@@ -26,7 +26,7 @@ public class ChatGptService {
         message.put("content", prompt);
 
         Map<String, Object> body = new HashMap<>();
-        body.put("model", "gpt-3.5-turbo");
+        body.put("model", "gpt-5-mini");
         body.put("messages", new Object[]{message});
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
