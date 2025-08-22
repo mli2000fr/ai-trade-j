@@ -1,7 +1,7 @@
 
 cd backend; mvn spring-boot:run
 cd frontend; npm start
-
+http://localhost:3000/chatgpt
 
 
 mvn spring-boot:run -Dspring-boot.run.fork=false -Dspring-boot.run.jvmArguments="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
