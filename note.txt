@@ -2,6 +2,7 @@
 cd backend; mvn spring-boot:run
 cd frontend; npm start
 http://localhost:3000/chatgpt
+mvn clean install -f backend/pom.xml
 
 https://chatgpt.com/share/68a8fceb-3228-800d-85cd-309c9eb41411
 

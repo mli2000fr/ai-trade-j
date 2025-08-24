@@ -1,5 +1,6 @@
 package com.example.backend;
 
+import com.example.backend.model.DataAction;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -14,7 +15,7 @@ public class ChatGptService {
     private String apiKey;
 
     private static final String API_URL = "https://api.openai.com/v1/chat/completions";
-    private static final String VERSION_TEMPLATE_PROMPT = "6";
+    private static final String VERSION_TEMPLATE_PROMPT = "10";
 
     public ChatGptResponse askChatGpt(String prompt) {
         RestTemplate restTemplate = new RestTemplate();
@@ -61,7 +62,7 @@ public class ChatGptService {
             if (symbol == null || symbol.isEmpty()) {
                 return "Argument 'symbol' manquant ou vide.";
             }
-            System.out.println("Appel de la fonction getInfosAction avec le symbole : " + symbol + " et la fonction : " + functionName);
+            Utils.log("Appel de la fonction getInfosAction avec le symbole : " + symbol + " et la fonction : " + functionName);
 
             if (functionName == null || functionName.isEmpty()) {
                 functionName = "TIME_SERIES_INTRADAY"; // valeur par défaut
@@ -120,12 +121,49 @@ public class ChatGptService {
         promptTemplate.put("version", VERSION_TEMPLATE_PROMPT);
         promptTemplate.put("variables", variables);
         String prompt = promptTemplate.toString();
-        System.out.println("Prompt JSON : " + prompt);
+        Utils.log("Prompt JSON : " + prompt);
 
         ChatGptResponse response = askChatGpt(prompt);
         if (response.getError() != null) {
             return "Erreur lors de l'analyse : " + response.getError();
         }
         return response.getMessage();
+    }
+
+    public String getAnalyseAction(DataAction dataAction) {
+
+        Map<String, Object> variables = getStringObjectMap(dataAction);
+        Map<String, Object> promptTemplate = new HashMap<>();
+        promptTemplate.put("id", "pmpt_68a9a60f9e2081968f356abd0b036e710a1847164c537613");
+        promptTemplate.put("version", VERSION_TEMPLATE_PROMPT);
+        promptTemplate.put("variables", variables);
+        String prompt = promptTemplate.toString();
+        Utils.log("Prompt JSON : " + prompt);
+
+        if(true){
+            return "Prompt JSON : " + prompt;
+        }
+
+        ChatGptResponse response = askChatGpt(prompt);
+        if (response.getError() != null) {
+            return "Erreur lors de l'analyse : " + response.getError();
+        }
+        return response.getMessage();
+    }
+
+    private static Map<String, Object> getStringObjectMap(DataAction dataAction) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("symbole", dataAction.getSymbol());
+        variables.put("data_value_daily", dataAction.getData());
+        variables.put("delai_mois", dataAction.getDelai());
+        variables.put("data_sma", dataAction.getSma());
+        variables.put("data_rsi", dataAction.getRsi());
+        variables.put("data_macd", dataAction.getMacd());
+        variables.put("data_atr", dataAction.getAtr());
+        variables.put("data_financial", dataAction.getFinancial());
+        variables.put("data_statistics", dataAction.getStatistics());
+        variables.put("data_earnings", dataAction.getEarnings());
+        variables.put("data_montant", dataAction.getMontant());
+        return variables;
     }
 }

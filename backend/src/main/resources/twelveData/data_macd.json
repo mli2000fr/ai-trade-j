@@ -1,0 +1,201 @@
+{
+  "meta": {
+    "symbol": "AAPL",
+    "interval": "1day",
+    "currency": "USD",
+    "exchange_timezone": "America/New_York",
+    "exchange": "NASDAQ",
+    "mic_code": "XNGS",
+    "type": "Common Stock",
+    "indicator": {
+      "name": "MACD - Moving Average Convergence Divergence",
+      "series_type": "close",
+      "fast_period": 12,
+      "slow_period": 26,
+      "signal_period": 9
+    }
+  },
+  "values": [
+    {
+      "datetime": "2025-08-22",
+      "macd": "5.15609",
+      "macd_signal": "5.090454",
+      "macd_hist": "0.065635902"
+    },
+    {
+      "datetime": "2025-08-21",
+      "macd": "5.37365",
+      "macd_signal": "5.074045",
+      "macd_hist": "0.29960637"
+    },
+    {
+      "datetime": "2025-08-20",
+      "macd": "5.86438",
+      "macd_signal": "4.99914",
+      "macd_hist": "0.86523339"
+    },
+    {
+      "datetime": "2025-08-19",
+      "macd": "6.29240",
+      "macd_signal": "4.78283",
+      "macd_hist": "1.50957"
+    },
+    {
+      "datetime": "2025-08-18",
+      "macd": "6.28392",
+      "macd_signal": "4.40544",
+      "macd_hist": "1.87848"
+    },
+    {
+      "datetime": "2025-08-15",
+      "macd": "6.14809",
+      "macd_signal": "3.93582",
+      "macd_hist": "2.21227"
+    },
+    {
+      "datetime": "2025-08-14",
+      "macd": "5.81402",
+      "macd_signal": "3.38276",
+      "macd_hist": "2.43127"
+    },
+    {
+      "datetime": "2025-08-13",
+      "macd": "5.18190",
+      "macd_signal": "2.77494",
+      "macd_hist": "2.40696"
+    },
+    {
+      "datetime": "2025-08-12",
+      "macd": "4.24371",
+      "macd_signal": "2.17320",
+      "macd_hist": "2.070513"
+    },
+    {
+      "datetime": "2025-08-11",
+      "macd": "3.35920",
+      "macd_signal": "1.65557",
+      "macd_hist": "1.70363"
+    },
+    {
+      "datetime": "2025-08-08",
+      "macd": "2.43288",
+      "macd_signal": "1.22966",
+      "macd_hist": "1.20322"
+    },
+    {
+      "datetime": "2025-08-07",
+      "macd": "0.99422048",
+      "macd_signal": "0.92885822",
+      "macd_hist": "0.065362262"
+    },
+    {
+      "datetime": "2025-08-06",
+      "macd": "0.092452154",
+      "macd_signal": "0.91251765",
+      "macd_hist": "-0.82006550"
+    },
+    {
+      "datetime": "2025-08-05",
+      "macd": "-0.36954975",
+      "macd_signal": "1.11753",
+      "macd_hist": "-1.48708"
+    },
+    {
+      "datetime": "2025-08-04",
+      "macd": "0.097925088",
+      "macd_signal": "1.48930",
+      "macd_hist": "-1.39138"
+    },
+    {
+      "datetime": "2025-08-01",
+      "macd": "0.64938598",
+      "macd_signal": "1.83715",
+      "macd_hist": "-1.18776"
+    },
+    {
+      "datetime": "2025-07-31",
+      "macd": "1.44257",
+      "macd_signal": "2.13409",
+      "macd_hist": "-0.69152216"
+    },
+    {
+      "datetime": "2025-07-30",
+      "macd": "1.90554",
+      "macd_signal": "2.30697",
+      "macd_hist": "-0.40143247"
+    },
+    {
+      "datetime": "2025-07-29",
+      "macd": "2.31805",
+      "macd_signal": "2.40733",
+      "macd_hist": "-0.089279632"
+    },
+    {
+      "datetime": "2025-07-28",
+      "macd": "2.58481",
+      "macd_signal": "2.42965",
+      "macd_hist": "0.15516087"
+    },
+    {
+      "datetime": "2025-07-25",
+      "macd": "2.60464",
+      "macd_signal": "2.39086",
+      "macd_hist": "0.21378271"
+    },
+    {
+      "datetime": "2025-07-24",
+      "macd": "2.60938",
+      "macd_signal": "2.33741",
+      "macd_hist": "0.27196396"
+    },
+    {
+      "datetime": "2025-07-23",
+      "macd": "2.58969",
+      "macd_signal": "2.26942",
+      "macd_hist": "0.32026391"
+    },
+    {
+      "datetime": "2025-07-22",
+      "macd": "2.48718",
+      "macd_signal": "2.18936",
+      "macd_hist": "0.29781976"
+    },
+    {
+      "datetime": "2025-07-21",
+      "macd": "2.29470",
+      "macd_signal": "2.11490",
+      "macd_hist": "0.17980285"
+    },
+    {
+      "datetime": "2025-07-18",
+      "macd": "2.21115",
+      "macd_signal": "2.069951",
+      "macd_hist": "0.14120270"
+    },
+    {
+      "datetime": "2025-07-17",
+      "macd": "2.20471",
+      "macd_signal": "2.034650",
+      "macd_hist": "0.17006379"
+    },
+    {
+      "datetime": "2025-07-16",
+      "macd": "2.28253",
+      "macd_signal": "1.99213",
+      "macd_hist": "0.29039984"
+    },
+    {
+      "datetime": "2025-07-15",
+      "macd": "2.33441",
+      "macd_signal": "1.91953",
+      "macd_hist": "0.41487157"
+    },
+    {
+      "datetime": "2025-07-14",
+      "macd": "2.47357",
+      "macd_signal": "1.81582",
+      "macd_hist": "0.65775110"
+    }
+  ],
+  "status": "ok"
+}

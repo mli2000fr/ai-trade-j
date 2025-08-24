@@ -6,13 +6,14 @@ const AnalyseActionPage: React.FC = () => {
   const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [montant, setMontant] = useState(1000); // montant par défaut
 
   const handleAnalyse = async () => {
     setLoading(true);
     setError(null);
     setResult(null);
     try {
-      const response = await fetch(`/api/chatgpt/analyse-action?symbol=${encodeURIComponent(symbol)}&delai=${delai}`);
+      const response = await fetch(`/api/chatgpt/analyse-action?symbol=${encodeURIComponent(symbol)}&delai=${delai}&montant=${montant}`);
       if (!response.ok) {
         throw new Error('Erreur lors de la requête');
       }
@@ -45,7 +46,15 @@ const AnalyseActionPage: React.FC = () => {
           style={{ width: 80, marginRight: 8 }}
           placeholder="Délai (mois)"
         />
-        <button onClick={handleAnalyse} disabled={loading || !symbol || !delai}>
+        <input
+          type="number"
+          min={1}
+          value={montant}
+          onChange={e => setMontant(Number(e.target.value))}
+          style={{ width: 120, marginRight: 8 }}
+          placeholder="Montant (€)"
+        />
+        <button onClick={handleAnalyse} disabled={loading || !symbol || !delai || !montant}>
           {loading ? 'Analyse en cours...' : 'Analyser'}
         </button>
       </div>

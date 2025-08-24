@@ -1,0 +1,539 @@
+{
+  "metric": {
+    "10DayAverageTradingVolume": 48.75536,
+    "13WeekPriceReturnDaily": 12.7023,
+    "26WeekPriceReturnDaily": -6.8352,
+    "3MonthADReturnStd": 22.946335,
+    "3MonthAverageTradingVolume": 54.77137,
+    "52WeekHigh": 260.1,
+    "52WeekHighDate": "2024-12-26",
+    "52WeekLow": 169.2101,
+    "52WeekLowDate": "2025-04-08",
+    "52WeekPriceReturnDaily": 0.6007,
+    "5DayPriceReturnDaily": -1.3556,
+    "assetTurnoverAnnual": 1.0714,
+    "assetTurnoverTTM": 1.1915,
+    "beta": 1.0865256,
+    "bookValuePerShareAnnual": 3.7673,
+    "bookValuePerShareQuarterly": 4.431,
+    "bookValueShareGrowth5Y": -5.85,
+    "capexCagr5Y": -2.08,
+    "cashFlowPerShareAnnual": 7.1978,
+    "cashFlowPerShareQuarterly": 6.4741,
+    "cashFlowPerShareTTM": 6.86253,
+    "cashPerSharePerShareAnnual": 4.3112,
+    "cashPerSharePerShareQuarterly": 3.7271,
+    "currentDividendYieldTTM": 0.456,
+    "currentEv/freeCashFlowAnnual": 31.5677,
+    "currentEv/freeCashFlowTTM": 35.7106,
+    "currentRatioAnnual": 0.8673,
+    "currentRatioQuarterly": 0.868,
+    "dividendGrowthRate5Y": 5.3,
+    "dividendPerShareAnnual": 0.9935,
+    "dividendPerShareTTM": 1.0215,
+    "dividendYieldIndicatedAnnual": 0.46242774,
+    "ebitdPerShareAnnual": 8.7571,
+    "ebitdPerShareTTM": 9.3392,
+    "ebitdaCagr5Y": 11.9,
+    "ebitdaInterimCagr5Y": 14.49,
+    "enterpriseValue": 3434791,
+    "epsAnnual": 6.0836,
+    "epsBasicExclExtraItemsAnnual": 6.0836,
+    "epsBasicExclExtraItemsTTM": 6.5781,
+    "epsExclExtraItemsAnnual": 6.0836,
+    "epsExclExtraItemsTTM": 6.5781,
+    "epsGrowth3Y": 2.71,
+    "epsGrowth5Y": 15.41,
+    "epsGrowthQuarterlyYoy": 12.19,
+    "epsGrowthTTMYoy": 0.16,
+    "epsInclExtraItemsAnnual": 6.0836,
+    "epsInclExtraItemsTTM": 6.5781,
+    "epsNormalizedAnnual": 6.0836,
+    "epsTTM": 6.5781,
+    "focfCagr5Y": 13.06,
+    "forwardPE": 30.899378675033123,
+    "grossMargin5Y": 42.73,
+    "grossMarginAnnual": 46.21,
+    "grossMarginTTM": 46.68,
+    "inventoryTurnoverAnnual": 30.8955,
+    "inventoryTurnoverTTM": 36.044,
+    "longTermDebt/equityAnnual": 1.5057,
+    "longTermDebt/equityQuarterly": 1.2522,
+    "marketCapitalization": 3369362,
+    "monthToDatePriceReturnDaily": 9.7268,
+    "netIncomeEmployeeAnnual": 0.5716,
+    "netIncomeEmployeeTTM": 0.6054,
+    "netInterestCoverageAnnual": 622.5082,
+    "netInterestCoverageTTM": 622.5082,
+    "netMarginGrowth5Y": 2.45,
+    "netProfitMargin5Y": 24.28,
+    "netProfitMarginAnnual": 23.97,
+    "netProfitMarginTTM": 24.3,
+    "operatingMargin5Y": 29.11,
+    "operatingMarginAnnual": 31.51,
+    "operatingMarginTTM": 31.87,
+    "payoutRatioAnnual": 16.25,
+    "payoutRatioTTM": 15.47,
+    "pb": 51.1828,
+    "pbAnnual": 61.8474,
+    "pbQuarterly": 46.55,
+    "pcfShareAnnual": 28.4926,
+    "pcfShareTTM": 31.0354,
+    "peAnnual": 35.9452,
+    "peBasicExclExtraTTM": 33.938,
+    "peExclExtraAnnual": 30.96975,
+    "peExclExtraTTM": 33.938,
+    "peInclExtraTTM": 33.938,
+    "peNormalizedAnnual": 35.9452,
+    "peTTM": 33.938,
+    "pegTTM": 218.00762772474886,
+    "pfcfShareAnnual": 30.9664,
+    "pfcfShareTTM": 35.0304,
+    "pretaxMargin5Y": 29.15,
+    "pretaxMarginAnnual": 31.58,
+    "pretaxMarginTTM": 31.7,
+    "priceRelativeToS&P50013Week": 1.9879,
+    "priceRelativeToS&P50026Week": -12.366,
+    "priceRelativeToS&P5004Week": 5.0909,
+    "priceRelativeToS&P50052Week": -14.5058,
+    "priceRelativeToS&P500Ytd": -19.1549,
+    "psAnnual": 8.6165,
+    "psTTM": 8.2456,
+    "ptbvAnnual": 4.8643,
+    "ptbvQuarterly": 6.4066,
+    "quickRatioAnnual": 0.826,
+    "quickRatioQuarterly": 0.826,
+    "receivablesTurnoverAnnual": 12.43,
+    "receivablesTurnoverTTM": 16.2307,
+    "revenueEmployeeAnnual": 2.3844,
+    "revenueEmployeeTTM": 2.4916,
+    "revenueGrowth3Y": 2.25,
+    "revenueGrowth5Y": 8.49,
+    "revenueGrowthQuarterlyYoy": 9.63,
+    "revenueGrowthTTMYoy": 5.97,
+    "revenuePerShareAnnual": 25.3785,
+    "revenuePerShareTTM": 27.3361,
+    "revenueShareGrowth5Y": 12.65,
+    "roa5Y": 25.24,
+    "roaRfy": 25.679999999999996,
+    "roaTTM": 28.95,
+    "roe5Y": 151.11,
+    "roeRfy": 164.59,
+    "roeTTM": 154.92,
+    "roi5Y": 50.63,
+    "roiAnnual": 56.989999999999995,
+    "roiTTM": 60.199999999999996,
+    "tangibleBookValuePerShareAnnual": 5.8583,
+    "tangibleBookValuePerShareQuarterly": 6.7916,
+    "tbvCagr5Y": 11.34,
+    "totalDebt/totalEquityAnnual": 1.8881,
+    "totalDebt/totalEquityQuarterly": 1.5449,
+    "yearToDatePriceReturnDaily": -9.0488
+  },
+  "metricType": "all",
+  "series": {
+    "annual": {
+      "bookValue": [],
+      "cashRatio": [],
+      "currentRatio": [],
+      "ebitPerShare": [],
+      "eps": [],
+      "ev": [],
+      "fcfMargin": [],
+      "grossMargin": [],
+      "inventoryTurnover": [],
+      "longtermDebtTotalAsset": [],
+      "longtermDebtTotalCapital": [],
+      "longtermDebtTotalEquity": [],
+      "netDebtToTotalCapital": [],
+      "netDebtToTotalEquity": [],
+      "netMargin": [],
+      "operatingMargin": [],
+      "payoutRatio": [],
+      "pb": [],
+      "pe": [],
+      "pfcf": [],
+      "pretaxMargin": [],
+      "ps": [],
+      "ptbv": [],
+      "quickRatio": [],
+      "receivablesTurnover": [],
+      "roa": [],
+      "roe": [],
+      "roic": [],
+      "rotc": [],
+      "salesPerShare": [],
+      "sgaToSale": [],
+      "tangibleBookValue": [],
+      "totalDebtToEquity": [],
+      "totalDebtToTotalAsset": [],
+      "totalDebtToTotalCapital": [],
+      "totalRatio": []
+    },
+    "quarterly": {
+      "assetTurnoverTTM": [
+        {
+          "period": "2025-06-28",
+          "v": 1.1915
+        },
+        {
+          "period": "2025-03-29",
+          "v": 1.1673
+        }
+      ],
+      "bookValue": [
+        {
+          "period": "2025-06-28",
+          "v": 65830
+        },
+        {
+          "period": "2025-03-29",
+          "v": 66796
+        }
+      ],
+      "cashRatio": [
+        {
+          "period": "2025-06-28",
+          "v": 0.2570082199546485
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.19479702014926922
+        }
+      ],
+      "currentRatio": [
+        {
+          "period": "2025-06-28",
+          "v": 0.868
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.8209
+        }
+      ],
+      "ebitPerShare": [
+        {
+          "period": "2025-06-28",
+          "v": 1.8867
+        },
+        {
+          "period": "2025-03-29",
+          "v": 1.9652
+        }
+      ],
+      "eps": [
+        {
+          "period": "2025-06-28",
+          "v": 1.5677
+        },
+        {
+          "period": "2025-03-29",
+          "v": 1.6458
+        }
+      ],
+      "ev": [
+        {
+          "period": "2025-06-28",
+          "v": 3129812.5
+        },
+        {
+          "period": "2025-03-29",
+          "v": 3410387
+        }
+      ],
+      "fcfMargin": [
+        {
+          "period": "2025-06-28",
+          "v": 0.2595
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.219
+        }
+      ],
+      "fcfPerShareTTM": [
+        {
+          "period": "2025-06-28",
+          "v": 6.4741
+        },
+        {
+          "period": "2025-03-29",
+          "v": 6.5924
+        }
+      ],
+      "grossMargin": [
+        {
+          "period": "2025-06-28",
+          "v": 0.4649
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.4705
+        }
+      ],
+      "inventoryTurnoverTTM": [
+        {
+          "period": "2025-06-28",
+          "v": 36.044
+        },
+        {
+          "period": "2025-03-29",
+          "v": 34.184
+        }
+      ],
+      "longtermDebtTotalAsset": [
+        {
+          "period": "2025-06-28",
+          "v": 0.2487
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.2372
+        }
+      ],
+      "longtermDebtTotalCapital": [
+        {
+          "period": "2025-06-28",
+          "v": 0.492
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.4762
+        }
+      ],
+      "longtermDebtTotalEquity": [
+        {
+          "period": "2025-06-28",
+          "v": 1.2522
+        },
+        {
+          "period": "2025-03-29",
+          "v": 1.1762
+        }
+      ],
+      "netDebtToTotalCapital": [
+        {
+          "period": "2025-06-28",
+          "v": 0.3906
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.4244
+        }
+      ],
+      "netDebtToTotalEquity": [
+        {
+          "period": "2025-06-28",
+          "v": 0.9939
+        },
+        {
+          "period": "2025-03-29",
+          "v": 1.0483
+        }
+      ],
+      "netMargin": [
+        {
+          "period": "2025-06-28",
+          "v": 0.2492
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.2599
+        }
+      ],
+      "operatingMargin": [
+        {
+          "period": "2025-06-28",
+          "v": 0.2999
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.3103
+        }
+      ],
+      "payoutRatioTTM": [
+        {
+          "period": "2025-06-28",
+          "v": 0.1547
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.1574
+        }
+      ],
+      "pb": [
+        {
+          "period": "2025-06-28",
+          "v": 46.55
+        },
+        {
+          "period": "2025-03-29",
+          "v": 50.0084
+        }
+      ],
+      "peTTM": [
+        {
+          "period": "2025-06-28",
+          "v": 30.8661
+        },
+        {
+          "period": "2025-03-29",
+          "v": 34.3327
+        }
+      ],
+      "pfcfTTM": [
+        {
+          "period": "2025-06-28",
+          "v": 31.8596
+        },
+        {
+          "period": "2025-03-29",
+          "v": 33.9171
+        }
+      ],
+      "pretaxMargin": [
+        {
+          "period": "2025-06-28",
+          "v": 0.2981
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.3074
+        }
+      ],
+      "psTTM": [
+        {
+          "period": "2025-06-28",
+          "v": 7.4993
+        },
+        {
+          "period": "2025-03-29",
+          "v": 8.3433
+        }
+      ],
+      "ptbv": [],
+      "quickRatio": [
+        {
+          "period": "2025-06-28",
+          "v": 0.826
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.7775
+        }
+      ],
+      "receivablesTurnoverTTM": [
+        {
+          "period": "2025-06-28",
+          "v": 16.2307
+        },
+        {
+          "period": "2025-03-29",
+          "v": 16.6913
+        }
+      ],
+      "roaTTM": [
+        {
+          "period": "2025-06-28",
+          "v": 0.2895
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.2837
+        }
+      ],
+      "roeTTM": [
+        {
+          "period": "2025-06-28",
+          "v": 1.5492
+        },
+        {
+          "period": "2025-03-29",
+          "v": 1.5131
+        }
+      ],
+      "roicTTM": [
+        {
+          "period": "2025-06-28",
+          "v": 0.602
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.5895
+        }
+      ],
+      "rotcTTM": [
+        {
+          "period": "2025-06-28",
+          "v": 0.7896
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.7718
+        }
+      ],
+      "salesPerShare": [
+        {
+          "period": "2025-06-28",
+          "v": 6.2908
+        },
+        {
+          "period": "2025-03-29",
+          "v": 6.3336
+        }
+      ],
+      "sgaToSale": [
+        {
+          "period": "2025-06-28",
+          "v": 0.5351
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.5295
+        }
+      ],
+      "tangibleBookValue": [],
+      "totalDebtToEquity": [
+        {
+          "period": "2025-06-28",
+          "v": 1.5449
+        },
+        {
+          "period": "2025-03-29",
+          "v": 1.4699
+        }
+      ],
+      "totalDebtToTotalAsset": [
+        {
+          "period": "2025-06-28",
+          "v": 0.3068
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.2964
+        }
+      ],
+      "totalDebtToTotalCapital": [
+        {
+          "period": "2025-06-28",
+          "v": 0.6071
+        },
+        {
+          "period": "2025-03-29",
+          "v": 0.5951
+        }
+      ],
+      "totalRatio": [
+        {
+          "period": "2025-06-28",
+          "v": 1.2478
+        },
+        {
+          "period": "2025-03-29",
+          "v": 1.2526
+        }
+      ]
+    }
+  },
+  "symbol": "AAPL"
+}
