@@ -1,5 +1,6 @@
-package com.example.backend;
+package com.example.backend.service;
 
+import com.example.backend.util.Utils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -10,7 +11,10 @@ import org.springframework.http.HttpStatus;
 public class TwelveDataService {
     @Value("${twelvedata.api.key}")
     private String apiKey;
-    private final String BASE_URL = "https://api.twelvedata.com/";
+
+    @Value("${twelvedata.api.url}")
+    private String apiUrl;
+
 
     // SMA (Simple Moving Average)
     public String getSMA(String symbol) {
@@ -46,7 +50,7 @@ public class TwelveDataService {
 
     private String getIndicator(String function, String symbol, String params) {
         RestTemplate restTemplate = new RestTemplate();
-        String url = BASE_URL + function + "?symbol=" + symbol + "&apikey=" + apiKey + (params != null ? "&" + params : "");
+        String url = apiUrl + function + "?symbol=" + symbol + "&apikey=" + apiKey + (params != null ? "&" + params : "");
         Utils.log("Appel Twelve Data API (" + function + "): " + url);
         try {
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
@@ -58,7 +62,7 @@ public class TwelveDataService {
                 return "Erreur lors de la récupération des données : " + response.getStatusCode();
             }
         } catch (Exception e) {
-            return "Exception : " + e.getMessage();
+            return "Exception callTwelveDataApi: " + e.getMessage();
         }
     }
 }

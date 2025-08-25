@@ -1,9 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import ChatGptPage from './ChatGptPage';
-import YahooFunctionCallPage from './YahooFunctionCallPage';
 import AnalyseActionPage from './AnalyseActionPage';
-import GoogleSearchPage from './GoogleSearchPage';
 import logo from './logo.svg';
 import './App.css';
 
@@ -24,11 +22,9 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<AnalyseActionPage />} />
         <Route path="/chatgpt" element={<ChatGptPage />} />
-        <Route path="/yahoo-function-call" element={<YahooFunctionCallPage />} />
         <Route path="/analyse-action" element={<AnalyseActionPage />} />
-        <Route path="/google-search" element={<GoogleSearchPage />} />
       </Routes>
     </BrowserRouter>
   );

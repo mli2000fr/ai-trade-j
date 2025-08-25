@@ -1,5 +1,7 @@
-package com.example.backend;
+package com.example.backend.service;
 
+import com.example.backend.util.Constant;
+import com.example.backend.util.Utils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -17,16 +19,22 @@ public class FinnhubService {
     @Value("${finnhub.api.key}")
     private String apiKey;
 
-    private static final String BASE_URL = "https://finnhub.io/api/v1/";
+    @Value("${finnhub.api.url}")
+    private String apiUrl;
+
     private static final String CONTENJ_VIDE = "aucune information trouvée";
 
     private String callFinnhubApi(String endpoint, String params) {
-        RestTemplate restTemplate = new RestTemplate();
-        String url = BASE_URL + endpoint + "?" + params + "&token=" + apiKey;
-        Utils.log("Appel Finnhub API (" + endpoint + "): " + url);
-        String reponse = restTemplate.getForObject(url, String.class);
-        Utils.log("Réponse Finnhub API (" + endpoint + "): " + reponse);
-        return reponse;
+        try{
+            RestTemplate restTemplate = new RestTemplate();
+            String url = apiUrl + endpoint + "?" + params + "&token=" + apiKey;
+            Utils.log("Appel Finnhub API (" + endpoint + "): " + url);
+            String reponse = restTemplate.getForObject(url, String.class);
+            Utils.log("Réponse Finnhub API (" + endpoint + "): " + reponse);
+            return reponse;
+        } catch (Exception e) {
+            return "Exception callFinnhubApi: " + e.getMessage();
+        }
     }
 
     // Données financières (financialData)
@@ -60,7 +68,7 @@ public class FinnhubService {
             if (root.has("series")) {
                 ObjectNode seriesNode = (ObjectNode) root.get("series");
                 DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-                LocalDate minDate = LocalDate.now().minusDays(Utils.HISTO);
+                LocalDate minDate = LocalDate.now().minusDays(Constant.HISTO);
                 // Pour chaque type de série (annual, quarterly, etc.)
                 Iterator<String> seriesTypes = seriesNode.fieldNames();
                 while (seriesTypes.hasNext()) {

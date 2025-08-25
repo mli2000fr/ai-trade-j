@@ -24,3 +24,5 @@ yarn-error.log*
 
 */traget
 */.idea
+.idea/
+target/

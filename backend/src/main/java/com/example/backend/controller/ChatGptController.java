@@ -1,6 +1,11 @@
-package com.example.backend;
+package com.example.backend.controller;
 
+import com.example.backend.model.ChatGptResponse;
 import com.example.backend.model.DataAction;
+import com.example.backend.service.AlphaVantageService;
+import com.example.backend.service.ChatGptService;
+import com.example.backend.service.FinnhubService;
+import com.example.backend.service.TwelveDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,30 +27,24 @@ public class ChatGptController {
     }
 
     @PostMapping("/ask")
-    public ResponseEntity<ChatGptResponse> askChatGpt(@RequestBody String prompt) {
-        ChatGptResponse response = chatGptService.askChatGpt(prompt);
-        if (response.getError() != null) {
-            return ResponseEntity.status(500).body(response);
-        }
+    public ResponseEntity<String> askChatGpt(@RequestBody String prompt) {
+        String response = chatGptService.test(prompt);
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/function-call")
-    public ResponseEntity<String> functionCall(@RequestBody FunctionCallRequest request) {
-        String result = chatGptService.callFunction(request, alphaVantageService);
-        return ResponseEntity.ok(result);
-    }
-
-    @GetMapping("/analyse-action-0")
-    public ResponseEntity<String> analyseAction0(@RequestParam("symbol") String symbol, @RequestParam("delai") int delai) {
-        String result = chatGptService.getAnalyseActionWithTwelveData(symbol, delai, twelveDataService);
-        return ResponseEntity.ok(result);
-    }
 
     @GetMapping("/analyse-action")
     public ResponseEntity<String> analyseAction(@RequestParam("symbol") String symbol,
                                                 @RequestParam("delai") int delai,
                                                 @RequestParam("montant") int montant) {
+       /*
+        String data = alphaVantageService.getDataAction(symbol);
+        String sma = alphaVantageService.getSMA(symbol);
+        String rsi = alphaVantageService.getRSI(symbol);
+        String macd = alphaVantageService.getMACD(symbol);
+        String atr = alphaVantageService.getATR(symbol);
+        */
+
         String data = twelveDataService.getDataAction(symbol);
         String sma = twelveDataService.getSMA(symbol);
         String rsi = twelveDataService.getRSI(symbol);

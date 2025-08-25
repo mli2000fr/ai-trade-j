@@ -1,4 +1,4 @@
-package com.example.backend;
+package com.example.backend.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -10,7 +10,10 @@ import org.springframework.http.HttpStatus;
 public class AlphaVantageService {
     @Value("${alphavantage.api.key}")
     private String apiKey;
-    private final String BASE_URL = "https://www.alphavantage.co/query?function=";
+
+    @Value("${alphavantage.api.url}")
+    private String apiurl;
+
     private final String SURFIX_URL = "&interval=daily&time_period=12&series_type=close";
 
     //SMA (Simple Moving Average) Tendances globales (simple).
@@ -45,7 +48,7 @@ public class AlphaVantageService {
 
     public String getInfosAction(String functionName, String symbol, String surfix) {
         RestTemplate restTemplate = new RestTemplate();
-        String url = BASE_URL + functionName + "&symbol=" + symbol + "&apikey=" + apiKey + (surfix == null ? "" : surfix);
+        String url = apiurl + functionName + "&symbol=" + symbol + "&apikey=" + apiKey + (surfix == null ? "" : surfix);
         System.out.println("call l'API Alpha Vantage ("+functionName+"): " + url);
         try {
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
@@ -57,7 +60,7 @@ public class AlphaVantageService {
                 return "Erreur lors de la récupération des données : " + response.getStatusCode();
             }
         } catch (Exception e) {
-            return "Exception : " + e.getMessage();
+            return "Exception callAlphaVantageApi: " + e.getMessage();
         }
     }
 }
