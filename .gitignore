@@ -1,0 +1,18 @@
+# Ignorer les fichiers/dossiers courants non commités
+*.log
+*.gz
+*.tmp
+*.swp
+.DS_Store
+.idea/
+node_modules/
+target/
+build/
+/backend/target/
+/backend/app.log*
+/backend/app.log.*.gz
+/frontend/build/
+/frontend/node_modules/
+/frontend/.idea/
+/frontend/traget/
+
