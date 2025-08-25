@@ -109,4 +109,29 @@ public class FinnhubService {
     public String getEarnings(String symbol) {
         return callFinnhubApi("stock/earnings", "symbol=" + symbol);
     }
+
+    // News (actualités)
+    public String getNews(String symbol, String keywords) {
+        String params;
+        String functionNews;
+         // Si un symbole est fourni, on récupère les news de la semaine passée pour ce symbole
+        if (symbol != null && !symbol.trim().isEmpty()) {
+            java.time.LocalDate toDate = java.time.LocalDate.now();
+            java.time.LocalDate fromDate = toDate.minusDays(7);
+            params = String.format("symbol=%s&from=%s&to=%s", symbol, fromDate, toDate);
+            functionNews = "company-news";
+        } else {
+            params = "category=general";
+            functionNews = "news";
+        }
+        if (keywords != null && !keywords.trim().isEmpty()) {
+            params += "&q=" + keywords.trim();
+        }
+        return callFinnhubApi(functionNews, params);
+    }
+
+    // News générales (actualités générales)
+    public String getGeneralNews() {
+        return callFinnhubApi("company-news", "category=general");
+    }
 }

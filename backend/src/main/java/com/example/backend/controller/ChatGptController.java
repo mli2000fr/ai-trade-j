@@ -2,10 +2,7 @@ package com.example.backend.controller;
 
 import com.example.backend.model.ChatGptResponse;
 import com.example.backend.model.DataAction;
-import com.example.backend.service.AlphaVantageService;
-import com.example.backend.service.ChatGptService;
-import com.example.backend.service.FinnhubService;
-import com.example.backend.service.TwelveDataService;
+import com.example.backend.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,13 +14,22 @@ public class ChatGptController {
     private final AlphaVantageService alphaVantageService;
     private final TwelveDataService twelveDataService;
     private final FinnhubService finnhubService;
+    private final EodhdService eodhdService;
+    private final MarketauxService marketauxService;
 
     @Autowired
-    public ChatGptController(ChatGptService chatGptService, FinnhubService finnhubService, AlphaVantageService alphaVantageService, TwelveDataService twelveDataService) {
+    public ChatGptController(ChatGptService chatGptService,
+                             FinnhubService finnhubService,
+                             AlphaVantageService alphaVantageService,
+                             TwelveDataService twelveDataService,
+                             EodhdService eodhdService,
+                             MarketauxService marketauxService) {
         this.chatGptService = chatGptService;
         this.alphaVantageService = alphaVantageService;
         this.twelveDataService = twelveDataService;
         this.finnhubService = finnhubService;
+        this.eodhdService = eodhdService;
+        this.marketauxService = marketauxService;
     }
 
     @PostMapping("/ask")
@@ -53,9 +59,11 @@ public class ChatGptController {
         String financial = finnhubService.getFinancialData(symbol);
         String statistics = finnhubService.getDefaultKeyStatistics(symbol);
         String earnings = finnhubService.getEarnings(symbol);
+        String news = eodhdService.getNews(symbol);
 
         DataAction dataAction = new DataAction(
                 symbol,
+                montant,
                 delai,
                 data,
                 sma,
@@ -65,7 +73,7 @@ public class ChatGptController {
                 financial,
                 statistics,
                 earnings,
-                montant
+                news
         );
 
         String result = chatGptService.getAnalyseAction(dataAction);

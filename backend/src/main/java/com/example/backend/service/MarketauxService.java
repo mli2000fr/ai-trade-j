@@ -1,0 +1,27 @@
+package com.example.backend.service;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.ResponseEntity;
+
+@Service
+public class MarketauxService {
+    @Value("${marketaux.api.key}")
+    private String apiKey;
+
+    @Value("${marketaux.api.url}")
+    private String apiUrl;
+
+    public String getNews(String symbol) {
+        try {
+            RestTemplate restTemplate = new RestTemplate();
+            String url = apiUrl + "/v1/news/all?limit=50&symbols=" + symbol + "&api_token=" + apiKey;
+            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+            return response.getBody();
+        } catch (Exception e) {
+            return "Erreur lors de la récupération des news Marketaux : " + e.getMessage();
+        }
+    }
+}
+

@@ -2,7 +2,6 @@ package com.example.backend.model;
 
 import lombok.*;
 
-@Builder
 @Data
 @ToString
 @NoArgsConstructor
@@ -18,10 +17,23 @@ public class DataAction {
     private String statistics;
     private String earnings;
     private int montant;
+    private String news;
 
     // Constructeur explicite pour garantir la compatibilité sans Lombok
-    public DataAction(String symbol, int delai, String data, String sma, String rsi, String macd, String atr, String financial, String statistics, String earnings, int montant) {
+    public DataAction(String symbol,
+                      int montant,
+                      int delai,
+                      String data,
+                      String sma,
+                      String rsi,
+                      String macd,
+                      String atr,
+                      String financial,
+                      String statistics,
+                      String earnings,
+                      String news) {
         this.symbol = symbol;
+        this.news = news;
         this.delai = delai;
         this.data = data;
         this.sma = sma;
@@ -45,4 +57,5 @@ public class DataAction {
     public String getStatistics() { return statistics; }
     public String getEarnings() { return earnings; }
     public int getMontant() { return montant; }
+    public String getNews() { return news; }
 }

@@ -125,6 +125,7 @@ public class ChatGptService {
         variables.put("data_statistics", dataAction.getStatistics());
         variables.put("data_earnings", dataAction.getEarnings());
         variables.put("data_montant", dataAction.getMontant());
+        variables.put("data_news", dataAction.getNews());
         return variables;
     }
 }
