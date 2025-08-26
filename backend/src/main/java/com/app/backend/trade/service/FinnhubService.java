@@ -1,7 +1,7 @@
-package com.example.backend.service;
+package com.app.backend.trade.service;
 
-import com.example.backend.util.Constant;
-import com.example.backend.util.Utils;
+import com.app.backend.trade.util.TradeConstant;
+import com.app.backend.trade.util.TradeUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -28,9 +28,9 @@ public class FinnhubService {
         try{
             RestTemplate restTemplate = new RestTemplate();
             String url = apiUrl + endpoint + "?" + params + "&token=" + apiKey;
-            Utils.log("Appel Finnhub API (" + endpoint + "): " + url);
+            TradeUtils.log("Appel Finnhub API (" + endpoint + "): " + url);
             String reponse = restTemplate.getForObject(url, String.class);
-            Utils.log("Réponse Finnhub API (" + endpoint + "): " + reponse);
+            TradeUtils.log("Réponse Finnhub API (" + endpoint + "): " + reponse);
             return reponse;
         } catch (Exception e) {
             return "Exception callFinnhubApi: " + e.getMessage();
@@ -68,7 +68,7 @@ public class FinnhubService {
             if (root.has("series")) {
                 ObjectNode seriesNode = (ObjectNode) root.get("series");
                 DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-                LocalDate minDate = LocalDate.now().minusDays(Constant.HISTO);
+                LocalDate minDate = LocalDate.now().minusDays(TradeConstant.HISTO);
                 // Pour chaque type de série (annual, quarterly, etc.)
                 Iterator<String> seriesTypes = seriesNode.fieldNames();
                 while (seriesTypes.hasNext()) {

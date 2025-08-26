@@ -1,6 +1,6 @@
-package com.example.backend.service;
+package com.app.backend.trade.service;
 
-import com.example.backend.util.Utils;
+import com.app.backend.trade.util.TradeUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -59,12 +59,12 @@ public class EodhdService {
         if (symbol != null && !symbol.trim().isEmpty()) {
             url += "&s=" + symbol.trim();
         }
-        Utils.log("Appel EODHD API (news): " + url);
+        TradeUtils.log("Appel EODHD API (news): " + url);
         try {
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
             if (response.getStatusCode() == HttpStatus.OK) {
                 String responseBody = response.getBody();
-                Utils.log("Réponse EODHD API (news): " + responseBody);
+                TradeUtils.log("Réponse EODHD API (news): " + responseBody);
                 // Supprimer le champ 'content' de chaque news
                 if (responseBody != null) {
                     // Utilisation d'une manipulation JSON simple

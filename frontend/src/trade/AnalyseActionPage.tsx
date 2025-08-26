@@ -13,7 +13,7 @@ const AnalyseActionPage: React.FC = () => {
     setError(null);
     setResult(null);
     try {
-      const response = await fetch(`/api/chatgpt/analyse-action?symbol=${encodeURIComponent(symbol)}&delai=${delai}&montant=${montant}`);
+      const response = await fetch(`/api/trade/analyse-action?symbol=${encodeURIComponent(symbol)}&delai=${delai}&montant=${montant}`);
       if (!response.ok) {
         throw new Error('Erreur lors de la requête');
       }

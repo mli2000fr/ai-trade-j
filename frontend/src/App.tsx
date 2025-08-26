@@ -1,8 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import ChatGptPage from './ChatGptPage';
-import AnalyseActionPage from './AnalyseActionPage';
-import TradePage from './TradePage';
+import AnalyseActionPage from './trade/AnalyseActionPage';
+import TradePage from './trade/TradePage';
 import logo from './logo.svg';
 import './App.css';
 
@@ -23,8 +22,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<AnalyseActionPage />} />
-        <Route path="/chatgpt" element={<ChatGptPage />} />
+        <Route path="/" element={<TradePage />} />
         <Route path="/analyse-action" element={<AnalyseActionPage />} />
         <Route path="/trade" element={<TradePage />} />
       </Routes>

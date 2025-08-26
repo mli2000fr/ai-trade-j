@@ -1,8 +1,8 @@
-package com.example.backend.service;
+package com.app.backend.trade.service;
 
-import com.example.backend.model.ChatGptResponse;
-import com.example.backend.util.Utils;
-import com.example.backend.model.DataAction;
+import com.app.backend.trade.model.ChatGptResponse;
+import com.app.backend.trade.util.TradeUtils;
+import com.app.backend.trade.model.DataAction;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -85,7 +85,7 @@ public class ChatGptService {
         promptTemplate.put("version", promptVersionTestAction);
         promptTemplate.put("variables", variables);
         String prompt = promptTemplate.toString();
-        Utils.log("Prompt JSON : " + prompt);
+        TradeUtils.log("Prompt JSON : " + prompt);
 
         ChatGptResponse response = askChatGpt(prompt);
         if (response.getError() != null) {
@@ -103,7 +103,7 @@ public class ChatGptService {
         promptTemplate.put("version", promptVersionAnalyseAction);
         promptTemplate.put("variables", variables);
         String prompt = promptTemplate.toString();
-        Utils.log("Prompt JSON : " + prompt);
+        TradeUtils.log("Prompt JSON : " + prompt);
 
         ChatGptResponse response = askChatGpt(prompt);
         if (response.getError() != null) {

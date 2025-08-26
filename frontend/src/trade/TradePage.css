@@ -67,10 +67,10 @@ h3 {
   background: #f7f9fc;
 }
 .orders-table tr.buy-row td {
-  background: #a5d6a7 !important; /* vert plus vif */
+  background: #d0f8ef !important; /* vert turquoise clair, plus distinct */
 }
 .orders-table tr.sell-row td {
-  background: #ffcdd2 !important; /* rouge clair */
+  background: #ffd6d6 !important; /* rouge rosé clair, plus distinct */
 }
 
 input[type="text"], input[type="number"], select {
@@ -176,4 +176,3 @@ label {
   color: #607d8b;
   margin-bottom: 8px;
 }
-

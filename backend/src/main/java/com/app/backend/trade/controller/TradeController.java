@@ -1,16 +1,16 @@
-package com.example.backend.controller;
+package com.app.backend.trade.controller;
 
-import com.example.backend.model.DataAction;
-import com.example.backend.model.PortfolioAndOrdersDto;
-import com.example.backend.model.TradeRequest;
-import com.example.backend.service.*;
+import com.app.backend.trade.model.DataAction;
+import com.app.backend.trade.model.PortfolioAndOrdersDto;
+import com.app.backend.trade.model.TradeRequest;
+import com.app.backend.trade.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/chatgpt")
-public class ChatGptController {
+@RequestMapping("/api/trade")
+public class TradeController {
     private final ChatGptService chatGptService;
     private final AlphaVantageService alphaVantageService;
     private final TwelveDataService twelveDataService;
@@ -20,13 +20,13 @@ public class ChatGptController {
     private final AlpacaService alpacaService;
 
     @Autowired
-    public ChatGptController(ChatGptService chatGptService,
-                             FinnhubService finnhubService,
-                             AlphaVantageService alphaVantageService,
-                             TwelveDataService twelveDataService,
-                             EodhdService eodhdService,
-                             MarketauxService marketauxService,
-                             AlpacaService alpacaService) {
+    public TradeController(ChatGptService chatGptService,
+                           FinnhubService finnhubService,
+                           AlphaVantageService alphaVantageService,
+                           TwelveDataService twelveDataService,
+                           EodhdService eodhdService,
+                           MarketauxService marketauxService,
+                           AlpacaService alpacaService) {
         this.chatGptService = chatGptService;
         this.alphaVantageService = alphaVantageService;
         this.twelveDataService = twelveDataService;
@@ -34,12 +34,6 @@ public class ChatGptController {
         this.eodhdService = eodhdService;
         this.marketauxService = marketauxService;
         this.alpacaService = alpacaService;
-    }
-
-    @PostMapping("/ask")
-    public ResponseEntity<String> askChatGpt(@RequestBody String prompt) {
-        String response = chatGptService.test(prompt);
-        return ResponseEntity.ok(response);
     }
 
 

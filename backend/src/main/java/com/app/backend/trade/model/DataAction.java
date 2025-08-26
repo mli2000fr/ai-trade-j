@@ -1,4 +1,4 @@
-package com.example.backend.model;
+package com.app.backend.trade.model;
 
 import lombok.*;
 

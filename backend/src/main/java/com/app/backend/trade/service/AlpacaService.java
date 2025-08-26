@@ -1,6 +1,6 @@
-package com.example.backend.service;
+package com.app.backend.trade.service;
 
-import com.example.backend.model.PortfolioAndOrdersDto;
+import com.app.backend.trade.model.PortfolioAndOrdersDto;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;

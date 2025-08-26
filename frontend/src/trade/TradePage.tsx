@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './TradePage.css';
 
-const TRADE_API_URL = '/api/chatgpt/trade';
+const TRADE_API_URL = '/api/trade/trade';
 
 const TradePage: React.FC = () => {
   const [symbol, setSymbol] = useState('AAPL');
@@ -17,7 +17,7 @@ const TradePage: React.FC = () => {
     if (showLoading) setPortfolioLoading(true);
     try {
       await new Promise(resolve => setTimeout(resolve, 1000)); // Pause de 1 seconde
-      const res = await fetch('/api/chatgpt/portfolio');
+      const res = await fetch('/api/trade/portfolio');
       const data = await res.json();
       setPortfolio(data);
       setLastUpdate(new Date());
@@ -70,7 +70,7 @@ const TradePage: React.FC = () => {
     setCancellingOrderId(orderId);
     setMessage('');
     try {
-      const res = await fetch(`/api/chatgpt/order/cancel/${orderId}`, { method: 'POST' });
+      const res = await fetch(`/api/trade/order/cancel/${orderId}`, { method: 'POST' });
       const text = await res.text();
       setMessage(text || 'Ordre annulé.');
       // Rafraîchir le portefeuille après annulation

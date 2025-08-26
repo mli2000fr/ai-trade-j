@@ -1,4 +1,4 @@
-package com.example.backend.service;
+package com.app.backend.trade.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
