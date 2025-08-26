@@ -17,40 +17,6 @@ public class EodhdService {
     @Value("${eodhd.api.url}")
     private String apiUrl;
 
-    public String test() {
-        String responseBody = "";
-        try {
-            java.io.InputStream is = getClass().getClassLoader().getResourceAsStream("eodhd/data_news_eodhd_nvda.json");
-            if (is != null) {
-                java.util.Scanner s = new java.util.Scanner(is, "UTF-8").useDelimiter("\\A");
-                responseBody = s.hasNext() ? s.next() : "";
-                s.close();
-            } else {
-                return "Fichier non trouvé";
-            }
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            java.util.List<java.util.Map<String, Object>> newsList = mapper.readValue(responseBody, java.util.List.class);
-            for (java.util.Map<String, Object> news : newsList) {
-                news.remove("content");
-                news.remove("link");
-                System.out.println("---------test------------" + news.get("sentiment") + " " + news.get("neu") + " " + news.get("pos"));
-                Map<String, Object> sentiment = (Map<String, Object>) news.get("sentiment");
-                double neg = 0.0, neu = 0.0, pos = 0.0;
-                if (sentiment != null) {
-                    neg = sentiment.get("neg") != null ? ((Number) sentiment.get("neg")).doubleValue() : 0.0;
-                    neu = sentiment.get("neu") != null ? ((Number) sentiment.get("neu")).doubleValue() : 0.0;
-                    pos = sentiment.get("pos") != null ? ((Number) sentiment.get("pos")).doubleValue() : 0.0;
-                }
-                String sentimentInterpreted = interpretSentiment(neg, neu, pos);
-                news.put("sentimentInterpreted", sentimentInterpreted);
-            }
-            // Retirer les news neutres
-            newsList.removeIf(news -> "neutral".equals(news.get("sentimentInterpreted")));
-            return mapper.writeValueAsString(newsList);
-        } catch (Exception jsonEx) {
-            return "Erreur lors du traitement JSON : " + jsonEx.getMessage();
-        }
-    }
 
     // Récupérer les news pour un symbole donné (ou toutes les news si symbol est null)
     public String getNews(String symbol) {

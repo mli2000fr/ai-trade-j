@@ -1,6 +1,7 @@
 package com.app.backend.trade.controller;
 
 import com.app.backend.trade.model.DataAction;
+import com.app.backend.trade.model.Portfolio;
 import com.app.backend.trade.model.PortfolioAndOrdersDto;
 import com.app.backend.trade.model.TradeRequest;
 import com.app.backend.trade.service.*;
@@ -13,11 +14,12 @@ import org.springframework.web.bind.annotation.*;
 public class TradeController {
     private final ChatGptService chatGptService;
     private final AlphaVantageService alphaVantageService;
+    private final MarketauxService marketauxService;
     private final TwelveDataService twelveDataService;
     private final FinnhubService finnhubService;
     private final EodhdService eodhdService;
-    private final MarketauxService marketauxService;
     private final AlpacaService alpacaService;
+    private final TradeHelper tradeHelper;
 
     @Autowired
     public TradeController(ChatGptService chatGptService,
@@ -26,7 +28,8 @@ public class TradeController {
                            TwelveDataService twelveDataService,
                            EodhdService eodhdService,
                            MarketauxService marketauxService,
-                           AlpacaService alpacaService) {
+                           AlpacaService alpacaService,
+                           TradeHelper tradeHelper) {
         this.chatGptService = chatGptService;
         this.alphaVantageService = alphaVantageService;
         this.twelveDataService = twelveDataService;
@@ -34,6 +37,7 @@ public class TradeController {
         this.eodhdService = eodhdService;
         this.marketauxService = marketauxService;
         this.alpacaService = alpacaService;
+        this.tradeHelper = tradeHelper;
     }
 
 
@@ -74,7 +78,7 @@ public class TradeController {
                 news
         );
 
-        String result = chatGptService.getAnalyseAction(dataAction);
+        String result = tradeHelper.getAnalyseAction(dataAction);
         return ResponseEntity.ok(result);
     }
 
@@ -93,13 +97,45 @@ public class TradeController {
 
     @GetMapping("/portfolio")
     public ResponseEntity<PortfolioAndOrdersDto> getPortfolioAndOrders() {
-        PortfolioAndOrdersDto dto = alpacaService.getPortfolioAndOrders();
+        PortfolioAndOrdersDto dto = alpacaService.getPortfolioAndOrders(true);
         return ResponseEntity.ok(dto);
     }
 
     @PostMapping("/order/cancel/{orderId}")
     public ResponseEntity<String> cancelOrder(@PathVariable String orderId) {
         String result = alpacaService.cancelOrder(orderId);
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/test")
+    public ResponseEntity<String> trade() {
+        String symbol = "NVDA";
+        Portfolio portfolio = tradeHelper.getPortfolio();
+        String data = twelveDataService.getDataAction(symbol);
+        String sma = twelveDataService.getSMA(symbol);
+        String rsi = twelveDataService.getRSI(symbol);
+        String macd = twelveDataService.getMACD(symbol);
+        String atr = twelveDataService.getATR(symbol);
+        String financial = finnhubService.getFinancialData(symbol);
+        String statistics = finnhubService.getDefaultKeyStatistics(symbol);
+        String earnings = finnhubService.getEarnings(symbol);
+        String news = eodhdService.getNews(symbol);
+
+        DataAction dataAction = new DataAction(
+                symbol,
+                0,
+                0,
+                data,
+                sma,
+                rsi,
+                macd,
+                atr,
+                financial,
+                statistics,
+                earnings,
+                news
+        );
+        String result = tradeHelper.trade(dataAction, portfolio);
         return ResponseEntity.ok(result);
     }
 

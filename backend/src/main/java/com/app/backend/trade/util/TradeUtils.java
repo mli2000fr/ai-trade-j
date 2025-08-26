@@ -15,5 +15,19 @@ public class TradeUtils {
         LocalDate date = LocalDate.now().minusDays(TradeConstant.HISTO);
         return date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
     }
-}
 
+    // Lit le contenu d'un fichier de ressources et le retourne sous forme de String
+    public static String readResourceFile(String path) {
+        try (java.io.InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream(path)) {
+            if (is == null) {
+                throw new RuntimeException("Fichier de ressource non trouvé : " + path);
+            }
+            java.util.Scanner scanner = new java.util.Scanner(is, java.nio.charset.StandardCharsets.UTF_8.name());
+            String content = scanner.useDelimiter("\\A").hasNext() ? scanner.next() : "";
+            scanner.close();
+            return content;
+        } catch (Exception e) {
+            throw new RuntimeException("Erreur lors de la lecture du fichier de ressource : " + path, e);
+        }
+    }
+}

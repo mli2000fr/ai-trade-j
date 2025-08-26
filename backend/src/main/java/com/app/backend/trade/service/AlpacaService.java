@@ -1,6 +1,8 @@
 package com.app.backend.trade.service;
 
+import com.app.backend.trade.model.Portfolio;
 import com.app.backend.trade.model.PortfolioAndOrdersDto;
+import com.app.backend.trade.model.Position;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -9,10 +11,7 @@ import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 
 import java.net.URI;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Consumer;
 
 @Service
@@ -139,7 +138,9 @@ public class AlpacaService {
         return placeOrder(symbol, qty, "buy");
     }
 
-    public PortfolioAndOrdersDto getPortfolioAndOrders() {
+    public PortfolioAndOrdersDto getPortfolioAndOrders(boolean getOrder) {
+        PortfolioAndOrdersDto dto = new PortfolioAndOrdersDto();
+
         // Récupérer les positions
         String positionsUrl = apiBaseUrl + "/positions";
         HttpHeaders headers = new HttpHeaders();
@@ -147,20 +148,21 @@ public class AlpacaService {
         headers.set("APCA-API-SECRET-KEY", apiKeySecret);
         HttpEntity<Void> request = new HttpEntity<>(headers);
         ResponseEntity<Map[]> positionsResponse = restTemplate.exchange(positionsUrl, HttpMethod.GET, request, Map[].class);
+        dto.setPositions(positionsResponse.getBody() != null ? Arrays.asList(positionsResponse.getBody()) : List.of());
 
-        // Récupérer les ordres récents
-        String ordersUrl = apiBaseUrl + "/orders?limit=5&status=all";
-        ResponseEntity<Map[]> ordersResponse = restTemplate.exchange(ordersUrl, HttpMethod.GET, request, Map[].class);
+        if(getOrder){
+            // Récupérer les ordres récents
+            String ordersUrl = apiBaseUrl + "/orders?limit=5&status=all";
+            ResponseEntity<Map[]> ordersResponse = restTemplate.exchange(ordersUrl, HttpMethod.GET, request, Map[].class);
+            dto.setOrders(ordersResponse.getBody() != null ? Arrays.asList(ordersResponse.getBody()) : List.of());
+        }
 
         // Récupérer les infos du compte
         String accountUrl = apiBaseUrl + "/account";
         ResponseEntity<Map> accountResponse = restTemplate.exchange(accountUrl, HttpMethod.GET, request, Map.class);
         Map<String, Object> account = accountResponse.getBody();
-
-        PortfolioAndOrdersDto dto = new PortfolioAndOrdersDto();
-        dto.setPositions(positionsResponse.getBody() != null ? Arrays.asList(positionsResponse.getBody()) : List.of());
-        dto.setOrders(ordersResponse.getBody() != null ? Arrays.asList(ordersResponse.getBody()) : List.of());
         dto.setAccount(account);
+
         return dto;
     }
 
@@ -172,5 +174,51 @@ public class AlpacaService {
         HttpEntity<Void> request = new HttpEntity<>(headers);
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.DELETE, request, String.class);
         return response.getBody() != null ? response.getBody() : "Annulation demandée.";
+    }
+
+    public Portfolio getPortfolio() {
+        PortfolioAndOrdersDto dto = this.getPortfolioAndOrders(false);
+        double cash = 0.0;
+        if (dto.getAccount() != null && dto.getAccount().get("cash") != null) {
+            try {
+                cash = Double.parseDouble(dto.getAccount().get("cash").toString());
+            } catch (NumberFormatException e) {
+                cash = 0.0;
+            }
+        }
+        List<Position> positions = new ArrayList<>();
+        if (dto.getPositions() != null) {
+            for (Map<String, Object> posMap : dto.getPositions()) {
+                String symbol = posMap.get("symbol") != null ? posMap.get("symbol").toString() : null;
+                int quantity = 0;
+                if (posMap.get("qty") != null) {
+                    try {
+                        quantity = Integer.parseInt(posMap.get("qty").toString());
+                    } catch (NumberFormatException e) {
+                        quantity = 0;
+                    }
+                }
+                double costBasis = 0;
+                if (posMap.get("cost_basis") != null) {
+                    try {
+                        costBasis = Double.parseDouble(posMap.get("cost_basis").toString());
+                    } catch (NumberFormatException e) {
+                        costBasis = 0.0;
+                    }
+                }
+                double marketValue = 0;
+                if (posMap.get("market_value") != null) {
+                    try {
+                        marketValue = Double.parseDouble(posMap.get("market_value").toString());
+                    } catch (NumberFormatException e) {
+                        marketValue = 0.0;
+                    }
+                }
+                if (symbol != null) {
+                    positions.add(new Position(symbol, quantity, costBasis, marketValue));
+                }
+            }
+        }
+        return new Portfolio(cash, positions);
     }
 }

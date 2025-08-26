@@ -1,0 +1,48 @@
+Voici un plan de trading concis sur 3 mois pour AAPL en utilisant votre budget de 1 000 $ et les données que vous avez fournies.
+
+Instantané
+- Prix : 228,39 (clôture du 26 août). SMA 12 jours ≈ 229,18 (prix juste en dessous d’une tendance haussière à court terme). RSI 14 ≈ 61,9 (haussier mais pas suracheté). Le MACD vient de baisser (hist. < 0), suggérant une pause à court terme après une forte hausse en août. ATR(14) ≈ 4,56 (volatilité en baisse).
+- Niveaux clés récents : support 225–224 (plus bas du 22/21 août 225,41/223,78), puis 220. Résistance 233–235 (cluster/plus hauts), puis 240–242.
+- Fondamentaux : Qualité élevée, valorisation premium (PER à TTM d'environ 34, prévision d'environ 31), marges/flux de trésorerie importants, rachats massifs ; pas « bon marché », mais soutenu par la solidité des bénéfices. Le dernier trimestre a été supérieur d'environ 7,3 %.
+- Catalyseurs à court terme dans les 3 mois : événement produit de septembre (souvent acheter la rumeur et vendre la nouvelle), résultats du quatrième trimestre fiscal (début novembre), dividende (faible rendement). Flux d'informations positives.
+
+Thèse commerciale
+- Tendance haussière intermédiaire intacte ; ralentissement de la dynamique à court terme. Privilégiez l'achat en cas de repli vers le support ou de cassure confirmée sous 235 plutôt qu'une poursuite au milieu de la fourchette.
+
+Plan A : acheter à la baisse (préféré)
+- Entrées (limites échelonnées) :
+- 226,5 (première échelle)
+- 224,5 (deuxième échelle)
+- Stop (pour la position combinée) : 219,0 (en dessous du swing bas du 21/08 223,78 moins ~1× tampon ATR).
+- Cibles (mise à l'échelle) :
+- T1 : 233,5 (zone de résistance antérieure)
+- T2 : 240–242
+- Étirement : 248–250 si l'élan persiste
+- Dimensionnement de position avec 1 000 $ :
+- À 226,5/224,5, 4 actions au total ≈ 900 $–910 $ utilisées, il reste environ 90 $ en espèces.
+- Risque par action pour arrêter : environ 7,5 $ à 5,5 $ ; avec 4 actions, risque total : environ 30 $ à 40 $ (environ 3 à 4 % du compte). Ajustez le nombre d'actions ou l'arrêt si vous souhaitez un risque inférieur ou égal à 2 %.
+
+Plan B : Acheter la cassure (confirmation)
+- Déclencheur : clôture quotidienne > 235 avec un volume important (idéalement ≥ 1,3 × moyenne sur 10 jours ; 10 jours ≈ 45,7 M, donc > ~ 59 M).
+- Entrée : 235,5 (le lendemain) si la force se maintient.
+- Stop : 229,5 (en dessous de la zone de cassure/MA courtes en hausse).
+- Objectifs : 241, puis 248-250. Si le prix stagne à 240-242, prendre des positions partielles.
+
+Gestion et exécution des risques
+- Si rempli sur le plan A, prenez 1/2 au T1, déplacez l'arrêt au seuil de rentabilité ; suivez le reste d'environ 1 × ATR (actuellement environ 4,6) une fois au-dessus de 240.
+- Si aucun déclencheur n'est atteint et que le prix clôture en dessous de 221, restez à l'écart et réévaluez (cela signalerait un dommage à la tendance).
+- Événements : Soyez attentif au lancement de septembre et aux résultats de début novembre ; envisagez de réduire vos dépenses avant les événements si vous ne pouvez pas tolérer le risque d'écart.
+- Ordres pratiques : utilisez les ordres bracket/OTOCO lorsque votre courtier les prend en charge. Définissez des alertes à 226, 224, 235 et 240.
+
+Pourquoi cela fonctionne avec les indicateurs
+- RSI ~62 : marge de progression sans surachat.
+- L'histogramme MACD devient négatif : favorise un pullback constructif avant une continuation.
+- ATR en baisse : compression de la plage ; recherchez une expansion après une baisse ou une cassure.
+- Prix proche mais juste en dessous de la moyenne mobile sur 12 (SMA) en hausse : acheter lors d'une légère baisse du support offre un meilleur rapport R:R que d'acheter dans la fourchette moyenne.
+
+Si vous préférez déployer entièrement environ 1 000 $ maintenant
+- Achetez 4 actions autour du marché (228–229), arrêtez à 219, mêmes objectifs. Risque du compte : ≈ 37 $–40 $ (~3,7–4,0 %). Envisagez de réduire d'une à deux actions à 233,5 si la dynamique s'essouffle.
+
+Note
+- Les tailles de position supposent des actions entières ; utilisez des actions fractionnaires si vous souhaitez un contrôle des risques plus précis.
+- Ceci est un plan de trading, et non un conseil financier. Les marchés peuvent afficher des écarts ; les stops peuvent ne pas garantir un remplissage précis. Ajustez le risque selon vos préférences.
