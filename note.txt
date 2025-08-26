@@ -1,6 +1,7 @@
 
 cd backend; mvn spring-boot:run
 cd frontend; npm start
+cd backend; mvn spring-boot:run -Dspring-boot.run.fork=false -Dspring-boot.run.jvmArguments="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
 http://localhost:3000/chatgpt
 mvn clean install -f backend/pom.xml
 

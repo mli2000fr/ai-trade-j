@@ -1,0 +1,12 @@
+[
+  {
+    "T": "t",                              // Type: trade
+    "S": "AAPL",                           // Symbole
+    "i": 987654321,                        // Identifiant du trade
+    "x": "Q",                              // Exchange (Q = NASDAQ)
+    "p": 226.35,                           // Prix
+    "s": 50,                               // Taille (50 actions)
+    "t": "2025-08-26T14:31:07.654321Z",    // Horodatage UTC
+    "c": ["@", "T"]                        // Conditions
+  }
+]

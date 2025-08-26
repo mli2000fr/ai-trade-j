@@ -1,7 +1,8 @@
 package com.example.backend.controller;
 
-import com.example.backend.model.ChatGptResponse;
 import com.example.backend.model.DataAction;
+import com.example.backend.model.PortfolioAndOrdersDto;
+import com.example.backend.model.TradeRequest;
 import com.example.backend.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,7 @@ public class ChatGptController {
     private final FinnhubService finnhubService;
     private final EodhdService eodhdService;
     private final MarketauxService marketauxService;
+    private final AlpacaService alpacaService;
 
     @Autowired
     public ChatGptController(ChatGptService chatGptService,
@@ -23,13 +25,15 @@ public class ChatGptController {
                              AlphaVantageService alphaVantageService,
                              TwelveDataService twelveDataService,
                              EodhdService eodhdService,
-                             MarketauxService marketauxService) {
+                             MarketauxService marketauxService,
+                             AlpacaService alpacaService) {
         this.chatGptService = chatGptService;
         this.alphaVantageService = alphaVantageService;
         this.twelveDataService = twelveDataService;
         this.finnhubService = finnhubService;
         this.eodhdService = eodhdService;
         this.marketauxService = marketauxService;
+        this.alpacaService = alpacaService;
     }
 
     @PostMapping("/ask")
@@ -77,6 +81,31 @@ public class ChatGptController {
         );
 
         String result = chatGptService.getAnalyseAction(dataAction);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/trade")
+    public ResponseEntity<String> trade(@RequestBody TradeRequest request) {
+        String result;
+        if ("buy".equalsIgnoreCase(request.getAction())) {
+            result = alpacaService.buyStock(request.getSymbol(), request.getQuantity());
+        } else if ("sell".equalsIgnoreCase(request.getAction())) {
+            result = alpacaService.sellStock(request.getSymbol(), request.getQuantity());
+        } else {
+            return ResponseEntity.badRequest().body("Action invalide : doit être 'buy' ou 'sell'");
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/portfolio")
+    public ResponseEntity<PortfolioAndOrdersDto> getPortfolioAndOrders() {
+        PortfolioAndOrdersDto dto = alpacaService.getPortfolioAndOrders();
+        return ResponseEntity.ok(dto);
+    }
+
+    @PostMapping("/order/cancel/{orderId}")
+    public ResponseEntity<String> cancelOrder(@PathVariable String orderId) {
+        String result = alpacaService.cancelOrder(orderId);
         return ResponseEntity.ok(result);
     }
 

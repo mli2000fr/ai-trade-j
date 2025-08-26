@@ -1,0 +1,13 @@
+{
+  "symbol": "AAPL",
+  "quote": {
+    "t": "2025-08-26T14:32:10.456789Z",   // Horodatage UTC de la cotation
+    "ax": "Q",                            // Exchange du ask (vendeur)
+    "ap": 226.40,                         // Ask price (prix de vente le plus bas)
+    "as": 200,                            // Ask size (quantité dispo au ask)
+    "bx": "P",                            // Exchange du bid (acheteur)
+    "bp": 226.35,                         // Bid price (prix d’achat le plus haut)
+    "bs": 100,                            // Bid size (quantité dispo au bid)
+    "c": ["R"]                            // Conditions de marché
+  }
+}
