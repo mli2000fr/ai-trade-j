@@ -9,8 +9,8 @@ import com.google.gson.Gson;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
-
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Controller
@@ -82,7 +82,7 @@ public class TradeHelper {
 
         String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_analyse.json");
 
-        InfosAction infosAction = this.getInfosAction(symbol);
+        InfosAction infosAction = this.getInfosAction(symbol,true);
 
         Map<String, Object> variables = getStringObjectMap(infosAction);
 
@@ -96,12 +96,51 @@ public class TradeHelper {
         return response.getMessage();
     }
 
+    public String tradeAIAuto(List<String> symbols) throws Exception {
+        if(symbols == null || symbols.isEmpty()){
+            throw new Exception("Aucun symbole fourni pour tradeAIAuto.");
+        }
+
+        // Lecture du prompt depuis le fichier
+        String promptEntete = TradeUtils.readResourceFile("prompt/prompt_trade_auto_entete.json");
+        String promptPied = TradeUtils.readResourceFile("prompt/prompt_trade_auto_pied.json");
+        String promptSymbol = TradeUtils.readResourceFile("prompt/prompt_trade_auto_symbol.json");
+
+        Portfolio portfolio = this.getPortfolio();
+        String portfolioJson = new Gson().toJson(portfolio);
+
+        String joinedSymbols = String.join(",", symbols);
+        StringBuilder promptFinal = new StringBuilder(promptEntete.replace("{{symbols}}", joinedSymbols)
+                .replace("{{data_portfolio}}", portfolioJson));
+
+        for(String symbol : symbols){
+            symbol = symbol.trim();
+            if(symbol.isEmpty()){
+                continue;
+            }
+            InfosAction infosAction = this.getInfosAction(symbol, true);
+
+            Map<String, Object> variables = getStringObjectMap(infosAction);
+
+            promptFinal.append(getPromptWithValues(promptSymbol, variables));
+            try {
+                Thread.sleep(61000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Thread interrompu pendant la temporisation de 61s", e);
+            }
+        }
+        promptFinal.append(promptPied);
+        ChatGptResponse response = chatGptService.askChatGpt(promptFinal.toString());
+        return response.getMessage();
+    }
+
     public String tradeAI(String symbol) throws Exception {
 
         // Lecture du prompt depuis le fichier
         String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_trade.json");
 
-        InfosAction infosAction = this.getInfosAction(symbol);
+        InfosAction infosAction = this.getInfosAction(symbol, true);
 
         Map<String, Object> variables = getStringObjectMap(infosAction);
 
@@ -140,9 +179,12 @@ public class TradeHelper {
         return prompt;
     }
 
-    private InfosAction getInfosAction(String symbol) throws Exception {
-        Portfolio portfolio = this.getPortfolio();
-        String portfolioJson = new Gson().toJson(portfolio);
+    private InfosAction getInfosAction(String symbol, boolean withPortfolio) throws Exception {
+        String portfolioJson = null;
+        if(withPortfolio){
+            Portfolio portfolio = this.getPortfolio();
+            portfolioJson = new Gson().toJson(portfolio);
+        }
         String data = twelveDataService.getDataAction(symbol);
         String sma = twelveDataService.getSMA(symbol);
         String rsi = twelveDataService.getRSI(symbol);

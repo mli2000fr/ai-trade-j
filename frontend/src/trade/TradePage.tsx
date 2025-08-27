@@ -15,6 +15,7 @@ const TradePage: React.FC = () => {
   const [pollingActive, setPollingActive] = useState(true);
   const [aiJsonResult, setAiJsonResult] = useState<any | null>(null);
   const [aiTextResult, setAiTextResult] = useState<string | null>(null);
+  const [autoSymbols, setAutoSymbols] = useState<string>('');
 
   // Utilitaire pour charger le portefeuille (refactorisé avec temporisation)
   const loadPortfolio = async (showLoading: boolean = true) => {
@@ -46,6 +47,11 @@ const TradePage: React.FC = () => {
     loadPortfolio(true);
   }, []);
 
+  // Met à jour autoSymbols quand le portefeuille change
+  useEffect(() => {
+    setAutoSymbols(portfolio?.positions?.map((pos: any) => pos.symbol).join(',') || '');
+  }, [portfolio]);
+
   // Soumission du trade
   const handleTrade = async () => {
     setMessage('');
@@ -55,7 +61,11 @@ const TradePage: React.FC = () => {
     setPollingActive(false);
     try {
       if (action === 'trade-ai') {
-        const res = await fetch(`/api/trade/trade-ai?symbol=${encodeURIComponent(symbol)}`);
+        const res = await fetch('/api/trade/trade-ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol }),
+        });
         const text = await res.text();
         const parts = text.split('===');
         if (parts.length >= 2) {
@@ -88,6 +98,46 @@ const TradePage: React.FC = () => {
       await loadPortfolio(true);
     } catch (e) {
       setMessage('Erreur lors de la transaction');
+      setAiJsonResult(null);
+      setAiTextResult(null);
+    } finally {
+      setIsExecuting(false);
+      setPollingActive(true);
+    }
+  };
+
+  // Soumission du trade auto
+  const handleTradeAuto = async () => {
+    setMessage('');
+    setAiJsonResult(null);
+    setAiTextResult(null);
+    setIsExecuting(true);
+    setPollingActive(false);
+    try {
+      const symboles = autoSymbols.split(',').map(s => s.trim()).filter(Boolean);
+      const res = await fetch('/api/trade/trade-ai-auto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symboles }),
+      });
+      const text = await res.text();
+      const parts = text.split('===');
+      if (parts.length >= 2) {
+        try {
+          setAiJsonResult(JSON.parse(parts[0].trim()));
+        } catch {
+          setAiJsonResult(null);
+        }
+        setAiTextResult(parts.slice(1).join('===').trim());
+        setMessage('');
+      } else {
+        setAiJsonResult(null);
+        setAiTextResult(null);
+        setMessage(text);
+      }
+      await loadPortfolio(true);
+    } catch (e) {
+      setMessage('Erreur lors de la transaction auto');
       setAiJsonResult(null);
       setAiTextResult(null);
     } finally {
@@ -181,8 +231,9 @@ const TradePage: React.FC = () => {
                       <th>Prix d'achat</th>
                       <th>Prix actuel</th>
                       <th>Quantité</th>
-                      <th>Gain/Perte</th>
                       <th>Total</th>
+                      <th>P & L pc</th>
+                      <th>P & L</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -192,8 +243,9 @@ const TradePage: React.FC = () => {
                         <td>{pos.avg_entry_price !== undefined && pos.avg_entry_price !== null ? Number(pos.avg_entry_price).toFixed(2) + ' $' : '-'}</td>
                         <td>{pos.current_price !== undefined && pos.current_price !== null ? Number(pos.current_price).toFixed(2) + ' $' : '-'}</td>
                         <td>{pos.qty}</td>
-                        <td>{pos.unrealized_plpc !== undefined && pos.unrealized_plpc !== null ? (Number(pos.unrealized_plpc) * 100).toFixed(3) + ' %' : '-'}</td>
                         <td>{pos.current_price !== undefined && pos.current_price !== null ? (Number(pos.qty) * Number(pos.current_price)).toFixed(2) + ' $' : '-'}</td>
+                        <td>{pos.unrealized_plpc !== undefined && pos.unrealized_plpc !== null ? (Number(pos.unrealized_plpc) * 100).toFixed(3) + ' %' : '-'}</td>
+                        <td>{pos.unrealized_pl !== undefined && pos.unrealized_pl !== null ? Number(pos.unrealized_pl).toFixed(2) + ' $' : '-'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -252,75 +304,117 @@ const TradePage: React.FC = () => {
           </>
         )}
       </div>
-      <h2>Trade</h2>
-      <div>
-        <label>Action&nbsp;
-          <select value={action} onChange={e => setAction(e.target.value as 'buy' | 'sell' | 'trade-ai')}>
-            <option value="buy">Acheter</option>
-            <option value="sell">Vendre</option>
-            <option value="trade-ai">Ttrade AI</option>
-          </select>
-        </label>
-      </div>
-      {action === 'buy' ? (
-        <div>
-          <label>Symbole&nbsp;
-            <input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} maxLength={8} />
-          </label>
-        </div>
-      ) : action === 'sell' ? (
-        <div>
-          <label>Symbole&nbsp;
-            <select value={symbol} onChange={e => setSymbol(e.target.value)}>
-              {ownedSymbols.length === 0 ? (
-                <option value="">Aucune position</option>
-              ) : (
-                ownedSymbols.map((sym: string) => (
-                  <option key={sym} value={sym}>{sym}</option>
-                ))
-              )}
-            </select>
-          </label>
-        </div>
-      ) : (
-        <div>
-          <label>Symbole&nbsp;
-            <input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} maxLength={8} />
-          </label>
-        </div>
-      )}
-      {action !== 'trade-ai' && (
-        <div>
-          <label>Quantité&nbsp;
-            <input type="number" min={1} value={quantity} onChange={e => setQuantity(Number(e.target.value))} />
-          </label>
-        </div>
-      )}
-      <button onClick={handleTrade} disabled={isExecuting}>
-        {isExecuting ? <span className="spinner" style={{marginRight: 8}}></span> : null}
-        {isExecuting ? 'Exécution...' : 'Exécuter'}
-      </button>
-      {aiJsonResult && (
-        <div className="trade-ai-json-result" style={{marginTop: 16}}>
-          <b style={{fontSize: '1.1em'}}>Résultat AI :</b>
-          <table style={{marginTop: 8, borderCollapse: 'collapse', background: '#f8fafd', border: '1px solid #e0e0e0', borderRadius: 6, minWidth: 220, boxShadow: '0 1px 4px #e0e0e0'}}>
+      <div style={{marginBottom: 24, padding: 16, border: '1px solid #e0e0e0', borderRadius: 6, background: '#f8fafd'}}>
+                <h2 style={{marginTop: 0}}>Traide auto</h2>
+                <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                  <label style={{fontWeight: 500}} htmlFor="auto-symbols">Symboles&nbsp;</label>
+                  <input
+                    id="auto-symbols"
+                    type="text"
+                    style={{flex: 1, minWidth: 120, padding: '4px 8px'}}
+                    value={autoSymbols}
+                    onChange={e => setAutoSymbols(e.target.value)}
+                    placeholder="AAPL,MSFT,GOOG"
+                  />
+                </div>
+                <div style={{width: '100%', display: 'flex', justifyContent: 'center', marginTop: 16}}>
+    <button onClick={handleTradeAuto} disabled={isExecuting || !autoSymbols.trim()} style={{padding: '6px 18px', fontWeight: 500, height: 36}}>
+      {isExecuting ? <span className="spinner" style={{marginRight: 8}}></span> : null}
+      {isExecuting ? 'Exécution...' : 'Exécuter'}
+    </button>
+  </div>
+              </div>
+      <div style={{marginBottom: 24, padding: 16, border: '1px solid #e0e0e0', borderRadius: 6, background: '#f8fafd', display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+  <h2 style={{marginTop: 0, alignSelf: 'flex-start'}}>Trade Manuel</h2>
+  <div style={{display: 'flex', alignItems: 'center', gap: 24, width: '100%', maxWidth: 520}}>
+    <label style={{fontWeight: 500, minWidth: 70, display: 'flex', alignItems: 'center', height: '100%'}}>Action&nbsp;
+      <select value={action} onChange={e => setAction(e.target.value as 'buy' | 'sell' | 'trade-ai')}>
+        <option value="buy">Acheter</option>
+        <option value="sell">Vendre</option>
+        <option value="trade-ai">Ttrade AI</option>
+      </select>
+    </label>
+    {action === 'buy' || action === 'trade-ai' ? (
+      <label style={{fontWeight: 500, minWidth: 70, display: 'flex', alignItems: 'center', height: '100%'}}>Symbole&nbsp;&nbsp;
+        <input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} maxLength={8} style={{width: 100}} />
+      </label>
+    ) : (
+      <label style={{fontWeight: 500, minWidth: 70, display: 'flex', alignItems: 'center', height: '100%'}}>Symbole&nbsp;
+        <select value={symbol} onChange={e => setSymbol(e.target.value)} style={{width: 100}}>
+          {ownedSymbols.length === 0 ? (
+            <option value="">Aucune position</option>
+          ) : (
+            ownedSymbols.map((sym: string) => (
+              <option key={sym} value={sym}>{sym}</option>
+            ))
+          )}
+        </select>
+      </label>
+    )}
+    {action !== 'trade-ai' && (
+      <label style={{fontWeight: 500, minWidth: 70, display: 'flex', alignItems: 'center', height: '100%'}}>Quantité&nbsp;
+        <input type="number" min={1} value={quantity} onChange={e => setQuantity(Number(e.target.value))} style={{width: 50}} />
+      </label>
+    )}
+  </div>
+  <div style={{width: '100%', display: 'flex', justifyContent: 'center', marginTop: 16}}>
+    <button onClick={handleTrade} disabled={isExecuting} style={{padding: '6px 18px', fontWeight: 500, height: 36}}>
+      {isExecuting ? <span className="spinner" style={{marginRight: 8}}></span> : null}
+      {isExecuting ? 'Exécution...' : 'Exécuter'}
+    </button>
+  </div>
+  </div>
+{aiJsonResult && (
+    <div className="trade-ai-json-result" style={{marginTop: 16, width: '100%'}}>
+      <b style={{fontSize: '1.1em'}}>Résultat AI :</b>
+      {Array.isArray(aiJsonResult) ? (
+        <div style={{overflowX: 'auto'}}>
+          <table style={{marginTop: 8, borderCollapse: 'collapse', background: '#f8fafd', border: '1px solid #e0e0e0', borderRadius: 6, minWidth: 600, boxShadow: '0 1px 4px #e0e0e0', width: '100%'}}>
+            <thead style={{background: '#e3eaf3'}}>
+              <tr>
+                <th style={{padding: '8px 12px'}}>Symbole</th>
+                <th style={{padding: '8px 12px'}}>Action</th>
+                <th style={{padding: '8px 12px'}}>Quantité</th>
+                <th style={{padding: '8px 12px'}}>Prix limite</th>
+                <th style={{padding: '8px 12px'}}>Stop loss</th>
+                <th style={{padding: '8px 12px'}}>Take profit</th>
+              </tr>
+            </thead>
             <tbody>
-              {Object.entries(aiJsonResult).map(([key, value]) => (
-                <tr key={key}>
-                  <td style={{fontWeight: 'bold', padding: '6px 16px 6px 8px', borderBottom: '1px solid #e0e0e0', textTransform: 'capitalize', background: '#f0f4f8'}}>{key}</td>
-                  <td style={{padding: '6px 12px', borderBottom: '1px solid #e0e0e0'}}>{String(value)}</td>
+              {aiJsonResult.map((item: any, idx: number) => (
+                <tr key={idx} style={{background: idx % 2 === 0 ? '#f8fafd' : '#f0f4f8'}}>
+                  <td style={{padding: '6px 12px', fontWeight: 500}}>{item.symbol}</td>
+                  <td style={{padding: '6px 12px', textTransform: 'capitalize'}}>{item.action}</td>
+                  <td style={{padding: '6px 12px', textAlign: 'right'}}>{item.quantity ?? item.qty ?? ''}</td>
+                  <td style={{padding: '6px 12px', textAlign: 'right'}}>{item.price_limit ?? item.priceLimit ? (item.price_limit ?? item.priceLimit) + ' $' : '-'}</td>
+                  <td style={{padding: '6px 12px', textAlign: 'right'}}>{item.stop_loss ?? item.stopLoss ? (item.stop_loss ?? item.stopLoss) + ' $' : '-'}</td>
+                  <td style={{padding: '6px 12px', textAlign: 'right'}}>{item.take_profit ?? item.takeProfit ? (item.take_profit ?? item.takeProfit) + ' $' : '-'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      ) : (
+        <table style={{marginTop: 8, borderCollapse: 'collapse', background: '#f8fafd', border: '1px solid #e0e0e0', borderRadius: 6, minWidth: 220, boxShadow: '0 1px 4px #e0e0e0'}}>
+          <tbody>
+            {Object.entries(aiJsonResult).map(([key, value]) => (
+              <tr key={key}>
+                <td style={{fontWeight: 'bold', padding: '6px 16px 6px 8px', borderBottom: '1px solid #e0e0e0', textTransform: 'capitalize', background: '#f0f4f8'}}>{key}</td>
+                <td style={{padding: '6px 12px', borderBottom: '1px solid #e0e0e0'}}>{String(value)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
-      {aiTextResult && (
-        <div className="trade-ai-text-result" style={{marginTop: 12, whiteSpace: 'pre-wrap', background: '#f6f6f6', padding: 10, borderRadius: 4}}>
-          {aiTextResult}
-        </div>
-      )}
-      {!aiJsonResult && !aiTextResult && message && <div className="trade-message">{message}</div>}
+    </div>
+  )}
+  {aiTextResult && (
+    <div className="trade-ai-text-result" style={{marginTop: 12, whiteSpace: 'pre-wrap', background: '#f6f6f6', padding: 10, borderRadius: 4, width: '100%'}}>
+      {aiTextResult}
+    </div>
+  )}
+  {!aiJsonResult && !aiTextResult && message && <div className="trade-message" style={{width: '100%'}}>{message}</div>}
+
     </div>
   );
 };

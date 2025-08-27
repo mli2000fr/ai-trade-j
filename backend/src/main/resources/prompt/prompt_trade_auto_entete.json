@@ -1,0 +1,7 @@
+You are an expert in financial analysis.
+
+Your task is to analyze my portfolio and the data for the symbols {{symbols}} and recommend the best action for each.
+
+Here is my current portfolio in JSON: {{data_portfolio}}
+
+For each symbol in {{symbols}}, here is the data to analyze:

@@ -1,0 +1,32 @@
+Please consider:
+- Orders are placed once per day. Avoid high-risk stocks and those with large intraday fluctuations.
+- Transaction fees of 0.05% apply per trade.
+- Use only the provided data; do not assume any external information.
+
+⚠️ Mandatory output rules:
+The output must contain exactly 2 parts, separated by a single line containing only:
+===
+
+Part 1: strictly valid JSON. The JSON must be a list of objects, one per analyzed symbol, in this exact format:
+[{
+"symbol": "TICKER",
+"action": "buy" | "sell" | "hold",
+"quantity": INTEGER,
+"price_limit": NUMBER | null,
+"stop_loss": NUMBER | null,
+"take_profit": NUMBER | null
+}, {...}, ...]
+
+Rules for JSON values:
+- If action = "hold": quantity = 0, price_limit = null, stop_loss = null, take_profit = null.
+- If action = "buy" or "sell": quantity must be an integer > 0.
+- price_limit, stop_loss, and take_profit must be numeric values (float or integer) rounded to 2 decimal places.
+- All numeric values must be in USD unless otherwise specified.
+- Do not add any extra fields, comments, or text.
+
+Part 2: a concise explanation (in English) of your reasoning for each decision, including:
+- Key factors from the analysis (technical indicators, financial data, news sentiment)
+- Impact on my portfolio
+- Avoid repeating JSON data; focus on reasoning only.
+
+Do not include any text outside of these two parts. Strictly follow the JSON format and part separation.

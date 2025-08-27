@@ -2,6 +2,7 @@ package com.app.backend.trade.controller;
 
 import com.app.backend.trade.model.PortfolioAndOrdersDto;
 import com.app.backend.trade.model.TradeRequest;
+import com.app.backend.trade.model.TradeAutoRequest;
 import com.app.backend.trade.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -53,10 +54,17 @@ public class TradeController {
         return ResponseEntity.ok(result);
     }
 
-    @GetMapping("/trade-ai")
-    public ResponseEntity<String> tradeAI(String symbol) throws Exception {
+    @PostMapping("/trade-ai")
+    public ResponseEntity<String> tradeAI(@RequestBody TradeRequest request) throws Exception {
 
-        String result = tradeHelper.tradeAI(symbol);
+        String result = tradeHelper.tradeAI(request.getSymbol());
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/trade-ai-auto")
+    public ResponseEntity<String> tradeAIAuto(@RequestBody TradeAutoRequest request) throws Exception {
+
+        String result = tradeHelper.tradeAIAuto(request.getSymboles());
         return ResponseEntity.ok(result);
     }
 

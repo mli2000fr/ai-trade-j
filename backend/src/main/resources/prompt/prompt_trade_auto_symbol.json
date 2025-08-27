@@ -1,0 +1,12 @@
+
+Data of symbole {{symbol}}
+- Daily price (in USD): {{data_value_daily}}
+- SMA_12: {{data_sma}}
+- RSI_14: {{data_rsi}}
+- ATR_14: {{data_atr}}
+- MACD_12: {{data_macd}}
+- Financial data: {{data_financial}}
+- Statistics: {{data_statistics}}
+- Earnings: {{data_earnings}}
+- News with sentiment: {{data_news}}
+
