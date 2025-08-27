@@ -3,8 +3,7 @@ Please consider:
 - Use only the provided data; do not assume any external information.
 
 ⚠️ Mandatory output rules:
-The output must contain exactly 2 parts, separated by a single line containing only:
-===
+The output must contain exactly 2 parts, separated by a single line containing only: ===
 
 Part 1: strictly valid JSON. The JSON must be a list of objects, one per analyzed symbol, in this exact format:
 [{

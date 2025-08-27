@@ -66,6 +66,26 @@ public class TradeHelper {
         }
     }
 
+    public boolean isSymbolsValid(String symbols) throws Exception {
+        String prompt = TradeUtils.readResourceFile("prompt/prompt_check_symbol.json")
+                .replace("{{symbols}}", symbols);
+        ChatGptResponse response = chatGptService.askChatGpt(prompt);
+        if (response.getError() != null) {
+            throw new Exception("Erreur lors de l'analyse : " + response.getError());
+        }
+
+        try{
+            boolean valid = Boolean.parseBoolean(response.getMessage());
+            if (!valid) {
+                throw new Exception("Les symboles ne sont pas valides : " + response.getMessage());
+            }
+            return true;
+        } catch (Exception e) {
+            throw new Exception("check symboles : " + response.getMessage());
+        }
+
+    }
+
     // Analyse une action en interrogeant Alpha Vantage puis ChatGPT avec un délai spécifique
     public String getAnalyseAction(String symbol) throws Exception {
 
@@ -90,6 +110,9 @@ public class TradeHelper {
             throw new Exception("Aucun symbole fourni pour tradeAIAuto.");
         }
 
+        String joinedSymbols = String.join(",", symbols);
+        this.isSymbolsValid(joinedSymbols);
+
         // Lecture du prompt depuis le fichier
         String promptEntete = TradeUtils.readResourceFile("prompt/prompt_trade_auto_entete.json");
         String promptPied = TradeUtils.readResourceFile("prompt/prompt_trade_auto_pied.json");
@@ -98,7 +121,6 @@ public class TradeHelper {
         Portfolio portfolio = this.getPortfolio();
         String portfolioJson = new Gson().toJson(portfolio);
 
-        String joinedSymbols = String.join(",", symbols);
         StringBuilder promptFinal = new StringBuilder(promptEntete.replace("{{symbols}}", joinedSymbols)
                 .replace("{{data_portfolio}}", portfolioJson));
 

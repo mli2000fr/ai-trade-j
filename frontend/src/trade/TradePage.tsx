@@ -368,7 +368,7 @@ const TradePage: React.FC = () => {
         )}
       </div>
       <div style={{marginBottom: 24, padding: 16, border: '1px solid #e0e0e0', borderRadius: 6, background: '#f8fafd'}}>
-                <h2 style={{marginTop: 0}}>Traide auto</h2>
+                <h2 style={{marginTop: 0}}>Trade auto</h2>
                 <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
                   <label style={{fontWeight: 500}} htmlFor="auto-symbols">Symboles&nbsp;</label>
                   <input

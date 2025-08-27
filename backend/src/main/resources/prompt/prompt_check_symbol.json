@@ -1,0 +1,5 @@
+Check whether the following symbols are valid: {{symbols}}.
+
+- If all symbols are valid, return only: "true"
+- If any symbol is invalid, return only: a comma-separated list of the invalid symbols.
+- The output must be strictly "true" or a comma-separated list of the invalid symbols, without any additional text, explanation, or formatting.
