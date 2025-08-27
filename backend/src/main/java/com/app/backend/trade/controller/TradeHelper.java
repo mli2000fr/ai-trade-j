@@ -6,6 +6,8 @@ import com.app.backend.trade.model.Portfolio;
 import com.app.backend.trade.service.*;
 import com.app.backend.trade.util.TradeUtils;
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import java.lang.reflect.Type;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
@@ -132,6 +134,28 @@ public class TradeHelper {
         }
         promptFinal.append(promptPied);
         ChatGptResponse response = chatGptService.askChatGpt(promptFinal.toString());
+
+        if (response.getError() != null) {
+            return "Erreur lors de l'analyse : " + response.getError();
+        }
+        String[] parts = response.getMessage() != null ? response.getMessage().split("===") : new String[0];
+        String responseOrder = parts.length > 0 ? parts[0].trim() : "";
+        try {
+            Type listType = new TypeToken<List<OrderRequest>>(){}.getType();
+            List<OrderRequest> orders = new Gson().fromJson(responseOrder, listType);
+            if (orders != null) {
+                for (OrderRequest order : orders) {
+                    order.normalize();
+                    if (order != null && order.symbol != null && order.qty != null && order.qty > 0 && order.side != null) {
+                        alpacaService.placeOrder(order.symbol, order.qty, order.side, order.priceLimit, order.stopLoss, order.takeProfit);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            return "Erreur de parsing de l'ordre : " + e.getMessage();
+        }
+
+
         return response.getMessage();
     }
 
