@@ -107,9 +107,8 @@ public class TradeController {
         return ResponseEntity.ok(result);
     }
 
-    @GetMapping("/test")
-    public ResponseEntity<String> trade() {
-        String symbol = "NVDA";
+    @GetMapping("/trade-ai")
+    public ResponseEntity<String> trade(String symbol) {
         Portfolio portfolio = tradeHelper.getPortfolio();
         String data = twelveDataService.getDataAction(symbol);
         String sma = twelveDataService.getSMA(symbol);
@@ -123,8 +122,6 @@ public class TradeController {
 
         DataAction dataAction = new DataAction(
                 symbol,
-                0,
-                0,
                 data,
                 sma,
                 rsi,
@@ -135,7 +132,7 @@ public class TradeController {
                 earnings,
                 news
         );
-        String result = tradeHelper.trade(dataAction, portfolio);
+        String result = tradeHelper.tradeAI(dataAction, portfolio);
         return ResponseEntity.ok(result);
     }
 

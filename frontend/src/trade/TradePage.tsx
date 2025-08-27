@@ -5,12 +5,16 @@ const TRADE_API_URL = '/api/trade/trade';
 
 const TradePage: React.FC = () => {
   const [symbol, setSymbol] = useState('AAPL');
-  const [action, setAction] = useState<'buy' | 'sell'>('buy');
+  const [action, setAction] = useState<'buy' | 'sell' | 'trade-ai'>('buy');
   const [quantity, setQuantity] = useState(1);
   const [message, setMessage] = useState('');
   const [portfolio, setPortfolio] = useState<{ positions: any[]; orders: any[]; account?: any } | null>(null);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [pollingActive, setPollingActive] = useState(true);
+  const [aiJsonResult, setAiJsonResult] = useState<any | null>(null);
+  const [aiTextResult, setAiTextResult] = useState<string | null>(null);
 
   // Utilitaire pour charger le portefeuille (refactorisé avec temporisation)
   const loadPortfolio = async (showLoading: boolean = true) => {
@@ -30,11 +34,12 @@ const TradePage: React.FC = () => {
 
   // Rafraîchissement automatique du portefeuille toutes les minutes
   useEffect(() => {
+    if (!pollingActive) return;
     const interval = setInterval(() => {
       loadPortfolio(false); // Mise à jour silencieuse
     }, 60000); // 60 000 ms = 1 minute
     return () => clearInterval(interval);
-  }, []);
+  }, [pollingActive]);
 
   // Récupération du portefeuille et des ordres récents
   useEffect(() => {
@@ -44,7 +49,33 @@ const TradePage: React.FC = () => {
   // Soumission du trade
   const handleTrade = async () => {
     setMessage('');
+    setAiJsonResult(null);
+    setAiTextResult(null);
+    setIsExecuting(true);
+    setPollingActive(false);
     try {
+      if (action === 'trade-ai') {
+        const res = await fetch(`/api/trade/trade-ai?symbol=${encodeURIComponent(symbol)}`);
+        const text = await res.text();
+        const parts = text.split('===');
+        if (parts.length >= 2) {
+          try {
+            setAiJsonResult(JSON.parse(parts[0].trim()));
+          } catch {
+            setAiJsonResult(null);
+          }
+          setAiTextResult(parts.slice(1).join('===').trim());
+          setMessage('');
+        } else {
+          setAiJsonResult(null);
+          setAiTextResult(null);
+          setMessage(text);
+        }
+        await loadPortfolio(true);
+        setIsExecuting(false);
+        setPollingActive(true);
+        return;
+      }
       const res = await fetch(TRADE_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -52,10 +83,16 @@ const TradePage: React.FC = () => {
       });
       const text = await res.text();
       setMessage(text);
-      // Rafraîchir le portefeuille après un trade
+      setAiJsonResult(null);
+      setAiTextResult(null);
       await loadPortfolio(true);
     } catch (e) {
       setMessage('Erreur lors de la transaction');
+      setAiJsonResult(null);
+      setAiTextResult(null);
+    } finally {
+      setIsExecuting(false);
+      setPollingActive(true);
     }
   };
 
@@ -211,12 +248,13 @@ const TradePage: React.FC = () => {
           </>
         )}
       </div>
-      <h2>Trade d'action</h2>
+      <h2>Trade</h2>
       <div>
         <label>Action&nbsp;
-          <select value={action} onChange={e => setAction(e.target.value as 'buy' | 'sell')}>
+          <select value={action} onChange={e => setAction(e.target.value as 'buy' | 'sell' | 'trade-ai')}>
             <option value="buy">Acheter</option>
             <option value="sell">Vendre</option>
+            <option value="trade-ai">Ttrade AI</option>
           </select>
         </label>
       </div>
@@ -226,7 +264,7 @@ const TradePage: React.FC = () => {
             <input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} maxLength={8} />
           </label>
         </div>
-      ) : (
+      ) : action === 'sell' ? (
         <div>
           <label>Symbole&nbsp;
             <select value={symbol} onChange={e => setSymbol(e.target.value)}>
@@ -240,14 +278,45 @@ const TradePage: React.FC = () => {
             </select>
           </label>
         </div>
+      ) : (
+        <div>
+          <label>Symbole&nbsp;
+            <input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} maxLength={8} />
+          </label>
+        </div>
       )}
-      <div>
-        <label>Quantité&nbsp;
-          <input type="number" min={1} value={quantity} onChange={e => setQuantity(Number(e.target.value))} />
-        </label>
-      </div>
-      <button onClick={handleTrade}>Exécuter</button>
-      {message && <div className="trade-message">{message}</div>}
+      {action !== 'trade-ai' && (
+        <div>
+          <label>Quantité&nbsp;
+            <input type="number" min={1} value={quantity} onChange={e => setQuantity(Number(e.target.value))} />
+          </label>
+        </div>
+      )}
+      <button onClick={handleTrade} disabled={isExecuting}>
+        {isExecuting ? <span className="spinner" style={{marginRight: 8}}></span> : null}
+        {isExecuting ? 'Exécution...' : 'Exécuter'}
+      </button>
+      {aiJsonResult && (
+        <div className="trade-ai-json-result" style={{marginTop: 16}}>
+          <b style={{fontSize: '1.1em'}}>Résultat AI :</b>
+          <table style={{marginTop: 8, borderCollapse: 'collapse', background: '#f8fafd', border: '1px solid #e0e0e0', borderRadius: 6, minWidth: 220, boxShadow: '0 1px 4px #e0e0e0'}}>
+            <tbody>
+              {Object.entries(aiJsonResult).map(([key, value]) => (
+                <tr key={key}>
+                  <td style={{fontWeight: 'bold', padding: '6px 16px 6px 8px', borderBottom: '1px solid #e0e0e0', textTransform: 'capitalize', background: '#f0f4f8'}}>{key}</td>
+                  <td style={{padding: '6px 12px', borderBottom: '1px solid #e0e0e0'}}>{String(value)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {aiTextResult && (
+        <div className="trade-ai-text-result" style={{marginTop: 12, whiteSpace: 'pre-wrap', background: '#f6f6f6', padding: 10, borderRadius: 4}}>
+          {aiTextResult}
+        </div>
+      )}
+      {!aiJsonResult && !aiTextResult && message && <div className="trade-message">{message}</div>}
     </div>
   );
 };

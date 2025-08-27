@@ -1,6 +1,6 @@
 You are an expert in financial analysis.
 
-You have the following data for the symbol {{symbole}}:
+You have the following data for the symbol {{symbol}}:
 Daily prices: {{data_value_daily}},
 Technical indicators: SMA(12) {{data_sma}},
 RSI(14) {{data_rsi}},

@@ -30,7 +30,7 @@ public class AlpacaService {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    private String placeOrder(String symbol, int qty, String side) {
+    public String placeOrder(String symbol, int qty, String side, Double priceLimit, Double stopLoss, Double takeProfit) {
         String url = apiBaseUrl + "/orders";
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -41,8 +41,31 @@ public class AlpacaService {
         body.put("symbol", symbol);
         body.put("qty", qty);
         body.put("side", side);
-        body.put("type", "market");
         body.put("time_in_force", "gtc");
+
+        // Gestion des différents types d'ordre
+        if (priceLimit != null && (stopLoss == null && takeProfit == null)) {
+            // Ordre limit simple
+            body.put("type", "limit");
+            body.put("limit_price", priceLimit);
+        } else if (stopLoss != null || takeProfit != null) {
+            // Bracket order
+            body.put("type", "market"); // Alpaca exige type=market pour bracket
+            body.put("order_class", "bracket");
+            if (takeProfit != null) {
+                Map<String, Object> tp = new HashMap<>();
+                tp.put("limit_price", takeProfit);
+                body.put("take_profit", tp);
+            }
+            if (stopLoss != null) {
+                Map<String, Object> sl = new HashMap<>();
+                sl.put("stop_price", stopLoss);
+                body.put("stop_loss", sl);
+            }
+        } else {
+            // Ordre market simple
+            body.put("type", "market");
+        }
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
         ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
@@ -128,14 +151,18 @@ public class AlpacaService {
         if (hasOppositeOpenOrder(symbol, "sell")) {
             return "Erreur : Un ordre d'achat ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant de vendre.";
         }
-        return placeOrder(symbol, qty, "sell");
+        return placeOrder(symbol, qty, "sell", null, null, null);
     }
 
     public String buyStock(String symbol, int qty) {
+        return buyStock(symbol, qty, null, null, null);
+    }
+
+    public String buyStock(String symbol, int qty, Double priceLimit, Double stopLoss, Double takeProfit) {
         if (hasOppositeOpenOrder(symbol, "buy")) {
             return "Erreur : Un ordre de vente ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant d'acheter.";
         }
-        return placeOrder(symbol, qty, "buy");
+        return placeOrder(symbol, qty, "buy", priceLimit, stopLoss, takeProfit);
     }
 
     public PortfolioAndOrdersDto getPortfolioAndOrders(boolean getOrder) {

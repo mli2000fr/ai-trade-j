@@ -44,6 +44,30 @@ public class TradeHelper {
         return portfolio;
     }
 
+    // Classe interne pour parser la réponse de l'IA
+    private static class OrderRequest {
+        String symbol;
+        Integer qty;
+        Integer quantity;
+        String side;
+        String action;
+        Double priceLimit;
+        Double price_limit;
+        Double stopLoss;
+        Double stop_loss;
+        Double takeProfit;
+        Double take_profit;
+
+        // Méthode utilitaire pour normaliser les champs
+        void normalize() {
+            if (side == null && action != null) side = action;
+            if (qty == null && quantity != null) qty = quantity;
+            if (priceLimit == null && price_limit != null) priceLimit = price_limit;
+            if (stopLoss == null && stop_loss != null) stopLoss = stop_loss;
+            if (takeProfit == null && take_profit != null) takeProfit = take_profit;
+        }
+    }
+
     // Analyse une action en interrogeant Alpha Vantage puis ChatGPT avec un délai spécifique
     public String getAnalyseAction(DataAction dataAction) {
 
@@ -62,17 +86,31 @@ public class TradeHelper {
         if (response.getError() != null) {
             return "Erreur lors de l'analyse : " + response.getError();
         }
+        String[] parts = response.getMessage() != null ? response.getMessage().split("===") : new String[0];
+        String responseOrder = parts.length > 0 ? parts[0].trim() : "";
+        OrderRequest order;
+        try {
+            order = new Gson().fromJson(responseOrder, OrderRequest.class);
+            order.normalize();
+        } catch (Exception e) {
+            return "Erreur de parsing de l'ordre : " + e.getMessage();
+        }
+        if (order != null && order.symbol != null && order.qty != null && order.qty > 0 && order.side != null) {
+            alpacaService.placeOrder(order.symbol, order.qty, order.side, order.priceLimit, order.stopLoss, order.takeProfit);
+        } else {
+            return "Ordre incomplet ou invalide : " + responseOrder;
+        }
         return response.getMessage();
     }
 
-    public String trade(DataAction dataAction, Portfolio portfolio) {
+    public String tradeAI(DataAction dataAction, Portfolio portfolio) {
         // Lecture du prompt depuis le fichier
         String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_trade.json");
 
         Map<String, Object> variables = getStringObjectMap(dataAction);
         // Conversion du portefeuille en JSON avec Gson
         String portfolioJson = new Gson().toJson(portfolio);
-        variables.put("data_portefeuille", portfolioJson);
+        variables.put("data_portfolio", portfolioJson);
         // Remplacement des variables {{...}} par leur valeur
         String prompt = promptTemplate;
         for (Map.Entry<String, Object> entry : variables.entrySet()) {
@@ -85,12 +123,24 @@ public class TradeHelper {
         if (response.getError() != null) {
             return "Erreur lors de l'analyse : " + response.getError();
         }
+        String[] parts = response.getMessage() != null ? response.getMessage().split("===") : new String[0];
+        String responseOrder = parts.length > 0 ? parts[0].trim() : "";
+        OrderRequest order;
+        try {
+            order = new Gson().fromJson(responseOrder, OrderRequest.class);
+            order.normalize();
+        } catch (Exception e) {
+            return "Erreur de parsing de l'ordre : " + e.getMessage();
+        }
+        if (order != null && order.symbol != null && order.qty != null && order.qty > 0 && order.side != null) {
+            alpacaService.placeOrder(order.symbol, order.qty, order.side, order.priceLimit, order.stopLoss, order.takeProfit);
+        }
         return response.getMessage();
     }
 
     private static Map<String, Object> getStringObjectMap(DataAction dataAction) {
         Map<String, Object> variables = new HashMap<>();
-        variables.put("symbole", dataAction.getSymbol());
+        variables.put("symbol", dataAction.getSymbol());
         variables.put("data_value_daily", dataAction.getData());
         variables.put("delai_mois", dataAction.getDelai());
         variables.put("data_sma", dataAction.getSma());

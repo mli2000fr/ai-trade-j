@@ -46,6 +46,28 @@ public class DataAction {
         this.montant = montant;
     }
 
+    public DataAction(String symbol,
+                      String data,
+                      String sma,
+                      String rsi,
+                      String macd,
+                      String atr,
+                      String financial,
+                      String statistics,
+                      String earnings,
+                      String news) {
+        this.symbol = symbol;
+        this.news = news;
+        this.data = data;
+        this.sma = sma;
+        this.rsi = rsi;
+        this.macd = macd;
+        this.atr = atr;
+        this.financial = financial;
+        this.statistics = statistics;
+        this.earnings = earnings;
+    }
+
     public String getSymbol() { return symbol; }
     public int getDelai() { return delai; }
     public String getData() { return data; }

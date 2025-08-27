@@ -1,5 +1,6 @@
 package com.app.backend.trade.service;
 
+import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -21,7 +22,13 @@ public class EodhdService {
     // Récupérer les news pour un symbole donné (ou toutes les news si symbol est null)
     public String getNews(String symbol) {
         RestTemplate restTemplate = new RestTemplate();
-        String url = apiUrl + "/news" + "?limit=1000&api_token=" + apiKey;
+        StringBuilder urlBuilder = new StringBuilder(apiUrl);
+        if (!apiUrl.endsWith("/")) {
+            urlBuilder.append("/");
+        }
+        urlBuilder.append("news?limit=").append(TradeConstant.LIMIT_NEWS)
+                  .append("&api_token=").append(apiKey);
+        String url = urlBuilder.toString();
         if (symbol != null && !symbol.trim().isEmpty()) {
             url += "&s=" + symbol.trim();
         }
