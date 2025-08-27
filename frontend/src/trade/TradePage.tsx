@@ -47,6 +47,12 @@ const TradePage: React.FC = () => {
     loadPortfolio(true);
   }, []);
 
+  // Charger les ordres au premier affichage de la page
+  useEffect(() => {
+    loadOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Met à jour autoSymbols quand le portefeuille change
   useEffect(() => {
     setAutoSymbols(portfolio?.positions?.map((pos: any) => pos.symbol).join(',') || '');
@@ -82,6 +88,7 @@ const TradePage: React.FC = () => {
           setMessage(text);
         }
         await loadPortfolio(true);
+        await loadOrders();
         setIsExecuting(false);
         setPollingActive(true);
         return;
@@ -96,6 +103,7 @@ const TradePage: React.FC = () => {
       setAiJsonResult(null);
       setAiTextResult(null);
       await loadPortfolio(true);
+      await loadOrders();
     } catch (e) {
       setMessage('Erreur lors de la transaction');
       setAiJsonResult(null);
@@ -136,6 +144,7 @@ const TradePage: React.FC = () => {
         setMessage(text);
       }
       await loadPortfolio(true);
+      await loadOrders();
     } catch (e) {
       setMessage('Erreur lors de la transaction auto');
       setAiJsonResult(null);
@@ -162,6 +171,8 @@ const TradePage: React.FC = () => {
       setMessage(text || 'Ordre annulé.');
       // Rafraîchir le portefeuille après annulation
       await loadPortfolio();
+      // Rafraîchir le tableau des ordres après annulation
+      await loadOrders();
     } catch (e) {
       setMessage('Erreur lors de l\'annulation de l\'ordre.');
     }
@@ -177,6 +188,33 @@ const TradePage: React.FC = () => {
       setSymbol(ownedSymbols[0]);
     }
   }, [action, ownedSymbols]);
+
+  // Filtres pour les ordres récents
+  const [filterSymbol, setFilterSymbol] = useState<string>('');
+  const [filterCancelable, setFilterCancelable] = useState<boolean>(false);
+
+  // Ajout état pour les ordres récupérés via l'API
+  const [orders, setOrders] = useState<any[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+
+  // Fonction pour charger les ordres depuis l'API
+  const loadOrders = async () => {
+    setOrdersLoading(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Pause de 1 seconde
+      const params = [];
+      if (filterSymbol) params.push(`symbol=${encodeURIComponent(filterSymbol)}`);
+      if (filterCancelable) params.push(`cancelable=true`);
+      const url = '/api/trade/orders' + (params.length ? `?${params.join('&')}` : '');
+      const res = await fetch(url);
+      const data = await res.json();
+      setOrders(Array.isArray(data) ? data : []);
+    } catch {
+      setOrders([]);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
 
   return (
     <div className="trade-page">
@@ -254,12 +292,37 @@ const TradePage: React.FC = () => {
             </div>
             <div style={{ marginTop: 8 }}>
               <b>Ordres récents&nbsp;:</b>
-              {portfolio.orders.length === 0 ? (
-                <div>Aucun ordre récent.</div>
+              {/* Filtres pour les ordres récents */}
+              <div style={{ display: 'flex', gap: 16, alignItems: 'center', margin: '8px 0' }}>
+                <label>
+                  Filtrer par symbole&nbsp;
+                  <select value={filterSymbol} onChange={e => setFilterSymbol(e.target.value)}>
+                    <option value="">Tous</option>
+                    {portfolio.positions
+                      .map(pos => pos.symbol)
+                      .filter((symbol, idx, arr) => arr.indexOf(symbol) === idx)
+                      .map(symbol => (
+                        <option key={symbol} value={symbol}>{symbol}</option>
+                      ))}
+                  </select>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input type="checkbox" checked={filterCancelable} onChange={e => setFilterCancelable(e.target.checked)} />
+                  Annulables uniquement
+                </label>
+                <button onClick={loadOrders} disabled={ordersLoading} style={{ minWidth: 80 }}>
+                  {ordersLoading ? 'Mise à jour...' : 'Update'}
+                </button>
+              </div>
+              {/* Affichage du tableau d'ordres récupérés via l'API */}
+              {orders.length === 0 && !ordersLoading ? (
+                <div>Aucun ordre à afficher.</div>
+              ) : ordersLoading ? (
+                <div>Chargement des ordres...</div>
               ) : (
                 (() => {
-                  // Vérifier s'il y a au moins une action annulable
-                  const hasCancellable = portfolio.orders.some(order => order.id && cancellableStatuses.includes(order.status));
+                  const hasCancellable = orders.some(order => order.id && cancellableStatuses.includes(order.status));
+                  if (orders.length === 0) return <div>Aucun ordre ne correspond aux filtres.</div>;
                   return (
                     <table className="orders-table">
                       <thead>
@@ -273,12 +336,12 @@ const TradePage: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {portfolio.orders.map((order, i) => (
+                        {orders.map((order, i) => (
                           <tr key={i} className={order.side === 'buy' ? 'buy-row' : order.side === 'sell' ? 'sell-row' : ''}>
                             <td className="status">{order.side}</td>
                             <td>{order.symbol}</td>
                             <td>{order.qty}</td>
-                            <td>{order.filled_avg_price ? Number(order.filled_avg_price).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : (order.limit_price ? Number(order.limit_price).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : '-')}</td>
+                            <td>{order.filledAvgPrice !== undefined && order.filledAvgPrice !== null ? Number(order.filledAvgPrice).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : (order.limit_price !== undefined && order.limit_price !== null ? Number(order.limit_price).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : '-')}</td>
                             <td className="status">{order.status}</td>
                             {hasCancellable && (
                               <td>

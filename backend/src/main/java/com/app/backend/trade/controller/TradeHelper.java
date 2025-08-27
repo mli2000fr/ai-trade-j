@@ -3,13 +3,13 @@ package com.app.backend.trade.controller;
 import com.app.backend.trade.model.ChatGptResponse;
 import com.app.backend.trade.model.InfosAction;
 import com.app.backend.trade.model.Portfolio;
+import com.app.backend.trade.model.alpaca.Order;
 import com.app.backend.trade.service.*;
 import com.app.backend.trade.util.TradeUtils;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import java.util.HashMap;
 import java.util.List;
@@ -17,19 +17,6 @@ import java.util.Map;
 
 @Controller
 public class TradeHelper {
-
-    @Value("${openai.api.prompt.version.analyse.action}")
-    private String promptVersionAnalyseAction;
-
-    @Value("${openai.api.prompt.version.analyse.id}")
-    private String promptVersionAnalyseId;
-
-
-    @Value("${openai.api.prompt.version.trade.action}")
-    private String promptVersionTradeAction;
-
-    @Value("${openai.api.prompt.version.trade.id}")
-    private String promptVersionTradeId;
 
     private final AlpacaService alpacaService;
     private final ChatGptService chatGptService;
@@ -147,7 +134,7 @@ public class TradeHelper {
                 for (OrderRequest order : orders) {
                     order.normalize();
                     if (order != null && order.symbol != null && order.qty != null && order.qty > 0 && order.side != null) {
-                        alpacaService.placeOrder(order.symbol, order.qty, order.side, order.priceLimit, order.stopLoss, order.takeProfit);
+                        Order epageorder = alpacaService.placeOrder(order.symbol, order.qty, order.side, order.priceLimit, order.stopLoss, order.takeProfit);
                     }
                 }
             }
@@ -184,7 +171,7 @@ public class TradeHelper {
             return "Erreur de parsing de l'ordre : " + e.getMessage();
         }
         if (order != null && order.symbol != null && order.qty != null && order.qty > 0 && order.side != null) {
-            alpacaService.placeOrder(order.symbol, order.qty, order.side, order.priceLimit, order.stopLoss, order.takeProfit);
+            Order orderAlpaca = alpacaService.placeOrder(order.symbol, order.qty, order.side, order.priceLimit, order.stopLoss, order.takeProfit);
         }
         return response.getMessage();
     }

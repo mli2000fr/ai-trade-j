@@ -1,16 +1,20 @@
 package com.app.backend.trade.service;
 
 import com.app.backend.trade.model.Portfolio;
-import com.app.backend.trade.model.PortfolioAndOrdersDto;
+import com.app.backend.trade.model.PortfolioDto;
 import com.app.backend.trade.model.Position;
+import com.app.backend.trade.model.alpaca.OffsetDateTimeAdapter;
+import com.app.backend.trade.model.alpaca.Order;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
-
 import java.net.URI;
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -28,9 +32,11 @@ public class AlpacaService {
     @Value("${alpaca.markets.api.market.url}")
     private String apiMarketBaseUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    @Value("${alpaca.markets.api.order.limit}")
+    private String limitOrders;
 
-    public String placeOrder(String symbol, int qty, String side, Double priceLimit, Double stopLoss, Double takeProfit) {
+    private final RestTemplate restTemplate = new RestTemplate();
+    public Order placeOrder(String symbol, int qty, String side, Double priceLimit, Double stopLoss, Double takeProfit) {
         String url = apiBaseUrl + "/orders";
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -69,7 +75,10 @@ public class AlpacaService {
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
         ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-        return response.getBody();
+        Gson gson = new GsonBuilder()
+            .registerTypeAdapter(OffsetDateTime.class, new OffsetDateTimeAdapter())
+            .create();
+        return gson.fromJson(response.getBody(), Order.class);
     }
 
     public Double getLastPrice(String symbol) {
@@ -151,7 +160,7 @@ public class AlpacaService {
         if (hasOppositeOpenOrder(symbol, "sell")) {
             return "Erreur : Un ordre d'achat ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant de vendre.";
         }
-        return placeOrder(symbol, qty, "sell", null, null, null);
+        return placeOrder(symbol, qty, "sell", null, null, null).toString();
     }
 
     public String buyStock(String symbol, int qty) {
@@ -162,11 +171,11 @@ public class AlpacaService {
         if (hasOppositeOpenOrder(symbol, "buy")) {
             return "Erreur : Un ordre de vente ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant d'acheter.";
         }
-        return placeOrder(symbol, qty, "buy", priceLimit, stopLoss, takeProfit);
+        return placeOrder(symbol, qty, "buy", priceLimit, stopLoss, takeProfit).toString();
     }
 
-    public PortfolioAndOrdersDto getPortfolioAndOrders(boolean getOrder) {
-        PortfolioAndOrdersDto dto = new PortfolioAndOrdersDto();
+    public PortfolioDto getPortfolioWithPositions() {
+        PortfolioDto dto = new PortfolioDto();
 
         // Récupérer les positions
         String positionsUrl = apiBaseUrl + "/positions";
@@ -176,13 +185,6 @@ public class AlpacaService {
         HttpEntity<Void> request = new HttpEntity<>(headers);
         ResponseEntity<Map[]> positionsResponse = restTemplate.exchange(positionsUrl, HttpMethod.GET, request, Map[].class);
         dto.setPositions(positionsResponse.getBody() != null ? Arrays.asList(positionsResponse.getBody()) : List.of());
-
-        if(getOrder){
-            // Récupérer les ordres récents
-            String ordersUrl = apiBaseUrl + "/orders?limit=5&status=all";
-            ResponseEntity<Map[]> ordersResponse = restTemplate.exchange(ordersUrl, HttpMethod.GET, request, Map[].class);
-            dto.setOrders(ordersResponse.getBody() != null ? Arrays.asList(ordersResponse.getBody()) : List.of());
-        }
 
         // Récupérer les infos du compte
         String accountUrl = apiBaseUrl + "/account";
@@ -204,7 +206,7 @@ public class AlpacaService {
     }
 
     public Portfolio getPortfolio() {
-        PortfolioAndOrdersDto dto = this.getPortfolioAndOrders(false);
+        PortfolioDto dto = this.getPortfolioWithPositions();
         double cash = 0.0;
         if (dto.getAccount() != null && dto.getAccount().get("cash") != null) {
             try {
@@ -247,5 +249,35 @@ public class AlpacaService {
             }
         }
         return new Portfolio(cash, positions);
+    }
+
+    /**
+     * Récupère les ordres Alpaca, avec filtre optionnel sur le symbole, l'annulabilité et la limite de résultats.
+     * @param symbol symbole à filtrer (null ou vide = tous)
+     * @param cancelable true = seulement les statuts annulables, false = tous
+     * @return liste des ordres filtrés
+     */
+    public List<Order> getOrders(String symbol, Boolean cancelable) {
+        StringBuilder url = new StringBuilder(apiBaseUrl + "/orders?status=all");
+        if (symbol != null && !symbol.trim().isEmpty()) {
+            url.append("&symbols=").append(symbol.trim());
+        }
+        url.append("&limit=").append(limitOrders);
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("APCA-API-KEY-ID", apiKeyId);
+        headers.set("APCA-API-SECRET-KEY", apiKeySecret);
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+        ResponseEntity<String> response = restTemplate.exchange(url.toString(), HttpMethod.GET, request, String.class);
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(OffsetDateTime.class, new OffsetDateTimeAdapter())
+                .create();
+        Order[] orders = gson.fromJson(response.getBody(), Order[].class);
+        List<Order> result = Arrays.asList(orders);
+        if (Boolean.TRUE.equals(cancelable)) {
+            result = result.stream()
+                    .filter(order -> ACTIVE_ORDER_STATUSES.contains(order.getStatus()))
+                    .toList();
+        }
+        return result;
     }
 }

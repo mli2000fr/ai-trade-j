@@ -1,6 +1,6 @@
 package com.app.backend.trade.controller;
 
-import com.app.backend.trade.model.PortfolioAndOrdersDto;
+import com.app.backend.trade.model.PortfolioDto;
 import com.app.backend.trade.model.TradeRequest;
 import com.app.backend.trade.model.TradeAutoRequest;
 import com.app.backend.trade.service.*;
@@ -43,8 +43,8 @@ public class TradeController {
     }
 
     @GetMapping("/portfolio")
-    public ResponseEntity<PortfolioAndOrdersDto> getPortfolioAndOrders() {
-        PortfolioAndOrdersDto dto = alpacaService.getPortfolioAndOrders(true);
+    public ResponseEntity<PortfolioDto> getPortfolioWithPositions() {
+        PortfolioDto dto = alpacaService.getPortfolioWithPositions();
         return ResponseEntity.ok(dto);
     }
 
@@ -63,9 +63,19 @@ public class TradeController {
 
     @PostMapping("/trade-ai-auto")
     public ResponseEntity<String> tradeAIAuto(@RequestBody TradeAutoRequest request) throws Exception {
-
         String result = tradeHelper.tradeAIAuto(request.getSymboles());
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/orders")
+    public ResponseEntity<?> getOrders(
+            @RequestParam(value = "symbol", required = false) String symbol,
+            @RequestParam(value = "cancelable", required = false) Boolean cancelable) {
+        java.util.List<com.app.backend.trade.model.alpaca.Order> orders = alpacaService.getOrders(symbol, cancelable);
+        // Ne retourner que les 6 premiers ordres
+        if (orders == null) orders = java.util.Collections.emptyList();
+        if (orders.size() > 6) orders = orders.subList(0, 6);
+        return ResponseEntity.ok(orders);
     }
 
 }
