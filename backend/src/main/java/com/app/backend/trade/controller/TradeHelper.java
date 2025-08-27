@@ -1,10 +1,9 @@
 package com.app.backend.trade.controller;
 
 import com.app.backend.trade.model.ChatGptResponse;
-import com.app.backend.trade.model.DataAction;
+import com.app.backend.trade.model.InfosAction;
 import com.app.backend.trade.model.Portfolio;
-import com.app.backend.trade.service.AlpacaService;
-import com.app.backend.trade.service.ChatGptService;
+import com.app.backend.trade.service.*;
 import com.app.backend.trade.util.TradeUtils;
 import com.google.gson.Gson;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,12 +31,22 @@ public class TradeHelper {
 
     private final AlpacaService alpacaService;
     private final ChatGptService chatGptService;
+    private final TwelveDataService twelveDataService;
+    private final FinnhubService finnhubService;
+    private final EodhdService eodhdService;
 
     @Autowired
     public TradeHelper(AlpacaService alpacaService,
-                       ChatGptService chatGptService) {
+                       ChatGptService chatGptService,
+                       FinnhubService finnhubService,
+                       TwelveDataService twelveDataService,
+                       EodhdService eodhdService
+                       ) {
         this.alpacaService = alpacaService;
         this.chatGptService = chatGptService;
+        this.twelveDataService = twelveDataService;
+        this.finnhubService = finnhubService;
+        this.eodhdService = eodhdService;
     }
     public Portfolio getPortfolio() {
         Portfolio portfolio = alpacaService.getPortfolio();
@@ -69,56 +78,35 @@ public class TradeHelper {
     }
 
     // Analyse une action en interrogeant Alpha Vantage puis ChatGPT avec un délai spécifique
-    public String getAnalyseAction(DataAction dataAction) {
+    public String getAnalyseAction(String symbol) {
 
         String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_analyse.json");
-        Map<String, Object> variables = getStringObjectMap(dataAction);
 
-        String prompt = promptTemplate;
-        for (Map.Entry<String, Object> entry : variables.entrySet()) {
-            String key = entry.getKey();
-            Object value = entry.getValue();
-            prompt = prompt.replace("{{" + key + "}}", value != null ? value.toString() : "");
-        }
-        TradeUtils.log("Prompt JSON : " + prompt);
+        InfosAction infosAction = this.getInfosAction(symbol);
+
+        Map<String, Object> variables = getStringObjectMap(infosAction);
+
+        String prompt = getPromptWithValues(promptTemplate, variables);
 
         ChatGptResponse response = chatGptService.askChatGpt(prompt);
         if (response.getError() != null) {
             return "Erreur lors de l'analyse : " + response.getError();
         }
-        String[] parts = response.getMessage() != null ? response.getMessage().split("===") : new String[0];
-        String responseOrder = parts.length > 0 ? parts[0].trim() : "";
-        OrderRequest order;
-        try {
-            order = new Gson().fromJson(responseOrder, OrderRequest.class);
-            order.normalize();
-        } catch (Exception e) {
-            return "Erreur de parsing de l'ordre : " + e.getMessage();
-        }
-        if (order != null && order.symbol != null && order.qty != null && order.qty > 0 && order.side != null) {
-            alpacaService.placeOrder(order.symbol, order.qty, order.side, order.priceLimit, order.stopLoss, order.takeProfit);
-        } else {
-            return "Ordre incomplet ou invalide : " + responseOrder;
-        }
+
         return response.getMessage();
     }
 
-    public String tradeAI(DataAction dataAction, Portfolio portfolio) {
+    public String tradeAI(String symbol) {
+
         // Lecture du prompt depuis le fichier
         String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_trade.json");
 
-        Map<String, Object> variables = getStringObjectMap(dataAction);
-        // Conversion du portefeuille en JSON avec Gson
-        String portfolioJson = new Gson().toJson(portfolio);
-        variables.put("data_portfolio", portfolioJson);
-        // Remplacement des variables {{...}} par leur valeur
-        String prompt = promptTemplate;
-        for (Map.Entry<String, Object> entry : variables.entrySet()) {
-            String key = entry.getKey();
-            Object value = entry.getValue();
-            prompt = prompt.replace("{{" + key + "}}", value != null ? value.toString() : "");
-        }
-        TradeUtils.log("Prompt JSON : " + prompt);
+        InfosAction infosAction = this.getInfosAction(symbol);
+
+        Map<String, Object> variables = getStringObjectMap(infosAction);
+
+        String prompt = getPromptWithValues(promptTemplate, variables);
+
         ChatGptResponse response = chatGptService.askChatGpt(prompt);
         if (response.getError() != null) {
             return "Erreur lors de l'analyse : " + response.getError();
@@ -138,20 +126,59 @@ public class TradeHelper {
         return response.getMessage();
     }
 
-    private static Map<String, Object> getStringObjectMap(DataAction dataAction) {
+    private String getPromptWithValues(String promptTemplate,  Map<String, Object> variables){
+        String prompt = promptTemplate;
+        for (Map.Entry<String, Object> entry : variables.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            prompt = prompt.replace("{{" + key + "}}", value != null ? value.toString() : "");
+        }
+        TradeUtils.log("Prompt JSON : " + prompt);
+        return prompt;
+    }
+
+    private InfosAction getInfosAction(String symbol) {
+        Portfolio portfolio = this.getPortfolio();
+        String portfolioJson = new Gson().toJson(portfolio);
+        String data = twelveDataService.getDataAction(symbol);
+        String sma = twelveDataService.getSMA(symbol);
+        String rsi = twelveDataService.getRSI(symbol);
+        String macd = twelveDataService.getMACD(symbol);
+        String atr = twelveDataService.getATR(symbol);
+        String financial = finnhubService.getFinancialData(symbol);
+        String statistics = finnhubService.getDefaultKeyStatistics(symbol);
+        String earnings = finnhubService.getEarnings(symbol);
+        String news = eodhdService.getNews(symbol);
+
+        InfosAction info = new InfosAction(
+                symbol,
+                data,
+                sma,
+                rsi,
+                macd,
+                atr,
+                financial,
+                statistics,
+                earnings,
+                news,
+                portfolioJson
+        );
+        return info;
+    }
+
+    private static Map<String, Object> getStringObjectMap(InfosAction infosAction) {
         Map<String, Object> variables = new HashMap<>();
-        variables.put("symbol", dataAction.getSymbol());
-        variables.put("data_value_daily", dataAction.getData());
-        variables.put("delai_mois", dataAction.getDelai());
-        variables.put("data_sma", dataAction.getSma());
-        variables.put("data_rsi", dataAction.getRsi());
-        variables.put("data_macd", dataAction.getMacd());
-        variables.put("data_atr", dataAction.getAtr());
-        variables.put("data_financial", dataAction.getFinancial());
-        variables.put("data_statistics", dataAction.getStatistics());
-        variables.put("data_earnings", dataAction.getEarnings());
-        variables.put("data_montant", dataAction.getMontant());
-        variables.put("data_news", dataAction.getNews());
+        variables.put("symbol", infosAction.getSymbol());
+        variables.put("data_value_daily", infosAction.getData());
+        variables.put("data_sma", infosAction.getSma());
+        variables.put("data_rsi", infosAction.getRsi());
+        variables.put("data_macd", infosAction.getMacd());
+        variables.put("data_atr", infosAction.getAtr());
+        variables.put("data_financial", infosAction.getFinancial());
+        variables.put("data_statistics", infosAction.getStatistics());
+        variables.put("data_earnings", infosAction.getEarnings());
+        variables.put("data_news", infosAction.getNews());
+        variables.put("data_portfolio", infosAction.getPortfolio());
         return variables;
     }
 }

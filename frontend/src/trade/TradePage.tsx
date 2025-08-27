@@ -178,8 +178,10 @@ const TradePage: React.FC = () => {
                   <thead>
                     <tr>
                       <th>Symbole</th>
-                      <th>Prix courant</th>
+                      <th>Prix d'achat</th>
+                      <th>Prix actuel</th>
                       <th>Quantité</th>
+                      <th>Gain/Perte</th>
                       <th>Total</th>
                     </tr>
                   </thead>
@@ -187,8 +189,10 @@ const TradePage: React.FC = () => {
                     {portfolio.positions.map((pos, i) => (
                       <tr key={i}>
                         <td>{pos.symbol}</td>
+                        <td>{pos.avg_entry_price !== undefined && pos.avg_entry_price !== null ? Number(pos.avg_entry_price).toFixed(2) + ' $' : '-'}</td>
                         <td>{pos.current_price !== undefined && pos.current_price !== null ? Number(pos.current_price).toFixed(2) + ' $' : '-'}</td>
                         <td>{pos.qty}</td>
+                        <td>{pos.unrealized_plpc !== undefined && pos.unrealized_plpc !== null ? (Number(pos.unrealized_plpc) * 100).toFixed(3) + ' %' : '-'}</td>
                         <td>{pos.current_price !== undefined && pos.current_price !== null ? (Number(pos.qty) * Number(pos.current_price)).toFixed(2) + ' $' : '-'}</td>
                       </tr>
                     ))}

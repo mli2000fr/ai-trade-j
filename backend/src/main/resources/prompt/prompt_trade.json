@@ -17,7 +17,7 @@ Here is the data to analyze:
 
 Please consider:
 - I place orders once per day. Avoid high-risk stocks and those that fluctuate too much within a single day.
-- Transaction fees of 0.6% apply per trade.
+- Transaction fees of 0.05% apply per trade.
 
 ⚠️ Mandatory output rules:
 The output must contain exactly 2 parts, separated by a single line containing only:
