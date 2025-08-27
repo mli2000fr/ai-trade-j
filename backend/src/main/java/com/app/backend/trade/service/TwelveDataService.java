@@ -15,54 +15,55 @@ public class TwelveDataService {
     @Value("${twelvedata.api.url}")
     private String apiUrl;
 
+    @Value("${twelvedata.api.history.limit}")
+    private int limit;
 
     // SMA (Simple Moving Average)
-    public String getSMA(String symbol) {
-        return getIndicator("sma", symbol, "interval=1day&time_period=12&start_date=" + TradeUtils.getDateMoins90Jours());
+    public String getSMA(String symbol) throws Exception {
+        return getIndicator("sma", symbol, "interval=1day&time_period=30&start_date=" + TradeUtils.getStartDate(limit));
     }
 
     // RSI (Relative Strength Index)
-    public String getRSI(String symbol) {
-        return getIndicator("rsi", symbol, "interval=1day&time_period=14&start_date=" + TradeUtils.getDateMoins90Jours());
+    public String getRSI(String symbol) throws Exception {
+        return getIndicator("rsi", symbol, "interval=1day&time_period=14&start_date=" + TradeUtils.getStartDate(limit));
     }
 
     // MACD (Moving Average Convergence Divergence)
-    public String getMACD(String symbol) {
-        return getIndicator("macd", symbol, "interval=1day&short_period=12&long_period=26&signal_period=9&start_date=" + TradeUtils.getDateMoins90Jours());
+    public String getMACD(String symbol) throws Exception {
+        return getIndicator("macd", symbol, "interval=1day&short_period=12&long_period=26&signal_period=9&start_date=" + TradeUtils.getStartDate(limit));
     }
 
     // ATR (Average True Range)
-    public String getATR(String symbol) {
-        return getIndicator("atr", symbol, "interval=1day&time_period=14&start_date=" + TradeUtils.getDateMoins90Jours());
+    public String getATR(String symbol) throws Exception {
+        return getIndicator("atr", symbol, "interval=1day&time_period=14&start_date=" + TradeUtils.getStartDate(limit));
     }
 
     // Données de l'action (Time Series)
-    public String getDataAction(String symbol) {
-        return getIndicator("time_series", symbol, "interval=1day&start_date=" + TradeUtils.getDateMoins90Jours());
+    public String getDataAction(String symbol) throws Exception {
+        return getIndicator("time_series", symbol, "interval=1day&start_date=" + TradeUtils.getStartDate(limit));
     }
 
     // Données fondamentales (Fundamental Data) les fondamentaux (bénéfices, prévisions, valorisation, actualités produits)
-    public String getFundamental(String symbol) {
+    public String getFundamental(String symbol) throws Exception {
         return getIndicator("fundamentals", symbol, null);
     }
 
 
 
-    private String getIndicator(String function, String symbol, String params) {
+    private String getIndicator(String function, String symbol, String params) throws Exception {
         RestTemplate restTemplate = new RestTemplate();
         String url = apiUrl + function + "?symbol=" + symbol + "&apikey=" + apiKey + (params != null ? "&" + params : "");
         TradeUtils.log("Appel Twelve Data API (" + function + "): " + url);
-        try {
-            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
-            if (response.getStatusCode() == HttpStatus.OK) {
-                String responseBody = response.getBody();
-                TradeUtils.log("Réponse Twelve Data API (" + function + "): " + responseBody);
-                return responseBody != null ? responseBody : "Aucune donnée reçue de l'API Twelve Data.";
-            } else {
-                return "Erreur lors de la récupération des données : " + response.getStatusCode();
+        ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+        if (response.getStatusCode() == HttpStatus.OK) {
+            String responseBody = response.getBody();
+            TradeUtils.log("Réponse Twelve Data API (" + function + "): " + responseBody);
+            if(responseBody == null || (responseBody != null && responseBody.contains("\"status\":\"error\""))) {
+                throw new Exception("Erreur Twelve Data API: " + responseBody);
             }
-        } catch (Exception e) {
-            return "Exception callTwelveDataApi: " + e.getMessage();
+            return responseBody;
+        } else {
+            throw new Exception("Erreur lors de la récupération des données : " + response.getStatusCode());
         }
     }
 }

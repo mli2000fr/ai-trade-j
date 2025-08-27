@@ -11,8 +11,8 @@ public class TradeUtils {
     }
 
     // Retourne la date du jour moins 90 jours au format YYYY-MM-DD
-    public static String getDateMoins90Jours() {
-        LocalDate date = LocalDate.now().minusDays(TradeConstant.HISTO);
+    public static String getStartDate(int histo) {
+        LocalDate date = LocalDate.now().minusDays(histo);
         return date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
     }
 

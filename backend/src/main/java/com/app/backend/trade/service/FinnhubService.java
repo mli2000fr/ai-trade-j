@@ -22,9 +22,13 @@ public class FinnhubService {
     @Value("${finnhub.api.url}")
     private String apiUrl;
 
+
+    @Value("${finnhub.api.history.limit}")
+    private int limit;
+
     private static final String CONTENJ_VIDE = "aucune information trouvée";
 
-    private String callFinnhubApi(String endpoint, String params) {
+    private String callFinnhubApi(String endpoint, String params) throws Exception {
         try{
             RestTemplate restTemplate = new RestTemplate();
             String url = apiUrl + endpoint + "?" + params + "&token=" + apiKey;
@@ -33,12 +37,12 @@ public class FinnhubService {
             TradeUtils.log("Réponse Finnhub API (" + endpoint + "): " + reponse);
             return reponse;
         } catch (Exception e) {
-            return "Exception callFinnhubApi: " + e.getMessage();
+            throw new Exception("Exception callFinnhubApi : " + e.getMessage());
         }
     }
 
     // Données financières (financialData)
-    public String getFinancialData(String symbol) {
+    public String getFinancialData(String symbol) throws Exception {
         String response = callFinnhubApi("stock/financials-reported", "symbol=" + symbol);
         try {
             ObjectMapper mapper = new ObjectMapper();
@@ -55,12 +59,12 @@ public class FinnhubService {
                 return response;
             }
         } catch (Exception e) {
-            return CONTENJ_VIDE; // En cas d'erreur de parsing, retourner contenu vide
+            throw new Exception("getFinancialData : " + e.getMessage());
         }
     }
 
     // Statistiques clés par défaut (defaultKeyStatistics)
-    public String getDefaultKeyStatistics(String symbol) {
+    public String getDefaultKeyStatistics(String symbol) throws Exception {
         String response = callFinnhubApi("stock/metric", "symbol=" + symbol + "&metric=all");
         try {
             ObjectMapper mapper = new ObjectMapper();
@@ -68,7 +72,7 @@ public class FinnhubService {
             if (root.has("series")) {
                 ObjectNode seriesNode = (ObjectNode) root.get("series");
                 DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-                LocalDate minDate = LocalDate.now().minusDays(TradeConstant.HISTO);
+                LocalDate minDate = LocalDate.now().minusDays(limit);
                 // Pour chaque type de série (annual, quarterly, etc.)
                 Iterator<String> seriesTypes = seriesNode.fieldNames();
                 while (seriesTypes.hasNext()) {
@@ -101,17 +105,17 @@ public class FinnhubService {
             }
             return mapper.writeValueAsString(root);
         } catch (Exception e) {
-            return response; // en cas d'erreur, retour brut
+            throw new Exception("getDefaultKeyStatistics : " + e.getMessage());
         }
     }
 
     // Résultats (earnings)
-    public String getEarnings(String symbol) {
+    public String getEarnings(String symbol) throws Exception {
         return callFinnhubApi("stock/earnings", "symbol=" + symbol);
     }
 
     // News (actualités)
-    public String getNews(String symbol, String keywords) {
+    public String getNews(String symbol, String keywords) throws Exception {
         String params;
         String functionNews;
          // Si un symbole est fourni, on récupère les news de la semaine passée pour ce symbole
@@ -131,7 +135,7 @@ public class FinnhubService {
     }
 
     // News générales (actualités générales)
-    public String getGeneralNews() {
+    public String getGeneralNews() throws Exception {
         return callFinnhubApi("company-news", "category=general");
     }
 }

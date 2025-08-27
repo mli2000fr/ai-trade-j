@@ -1,6 +1,5 @@
 package com.app.backend.trade.service;
 
-import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -18,58 +17,57 @@ public class EodhdService {
     @Value("${eodhd.api.url}")
     private String apiUrl;
 
+    @Value("${eodhd.api.news.limit}")
+    private int limit;
+
 
     // Récupérer les news pour un symbole donné (ou toutes les news si symbol est null)
-    public String getNews(String symbol) {
+    public String getNews(String symbol) throws Exception {
         RestTemplate restTemplate = new RestTemplate();
         StringBuilder urlBuilder = new StringBuilder(apiUrl);
         if (!apiUrl.endsWith("/")) {
             urlBuilder.append("/");
         }
-        urlBuilder.append("news?limit=").append(TradeConstant.LIMIT_NEWS)
+        urlBuilder.append("news?limit=").append(limit)
                   .append("&api_token=").append(apiKey);
         String url = urlBuilder.toString();
         if (symbol != null && !symbol.trim().isEmpty()) {
             url += "&s=" + symbol.trim();
         }
         TradeUtils.log("Appel EODHD API (news): " + url);
-        try {
-            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
-            if (response.getStatusCode() == HttpStatus.OK) {
-                String responseBody = response.getBody();
-                TradeUtils.log("Réponse EODHD API (news): " + responseBody);
-                // Supprimer le champ 'content' de chaque news
-                if (responseBody != null) {
-                    // Utilisation d'une manipulation JSON simple
-                    try {
-                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                        java.util.List<java.util.Map<String, Object>> newsList = mapper.readValue(responseBody, java.util.List.class);
-                        for (java.util.Map<String, Object> news : newsList) {
-                            news.remove("content");
-                            news.remove("link");
-                            Map<String, Object> sentiment = (Map<String, Object>) news.get("sentiment");
-                            double neg = 0.0, neu = 0.0, pos = 0.0;
-                            if (sentiment != null) {
-                                neg = sentiment.get("neg") != null ? ((Number) sentiment.get("neg")).doubleValue() : 0.0;
-                                neu = sentiment.get("neu") != null ? ((Number) sentiment.get("neu")).doubleValue() : 0.0;
-                                pos = sentiment.get("pos") != null ? ((Number) sentiment.get("pos")).doubleValue() : 0.0;
-                            }
-                            news.put("sentimentInterpreted", interpretSentiment(neg, neu, pos));
+        ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+        if (response.getStatusCode() == HttpStatus.OK) {
+            String responseBody = response.getBody();
+            TradeUtils.log("Réponse EODHD API (news): " + responseBody);
+            // Supprimer le champ 'content' de chaque news
+            if (responseBody != null) {
+                // Utilisation d'une manipulation JSON simple
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    java.util.List<java.util.Map<String, Object>> newsList = mapper.readValue(responseBody, java.util.List.class);
+                    for (java.util.Map<String, Object> news : newsList) {
+                        news.remove("content");
+                        news.remove("link");
+                        Map<String, Object> sentiment = (Map<String, Object>) news.get("sentiment");
+                        double neg = 0.0, neu = 0.0, pos = 0.0;
+                        if (sentiment != null) {
+                            neg = sentiment.get("neg") != null ? ((Number) sentiment.get("neg")).doubleValue() : 0.0;
+                            neu = sentiment.get("neu") != null ? ((Number) sentiment.get("neu")).doubleValue() : 0.0;
+                            pos = sentiment.get("pos") != null ? ((Number) sentiment.get("pos")).doubleValue() : 0.0;
                         }
-                        // Retirer les news neutres
-                        newsList.removeIf(news -> "neutral".equals(news.get("sentimentInterpreted")));
-                        return mapper.writeValueAsString(newsList);
-                    } catch (Exception jsonEx) {
-                        return "Erreur lors du traitement JSON : " + jsonEx.getMessage();
+                        news.put("sentimentInterpreted", interpretSentiment(neg, neu, pos));
                     }
-                } else {
-                    return "Aucune donnée reçue de l'API EODHD.";
+                    // Retirer les news neutres
+                    newsList.removeIf(news -> "neutral".equals(news.get("sentimentInterpreted")));
+                    return mapper.writeValueAsString(newsList);
+                } catch (Exception jsonEx) {
+                    throw new Exception("Erreur lors du traitement JSON : " + jsonEx.getMessage());
                 }
             } else {
-                return "Erreur lors de la récupération des données : " + response.getStatusCode();
+                throw new Exception("Aucune donnée reçue de l'API EODHD.");
             }
-        } catch (Exception e) {
-            return "Exception callEodhdApi: " + e.getMessage();
+        } else {
+            throw new Exception("Erreur lors de la récupération des données : " + response.getStatusCode());
         }
     }
 

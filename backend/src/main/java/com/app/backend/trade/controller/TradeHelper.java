@@ -78,7 +78,7 @@ public class TradeHelper {
     }
 
     // Analyse une action en interrogeant Alpha Vantage puis ChatGPT avec un délai spécifique
-    public String getAnalyseAction(String symbol) {
+    public String getAnalyseAction(String symbol) throws Exception {
 
         String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_analyse.json");
 
@@ -96,7 +96,7 @@ public class TradeHelper {
         return response.getMessage();
     }
 
-    public String tradeAI(String symbol) {
+    public String tradeAI(String symbol) throws Exception {
 
         // Lecture du prompt depuis le fichier
         String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_trade.json");
@@ -126,7 +126,7 @@ public class TradeHelper {
         return response.getMessage();
     }
 
-    private String getPromptWithValues(String promptTemplate,  Map<String, Object> variables){
+    private String getPromptWithValues(String promptTemplate,  Map<String, Object> variables) throws Exception {
         String prompt = promptTemplate;
         for (Map.Entry<String, Object> entry : variables.entrySet()) {
             String key = entry.getKey();
@@ -134,10 +134,13 @@ public class TradeHelper {
             prompt = prompt.replace("{{" + key + "}}", value != null ? value.toString() : "");
         }
         TradeUtils.log("Prompt JSON : " + prompt);
+        if(prompt.indexOf("{{") != -1){
+            throw new Exception("Attention, certaines variables n'ont pas été remplacées dans le prompt.");
+        }
         return prompt;
     }
 
-    private InfosAction getInfosAction(String symbol) {
+    private InfosAction getInfosAction(String symbol) throws Exception {
         Portfolio portfolio = this.getPortfolio();
         String portfolioJson = new Gson().toJson(portfolio);
         String data = twelveDataService.getDataAction(symbol);
