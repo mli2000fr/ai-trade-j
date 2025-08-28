@@ -9,6 +9,7 @@ node_modules/
 target/
 build/
 /backend/target/
+/backend/target/classes/
 /backend/app.log*
 /backend/app.log.*.gz
 /frontend/build/

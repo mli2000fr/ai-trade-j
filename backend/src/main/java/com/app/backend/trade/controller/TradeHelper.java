@@ -234,9 +234,13 @@ public class TradeHelper {
         String earnings = finnhubService.getEarnings(symbol);
         String news = "No information found";
         try{
-            news = eodhdService.getNews(symbol);
+            // news = eodhdService.getNews(symbol);
+            Map<String, Object> newsMap = alpacaService.getDetailedNewsForSymbol(symbol, null);
+            if (newsMap != null && newsMap.containsKey("news")) {
+                news = new Gson().toJson(newsMap.get("news"));
+            }
         } catch (Exception e) {
-            TradeUtils.log("Error eodhdService.getNews("+symbol+"): " + e.getMessage());
+            TradeUtils.log("Error getNews("+symbol+"): " + e.getMessage());
         }
 
         InfosAction info = new InfosAction(

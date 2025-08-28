@@ -30,4 +30,39 @@ public class TradeUtils {
             throw new RuntimeException("Erreur lors de la lecture du fichier de ressource : " + path, e);
         }
     }
+
+
+    /**
+     * Supprime toutes les balises HTML d'une chaîne de caractères et ne garde que le texte.
+     * @param htmlContent contenu HTML à nettoyer
+     * @return texte sans balises HTML
+     */
+    public static String stripHtmlTags(String htmlContent) {
+        if (htmlContent == null || htmlContent.isEmpty()) {
+            return htmlContent;
+        }
+
+        // Remplacer les entités HTML communes
+        String cleaned = htmlContent
+                .replaceAll("&amp;", "&")
+                .replaceAll("&lt;", "<")
+                .replaceAll("&gt;", ">")
+                .replaceAll("&quot;", "\"")
+                .replaceAll("&#8216;", "'")
+                .replaceAll("&#8217;", "'")
+                .replaceAll("&#8220;", "\"")
+                .replaceAll("&#8221;", "\"")
+                .replaceAll("&nbsp;", " ");
+
+        // Supprimer toutes les balises HTML
+        cleaned = cleaned.replaceAll("<[^>]+>", "");
+
+        // Nettoyer les espaces multiples et les retours à la ligne excessifs
+        cleaned = cleaned
+                .replaceAll("\\s+", " ")  // Remplacer plusieurs espaces par un seul
+                .replaceAll("\\n\\s*\\n", "\n\n")  // Limiter à maximum 2 retours à la ligne consécutifs
+                .trim();  // Supprimer les espaces en début et fin
+
+        return cleaned;
+    }
 }

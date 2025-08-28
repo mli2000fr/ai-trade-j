@@ -1,0 +1,40 @@
+{
+  "news": [
+    {
+      "summary": "Apple, Alphabet, and Nvidia are flexing their financial power with $430 billion in stock buybacks. Skeptics question their motives.",
+      "created_at": "2025-08-28T19:31:25Z",
+      "source": "benzinga",
+      "headline": "Apple, Google, Nvidia Unleash $430 Billion Buyback Blitz—But Is Innovation Falling Behind?",
+      "content": "Wall Street is flexing harder than ever in 2025, and it's not through flashy M&A or moonshot R&D—it's with cash. U.S. corporate titans, led by Apple Inc (NASDAQ:AAPL), Alphabet Inc (NASDAQ:GOOGL) (NASDAQ:GOOG) and Nvidia Corp (NASDAQ:NVDA), have unveiled nearly $430 billion in stock buybacks this year, the biggest show of financial firepower yet. Track AAPL stock here. But while shareholders are cheering the windfall, skeptics wonder: are record repurchases a vote of confidence—or a warning sign of slowing innovation? Read Also: Apple Stock Could Hit An 'All-Time High' The Day It Does This, Says Analyst Tech Titans: From Buybacks To Stock Pops Apple rolled out a $100 billion repurchase plan on May 1. Despite tariff headwinds, shares are up 8% since then, steadying at around $230. Alphabet greenlit a $70 billion buyback on April 24, sparking a 30% rally as investors piled into its AI-fueled growth story. Nvidia announced its $60 billion program just this week on Aug. 27, but the market wasn't wowed—shares slipped slightly, a sign that buybacks alone can't distract from China jitters and cooling hyperscaler spend. Wall Street's biggest lenders— JPMorgan Chase & Co (NYSE:JPM) ($50 billion), Goldman Sachs Group Inc (NYSE:GS) ($40 billion), Wells Fargo & Co (NYSE:WFC) ($40 billion) and Bank of America Corp (NYSE:BAC) ($40 billion)—all announced jumbo buybacks of their own. Payments giant Visa Inc (NYSE:V) ($30B) rounded out the list. Together with Big Tech, the tally pushes toward half a trillion dollars. But the divergence is telling: while Alphabet's buyback lit a fire under the stock, Apple's gains have been more modest, and Nvidia's buyback debut barely moved the needle. The question lingers—are these announcements really about rewarding shareholders, or about filling the innovation gap as growth slows? The Verdict: Flex Or Red Flag? Buybacks this size send one clear message: corporate America is swimming in cash. Yet as the buyback arms race escalates, investors must weigh whether this is genuine confidence in future earnings—or just the most expensive way to paper over uncertainty. Read Next: Apple Hunts Big AI Deals — But Time Warner, Nokia Still Haunt The M&A Playbook Image: Shutterstock",
+      "symbols": [
+        "AAPL",
+        "BAC",
+        "GOOG",
+        "GOOGL",
+        "GS",
+        "JPM",
+        "NVDA",
+        "V",
+        "WFC"
+      ]
+    },
+    {
+      "summary": " Apple building a moat, securing supply and erecting a firewall against Trump&#39;s tariffs. First-mover advantage in chips and U.S investments shield them from rivals and political storms.",
+      "created_at": "2025-08-28T17:55:40Z",
+      "source": "benzinga",
+      "headline": "Apple–TSMC Chip Pact Builds Firewall Against Trump's Tariffs",
+      "content": "Apple Inc (NASDAQ:AAPL) isn't just building the iPhone 18—it's creating a moat. By reportedly securing nearly half of Taiwan Semiconductor Manufacturing Co Ltd's (NYSE:TSM) initial 2nm chip production capacity, Apple has locked in supply for its flagship device while also erecting a \"firewall\" against President Donald Trump's proposed 100% tariffs on imported semiconductors. Track AAPL stock here. The move highlights how Apple's scale, foresight, and U.S. investments could shield it from the political storm that threatens to slam its rivals. Read Also: Six Years Late, Apple's Foldable iPhone Could Still Flip Everything First-Mover Advantage In Chips The iPhone maker's reported deal to grab almost half of TSMC's first 2nm output is a flex that could leave competitors scrambling. Qualcomm Inc. (NASDAQ:QCOM) and MediaTek, already competing for cutting-edge mobile processors, may find themselves at a disadvantage, while AI chip heavyweights like Nvidia Corp. (NASDAQ:NVDA) and Advanced Micro Devices Inc. (NASDAQ:AMD) risk bottlenecks for their next-generation designs. Even Alphabet Inc's (NASDAQ:GOOGL) (NASDAQ:GOOG) Google and Samsung Electronics Co Ltd (OTCPK:SSNLF), with ambitions in mobile silicon, could be forced to make do with smaller slices of TSMC's most advanced node. For Apple, the advantage is clear: by locking in bleeding-edge chips early, it ensures the iPhone 18 launches with a performance edge just as rivals wrestle with supply constraints. A Silicon Shield Against Tariffs Beyond supply, Apple is hedging against politics. Trump's proposed 100% semiconductor tariffs are aimed squarely at imported chips, but Apple appears to have carved out protection on two fronts: The U.S. Bet: Apple pledged $100 billion in new U.S. investments, earning potential tariff immunity under carve-outs for companies reshoring or investing domestically. TSMC's Arizona Expansion: With TSMC's multibillion-dollar fabs under construction in Arizona, its chips could also qualify for exemptions, insulating Apple from cost shocks that could punish rivals dependent on Asia-made wafers. Taken together, Apple's deal looks less like panic-buying and more like chess—positioning itself two moves ahead of both competitors and Washington. Read Next: Apple Hunts Big AI Deals — But Time Warner, Nokia Still Haunt The M&A Playbook Photo: Prathmesh T On Shutterstock.com",
+      "symbols": [
+        "AAPL",
+        "AMD",
+        "GOOG",
+        "GOOGL",
+        "NVDA",
+        "QCOM",
+        "SSNLF",
+        "TSM"
+      ]
+    }
+  ],
+  "next_page_token": "MTc1NjQwMzc0MTAwMDAwMDAwMHw0NzM5NTQ5Mg=="
+}

@@ -9,5 +9,5 @@ Data of symbole {{symbol}}
 - Financial data: {{data_financial}}
 - Statistics: {{data_statistics}}
 - Earnings: {{data_earnings}}
-- News with sentiment: {{data_news}}
+- News: {{data_news}}
 

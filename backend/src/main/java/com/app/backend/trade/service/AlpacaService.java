@@ -9,6 +9,7 @@ import com.app.backend.trade.model.alpaca.Order;
 import com.app.backend.trade.model.OrderEntity;
 import com.app.backend.trade.repository.OrderRepository;
 import com.app.backend.trade.util.TradeConstant;
+import com.app.backend.trade.util.TradeUtils;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,6 +39,9 @@ public class AlpacaService {
 
     @Value("${alpaca.markets.api.order.limit}")
     private String limitOrders;
+
+    @Value("${alpaca.markets.api.news.defaut.limit}")
+    private String defaultLimitNews;
 
     private final RestTemplate restTemplate = new RestTemplate();
     private final OrderRepository orderRepository;
@@ -348,4 +352,161 @@ public class AlpacaService {
         }
         return result;
     }
+
+    /**
+     * Récupère les actualités depuis l'API Alpaca News.
+     * @param symbols liste des symboles à filtrer (optionnel)
+     * @param startDate date de début au format ISO (optionnel)
+     * @param endDate date de fin au format ISO (optionnel)
+     * @param sort ordre de tri ("asc" ou "desc", par défaut "desc")
+     * @param includeContent inclure le contenu complet des articles (par défaut false)
+     * @param excludeContentless exclure les articles sans contenu (par défaut true)
+     * @param pageSize nombre d'articles par page (max 50, par défaut 10)
+     * @return liste des actualités filtrées
+     */
+    public Map<String, Object> getNews(List<String> symbols, String startDate, String endDate,
+                                      String sort, Boolean includeContent, Boolean excludeContentless,
+                                      Integer pageSize) {
+        StringBuilder url = new StringBuilder(apiMarketBaseUrl + "/v1beta1/news");
+
+        List<String> params = new ArrayList<>();
+
+        if (symbols != null && !symbols.isEmpty()) {
+            params.add("symbols=" + String.join(",", symbols));
+        }
+
+        if (startDate != null && !startDate.trim().isEmpty()) {
+            params.add("start=" + startDate.trim());
+        }
+
+        if (endDate != null && !endDate.trim().isEmpty()) {
+            params.add("end=" + endDate.trim());
+        }
+
+        if (sort != null && !sort.trim().isEmpty()) {
+            params.add("sort=" + sort.trim());
+        } else {
+            params.add("sort=desc"); // valeur par défaut
+        }
+
+        if (includeContent != null) {
+            params.add("include_content=" + includeContent);
+        }
+
+        if (excludeContentless != null) {
+            params.add("exclude_contentless=" + excludeContentless);
+        } else {
+            params.add("exclude_contentless=true"); // valeur par défaut
+        }
+
+        if (pageSize != null && pageSize > 0 && pageSize <= 50) {
+            params.add("limit=" + pageSize);
+        } else {
+            params.add("limit="+defaultLimitNews); // valeur par défaut
+        }
+
+        if (!params.isEmpty()) {
+            url.append("?").append(String.join("&", params));
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("APCA-API-KEY-ID", apiKeyId);
+        headers.set("APCA-API-SECRET-KEY", apiKeySecret);
+
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(url.toString(), HttpMethod.GET, request, Map.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Map<String, Object> originalResponse = response.getBody();
+
+                // Filtrer la réponse pour ne garder que les champs requis
+                return filterNewsResponse(originalResponse);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Erreur lors de la récupération des actualités Alpaca: " + e.getMessage(), e);
+        }
+
+        return new HashMap<>(); // retour vide en cas de problème
+    }
+
+    /**
+     * Filtre la réponse des actualités pour ne garder que les champs requis.
+     * @param originalResponse réponse originale de l'API Alpaca
+     * @return réponse filtrée avec seulement les champs demandés
+     */
+    private Map<String, Object> filterNewsResponse(Map<String, Object> originalResponse) {
+        Map<String, Object> filteredResponse = new HashMap<>();
+
+        // Copier les champs de niveau supérieur sauf "news"
+        originalResponse.forEach((key, value) -> {
+            if (!"news".equals(key)) {
+                filteredResponse.put(key, value);
+            }
+        });
+
+        // Traiter la liste des actualités
+        Object newsObj = originalResponse.get("news");
+        if (newsObj instanceof List) {
+            List<?> newsList = (List<?>) newsObj;
+            List<Map<String, Object>> filteredNewsList = new ArrayList<>();
+
+            for (Object newsItem : newsList) {
+                if (newsItem instanceof Map) {
+                    Map<?, ?> newsMap = (Map<?, ?>) newsItem;
+                    Map<String, Object> filteredNews = new HashMap<>();
+
+                    // Ne garder que les champs requis
+                    String[] fieldsToKeep = {"content", "summary", "created_at", "headline", "source", "symbols"};
+                    for (String field : fieldsToKeep) {
+                        if (newsMap.containsKey(field)) {
+                            Object value = newsMap.get(field);
+                            // Nettoyer le HTML du champ content
+                            if ("content".equals(field) && value instanceof String) {
+                                value = TradeUtils.stripHtmlTags((String) value);
+                            }
+                            filteredNews.put(field, value);
+                        }
+                    }
+
+                    filteredNewsList.add(filteredNews);
+                }
+            }
+
+            filteredResponse.put("news", filteredNewsList);
+        }
+
+        return filteredResponse;
+    }
+
+
+    /**
+     * Récupère les actualités pour un symbole spécifique avec des paramètres simplifiés.
+     * @param symbol symbole de l'action
+     * @param pageSize nombre d'articles à récupérer (max 50)
+     * @return liste des actualités pour ce symbole
+     */
+    public Map<String, Object> getNewsForSymbol(String symbol, Integer pageSize) {
+        return getNews(Arrays.asList(symbol), null, null, "desc", false, true, pageSize);
+    }
+
+    /**
+     * Récupère les actualités récentes (sans filtre de symbole).
+     * @param pageSize nombre d'articles à récupérer (max 50)
+     * @return liste des actualités récentes
+     */
+    public Map<String, Object> getRecentNews(Integer pageSize) {
+        return getNews(null, null, null, "desc", false, true, pageSize);
+    }
+
+    /**
+     * Récupère les actualités avec contenu complet pour un symbole.
+     * @param symbol symbole de l'action
+     * @param pageSize nombre d'articles à récupérer (max 50)
+     * @return liste des actualités avec contenu complet
+     */
+    public Map<String, Object> getDetailedNewsForSymbol(String symbol, Integer pageSize) {
+        return getNews(Arrays.asList(symbol), null, null, "desc", true, true, pageSize);
+    }
+
 }

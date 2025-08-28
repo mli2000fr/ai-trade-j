@@ -1,0 +1,36 @@
+{
+  "name": "ai-trade-j",
+  "version": "1.0.0",
+  "description": "Application de trading AI avec backend Spring Boot et frontend React",
+  "private": true,
+  "scripts": {
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:backend": "cd backend && mvn spring-boot:run",
+    "start:frontend": "cd frontend && npm start",
+    "build": "npm run build:frontend",
+    "build:frontend": "cd frontend && npm run build",
+    "install:frontend": "cd frontend && npm install",
+    "clean": "cd backend && mvn clean && cd ../frontend && npm run build",
+    "dev": "npm run start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "local"
+  },
+  "keywords": [
+    "trading",
+    "ai",
+    "spring-boot",
+    "react",
+    "alpaca"
+  ],
+  "author": "",
+  "license": "ISC"
+}
+

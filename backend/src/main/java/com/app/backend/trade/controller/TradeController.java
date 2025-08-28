@@ -78,4 +78,44 @@ public class TradeController {
         return ResponseEntity.ok(orders);
     }
 
+    @GetMapping("/news")
+    public ResponseEntity<java.util.Map<String, Object>> getNews(
+            @RequestParam(value = "symbols", required = false) java.util.List<String> symbols,
+            @RequestParam(value = "start", required = false) String startDate,
+            @RequestParam(value = "end", required = false) String endDate,
+            @RequestParam(value = "sort", required = false, defaultValue = "desc") String sort,
+            @RequestParam(value = "include_content", required = false, defaultValue = "false") Boolean includeContent,
+            @RequestParam(value = "exclude_contentless", required = false, defaultValue = "true") Boolean excludeContentless,
+            @RequestParam(value = "page_size", required = false, defaultValue = "10") Integer pageSize) {
+
+        java.util.Map<String, Object> news = alpacaService.getNews(symbols, startDate, endDate, sort, includeContent, excludeContentless, pageSize);
+        return ResponseEntity.ok(news);
+    }
+
+    @GetMapping("/news/{symbol}")
+    public ResponseEntity<java.util.Map<String, Object>> getNewsForSymbol(
+            @PathVariable String symbol,
+            @RequestParam(value = "pageSize", required = false, defaultValue = "10") Integer pageSize) {
+
+        java.util.Map<String, Object> news = alpacaService.getNewsForSymbol(symbol, pageSize);
+        return ResponseEntity.ok(news);
+    }
+
+    @GetMapping("/news/recent")
+    public ResponseEntity<java.util.Map<String, Object>> getRecentNews(
+            @RequestParam(value = "pageSize", required = false, defaultValue = "10") Integer pageSize) {
+
+        java.util.Map<String, Object> news = alpacaService.getRecentNews(pageSize);
+        return ResponseEntity.ok(news);
+    }
+
+    @GetMapping("/news/{symbol}/detailed")
+    public ResponseEntity<java.util.Map<String, Object>> getDetailedNewsForSymbol(
+            @PathVariable String symbol,
+            @RequestParam(value = "pageSize", required = false, defaultValue = "10") Integer pageSize) {
+
+        java.util.Map<String, Object> news = alpacaService.getDetailedNewsForSymbol(symbol, pageSize);
+        return ResponseEntity.ok(news);
+    }
+
 }
