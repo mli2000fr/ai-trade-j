@@ -236,7 +236,11 @@ public class AlpacaService {
 
     public String buyStock(String symbol, double qty, Double priceLimit, Double stopLoss, Double takeProfit) {
         if (hasOppositeOpenOrder(symbol, "buy")) {
-            return "Erreur : Un ordre de vente ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant d'acheter.";
+            List<Order> annulables = this.getOrders(symbol, true);
+            for(Order ord : annulables) {
+                this.cancelOrder(ord.getId());
+            }
+            //return "Erreur : Un ordre de vente ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant d'acheter.";
         }
         return placeOrder(symbol, qty, "buy", priceLimit, stopLoss, takeProfit).toString();
     }

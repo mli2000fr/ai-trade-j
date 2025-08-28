@@ -159,8 +159,9 @@ public class TradeHelper {
             if (orders != null) {
                 for (OrderRequest order : orders) {
                     order.normalize();
+                    boolean isSell = "sell".equals(order.side);
                     if (order != null && order.symbol != null && order.qty != null && order.qty > 0 && order.side != null) {
-                        Order epageorder = alpacaService.placeOrder(order.symbol, order.qty, order.side, order.priceLimit, order.stopLoss, order.takeProfit);
+                        Order epageorder = alpacaService.placeOrder(order.symbol, order.qty, order.side, isSell ? null : order.priceLimit, isSell ? null : order.stopLoss, isSell ? null : order.takeProfit);
                     }
                 }
             }
@@ -197,7 +198,8 @@ public class TradeHelper {
             return "Erreur de parsing de l'ordre : " + e.getMessage();
         }
         if (order != null && order.symbol != null && order.qty != null && order.qty > 0 && order.side != null) {
-            Order orderAlpaca = alpacaService.placeOrder(order.symbol, order.qty, order.side, order.priceLimit, order.stopLoss, order.takeProfit);
+            boolean isSell = "sell".equals(order.side);
+            Order orderAlpaca = alpacaService.placeOrder(order.symbol, order.qty, order.side, isSell ? null : order.priceLimit, isSell ? null : order.stopLoss, isSell ? null : order.takeProfit);
         }
         return response.getMessage();
     }
