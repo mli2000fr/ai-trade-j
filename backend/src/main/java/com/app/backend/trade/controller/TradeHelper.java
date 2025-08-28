@@ -70,28 +70,28 @@ public class TradeHelper {
         }
     }
 
-    public boolean isSymbolsValid(String symbols) throws Exception {
+    public boolean isSymbolsValid(String symbols)  {
         String prompt = TradeUtils.readResourceFile("prompt/prompt_check_symbol.txt")
                 .replace("{{symbols}}", symbols);
         ChatGptResponse response = chatGptService.askChatGpt(prompt);
         if (response.getError() != null) {
-            throw new Exception("Erreur lors de l'analyse : " + response.getError());
+            throw new RuntimeException("Erreur lors de l'analyse : " + response.getError());
         }
 
         try{
             boolean valid = Boolean.parseBoolean(response.getMessage());
             if (!valid) {
-                throw new Exception("Les symboles ne sont pas valides : " + response.getMessage());
+                throw new RuntimeException("Les symboles ne sont pas valides : " + response.getMessage());
             }
             return true;
         } catch (Exception e) {
-            throw new Exception("check symboles : " + response.getMessage());
+            throw new RuntimeException("check symboles : " + response.getMessage());
         }
 
     }
 
     // Analyse une action en interrogeant Alpha Vantage puis ChatGPT avec un délai spécifique
-    public String getAnalyseAction(String symbol) throws Exception {
+    public String getAnalyseAction(String symbol)  {
 
         String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_analyse.txt");
 
@@ -109,9 +109,9 @@ public class TradeHelper {
         return response.getMessage();
     }
 
-    public String tradeAIAuto(List<String> symbols) throws Exception {
+    public String tradeAIAuto(List<String> symbols)  {
         if(symbols == null || symbols.isEmpty()){
-            throw new Exception("Aucun symbole fourni pour tradeAIAuto.");
+            throw new RuntimeException("Aucun symbole fourni pour tradeAIAuto.");
         }
 
         String joinedSymbols = String.join(",", symbols);
@@ -172,7 +172,7 @@ public class TradeHelper {
         return response.getMessage();
     }
 
-    public String tradeAI(String symbol) throws Exception {
+    public String tradeAI(String symbol)  {
 
         // Lecture du prompt depuis le fichier
         String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_trade.txt");
@@ -202,7 +202,7 @@ public class TradeHelper {
         return response.getMessage();
     }
 
-    private String getPromptWithValues(String promptTemplate,  Map<String, Object> variables) throws Exception {
+    private String getPromptWithValues(String promptTemplate,  Map<String, Object> variables)  {
         String prompt = promptTemplate;
         for (Map.Entry<String, Object> entry : variables.entrySet()) {
             String key = entry.getKey();
@@ -210,17 +210,18 @@ public class TradeHelper {
             prompt = prompt.replace("{{" + key + "}}", value != null ? value.toString() : "");
         }
         if(prompt.indexOf("{{") != -1){
-            throw new Exception("Attention, certaines variables n'ont pas été remplacées dans le prompt.");
+            throw new RuntimeException("Attention, certaines variables n'ont pas été remplacées dans le prompt.");
         }
         return prompt;
     }
 
-    private InfosAction getInfosAction(String symbol, boolean withPortfolio) throws Exception {
+    private InfosAction getInfosAction(String symbol, boolean withPortfolio)  {
         String portfolioJson = null;
         if(withPortfolio){
             Portfolio portfolio = this.getPortfolio();
             portfolioJson = new Gson().toJson(portfolio);
         }
+        Double lastPrice = alpacaService.getLastPrice(symbol);
         String data = twelveDataService.getDataAction(symbol);
         String sma = twelveDataService.getSMA(symbol);
         String rsi = twelveDataService.getRSI(symbol);
@@ -237,6 +238,7 @@ public class TradeHelper {
         }
 
         InfosAction info = new InfosAction(
+                lastPrice,
                 symbol,
                 data,
                 sma,
@@ -255,6 +257,7 @@ public class TradeHelper {
     private static Map<String, Object> getStringObjectMap(InfosAction infosAction) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("symbol", infosAction.getSymbol());
+        variables.put("data_price", infosAction.getLastPrice());
         variables.put("data_value_daily", infosAction.getData());
         variables.put("data_sma", infosAction.getSma());
         variables.put("data_rsi", infosAction.getRsi());

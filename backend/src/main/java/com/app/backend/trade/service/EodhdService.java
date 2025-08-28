@@ -22,7 +22,7 @@ public class EodhdService {
 
 
     // Récupérer les news pour un symbole donné (ou toutes les news si symbol est null)
-    public String getNews(String symbol) throws Exception {
+    public String getNews(String symbol)  {
         RestTemplate restTemplate = new RestTemplate();
         StringBuilder urlBuilder = new StringBuilder(apiUrl);
         if (!apiUrl.endsWith("/")) {
@@ -61,13 +61,13 @@ public class EodhdService {
                     newsList.removeIf(news -> "neutral".equals(news.get("sentimentInterpreted")));
                     return mapper.writeValueAsString(newsList);
                 } catch (Exception jsonEx) {
-                    throw new Exception("Erreur lors du traitement JSON : " + jsonEx.getMessage());
+                    throw new RuntimeException("Erreur lors du traitement JSON : " + jsonEx.getMessage());
                 }
             } else {
-                throw new Exception("Aucune donnée reçue de l'API EODHD.");
+                throw new RuntimeException("Aucune donnée reçue de l'API EODHD.");
             }
         } else {
-            throw new Exception("Erreur lors de la récupération des données : " + response.getStatusCode());
+            throw new RuntimeException("Erreur lors de la récupération des données : " + response.getStatusCode());
         }
     }
 

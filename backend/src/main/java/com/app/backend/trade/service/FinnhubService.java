@@ -28,7 +28,7 @@ public class FinnhubService {
 
     private static final String CONTENJ_VIDE = "aucune information trouvée";
 
-    private String callFinnhubApi(String endpoint, String params) throws Exception {
+    private String callFinnhubApi(String endpoint, String params)  {
         try{
             RestTemplate restTemplate = new RestTemplate();
             String url = apiUrl + endpoint + "?" + params + "&token=" + apiKey;
@@ -37,12 +37,12 @@ public class FinnhubService {
             TradeUtils.log("Réponse Finnhub API (" + endpoint + "): " + reponse);
             return reponse;
         } catch (Exception e) {
-            throw new Exception("Exception callFinnhubApi : " + e.getMessage());
+            throw new RuntimeException("Exception callFinnhubApi : " + e.getMessage());
         }
     }
 
     // Données financières (financialData)
-    public String getFinancialData(String symbol) throws Exception {
+    public String getFinancialData(String symbol)  {
         String response = callFinnhubApi("stock/financials-reported", "symbol=" + symbol);
         try {
             ObjectMapper mapper = new ObjectMapper();
@@ -59,12 +59,12 @@ public class FinnhubService {
                 return response;
             }
         } catch (Exception e) {
-            throw new Exception("getFinancialData : " + e.getMessage());
+            throw new RuntimeException("getFinancialData : " + e.getMessage());
         }
     }
 
     // Statistiques clés par défaut (defaultKeyStatistics)
-    public String getDefaultKeyStatistics(String symbol) throws Exception {
+    public String getDefaultKeyStatistics(String symbol)  {
         String response = callFinnhubApi("stock/metric", "symbol=" + symbol + "&metric=all");
         try {
             ObjectMapper mapper = new ObjectMapper();
@@ -105,17 +105,17 @@ public class FinnhubService {
             }
             return mapper.writeValueAsString(root);
         } catch (Exception e) {
-            throw new Exception("getDefaultKeyStatistics : " + e.getMessage());
+            throw new RuntimeException("getDefaultKeyStatistics : " + e.getMessage());
         }
     }
 
     // Résultats (earnings)
-    public String getEarnings(String symbol) throws Exception {
+    public String getEarnings(String symbol)  {
         return callFinnhubApi("stock/earnings", "symbol=" + symbol);
     }
 
     // News (actualités)
-    public String getNews(String symbol, String keywords) throws Exception {
+    public String getNews(String symbol, String keywords)  {
         String params;
         String functionNews;
          // Si un symbole est fourni, on récupère les news de la semaine passée pour ce symbole
@@ -135,7 +135,7 @@ public class FinnhubService {
     }
 
     // News générales (actualités générales)
-    public String getGeneralNews() throws Exception {
+    public String getGeneralNews()  {
         return callFinnhubApi("company-news", "category=general");
     }
 }

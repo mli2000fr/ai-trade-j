@@ -3,8 +3,12 @@ package com.app.backend.trade.service;
 import com.app.backend.trade.model.Portfolio;
 import com.app.backend.trade.model.PortfolioDto;
 import com.app.backend.trade.model.Position;
+import com.app.backend.trade.model.alpaca.ErrResponseOrder;
 import com.app.backend.trade.model.alpaca.OffsetDateTimeAdapter;
 import com.app.backend.trade.model.alpaca.Order;
+import com.app.backend.trade.model.OrderEntity;
+import com.app.backend.trade.repository.OrderRepository;
+import com.app.backend.trade.util.TradeConstant;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +40,16 @@ public class AlpacaService {
     private String limitOrders;
 
     private final RestTemplate restTemplate = new RestTemplate();
+    private final OrderRepository orderRepository;
+
+    private final Gson gson = new GsonBuilder()
+            .registerTypeAdapter(OffsetDateTime.class, new OffsetDateTimeAdapter())
+            .create();
+
+    public AlpacaService(OrderRepository orderRepository) {
+        this.orderRepository = orderRepository;
+    }
+
     public Order placeOrder(String symbol, double qty, String side, Double priceLimit, Double stopLoss, Double takeProfit) {
         String url = apiBaseUrl + "/orders";
         HttpHeaders headers = new HttpHeaders();
@@ -54,7 +68,6 @@ public class AlpacaService {
             body.put("qty", qty);
             body.put("time_in_force", "day");
         }
-
 
         // Gestion des différents types d'ordre
         if (priceLimit != null && (stopLoss == null && takeProfit == null)) {
@@ -81,11 +94,58 @@ public class AlpacaService {
         }
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+        String requestJson = gson.toJson(body);
+        String responseJson = null;
+        String errorJson = null;
+        Order order = null;
+        try {
+            order = this.callOrder(url, request);
+            responseJson = gson.toJson(order);
+        } catch (org.springframework.web.client.HttpClientErrorException ex) {
+            // Cas d'erreur HTTP (ex: 403 Forbidden)
+            errorJson = ex.getResponseBodyAsString();
+        } catch (Exception ex) {
+            errorJson = ex.getMessage();
+        }
+        // Sauvegarde via repository JPA
+        OrderEntity orderEntity = new OrderEntity(requestJson, responseJson, errorJson);
+        orderRepository.save(orderEntity);
+        if (order == null) {
+            // Tentative de parsing d'une erreur JSON Alpaca (ex: insufficient qty)
+            if (errorJson != null && errorJson.trim().startsWith("{")) {
+                try {
+                    ErrResponseOrder respOrder = gson.fromJson(errorJson, ErrResponseOrder.class);
+                    if ("sell".equals(side) && respOrder != null && TradeConstant.ALPACA_ORDER_CODE_QUANTITY_NON_DISPO == respOrder.getCode()) {
+                        List<Order> annulables = this.getOrders(symbol, true);
+                        int quantDispo = Integer.parseInt(respOrder.getAvailable());
+                        for(Order ord : annulables) {
+                            this.cancelOrder(ord.getId());
+                            if(quantDispo + Integer.parseInt(ord.getQty()) >= qty) {
+                                break;
+                            } else {
+                                quantDispo += Integer.parseInt(ord.getQty());
+                            }
+                        }
+                        order = this.callOrder(url, request);
+                        responseJson = gson.toJson(order);
+                        OrderEntity orderEntity2 = new OrderEntity(requestJson, responseJson, errorJson);
+                        orderRepository.save(orderEntity2);
+                    }
+                } catch (Exception ignore) {
+                    OrderEntity orderEntity3 = new OrderEntity(requestJson, responseJson, ignore.getMessage());
+                    orderRepository.save(orderEntity3);
+                    throw new RuntimeException("Erreur lors de la création de l'ordre Alpaca: " + ignore.getMessage());
+                }
+            }
+        }
+        return order;
+    }
+
+    private Order callOrder(String url, HttpEntity<Map<String, Object>> request){
+        String responseJson;
         ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-        Gson gson = new GsonBuilder()
-            .registerTypeAdapter(OffsetDateTime.class, new OffsetDateTimeAdapter())
-            .create();
-        return gson.fromJson(response.getBody(), Order.class);
+        responseJson = response.getBody();
+        return gson.fromJson(responseJson, Order.class);
     }
 
     public Double getLastPrice(String symbol) {
@@ -275,9 +335,6 @@ public class AlpacaService {
         headers.set("APCA-API-SECRET-KEY", apiKeySecret);
         HttpEntity<Void> request = new HttpEntity<>(headers);
         ResponseEntity<String> response = restTemplate.exchange(url.toString(), HttpMethod.GET, request, String.class);
-        Gson gson = new GsonBuilder()
-                .registerTypeAdapter(OffsetDateTime.class, new OffsetDateTimeAdapter())
-                .create();
         Order[] orders = gson.fromJson(response.getBody(), Order[].class);
         List<Order> result = Arrays.asList(orders);
         if (Boolean.TRUE.equals(cancelable)) {

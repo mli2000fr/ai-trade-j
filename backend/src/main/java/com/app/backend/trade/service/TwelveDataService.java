@@ -19,38 +19,38 @@ public class TwelveDataService {
     private int limit;
 
     // SMA (Simple Moving Average)
-    public String getSMA(String symbol) throws Exception {
+    public String getSMA(String symbol)  {
         return getIndicator("sma", symbol, "interval=1day&time_period=30&start_date=" + TradeUtils.getStartDate(limit));
     }
 
     // RSI (Relative Strength Index)
-    public String getRSI(String symbol) throws Exception {
+    public String getRSI(String symbol)  {
         return getIndicator("rsi", symbol, "interval=1day&time_period=14&start_date=" + TradeUtils.getStartDate(limit));
     }
 
     // MACD (Moving Average Convergence Divergence)
-    public String getMACD(String symbol) throws Exception {
+    public String getMACD(String symbol)  {
         return getIndicator("macd", symbol, "interval=1day&short_period=12&long_period=26&signal_period=9&start_date=" + TradeUtils.getStartDate(limit));
     }
 
     // ATR (Average True Range)
-    public String getATR(String symbol) throws Exception {
+    public String getATR(String symbol)  {
         return getIndicator("atr", symbol, "interval=1day&time_period=14&start_date=" + TradeUtils.getStartDate(limit));
     }
 
     // Données de l'action (Time Series)
-    public String getDataAction(String symbol) throws Exception {
+    public String getDataAction(String symbol)  {
         return getIndicator("time_series", symbol, "interval=1day&start_date=" + TradeUtils.getStartDate(limit));
     }
 
     // Données fondamentales (Fundamental Data) les fondamentaux (bénéfices, prévisions, valorisation, actualités produits)
-    public String getFundamental(String symbol) throws Exception {
+    public String getFundamental(String symbol)  {
         return getIndicator("fundamentals", symbol, null);
     }
 
 
 
-    private String getIndicator(String function, String symbol, String params) throws Exception {
+    private String getIndicator(String function, String symbol, String params)  {
         RestTemplate restTemplate = new RestTemplate();
         String url = apiUrl + function + "?symbol=" + symbol + "&apikey=" + apiKey + (params != null ? "&" + params : "");
         TradeUtils.log("Appel Twelve Data API (" + function + "): " + url);
@@ -59,11 +59,11 @@ public class TwelveDataService {
             String responseBody = response.getBody();
             TradeUtils.log("Réponse Twelve Data API (" + function + "): " + responseBody);
             if(responseBody == null || (responseBody != null && responseBody.contains("\"status\":\"error\""))) {
-                throw new Exception("Erreur Twelve Data API: " + responseBody);
+                throw new RuntimeException("Erreur Twelve Data API: " + responseBody);
             }
             return responseBody;
         } else {
-            throw new Exception("Erreur lors de la récupération des données : " + response.getStatusCode());
+            throw new RuntimeException("Erreur lors de la récupération des données : " + response.getStatusCode());
         }
     }
 }

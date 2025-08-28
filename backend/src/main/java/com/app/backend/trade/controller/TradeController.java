@@ -23,7 +23,7 @@ public class TradeController {
 
 
     @GetMapping("/analyse-action")
-    public ResponseEntity<String> analyseAction(@RequestParam("symbol") String symbol) throws Exception {
+    public ResponseEntity<String> analyseAction(@RequestParam("symbol") String symbol)  {
 
         String result = tradeHelper.getAnalyseAction(symbol);
         return ResponseEntity.ok(result);
@@ -55,14 +55,14 @@ public class TradeController {
     }
 
     @PostMapping("/trade-ai")
-    public ResponseEntity<String> tradeAI(@RequestBody TradeRequest request) throws Exception {
+    public ResponseEntity<String> tradeAI(@RequestBody TradeRequest request)  {
 
         String result = tradeHelper.tradeAI(request.getSymbol());
         return ResponseEntity.ok(result);
     }
 
     @PostMapping("/trade-ai-auto")
-    public ResponseEntity<String> tradeAIAuto(@RequestBody TradeAutoRequest request) throws Exception {
+    public ResponseEntity<String> tradeAIAuto(@RequestBody TradeAutoRequest request)  {
         String result = tradeHelper.tradeAIAuto(request.getSymboles());
         return ResponseEntity.ok(result);
     }

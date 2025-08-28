@@ -1,5 +1,6 @@
 
 Data of symbole {{symbol}}
+- last_price: {{data_price}}
 - Daily price (in USD): {{data_value_daily}}
 - SMA_12: {{data_sma}}
 - RSI_14: {{data_rsi}}

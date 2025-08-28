@@ -8,6 +8,7 @@ import lombok.ToString;
 @ToString
 @NoArgsConstructor
 public class InfosAction {
+    private Double lastPrice;
     private String symbol;
     private String data;
     private String sma;
@@ -21,7 +22,8 @@ public class InfosAction {
     private String portfolio;
 
     // Constructeur explicite pour garantir la compatibilité sans Lombok
-    public InfosAction(String symbol,
+    public InfosAction(Double lastPrice,
+                       String symbol,
                        String data,
                        String sma,
                        String rsi,
@@ -32,6 +34,7 @@ public class InfosAction {
                        String earnings,
                        String news,
                        String portfolio) {
+        this.lastPrice = lastPrice;
         this.symbol = symbol;
         this.news = news;
         this.data = data;
@@ -45,7 +48,9 @@ public class InfosAction {
         this.portfolio = portfolio;
     }
 
-
+    public Double getLastPrice() {
+        return lastPrice;
+    }
     public String getSymbol() { return symbol; }
     public String getData() { return data; }
     public String getSma() { return sma; }

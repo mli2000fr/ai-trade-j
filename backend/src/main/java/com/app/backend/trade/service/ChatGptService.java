@@ -1,6 +1,8 @@
 package com.app.backend.trade.service;
 
 import com.app.backend.trade.model.ChatGptResponse;
+import com.app.backend.trade.model.GptEntity;
+import com.app.backend.trade.repository.GptRepository;
 import com.app.backend.trade.util.TradeUtils;
 import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
@@ -12,6 +14,8 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
+import java.time.LocalDateTime;
+
 @Service
 public class ChatGptService {
     @Value("${openai.api.key}")
@@ -20,6 +24,11 @@ public class ChatGptService {
     @Value("${openai.api.model}")
     private String apiModel;
 
+    private final GptRepository gptRepository;
+
+    public ChatGptService(GptRepository gptRepository) {
+        this.gptRepository = gptRepository;
+    }
 
     public ChatGptResponse askChatGpt(String prompt) {
 
@@ -34,6 +43,9 @@ public class ChatGptService {
             ChatCompletion response = client.chat().completions().create(params);
             String res = response.choices().get(0).message().content().orElse("aucune réponse donnée");
             TradeUtils.log("askChatGpt Réponse ChatGPT: " + res);
+            // Sauvegarde en base
+            GptEntity gpt = new GptEntity(LocalDateTime.now(), prompt, res);
+            gptRepository.save(gpt);
             return new ChatGptResponse(res, null);
         } catch (RestClientException e) {
             return new ChatGptResponse(null, "Erreur d'appel à l'API OpenAI : " + e.getMessage());
