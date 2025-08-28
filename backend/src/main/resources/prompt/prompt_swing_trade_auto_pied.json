@@ -19,7 +19,7 @@ Part 1: strictly valid JSON. The JSON must be a list of objects, one per analyze
 [{
 "symbol": "TICKER",
 "action": "buy" | "sell" | "hold",
-"quantity": INTEGER,
+"quantity": NUMBER,
 "price_limit": NUMBER | null,
 "stop_loss": NUMBER | null,
 "take_profit": NUMBER | null
@@ -29,7 +29,7 @@ Rules for JSON values:
 
 If action = "hold": quantity = 0, price_limit = null, stop_loss = null, take_profit = null.
 
-If action = "buy" or "sell": quantity must be an integer > 0.
+If action = "buy" or "sell": quantity must be > 0.
 
 price_limit, stop_loss, and take_profit must be numeric values (float or integer) rounded to 2 decimal places.
 

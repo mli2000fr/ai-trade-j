@@ -416,7 +416,7 @@ const TradePage: React.FC = () => {
     )}
     {action !== 'trade-ai' && (
       <label style={{fontWeight: 500, minWidth: 70, display: 'flex', alignItems: 'center', height: '100%'}}>Quantité&nbsp;
-        <input type="number" min={1} value={quantity} onChange={e => setQuantity(Number(e.target.value))} style={{width: 50}} />
+        <input type="number" min={0.01} step="any" value={quantity} onChange={e => setQuantity(parseFloat(e.target.value))} style={{width: 70}} />
       </label>
     )}
   </div>

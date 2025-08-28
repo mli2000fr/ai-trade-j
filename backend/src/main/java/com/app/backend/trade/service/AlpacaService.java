@@ -36,7 +36,7 @@ public class AlpacaService {
     private String limitOrders;
 
     private final RestTemplate restTemplate = new RestTemplate();
-    public Order placeOrder(String symbol, int qty, String side, Double priceLimit, Double stopLoss, Double takeProfit) {
+    public Order placeOrder(String symbol, double qty, String side, Double priceLimit, Double stopLoss, Double takeProfit) {
         String url = apiBaseUrl + "/orders";
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -45,9 +45,16 @@ public class AlpacaService {
 
         Map<String, Object> body = new HashMap<>();
         body.put("symbol", symbol);
-        body.put("qty", qty);
         body.put("side", side);
-        body.put("time_in_force", "gtc");
+        // si qty est un entier, càd partie décimale = 0, on le passe en Integer pour Alpaca
+        if (qty == Math.floor(qty)) {
+            body.put("qty", (int) qty);
+            body.put("time_in_force", "gtc");
+        } else {
+            body.put("qty", qty);
+            body.put("time_in_force", "day");
+        }
+
 
         // Gestion des différents types d'ordre
         if (priceLimit != null && (stopLoss == null && takeProfit == null)) {
@@ -156,18 +163,18 @@ public class AlpacaService {
         return false;
     }
 
-    public String sellStock(String symbol, int qty) {
+    public String sellStock(String symbol, double qty) {
         if (hasOppositeOpenOrder(symbol, "sell")) {
             return "Erreur : Un ordre d'achat ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant de vendre.";
         }
         return placeOrder(symbol, qty, "sell", null, null, null).toString();
     }
 
-    public String buyStock(String symbol, int qty) {
+    public String buyStock(String symbol, double qty) {
         return buyStock(symbol, qty, null, null, null);
     }
 
-    public String buyStock(String symbol, int qty, Double priceLimit, Double stopLoss, Double takeProfit) {
+    public String buyStock(String symbol, double qty, Double priceLimit, Double stopLoss, Double takeProfit) {
         if (hasOppositeOpenOrder(symbol, "buy")) {
             return "Erreur : Un ordre de vente ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant d'acheter.";
         }

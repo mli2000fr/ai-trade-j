@@ -3,7 +3,7 @@ package com.app.backend.trade.model;
 public class TradeRequest {
     private String symbol;
     private String action; // "buy" ou "sell"
-    private int quantity;
+    private double quantity;
 
     public String getSymbol() {
         return symbol;
@@ -17,11 +17,10 @@ public class TradeRequest {
     public void setAction(String action) {
         this.action = action;
     }
-    public int getQuantity() {
+    public double getQuantity() {
         return quantity;
     }
-    public void setQuantity(int quantity) {
+    public void setQuantity(double quantity) {
         this.quantity = quantity;
     }
 }
-

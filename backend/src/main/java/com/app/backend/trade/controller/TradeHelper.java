@@ -49,8 +49,8 @@ public class TradeHelper {
     // Classe interne pour parser la réponse de l'IA
     private static class OrderRequest {
         String symbol;
-        Integer qty;
-        Integer quantity;
+        Double qty;
+        Double quantity;
         String side;
         String action;
         Double priceLimit;
