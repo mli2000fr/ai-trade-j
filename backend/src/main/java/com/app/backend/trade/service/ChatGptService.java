@@ -1,6 +1,7 @@
 package com.app.backend.trade.service;
 
 import com.app.backend.trade.model.ChatGptResponse;
+import com.app.backend.trade.util.TradeUtils;
 import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
 import com.openai.models.*;
@@ -29,9 +30,11 @@ public class ChatGptService {
                 .addUserMessage(prompt)
                 .build();
         try{
+            TradeUtils.log("askChatGpt Prompt JSON : " + prompt);
             ChatCompletion response = client.chat().completions().create(params);
-
-            return new ChatGptResponse(response.choices().get(0).message().content().orElse("aucune réponse donnée"), null);
+            String res = response.choices().get(0).message().content().orElse("aucune réponse donnée");
+            TradeUtils.log("askChatGpt Réponse ChatGPT: " + res);
+            return new ChatGptResponse(res, null);
         } catch (RestClientException e) {
             return new ChatGptResponse(null, "Erreur d'appel à l'API OpenAI : " + e.getMessage());
         }

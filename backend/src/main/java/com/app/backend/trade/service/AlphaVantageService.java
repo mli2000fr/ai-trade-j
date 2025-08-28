@@ -1,5 +1,6 @@
 package com.app.backend.trade.service;
 
+import com.app.backend.trade.util.TradeUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -49,12 +50,12 @@ public class AlphaVantageService {
     public String getInfosAction(String functionName, String symbol, String surfix) {
         RestTemplate restTemplate = new RestTemplate();
         String url = apiurl + functionName + "&symbol=" + symbol + "&apikey=" + apiKey + (surfix == null ? "" : surfix);
-        System.out.println("call l'API Alpha Vantage ("+functionName+"): " + url);
+        TradeUtils.log("call l'API Alpha Vantage ("+functionName+"): " + url);
         try {
             ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
             if (response.getStatusCode() == HttpStatus.OK) {
                 String responseBody =  response.getBody();
-                System.out.println("Réponse de l'API Alpha Vantage ("+functionName+"): " + responseBody);
+                TradeUtils.log("Réponse de l'API Alpha Vantage ("+functionName+"): " + responseBody);
                 return responseBody != null ? responseBody : "Aucune donnée reçue de l'API Alpha Vantage.";
             } else {
                 return "Erreur lors de la récupération des données : " + response.getStatusCode();

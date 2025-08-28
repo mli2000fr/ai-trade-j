@@ -1,21 +1,25 @@
-Please consider:
+Rules:
 
-Focus on swing trading opportunities (holding period: several days to weeks).
+- Focus on medium-term swings (holding days to weeks).
 
-Ignore intraday fluctuations; decisions are based on daily data and medium-term trends.
+- Take calculated opportunities; do not be overly defensive, but manage risk carefully.
 
-Prioritize clear swing setups (trend continuation, breakout, or reversal).
+- Include stop-loss and take-profit, partial TP optional.
 
-Avoid high-risk or highly volatile stocks (ATR too high relative to price).
+- Sell existing positions if swing targets are reached or technical/financial signals strongly justify it.
 
-Risk management: always define stop-loss and take-profit for buy/sell actions.
+- Quantity can be fractional if allowed.
 
-Use only the provided data; do not assume any external information.
+- Use only provided data; do not assume anything else.
 
-⚠️ Mandatory output rules:
-The output must contain exactly 2 parts, separated by a single line containing only: ===
+- Do not avoid moderately volatile stocks if the setup is favorable.
 
-Part 1: strictly valid JSON. The JSON must be a list of objects, one per analyzed symbol, in this exact format:
+- Apply a flexible R/R, ideally ≥1:1.5, but adjust if the setup supports higher potential.
+
+- Prioritize trades with high-quality swing setups over avoiding risk.
+
+⚠️ Output: 2 parts separated by ===
+Part 1: JSON
 [{
 "symbol": "TICKER",
 "action": "buy" | "sell" | "hold",
@@ -24,27 +28,22 @@ Part 1: strictly valid JSON. The JSON must be a list of objects, one per analyze
 "stop_loss": NUMBER | null,
 "take_profit": NUMBER | null
 }, {...}, ...]
-
 Rules for JSON values:
-
-If action = "hold": quantity = 0, price_limit = null, stop_loss = null, take_profit = null.
-
-If action = "buy" or "sell": quantity must be > 0.
-
-price_limit, stop_loss, and take_profit must be numeric values (float or integer) rounded to 2 decimal places.
-
-All numeric values must be in USD unless otherwise specified.
+- If action = "hold": quantity = 0, price_limit = null, stop_loss = null, take_profit = null.
+- If action = "buy" or "sell": quantity must be > 0.
+- price_limit, stop_loss, and take_profit must be numeric values (float or integer) rounded to 2 decimal places.
+- All numeric values must be in USD unless otherwise specified.
 
 Do not add any extra fields, comments, or text.
 
-Part 2: a concise explanation (in English) of your reasoning for each decision, including:
+Part 2: Explanation (English)
 
-Key swing trading factors from the analysis (technical indicators, financial data, news sentiment)
+- Key technical, financial, and news factors
 
-Medium-term trend and setup (continuation, breakout, reversal)
+- Medium-term trend and swing setup
 
-Impact on my portfolio
+- Risk/reward reasoning
 
-Avoid repeating JSON data; focus on reasoning only.
+- Portfolio impact, including sales of existing positions
 
-Do not include any text outside of these two parts. Strictly follow the JSON format and part separation.
+- Avoid repeating JSON; focus on reasoning only

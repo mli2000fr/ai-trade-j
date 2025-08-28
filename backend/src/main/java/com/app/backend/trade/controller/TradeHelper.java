@@ -165,7 +165,7 @@ public class TradeHelper {
                 }
             }
         } catch (Exception e) {
-            return "Erreur de parsing de l'ordre : " + e.getMessage();
+            return "Error exécution ordre !!!!! (voir la fin)" + response.getMessage() + "Erreur de parsing de l'ordre : " + e.getMessage() ;
         }
 
 
@@ -209,7 +209,6 @@ public class TradeHelper {
             Object value = entry.getValue();
             prompt = prompt.replace("{{" + key + "}}", value != null ? value.toString() : "");
         }
-        TradeUtils.log("Prompt JSON : " + prompt);
         if(prompt.indexOf("{{") != -1){
             throw new Exception("Attention, certaines variables n'ont pas été remplacées dans le prompt.");
         }
@@ -230,7 +229,12 @@ public class TradeHelper {
         String financial = finnhubService.getFinancialData(symbol);
         String statistics = finnhubService.getDefaultKeyStatistics(symbol);
         String earnings = finnhubService.getEarnings(symbol);
-        String news = eodhdService.getNews(symbol);
+        String news = "No information found";
+        try{
+            news = eodhdService.getNews(symbol);
+        } catch (Exception e) {
+            TradeUtils.log("Error eodhdService.getNews("+symbol+"): " + e.getMessage());
+        }
 
         InfosAction info = new InfosAction(
                 symbol,

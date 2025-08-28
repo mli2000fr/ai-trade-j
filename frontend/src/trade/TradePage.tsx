@@ -368,7 +368,7 @@ const TradePage: React.FC = () => {
         )}
       </div>
       <div style={{marginBottom: 24, padding: 16, border: '1px solid #e0e0e0', borderRadius: 6, background: '#f8fafd'}}>
-                <h2 style={{marginTop: 0}}>Trade auto</h2>
+                <h2 style={{marginTop: 0}}>Trade Auto</h2>
                 <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
                   <label style={{fontWeight: 500}} htmlFor="auto-symbols">Symboles&nbsp;</label>
                   <input
@@ -377,7 +377,7 @@ const TradePage: React.FC = () => {
                     style={{flex: 1, minWidth: 120, padding: '4px 8px'}}
                     value={autoSymbols}
                     onChange={e => setAutoSymbols(e.target.value)}
-                    placeholder="AAPL,MSFT,GOOG"
+                    placeholder="AAPL,KO,NVDA,TSLA,AMZN,MSFT,AMD,META,SHOP,PLTR"
                   />
                 </div>
                 <div style={{width: '100%', display: 'flex', justifyContent: 'center', marginTop: 16}}>
