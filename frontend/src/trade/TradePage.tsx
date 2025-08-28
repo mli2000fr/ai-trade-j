@@ -431,32 +431,40 @@ const TradePage: React.FC = () => {
     <div className="trade-ai-json-result" style={{marginTop: 16, width: '100%'}}>
       <b style={{fontSize: '1.1em'}}>Résultat AI :</b>
       {Array.isArray(aiJsonResult) ? (
-        <div style={{overflowX: 'auto'}}>
-          <table style={{marginTop: 8, borderCollapse: 'collapse', background: '#f8fafd', border: '1px solid #e0e0e0', borderRadius: 6, minWidth: 600, boxShadow: '0 1px 4px #e0e0e0', width: '100%'}}>
-            <thead style={{background: '#e3eaf3'}}>
-              <tr>
-                <th style={{padding: '8px 12px'}}>Symbole</th>
-                <th style={{padding: '8px 12px'}}>Action</th>
-                <th style={{padding: '8px 12px'}}>Quantité</th>
-                <th style={{padding: '8px 12px'}}>Prix limite</th>
-                <th style={{padding: '8px 12px'}}>Stop loss</th>
-                <th style={{padding: '8px 12px'}}>Take profit</th>
-              </tr>
-            </thead>
-            <tbody>
-              {aiJsonResult.map((item: any, idx: number) => (
-                <tr key={idx} style={{background: idx % 2 === 0 ? '#f8fafd' : '#f0f4f8'}}>
-                  <td style={{padding: '6px 12px', fontWeight: 500}}>{item.symbol}</td>
-                  <td style={{padding: '6px 12px', textTransform: 'capitalize'}}>{item.action}</td>
-                  <td style={{padding: '6px 12px', textAlign: 'right'}}>{item.quantity ?? item.qty ?? ''}</td>
-                  <td style={{padding: '6px 12px', textAlign: 'right'}}>{item.price_limit ?? item.priceLimit ? (item.price_limit ?? item.priceLimit) + ' $' : '-'}</td>
-                  <td style={{padding: '6px 12px', textAlign: 'right'}}>{item.stop_loss ?? item.stopLoss ? (item.stop_loss ?? item.stopLoss) + ' $' : '-'}</td>
-                  <td style={{padding: '6px 12px', textAlign: 'right'}}>{item.take_profit ?? item.takeProfit ? (item.take_profit ?? item.takeProfit) + ' $' : '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        (() => {
+          // Vérifier si au moins un élément a une valeur pour price_limit ou priceLimit
+          const hasPriceLimit = aiJsonResult.some((item: any) => item.price_limit !== undefined && item.price_limit !== null && item.price_limit !== '' || item.priceLimit !== undefined && item.priceLimit !== null && item.priceLimit !== '');
+          return (
+            <div style={{overflowX: 'auto'}}>
+              <table style={{marginTop: 8, borderCollapse: 'collapse', background: '#f8fafd', border: '1px solid #e0e0e0', borderRadius: 6, minWidth: 600, boxShadow: '0 1px 4px #e0e0e0', width: '100%'}}>
+                <thead style={{background: '#e3eaf3'}}>
+                  <tr>
+                    <th style={{padding: '8px 12px'}}>Symbole</th>
+                    <th style={{padding: '8px 12px'}}>Action</th>
+                    <th style={{padding: '8px 12px'}}>Quantité</th>
+                    {hasPriceLimit && <th style={{padding: '8px 12px'}}>Prix limite</th>}
+                    <th style={{padding: '8px 12px'}}>Stop loss</th>
+                    <th style={{padding: '8px 12px'}}>Take profit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aiJsonResult.map((item: any, idx: number) => (
+                    <tr key={idx} style={{background: idx % 2 === 0 ? '#f8fafd' : '#f0f4f8'}}>
+                      <td style={{padding: '6px 12px', fontWeight: 500}}>{item.symbol}</td>
+                      <td style={{padding: '6px 12px', textTransform: 'capitalize'}}>{item.action}</td>
+                      <td style={{padding: '6px 12px', textAlign: 'right'}}>{item.quantity ?? item.qty ?? ''}</td>
+                      {hasPriceLimit && (
+                        <td style={{padding: '6px 12px', textAlign: 'right'}}>{item.price_limit ?? item.priceLimit ? (item.price_limit ?? item.priceLimit) + ' $' : '-'}</td>
+                      )}
+                      <td style={{padding: '6px 12px', textAlign: 'right'}}>{item.stop_loss ?? item.stopLoss ? (item.stop_loss ?? item.stopLoss) + ' $' : '-'}</td>
+                      <td style={{padding: '6px 12px', textAlign: 'right'}}>{item.take_profit ?? item.takeProfit ? (item.take_profit ?? item.takeProfit) + ' $' : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()
       ) : (
         <table style={{marginTop: 8, borderCollapse: 'collapse', background: '#f8fafd', border: '1px solid #e0e0e0', borderRadius: 6, minWidth: 220, boxShadow: '0 1px 4px #e0e0e0'}}>
           <tbody>

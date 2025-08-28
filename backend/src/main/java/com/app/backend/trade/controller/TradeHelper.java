@@ -71,7 +71,7 @@ public class TradeHelper {
     }
 
     public boolean isSymbolsValid(String symbols) throws Exception {
-        String prompt = TradeUtils.readResourceFile("prompt/prompt_check_symbol.json")
+        String prompt = TradeUtils.readResourceFile("prompt/prompt_check_symbol.txt")
                 .replace("{{symbols}}", symbols);
         ChatGptResponse response = chatGptService.askChatGpt(prompt);
         if (response.getError() != null) {
@@ -93,7 +93,7 @@ public class TradeHelper {
     // Analyse une action en interrogeant Alpha Vantage puis ChatGPT avec un délai spécifique
     public String getAnalyseAction(String symbol) throws Exception {
 
-        String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_analyse.json");
+        String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_analyse.txt");
 
         InfosAction infosAction = this.getInfosAction(symbol,true);
 
@@ -118,9 +118,9 @@ public class TradeHelper {
         this.isSymbolsValid(joinedSymbols);
 
         // Lecture du prompt depuis le fichier
-        String promptEntete = TradeUtils.readResourceFile("prompt/prompt_"+tradeType+"_trade_auto_entete.json");
-        String promptPied = TradeUtils.readResourceFile("prompt/prompt_"+tradeType+"_trade_auto_pied.json");
-        String promptSymbol = TradeUtils.readResourceFile("prompt/prompt_trade_auto_symbol.json");
+        String promptEntete = TradeUtils.readResourceFile("prompt/prompt_"+tradeType+"_trade_auto_entete.txt");
+        String promptPied = TradeUtils.readResourceFile("prompt/prompt_"+tradeType+"_trade_auto_pied.txt");
+        String promptSymbol = TradeUtils.readResourceFile("prompt/prompt_trade_auto_symbol.txt");
 
         Portfolio portfolio = this.getPortfolio();
         String portfolioJson = new Gson().toJson(portfolio);
@@ -165,7 +165,7 @@ public class TradeHelper {
                 }
             }
         } catch (Exception e) {
-            return "Error exécution ordre !!!!! (voir la fin)" + response.getMessage() + "Erreur de parsing de l'ordre : " + e.getMessage() ;
+            return response.getMessage() + "Erreur de parsing de l'ordre : " + e.getMessage() ;
         }
 
 
@@ -175,7 +175,7 @@ public class TradeHelper {
     public String tradeAI(String symbol) throws Exception {
 
         // Lecture du prompt depuis le fichier
-        String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_trade.json");
+        String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_trade.txt");
 
         InfosAction infosAction = this.getInfosAction(symbol, true);
 

@@ -61,8 +61,8 @@ public class AlpacaService {
             // Ordre limit simple
             body.put("type", "limit");
             body.put("limit_price", priceLimit);
-        } else if (stopLoss != null || takeProfit != null) {
-            // Bracket order
+        } else if ((stopLoss != null || takeProfit != null) && qty == Math.floor(qty)) {
+            // Bracket order (seulement si qty entier)
             body.put("type", "market"); // Alpaca exige type=market pour bracket
             body.put("order_class", "bracket");
             if (takeProfit != null) {

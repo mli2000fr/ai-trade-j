@@ -22,7 +22,7 @@ equilibre:
 
 - Sell existing positions if swing targets are reached or technical/financial signals justify it.
 
-- Quantity can be fractional if allowed.
+- Quantity can be fractional.
 
 - Use only provided data; do not assume anything else.
 
@@ -70,3 +70,14 @@ Do not avoid moderately volatile stocks if the setup is favorable.
 Apply a flexible R/R, ideally ≥1:1.5, but allow higher potential if setup supports it.
 
 Prioritize trades with high potential reward, balancing risk carefully.
+
+
+
+
+
+entier/decimal sur quantioté:
+The quantity must be an integer whenever the order includes stop_loss or take_profit.
+
+Fractional quantities (decimals) are only allowed for simple market/limit orders without stop_loss or take_profit.
+
+By default, prefer integers for quantity.

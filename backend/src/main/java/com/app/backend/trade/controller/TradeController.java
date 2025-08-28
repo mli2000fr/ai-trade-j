@@ -72,9 +72,9 @@ public class TradeController {
             @RequestParam(value = "symbol", required = false) String symbol,
             @RequestParam(value = "cancelable", required = false) Boolean cancelable) {
         java.util.List<com.app.backend.trade.model.alpaca.Order> orders = alpacaService.getOrders(symbol, cancelable);
-        // Ne retourner que les 6 premiers ordres
+        // Ne retourner que les 10 premiers ordres
         if (orders == null) orders = java.util.Collections.emptyList();
-        if (orders.size() > 6) orders = orders.subList(0, 6);
+        if (orders.size() > 10) orders = orders.subList(0, 10);
         return ResponseEntity.ok(orders);
     }
 

@@ -8,7 +8,10 @@ Rules:
 
 - Sell existing positions if swing targets are reached or technical/financial signals strongly justify it.
 
-- Quantity can be fractional if allowed.
+- Quantity can be fractional.
+    - The quantity must be an integer whenever the order includes stop_loss or take_profit.
+    - Fractional quantities (decimals) are only allowed for simple market/limit orders without stop_loss or take_profit.
+    - By default, prefer integers for quantity.
 
 - Use only provided data; do not assume anything else.
 
@@ -17,6 +20,7 @@ Rules:
 - Apply a flexible R/R, ideally ≥1:1.5, but adjust if the setup supports higher potential.
 
 - Prioritize trades with high-quality swing setups over avoiding risk.
+
 
 ⚠️ Output: 2 parts separated by ===
 Part 1: JSON
