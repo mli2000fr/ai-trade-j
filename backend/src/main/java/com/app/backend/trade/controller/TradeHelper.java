@@ -10,6 +10,7 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import java.util.HashMap;
 import java.util.List;
@@ -17,6 +18,9 @@ import java.util.Map;
 
 @Controller
 public class TradeHelper {
+
+    @Value("${trade.type}")
+    private String tradeType;
 
     private final AlpacaService alpacaService;
     private final ChatGptService chatGptService;
@@ -114,8 +118,8 @@ public class TradeHelper {
         this.isSymbolsValid(joinedSymbols);
 
         // Lecture du prompt depuis le fichier
-        String promptEntete = TradeUtils.readResourceFile("prompt/prompt_trade_auto_entete.json");
-        String promptPied = TradeUtils.readResourceFile("prompt/prompt_trade_auto_pied.json");
+        String promptEntete = TradeUtils.readResourceFile("prompt/prompt_"+tradeType+"_trade_auto_entete.json");
+        String promptPied = TradeUtils.readResourceFile("prompt/prompt_"+tradeType+"_trade_auto_pied.json");
         String promptSymbol = TradeUtils.readResourceFile("prompt/prompt_trade_auto_symbol.json");
 
         Portfolio portfolio = this.getPortfolio();
