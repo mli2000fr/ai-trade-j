@@ -74,12 +74,13 @@ public class TradeController {
     }
 
     /**
-     * Effectue un trade automatique via l'IA pour un compte donné.
+     * Effectue un trade automatique via l'IA pour un compte donné, avec analyse GPT optionnelle.
      */
     @PostMapping("/trade-ai-auto")
-    public ResponseEntity<String> tradeAIAuto(@RequestBody TradeAutoRequest request)  {
+    public ResponseEntity<String> tradeAIAuto(@RequestBody TradeAutoRequestGpt request)  {
         CompteEntity compte = compteService.getCompteCredentialsById(request.getId());
-        String result = tradeHelper.tradeAIAuto(compte, request.getSymboles());
+        String analyseGpt = request.getAnalyseGpt() != null ? request.getAnalyseGpt() : "";
+        String result = tradeHelper.tradeAIAuto(compte, request.getSymboles(), analyseGpt);
         return ResponseEntity.ok(result);
     }
 

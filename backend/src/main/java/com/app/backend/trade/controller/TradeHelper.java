@@ -109,6 +109,42 @@ public class TradeHelper {
     }
 
     /**
+     * Exécute un trade automatique via l'IA sur une liste de symboles, avec analyse GPT optionnelle.
+     * @param compte compte utilisateur
+     * @param symbols liste des symboles
+     * @param analyseGpt texte d'analyse GPT (optionnel)
+     * @return message de retour de l'IA ou erreur
+     */
+    public String tradeAIAuto(CompteEntity compte, List<String> symbols, String analyseGpt)  {
+        if(symbols == null || symbols.isEmpty()){
+            throw new RuntimeException("Aucun symbole fourni pour tradeAIAuto.");
+        }
+        String joinedSymbols = String.join(",", symbols);
+        this.isSymbolsValid(joinedSymbols);
+        String promptEntete = TradeUtils.readResourceFile("prompt/prompt_"+tradeType+"_trade_auto_entete.txt");
+        String promptPied = TradeUtils.readResourceFile("prompt/prompt_"+tradeType+"_trade_auto_pied.txt")
+                .replace("{{data_analyse_ia}}", analyseGpt != null ? analyseGpt : "not available");
+        String promptSymbol = TradeUtils.readResourceFile("prompt/prompt_trade_auto_symbol.txt");
+        String portfolioJson = new Gson().toJson(this.getPortfolio(compte));
+        StringBuilder promptFinal = new StringBuilder(promptEntete.replace("{{symbols}}", joinedSymbols)
+                .replace("{{data_portfolio}}", portfolioJson));
+        for(String symbol : symbols){
+            symbol = symbol.trim();
+            if(symbol.isEmpty()) continue;
+            InfosAction infosAction = this.getInfosAction(compte, symbol, true);
+            Map<String, Object> variables = getStringObjectMap(infosAction);
+            promptFinal.append(getPromptWithValues(promptSymbol, variables));
+            sleepForRateLimit();
+        }
+        promptFinal.append(promptPied);
+        ChatGptResponse response = chatGptService.askChatGpt(promptFinal.toString());
+        if (response.getError() != null) {
+            return "Erreur lors de l'analyse : " + response.getError();
+        }
+        return processAIAutoOrders(response.getMessage(), compte);
+    }
+
+    /**
      * Exécute un trade IA sur un symbole donné.
      * @param compte compte utilisateur
      * @param symbol symbole à trader

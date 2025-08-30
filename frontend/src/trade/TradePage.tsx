@@ -152,6 +152,10 @@ const TradePage: React.FC = () => {
     }
   };
 
+  // Etats pour le trade auto
+  const [analyseGptFile, setAnalyseGptFile] = useState<File | null>(null);
+  const [analyseGptText, setAnalyseGptText] = useState<string>('');
+
   // Soumission du trade auto
   const handleTradeAuto = async () => {
     setMessage('');
@@ -161,10 +165,19 @@ const TradePage: React.FC = () => {
     setPollingActive(false);
     try {
       const symboles = autoSymbols.split(',').map(s => s.trim()).filter(Boolean);
+      // Attendre la lecture du fichier si besoin
+      let analyseGpt = analyseGptText;
+      if (analyseGptFile && !analyseGptText) {
+        analyseGpt = await new Promise<string>(resolve => {
+          const reader = new FileReader();
+          reader.onload = ev => resolve(ev.target?.result as string || '');
+          reader.readAsText(analyseGptFile);
+        });
+      }
       const res = await fetch('/api/trade/trade-ai-auto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symboles, id: compteId }),
+        body: JSON.stringify({ symboles, id: compteId, analyseGpt }),
       });
       const text = await res.text();
       const parts = text.split('===');
@@ -296,6 +309,8 @@ const TradePage: React.FC = () => {
         isExecuting={isExecuting}
         onChange={setAutoSymbols}
         onTrade={handleTradeAuto}
+        analyseGptText={analyseGptText}
+        onAnalyseGptChange={setAnalyseGptText}
       />
       {/* Bloc trade manuel */}
       <TradeManualBlock
