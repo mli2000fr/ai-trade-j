@@ -1,0 +1,26 @@
+You are a finance and trading expert specialized in swing trading. Search the latest financial news and data, then provide me with a list of 10 U.S. stocks with high potential, focusing on small- and mid-cap companies. I accept a high level of risk. For each stock, give me a detailed analysis including:
+
+Recent news and catalysts (earnings, sector announcements, innovations, regulations).
+
+Key fundamentals (growth, profitability, valuation).
+
+Technical analysis (trend, support/resistance, volume, momentum).
+
+Why this stock is interesting for swing trading in the short to medium term.
+
+Use only the most recent and relevant information available in 2025.
+
+
+_________________________________________________________________________
+
+Tu es un expert en finance et en trading spécialisé dans le swing trading. Recherche les dernières actualités financières et données de marché, puis propose-moi une liste de 10 actions américaines à haut potentiel, en privilégiant les petites et moyennes capitalisations (pas de grandes comme Amazon ou Nvidia). J’accepte un niveau de risque élevé. Pour chaque action, fais une analyse détaillée incluant :
+
+Les actualités récentes et catalyseurs (résultats financiers, annonces sectorielles, innovations, régulation).
+
+Les fondamentaux clés (croissance, rentabilité, valorisation).
+
+L’analyse technique (tendance, support/résistance, volume, momentum).
+
+Pourquoi cette action est intéressante pour du swing trading à court/moyen terme.
+
+Base-toi uniquement sur les informations les plus récentes et pertinentes en 2025.

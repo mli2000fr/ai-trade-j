@@ -134,11 +134,13 @@ public class AlpacaService {
                         responseJson = gson.toJson(order);
                         OrderEntity orderEntity2 = new OrderEntity(requestJson, responseJson, errorJson);
                         orderRepository.save(orderEntity2);
+                    } else {
+                        throw new RuntimeException("Erreur lors de la création de l'ordre Alpaca: " + errorJson);
                     }
                 } catch (Exception ignore) {
                     OrderEntity orderEntity3 = new OrderEntity(requestJson, responseJson, ignore.getMessage());
                     orderRepository.save(orderEntity3);
-                    throw new RuntimeException("Erreur lors de la création de l'ordre Alpaca: " + ignore.getMessage());
+                    throw new RuntimeException("Erreur lors de la création de l'ordre Alpaca: " +request+ " / " + ignore.getMessage());
                 }
             }
         }

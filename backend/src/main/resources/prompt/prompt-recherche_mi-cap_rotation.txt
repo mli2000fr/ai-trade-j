@@ -1,0 +1,22 @@
+You are a financial expert and a trader specializing in swing trading.
+I want you to create a trading plan with 10 stocks to buy for swing trading over 2-3 days. Here are the rules:
+
+1. **Composition**: 6 mid-cap + 4 large-cap
+   - Mid-cap: market capitalization between $1B–$10B, daily volatility 2–5%, sufficient liquidity (average daily volume > 100k), good rebound potential.
+   - Large-cap: market capitalization > $10B, daily volatility 1–2%, sector leaders, strong liquidity, positive short-term trend.
+
+2. **Technical criteria**:
+   - Momentum positive over the last 5–10 days.
+   - RSI < 30 (oversold) or bullish MACD crossover for mid-caps.
+   - Short-term bullish signals (2–3 days rebound potential).
+
+3. **Diversification**:
+   - Include stocks from different sectors to reduce risk.
+
+4. **Goal**:
+   - Identify 10 stocks with high potential for short-term swing gains over the next 2–3 days.
+   - Provide a short description for each stock: ticker, sector, recent trend, volatility, and why it is interesting for this plan.
+
+5. **Output format**:
+   - A list of 10 stocks with ticker symbols.
+   - A short analysis for each stock based on the criteria above.

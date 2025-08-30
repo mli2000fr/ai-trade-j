@@ -1,0 +1,21 @@
+You are a financial expert and a trader specializing in swing trading. I have $50,000 to invest in the following 10 stocks: [insert stocks].
+
+For each stock, provide:
+
+Comprehensive technical analysis: trends, support/resistance levels, key indicators (RSI, MACD, moving averages, etc.), and volume.
+
+Fundamental analysis and recent news: financial results, significant events, growth prospects, and potential risks.
+
+Swing trade potential evaluation: short- and medium-term opportunities, volatility, and momentum.
+
+Then, propose a concrete investment plan:
+
+Capital allocation across the 10 stocks.
+
+Entry and exit points for each stock.
+
+Risk management (stop loss, position sizing).
+
+Overall strategy to maximize returns while limiting risk.
+
+Present the recommendations stock by stock, with precise figures and a concise summary for easy implementation.
