@@ -1,6 +1,7 @@
 package com.app.backend.trade.service;
 
 import com.app.backend.trade.model.*;
+import com.app.backend.trade.model.alpaca.AlpacaTransferActivity;
 import com.app.backend.trade.model.alpaca.ErrResponseOrder;
 import com.app.backend.trade.model.alpaca.OffsetDateTimeAdapter;
 import com.app.backend.trade.model.alpaca.Order;
@@ -296,6 +297,10 @@ public class AlpacaService {
         Map<String, Object> account = accountResponse.getBody();
         dto.setAccount(account);
 
+        // Récupérer le montant initial (somme des dépôts/retraits)
+        double initialDeposit = getInitialDeposit(compte);
+        dto.setInitialDeposit(initialDeposit);
+
         return dto;
     }
 
@@ -542,6 +547,44 @@ public class AlpacaService {
      */
     public Map<String, Object> getDetailedNewsForSymbol(CompteEntity compte, String symbol, Integer pageSize) {
         return getNews(compte, Arrays.asList(symbol), null, null, "desc", true, true, pageSize);
+    }
+
+    /**
+     * Récupère la somme nette des dépôts et retraits (montant initial) via l'API Alpaca.
+     * @param compte CompteEntity contenant les credentials
+     * @return somme nette des dépôts (positif) et retraits (négatif)
+     */
+    public double getInitialDeposit(CompteEntity compte) {
+        String url = apiBaseUrl + "/account/activities";
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("APCA-API-KEY-ID", compte.getCle());
+        headers.set("APCA-API-SECRET-KEY", compte.getSecret());
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+        ResponseEntity<String> rawResponse = restTemplate.exchange(
+                url, HttpMethod.GET, request, String.class);
+        logger.info("Réponse brute Alpaca activities: {}", rawResponse.getBody());
+        AlpacaTransferActivity[] activities = gson.fromJson(rawResponse.getBody(), AlpacaTransferActivity[].class);
+        double sum = 0.0;
+        if (activities != null) {
+            for (AlpacaTransferActivity act : activities) {
+                // Types de transferts de fonds selon la doc Alpaca et observation du log (inclure JNLC)
+                if (act.getActivityType() != null && (
+                        act.getActivityType().equals("ACHV") ||
+                        act.getActivityType().equals("ACATC") ||
+                        act.getActivityType().equals("ACATS") ||
+                        act.getActivityType().equals("CSD") ||
+                        act.getActivityType().equals("CSR") ||
+                        act.getActivityType().equals("JNLC")
+                ) && act.getNetAmount() != null) {
+                    try {
+                        sum += Double.parseDouble(act.getNetAmount());
+                    } catch (Exception e) {
+                        logger.warn("Impossible de parser net_amount: {}", act.getNetAmount());
+                    }
+                }
+            }
+        }
+        return sum;
     }
 
 }

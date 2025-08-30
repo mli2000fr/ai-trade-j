@@ -32,7 +32,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
         <>
           {portfolio.account && (
             <Grid container spacing={2} sx={{ mb: 2 }}>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid>
                 <Card variant="outlined">
                   <CardContent>
                     <Typography variant="subtitle2" color="text.secondary">Valeur totale</Typography>
@@ -40,7 +40,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                   </CardContent>
                 </Card>
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid>
                 <Card variant="outlined">
                   <CardContent>
                     <Typography variant="subtitle2" color="text.secondary">Buying Power</Typography>
@@ -48,7 +48,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                   </CardContent>
                 </Card>
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid>
                 <Card variant="outlined">
                   <CardContent>
                     <Typography variant="subtitle2" color="text.secondary">Cash</Typography>
@@ -57,7 +57,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                 </Card>
               </Grid>
               {portfolio.account.portfolio_value && (
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid>
                   <Card variant="outlined">
                     <CardContent>
                       <Typography variant="subtitle2" color="text.secondary">Portfolio Value</Typography>
@@ -67,7 +67,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                 </Grid>
               )}
               {portfolio.account.status && (
-                <Grid item xs={12} sm={6} md={3}>
+                <Grid>
                   <Card variant="outlined">
                     <CardContent>
                       <Typography variant="subtitle2" color="text.secondary">Status</Typography>
@@ -76,6 +76,30 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                   </Card>
                 </Grid>
               )}
+              <Grid>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="subtitle2" color="text.secondary">P/L total</Typography>
+                    <Typography variant="h6">
+                      {portfolio.initialDeposit !== undefined && portfolio.initialDeposit !== 0
+                        ? (Number(portfolio.account.equity) - Number(portfolio.initialDeposit)).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $'
+                        : '-'}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="subtitle2" color="text.secondary">P/L (%)</Typography>
+                    <Typography variant="h6">
+                      {portfolio.initialDeposit !== undefined && portfolio.initialDeposit !== 0
+                        ? (((Number(portfolio.account.equity) - Number(portfolio.initialDeposit)) / Number(portfolio.initialDeposit)) * 100).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' %'
+                        : '-'}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
             </Grid>
           )}
           <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}><b>Positions&nbsp;:</b></Typography>

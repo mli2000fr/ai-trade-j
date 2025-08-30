@@ -6,12 +6,14 @@ import java.util.Map;
 public class PortfolioDto {
     private List<Map<String, Object>> positions;
     private Map<String, Object> account;
+    private double initialDeposit;
 
     public PortfolioDto() {}
 
-    public PortfolioDto(List<Map<String, Object>> positions, Map<String, Object> account) {
+    public PortfolioDto(List<Map<String, Object>> positions, Map<String, Object> account, double initialDeposit) {
         this.positions = positions;
         this.account = account;
+        this.initialDeposit = initialDeposit;
     }
 
     public List<Map<String, Object>> getPositions() {
@@ -28,5 +30,13 @@ public class PortfolioDto {
 
     public void setAccount(Map<String, Object> account) {
         this.account = account;
+    }
+
+    public double getInitialDeposit() {
+        return initialDeposit;
+    }
+
+    public void setInitialDeposit(double initialDeposit) {
+        this.initialDeposit = initialDeposit;
     }
 }
