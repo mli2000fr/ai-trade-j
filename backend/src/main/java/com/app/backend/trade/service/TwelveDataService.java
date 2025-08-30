@@ -7,6 +7,9 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 
+/**
+ * Service pour interagir avec l'API Twelve Data (indicateurs techniques et fondamentaux).
+ */
 @Service
 public class TwelveDataService {
     @Value("${twelvedata.api.key}")
@@ -18,38 +21,49 @@ public class TwelveDataService {
     @Value("${twelvedata.api.history.limit}")
     private int limit;
 
-    // SMA (Simple Moving Average)
+    /**
+     * SMA (Simple Moving Average)
+     */
     public String getSMA(String symbol)  {
         return getIndicator("sma", symbol, "interval=1day&time_period=30&start_date=" + TradeUtils.getStartDate(limit));
     }
-
-    // RSI (Relative Strength Index)
+    /**
+     * RSI (Relative Strength Index)
+     */
     public String getRSI(String symbol)  {
         return getIndicator("rsi", symbol, "interval=1day&time_period=14&start_date=" + TradeUtils.getStartDate(limit));
     }
-
-    // MACD (Moving Average Convergence Divergence)
+    /**
+     * MACD (Moving Average Convergence Divergence)
+     */
     public String getMACD(String symbol)  {
         return getIndicator("macd", symbol, "interval=1day&short_period=12&long_period=26&signal_period=9&start_date=" + TradeUtils.getStartDate(limit));
     }
-
-    // ATR (Average True Range)
+    /**
+     * ATR (Average True Range)
+     */
     public String getATR(String symbol)  {
         return getIndicator("atr", symbol, "interval=1day&time_period=14&start_date=" + TradeUtils.getStartDate(limit));
     }
-
-    // Données de l'action (Time Series)
+    /**
+     * Données de l'action (Time Series)
+     */
     public String getDataAction(String symbol)  {
         return getIndicator("time_series", symbol, "interval=1day&start_date=" + TradeUtils.getStartDate(limit));
     }
-
-    // Données fondamentales (Fundamental Data) les fondamentaux (bénéfices, prévisions, valorisation, actualités produits)
+    /**
+     * Données fondamentales (Fundamental Data)
+     */
     public String getFundamental(String symbol)  {
         return getIndicator("fundamentals", symbol, null);
     }
-
-
-
+    /**
+     * Appelle l'API Twelve Data pour un indicateur donné.
+     * @param function nom de la fonction (sma, rsi, etc.)
+     * @param symbol symbole de l'action
+     * @param params paramètres supplémentaires
+     * @return réponse JSON de l'API
+     */
     private String getIndicator(String function, String symbol, String params)  {
         RestTemplate restTemplate = new RestTemplate();
         String url = apiUrl + function + "?symbol=" + symbol + "&apikey=" + apiKey + (params != null ? "&" + params : "");

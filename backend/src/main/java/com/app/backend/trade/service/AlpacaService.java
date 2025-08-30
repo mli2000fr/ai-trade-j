@@ -1,6 +1,7 @@
 package com.app.backend.trade.service;
 
 import com.app.backend.trade.model.*;
+import com.app.backend.trade.model.alpaca.AlpacaTransferActivity;
 import com.app.backend.trade.model.alpaca.ErrResponseOrder;
 import com.app.backend.trade.model.alpaca.OffsetDateTimeAdapter;
 import com.app.backend.trade.model.alpaca.Order;
@@ -15,6 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.URI;
 import java.time.OffsetDateTime;
 import java.util.*;
@@ -22,8 +26,7 @@ import java.util.function.Consumer;
 
 @Service
 public class AlpacaService {
-
-
+    private static final Logger logger = LoggerFactory.getLogger(AlpacaService.class);
 
     @Value("${alpaca.markets.api.paper.url}")
     private String apiBaseUrl;
@@ -48,6 +51,17 @@ public class AlpacaService {
         this.orderRepository = orderRepository;
     }
 
+    /**
+     * Place un ordre sur Alpaca (achat, vente, limit, bracket, etc.).
+     * @param compte CompteEntity contenant les credentials
+     * @param symbol Symbole de l'action
+     * @param qty Quantité
+     * @param side "buy" ou "sell"
+     * @param priceLimit Limite de prix (optionnel)
+     * @param stopLoss Stop loss (optionnel)
+     * @param takeProfit Take profit (optionnel)
+     * @return Order créé
+     */
     public Order placeOrder(CompteEntity compte, String symbol, double qty, String side, Double priceLimit, Double stopLoss, Double takeProfit) {
         String url = apiBaseUrl + "/orders";
         HttpHeaders headers = new HttpHeaders();
@@ -100,10 +114,11 @@ public class AlpacaService {
             order = this.callOrder(url, request);
             responseJson = gson.toJson(order);
         } catch (org.springframework.web.client.HttpClientErrorException ex) {
-            // Cas d'erreur HTTP (ex: 403 Forbidden)
             errorJson = ex.getResponseBodyAsString();
+            logger.error("Erreur HTTP lors de la création de l'ordre Alpaca: {}", errorJson);
         } catch (Exception ex) {
             errorJson = ex.getMessage();
+            logger.error("Exception lors de la création de l'ordre Alpaca: {}", errorJson);
         }
         // Sauvegarde via repository JPA
         OrderEntity orderEntity = new OrderEntity(requestJson, responseJson, errorJson);
@@ -148,6 +163,9 @@ public class AlpacaService {
         return gson.fromJson(responseJson, Order.class);
     }
 
+    /**
+     * Récupère le dernier prix pour un symbole donné.
+     */
     public Double getLastPrice(CompteEntity compte, String symbol) {
         String url = apiMarketBaseUrl + "/v2/stocks/" + symbol + "/quotes/latest";
         HttpHeaders headers = new HttpHeaders();
@@ -164,6 +182,9 @@ public class AlpacaService {
         return null;
     }
 
+    /**
+     * Stream les prix en temps réel via WebSocket.
+     */
     public void streamLivePrice(CompteEntity compte, String symbol, Consumer<String> onMessage) {
         try {
             String wsUrl = "wss://stream.data.alpaca.markets/v2/sip";
@@ -194,6 +215,7 @@ public class AlpacaService {
             };
             client.connect();
         } catch (Exception e) {
+            logger.error("Erreur lors de la connexion WebSocket Alpaca", e);
             throw new RuntimeException("Erreur lors de la connexion WebSocket Alpaca", e);
         }
     }
@@ -223,6 +245,9 @@ public class AlpacaService {
         return false;
     }
 
+    /**
+     * Vend une action pour un compte donné.
+     */
     public String sellStock(CompteEntity compte, String symbol, double qty) {
         if (hasOppositeOpenOrder(compte, symbol, "sell")) {
             return "Erreur : Un ordre d'achat ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant de vendre.";
@@ -230,10 +255,16 @@ public class AlpacaService {
         return placeOrder(compte, symbol, qty, "sell", null, null, null).toString();
     }
 
+    /**
+     * Achète une action pour un compte donné.
+     */
     public String buyStock(CompteEntity compte, String symbol, double qty) {
         return buyStock(compte, symbol, qty, null, null, null);
     }
 
+    /**
+     * Achète une action avec options avancées (limit, stop, take profit).
+     */
     public String buyStock(CompteEntity compte, String symbol, double qty, Double priceLimit, Double stopLoss, Double takeProfit) {
         if (hasOppositeOpenOrder(compte, symbol, "buy")) {
             List<Order> annulables = this.getOrders(compte, symbol, true);
@@ -245,6 +276,9 @@ public class AlpacaService {
         return placeOrder(compte, symbol, qty, "buy", priceLimit, stopLoss, takeProfit).toString();
     }
 
+    /**
+     * Récupère le portefeuille et les positions pour un compte donné.
+     */
     public PortfolioDto getPortfolioWithPositions(CompteEntity compte) {
         PortfolioDto dto = new PortfolioDto();
 
@@ -263,9 +297,16 @@ public class AlpacaService {
         Map<String, Object> account = accountResponse.getBody();
         dto.setAccount(account);
 
+        // Récupérer le montant initial (somme des dépôts/retraits)
+        double initialDeposit = getInitialDeposit(compte);
+        dto.setInitialDeposit(initialDeposit);
+
         return dto;
     }
 
+    /**
+     * Annule un ordre pour un compte donné.
+     */
     public String cancelOrder(CompteEntity compte, String orderId) {
         String url = apiBaseUrl + "/orders/" + orderId;
         HttpHeaders headers = new HttpHeaders();
@@ -276,6 +317,9 @@ public class AlpacaService {
         return response.getBody() != null ? response.getBody() : "Annulation demandée.";
     }
 
+    /**
+     * Récupère le portefeuille (cash + positions) pour un compte donné.
+     */
     public Portfolio getPortfolio(CompteEntity compte) {
         PortfolioDto dto = this.getPortfolioWithPositions(compte);
         double cash = 0.0;
@@ -503,6 +547,44 @@ public class AlpacaService {
      */
     public Map<String, Object> getDetailedNewsForSymbol(CompteEntity compte, String symbol, Integer pageSize) {
         return getNews(compte, Arrays.asList(symbol), null, null, "desc", true, true, pageSize);
+    }
+
+    /**
+     * Récupère la somme nette des dépôts et retraits (montant initial) via l'API Alpaca.
+     * @param compte CompteEntity contenant les credentials
+     * @return somme nette des dépôts (positif) et retraits (négatif)
+     */
+    public double getInitialDeposit(CompteEntity compte) {
+        String url = apiBaseUrl + "/account/activities";
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("APCA-API-KEY-ID", compte.getCle());
+        headers.set("APCA-API-SECRET-KEY", compte.getSecret());
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+        ResponseEntity<String> rawResponse = restTemplate.exchange(
+                url, HttpMethod.GET, request, String.class);
+        logger.info("Réponse brute Alpaca activities: {}", rawResponse.getBody());
+        AlpacaTransferActivity[] activities = gson.fromJson(rawResponse.getBody(), AlpacaTransferActivity[].class);
+        double sum = 0.0;
+        if (activities != null) {
+            for (AlpacaTransferActivity act : activities) {
+                // Types de transferts de fonds selon la doc Alpaca et observation du log (inclure JNLC)
+                if (act.getActivityType() != null && (
+                        act.getActivityType().equals("ACHV") ||
+                        act.getActivityType().equals("ACATC") ||
+                        act.getActivityType().equals("ACATS") ||
+                        act.getActivityType().equals("CSD") ||
+                        act.getActivityType().equals("CSR") ||
+                        act.getActivityType().equals("JNLC")
+                ) && act.getNetAmount() != null) {
+                    try {
+                        sum += Double.parseDouble(act.getNetAmount());
+                    } catch (Exception e) {
+                        logger.warn("Impossible de parser net_amount: {}", act.getNetAmount());
+                    }
+                }
+            }
+        }
+        return sum;
     }
 
 }

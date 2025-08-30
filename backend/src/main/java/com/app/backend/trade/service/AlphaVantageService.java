@@ -7,6 +7,9 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 
+/**
+ * Service pour interagir avec l'API Alpha Vantage (indicateurs techniques et fondamentaux).
+ */
 @Service
 public class AlphaVantageService {
     @Value("${alphavantage.api.key}")
@@ -17,36 +20,55 @@ public class AlphaVantageService {
 
     private final String SURFIX_URL = "&interval=daily&time_period=12&series_type=close";
 
-    //SMA (Simple Moving Average) Tendances globales (simple).
+    /**
+     * SMA (Simple Moving Average) Tendances globales (simple).
+     */
     public String getSMA(String symbol) {
         return getInfosAction("SMA", symbol, SURFIX_URL);
     }
 
-    //RSI (Relative Strength Index) Zones extrêmes (surachat/survente).
+    /**
+     * RSI (Relative Strength Index) Zones extrêmes (surachat/survente).
+     */
     public String getRSI(String symbol) {
         return getInfosAction("RSI", symbol, SURFIX_URL);
     }
 
-    //MACD (Moving Average Convergence Divergence) Force et changement de tendance.
+    /**
+     * MACD (Moving Average Convergence Divergence) Force et changement de tendance.
+     */
     public String getMACD(String symbol) {
         return getInfosAction("MACD", symbol, SURFIX_URL);
     }
 
-    //Volatilité (via ATR = Average True Range) la taille des mouvements possibles.
+    /**
+     * Volatilité (via ATR = Average True Range) la taille des mouvements possibles.
+     */
     public String getATR(String symbol) {
         return getInfosAction("ATR", symbol, SURFIX_URL);
     }
 
-    //Volatilité (Moving Average Convergence Divergence)
+    /**
+     * Données de l'action (Time Series Daily).
+     */
     public String getDataAction(String symbol) {
         return getInfosAction("TIME_SERIES_DAILY", symbol, SURFIX_URL);
     }
 
-    // Données fondamentales (Fundamental Data)
+    /**
+     * Données fondamentales (Fundamental Data).
+     */
     public String getFundamental(String symbol) {
         return getInfosAction("OVERVIEW", symbol, null);
     }
 
+    /**
+     * Appelle l'API Alpha Vantage pour un indicateur donné.
+     * @param functionName nom de la fonction (SMA, RSI, etc.)
+     * @param symbol symbole de l'action
+     * @param surfix paramètres supplémentaires
+     * @return réponse JSON de l'API
+     */
     public String getInfosAction(String functionName, String symbol, String surfix) {
         RestTemplate restTemplate = new RestTemplate();
         String url = apiurl + functionName + "&symbol=" + symbol + "&apikey=" + apiKey + (surfix == null ? "" : surfix);

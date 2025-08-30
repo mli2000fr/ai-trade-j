@@ -9,6 +9,9 @@ import org.springframework.http.HttpStatus;
 
 import java.util.Map;
 
+/**
+ * Service pour interagir avec l'API EODHD (actualités financières).
+ */
 @Service
 public class EodhdService {
     @Value("${eodhd.api.key}")
@@ -21,7 +24,11 @@ public class EodhdService {
     private int limit;
 
 
-    // Récupérer les news pour un symbole donné (ou toutes les news si symbol est null)
+    /**
+     * Récupère les news pour un symbole donné (ou toutes les news si symbol est null).
+     * @param symbol symbole de l'action (optionnel)
+     * @return JSON filtré des news
+     */
     public String getNews(String symbol)  {
         RestTemplate restTemplate = new RestTemplate();
         StringBuilder urlBuilder = new StringBuilder(apiUrl);
@@ -71,6 +78,9 @@ public class EodhdService {
         }
     }
 
+    /**
+     * Interprète le score de sentiment en une catégorie lisible.
+     */
     public String interpretSentiment(double neg, double neu, double pos) {
         // 1. Cas neutre dominant
         if (neu >= 0.7 && pos < 0.2 && neg < 0.2) {

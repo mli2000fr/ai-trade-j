@@ -3,20 +3,33 @@ package com.app.backend.trade.util;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
+/**
+ * Classe utilitaire pour fonctions diverses liées au trading (logs, dates, nettoyage HTML, etc.).
+ */
 public class TradeUtils {
-
-
+    /**
+     * Affiche un message de log dans la console (préfixé).
+     * @param message message à afficher
+     */
     public static void log(String message) {
         System.out.println("[LOG] " + message);
     }
 
-    // Retourne la date du jour moins 90 jours au format YYYY-MM-DD
+    /**
+     * Retourne la date du jour moins un nombre de jours donné, au format YYYY-MM-DD.
+     * @param histo nombre de jours à soustraire
+     * @return date au format yyyy-MM-dd
+     */
     public static String getStartDate(int histo) {
         LocalDate date = LocalDate.now().minusDays(histo);
         return date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
     }
 
-    // Lit le contenu d'un fichier de ressources et le retourne sous forme de String
+    /**
+     * Lit le contenu d'un fichier de ressources et le retourne sous forme de String.
+     * @param path chemin du fichier dans les ressources
+     * @return contenu du fichier
+     */
     public static String readResourceFile(String path) {
         try (java.io.InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream(path)) {
             if (is == null) {
@@ -30,7 +43,6 @@ public class TradeUtils {
             throw new RuntimeException("Erreur lors de la lecture du fichier de ressource : " + path, e);
         }
     }
-
 
     /**
      * Supprime toutes les balises HTML d'une chaîne de caractères et ne garde que le texte.

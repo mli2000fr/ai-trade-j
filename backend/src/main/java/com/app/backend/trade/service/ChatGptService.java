@@ -16,6 +16,9 @@ import org.springframework.web.client.RestClientException;
 
 import java.time.LocalDateTime;
 
+/**
+ * Service pour interagir avec l'API OpenAI (ChatGPT).
+ */
 @Service
 public class ChatGptService {
     @Value("${openai.api.key}")
@@ -30,6 +33,11 @@ public class ChatGptService {
         this.gptRepository = gptRepository;
     }
 
+    /**
+     * Envoie un prompt à ChatGPT et retourne la réponse.
+     * @param prompt texte à envoyer à l'API
+     * @return réponse de ChatGPT ou message d'erreur
+     */
     public ChatGptResponse askChatGpt(String prompt) {
 
         // Création du client avec ta clé API

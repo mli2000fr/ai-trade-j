@@ -5,6 +5,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.ResponseEntity;
 
+/**
+ * Service pour interagir avec l'API Marketaux (actualités financières).
+ */
 @Service
 public class MarketauxService {
     @Value("${marketaux.api.key}")
@@ -13,6 +16,11 @@ public class MarketauxService {
     @Value("${marketaux.api.url}")
     private String apiUrl;
 
+    /**
+     * Récupère les news pour un symbole donné.
+     * @param symbol symbole de l'action
+     * @return JSON des news ou message d'erreur
+     */
     public String getNews(String symbol) {
         try {
             RestTemplate restTemplate = new RestTemplate();
@@ -24,4 +32,3 @@ public class MarketauxService {
         }
     }
 }
-
