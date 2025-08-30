@@ -260,8 +260,8 @@ const TradePage: React.FC = () => {
         </div>
       )}
       {/* Liste déroulante des comptes */}
-      <div style={{ marginBottom: 20 }}>
-        <label style={{ fontWeight: 500, marginRight: 8 }}>Compte&nbsp;:</label>
+      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <label style={{ fontWeight: 700, marginRight: 8, fontSize: '1.3em', lineHeight: '1.2', paddingTop: 2 }}>Compte&nbsp;:</label>
         {comptesLoading ? (
           <span>Chargement des comptes...</span>
         ) : comptesError ? (
@@ -270,7 +270,7 @@ const TradePage: React.FC = () => {
           <select
             value={selectedCompteId ?? ''}
             onChange={e => setSelectedCompteId(Number(e.target.value))}
-            style={{ minWidth: 180, padding: '4px 8px' }}
+            style={{ minWidth: 180, padding: '8px 8px', fontSize: '1em', height: 40, marginTop: 0 }}
           >
             {comptes.map(compte => (
               <option key={compte.id} value={compte.id}>
