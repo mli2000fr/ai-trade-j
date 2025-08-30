@@ -339,3 +339,68 @@ label {
   font-weight: 500;
   text-align: center;
 }
+
+.trade-ai-json-table {
+  margin-top: 8px;
+  border-collapse: collapse;
+  background: #f8fafd;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  min-width: 220px;
+  box-shadow: 0 1px 4px #e0e0e0;
+  width: 100%;
+  font-size: 0.98em;
+}
+.trade-ai-json-table th, .trade-ai-json-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e0e0e0;
+}
+.trade-ai-json-table th {
+  background: #e3eaf3;
+  font-weight: 600;
+  color: #1a237e;
+}
+.trade-ai-json-table .trade-ai-json-symbol {
+  font-weight: 500;
+}
+.trade-ai-json-table .trade-ai-json-action {
+  text-transform: capitalize;
+}
+.trade-ai-json-table .trade-ai-json-qty,
+.trade-ai-json-table .trade-ai-json-price,
+.trade-ai-json-table .trade-ai-json-stop,
+.trade-ai-json-table .trade-ai-json-take {
+  text-align: right;
+}
+.trade-ai-json-table .even-row {
+  background: #f8fafd;
+}
+.trade-ai-json-table .odd-row {
+  background: #f0f4f8;
+}
+.trade-ai-json-table-single .trade-ai-json-key {
+  font-weight: bold;
+  text-transform: capitalize;
+  background: #f0f4f8;
+  padding-left: 8px;
+}
+.trade-ai-json-table-single .trade-ai-json-value {
+  padding-left: 12px;
+}
+
+.trade-ai-text-result-custom {
+  margin-top: 12px;
+  white-space: pre-wrap;
+  background: #f6f6f6;
+  padding: 10px;
+  border-radius: 4px;
+  width: 100%;
+}
+
+.trade-message-custom {
+  width: 100%;
+}
+
+.overflow-x-auto {
+  overflow-x: auto;
+}
