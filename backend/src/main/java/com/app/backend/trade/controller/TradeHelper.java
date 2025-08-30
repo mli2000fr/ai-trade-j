@@ -1,6 +1,7 @@
 package com.app.backend.trade.controller;
 
 import com.app.backend.trade.model.ChatGptResponse;
+import com.app.backend.trade.model.CompteEntity;
 import com.app.backend.trade.model.InfosAction;
 import com.app.backend.trade.model.Portfolio;
 import com.app.backend.trade.model.alpaca.Order;
@@ -41,8 +42,8 @@ public class TradeHelper {
         this.finnhubService = finnhubService;
         this.eodhdService = eodhdService;
     }
-    public Portfolio getPortfolio() {
-        Portfolio portfolio = alpacaService.getPortfolio();
+    public Portfolio getPortfolio(CompteEntity compte) {
+        Portfolio portfolio = alpacaService.getPortfolio(compte);
         return portfolio;
     }
 
@@ -90,26 +91,7 @@ public class TradeHelper {
 
     }
 
-    // Analyse une action en interrogeant Alpha Vantage puis ChatGPT avec un délai spécifique
-    public String getAnalyseAction(String symbol)  {
-
-        String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_analyse.txt");
-
-        InfosAction infosAction = this.getInfosAction(symbol,true);
-
-        Map<String, Object> variables = getStringObjectMap(infosAction);
-
-        String prompt = getPromptWithValues(promptTemplate, variables);
-
-        ChatGptResponse response = chatGptService.askChatGpt(prompt);
-        if (response.getError() != null) {
-            return "Erreur lors de l'analyse : " + response.getError();
-        }
-
-        return response.getMessage();
-    }
-
-    public String tradeAIAuto(List<String> symbols)  {
+    public String tradeAIAuto(CompteEntity compte, List<String> symbols)  {
         if(symbols == null || symbols.isEmpty()){
             throw new RuntimeException("Aucun symbole fourni pour tradeAIAuto.");
         }
@@ -122,7 +104,7 @@ public class TradeHelper {
         String promptPied = TradeUtils.readResourceFile("prompt/prompt_"+tradeType+"_trade_auto_pied.txt");
         String promptSymbol = TradeUtils.readResourceFile("prompt/prompt_trade_auto_symbol.txt");
 
-        Portfolio portfolio = this.getPortfolio();
+        Portfolio portfolio = this.getPortfolio(compte);
         String portfolioJson = new Gson().toJson(portfolio);
 
         StringBuilder promptFinal = new StringBuilder(promptEntete.replace("{{symbols}}", joinedSymbols)
@@ -133,7 +115,7 @@ public class TradeHelper {
             if(symbol.isEmpty()){
                 continue;
             }
-            InfosAction infosAction = this.getInfosAction(symbol, true);
+            InfosAction infosAction = this.getInfosAction(compte, symbol, true);
 
             Map<String, Object> variables = getStringObjectMap(infosAction);
 
@@ -161,7 +143,7 @@ public class TradeHelper {
                     order.normalize();
                     boolean isSell = "sell".equals(order.side);
                     if (order != null && order.symbol != null && order.qty != null && order.qty > 0 && order.side != null) {
-                        Order epageorder = alpacaService.placeOrder(order.symbol, order.qty, order.side, isSell ? null : order.priceLimit, isSell ? null : order.stopLoss, isSell ? null : order.takeProfit);
+                        Order epageorder = alpacaService.placeOrder(compte, order.symbol, order.qty, order.side, isSell ? null : order.priceLimit, isSell ? null : order.stopLoss, isSell ? null : order.takeProfit);
                     }
                 }
             }
@@ -173,12 +155,12 @@ public class TradeHelper {
         return response.getMessage();
     }
 
-    public String tradeAI(String symbol)  {
+    public String tradeAI(CompteEntity compte, String symbol)  {
 
         // Lecture du prompt depuis le fichier
         String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_trade.txt");
 
-        InfosAction infosAction = this.getInfosAction(symbol, true);
+        InfosAction infosAction = this.getInfosAction(compte, symbol, true);
 
         Map<String, Object> variables = getStringObjectMap(infosAction);
 
@@ -199,7 +181,7 @@ public class TradeHelper {
         }
         if (order != null && order.symbol != null && order.qty != null && order.qty > 0 && order.side != null) {
             boolean isSell = "sell".equals(order.side);
-            Order orderAlpaca = alpacaService.placeOrder(order.symbol, order.qty, order.side, isSell ? null : order.priceLimit, isSell ? null : order.stopLoss, isSell ? null : order.takeProfit);
+            Order orderAlpaca = alpacaService.placeOrder(compte, order.symbol, order.qty, order.side, isSell ? null : order.priceLimit, isSell ? null : order.stopLoss, isSell ? null : order.takeProfit);
         }
         return response.getMessage();
     }
@@ -217,13 +199,13 @@ public class TradeHelper {
         return prompt;
     }
 
-    private InfosAction getInfosAction(String symbol, boolean withPortfolio)  {
+    private InfosAction getInfosAction(CompteEntity compte, String symbol, boolean withPortfolio)  {
         String portfolioJson = null;
         if(withPortfolio){
-            Portfolio portfolio = this.getPortfolio();
+            Portfolio portfolio = this.getPortfolio(compte);
             portfolioJson = new Gson().toJson(portfolio);
         }
-        Double lastPrice = alpacaService.getLastPrice(symbol);
+        Double lastPrice = alpacaService.getLastPrice(compte, symbol);
         String data = twelveDataService.getDataAction(symbol);
         String sma = twelveDataService.getSMA(symbol);
         String rsi = twelveDataService.getRSI(symbol);
@@ -235,7 +217,7 @@ public class TradeHelper {
         String news = "No information found";
         try{
             // news = eodhdService.getNews(symbol);
-            Map<String, Object> newsMap = alpacaService.getDetailedNewsForSymbol(symbol, null);
+            Map<String, Object> newsMap = alpacaService.getDetailedNewsForSymbol(compte, symbol, null);
             if (newsMap != null && newsMap.containsKey("news")) {
                 news = new Gson().toJson(newsMap.get("news"));
             }

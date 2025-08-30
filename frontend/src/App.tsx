@@ -1,6 +1,5 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import AnalyseActionPage from './trade/AnalyseActionPage';
 import TradePage from './trade/TradePage';
 import logo from './logo.svg';
 import './App.css';
@@ -23,7 +22,6 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<TradePage />} />
-        <Route path="/analyse-action" element={<AnalyseActionPage />} />
         <Route path="/trade" element={<TradePage />} />
       </Routes>
     </BrowserRouter>

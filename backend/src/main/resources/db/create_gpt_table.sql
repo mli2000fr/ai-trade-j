@@ -2,6 +2,7 @@ CREATE TABLE gpt (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     date DATETIME NOT NULL,
     prompt LONGTEXT NOT NULL,
-    reponse TEXT
+    reponse TEXT,
+    aliasCompte VARCHAR(255),
 );
 

@@ -17,12 +17,42 @@ const TradePage: React.FC = () => {
   const [aiTextResult, setAiTextResult] = useState<string | null>(null);
   const [autoSymbols, setAutoSymbols] = useState<string>('');
 
+  // --- Gestion des comptes ---
+  const [comptes, setComptes] = useState<{ id: number; nom: string; alias?: string; real?: boolean }[]>([]);
+  const [selectedCompteId, setSelectedCompteId] = useState<number | null>(null);
+  const [comptesLoading, setComptesLoading] = useState(true);
+  const [comptesError, setComptesError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchComptes = async () => {
+      setComptesLoading(true);
+      setComptesError(null);
+      try {
+        const res = await fetch('/api/trade/comptes');
+        if (!res.ok) throw new Error('Erreur lors du chargement des comptes');
+        const data = await res.json();
+        setComptes(Array.isArray(data) ? data : []);
+        if (Array.isArray(data) && data.length > 0) setSelectedCompteId(data[0].id);
+      } catch (e) {
+        setComptesError('Impossible de charger les comptes');
+        setComptes([]);
+      } finally {
+        setComptesLoading(false);
+      }
+    };
+    fetchComptes();
+  }, []);
+
+  // Utilitaire pour obtenir l'id du compte sélectionné
+  const selectedCompte = comptes.find(c => c.id === selectedCompteId);
+  const compteId = selectedCompte?.id || '';
+
   // Utilitaire pour charger le portefeuille (refactorisé avec temporisation)
   const loadPortfolio = async (showLoading: boolean = true) => {
     if (showLoading) setPortfolioLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Pause de 1 seconde
-      const res = await fetch('/api/trade/portfolio');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const res = await fetch(`/api/trade/portfolio?id=${encodeURIComponent(compteId)}`);
       const data = await res.json();
       setPortfolio(data);
       setLastUpdate(new Date());
@@ -35,23 +65,24 @@ const TradePage: React.FC = () => {
 
   // Rafraîchissement automatique du portefeuille toutes les minutes
   useEffect(() => {
-    if (!pollingActive) return;
+    if (!pollingActive || !selectedCompteId) return;
     const interval = setInterval(() => {
       loadPortfolio(false); // Mise à jour silencieuse
     }, 60000); // 60 000 ms = 1 minute
     return () => clearInterval(interval);
-  }, [pollingActive]);
+  }, [pollingActive, selectedCompteId]);
 
-  // Récupération du portefeuille et des ordres récents
+  // Charger le portefeuille et les ordres après sélection du compte (et donc après chargement des comptes)
   useEffect(() => {
-    loadPortfolio(true);
-  }, []);
-
-  // Charger les ordres au premier affichage de la page
-  useEffect(() => {
-    loadOrders();
+    if (selectedCompteId !== null) {
+      loadPortfolio(true);
+      loadOrders();
+      setAiJsonResult(null); // Vider le bloc Résultat AI
+      setAiTextResult(null); // Vider le bloc Résultat AI
+      setMessage(''); // Vider le message
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedCompteId]);
 
   // Met à jour autoSymbols quand le portefeuille change
   useEffect(() => {
@@ -70,7 +101,7 @@ const TradePage: React.FC = () => {
         const res = await fetch('/api/trade/trade-ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ symbol }),
+          body: JSON.stringify({ symbol, id: compteId }),
         });
         const text = await res.text();
         const parts = text.split('===');
@@ -96,7 +127,7 @@ const TradePage: React.FC = () => {
       const res = await fetch(TRADE_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol, action, quantity }),
+        body: JSON.stringify({ symbol, action, quantity, id: compteId }),
       });
       const text = await res.text();
       setMessage(text);
@@ -126,7 +157,7 @@ const TradePage: React.FC = () => {
       const res = await fetch('/api/trade/trade-ai-auto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symboles }),
+        body: JSON.stringify({ symboles, id: compteId }),
       });
       const text = await res.text();
       const parts = text.split('===');
@@ -166,7 +197,10 @@ const TradePage: React.FC = () => {
     setCancellingOrderId(orderId);
     setMessage('');
     try {
-      const res = await fetch(`/api/trade/order/cancel/${orderId}`, { method: 'POST' });
+      const res = await fetch(`/api/trade/order/cancel/${compteId}/${orderId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
       const text = await res.text();
       setMessage(text || 'Ordre annulé.');
       // Rafraîchir le portefeuille après annulation
@@ -201,10 +235,11 @@ const TradePage: React.FC = () => {
   const loadOrders = async () => {
     setOrdersLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Pause de 1 seconde
+      await new Promise(resolve => setTimeout(resolve, 1000));
       const params = [];
       if (filterSymbol) params.push(`symbol=${encodeURIComponent(filterSymbol)}`);
       if (filterCancelable) params.push(`cancelable=true`);
+      if (compteId) params.push(`id=${encodeURIComponent(compteId)}`);
       const url = '/api/trade/orders' + (params.length ? `?${params.join('&')}` : '');
       const res = await fetch(url);
       const data = await res.json();
@@ -218,6 +253,35 @@ const TradePage: React.FC = () => {
 
   return (
     <div className="trade-page">
+      {/* Alerte compte réel */}
+      {selectedCompte && selectedCompte.real === true && (
+        <div style={{ color: 'white', background: '#d32f2f', padding: '10px 16px', borderRadius: 6, marginBottom: 12, fontWeight: 600, fontSize: '1.05em', textAlign: 'center' }}>
+          Attention : Vous êtes connecté à un <b>compte RÉEL</b> ! Toutes les opérations sont effectives sur le marché réel.
+        </div>
+      )}
+      {/* Liste déroulante des comptes */}
+      <div style={{ marginBottom: 20 }}>
+        <label style={{ fontWeight: 500, marginRight: 8 }}>Compte&nbsp;:</label>
+        {comptesLoading ? (
+          <span>Chargement des comptes...</span>
+        ) : comptesError ? (
+          <span style={{ color: 'red' }}>{comptesError}</span>
+        ) : (
+          <select
+            value={selectedCompteId ?? ''}
+            onChange={e => setSelectedCompteId(Number(e.target.value))}
+            style={{ minWidth: 180, padding: '4px 8px' }}
+          >
+            {comptes.map(compte => (
+              <option key={compte.id} value={compte.id}>
+                {compte.nom}
+                {compte.alias ? ` (${compte.alias})` : ''}
+                {compte.real === true ? ' [REAL]' : compte.real === false ? ' [PAPER]' : ''}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
       {/* Bloc portefeuille */}
       <div className="portfolio-block">
         <h3>Mon portefeuille</h3>

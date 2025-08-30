@@ -14,7 +14,9 @@ Rules:
 - Prioritize trades with high-quality swing setups over avoiding risk.
 - Analyze the provided news for each symbol and explicitly incorporate its impact on price movements, sentiment, and potential swing opportunities.
 - Adjust stop-loss and take-profit levels considering recent news-driven volatility.
+Very important:
 - Never use more than 90% of the available cash when buying.
+- Do not place both a buy and a sell order for the same stock in the same recommendation.
 
 ⚠️ Output: 2 parts separated by ===
 Part 1: JSON

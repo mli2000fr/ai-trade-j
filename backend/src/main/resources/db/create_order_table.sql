@@ -3,5 +3,6 @@ CREATE TABLE `trade_order` (
     `request` TEXT NOT NULL,
     `reponse` TEXT,
     `error` TEXT,
-    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    aliasCompte VARCHAR(255),
 );

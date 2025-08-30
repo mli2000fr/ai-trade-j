@@ -1,12 +1,9 @@
 package com.app.backend.trade.service;
 
-import com.app.backend.trade.model.Portfolio;
-import com.app.backend.trade.model.PortfolioDto;
-import com.app.backend.trade.model.Position;
+import com.app.backend.trade.model.*;
 import com.app.backend.trade.model.alpaca.ErrResponseOrder;
 import com.app.backend.trade.model.alpaca.OffsetDateTimeAdapter;
 import com.app.backend.trade.model.alpaca.Order;
-import com.app.backend.trade.model.OrderEntity;
 import com.app.backend.trade.repository.OrderRepository;
 import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
@@ -25,11 +22,8 @@ import java.util.function.Consumer;
 
 @Service
 public class AlpacaService {
-    @Value("${alpaca.markets.api.key.id}")
-    private String apiKeyId;
 
-    @Value("${alpaca.markets.api.key.secret}")
-    private String apiKeySecret;
+
 
     @Value("${alpaca.markets.api.paper.url}")
     private String apiBaseUrl;
@@ -54,12 +48,12 @@ public class AlpacaService {
         this.orderRepository = orderRepository;
     }
 
-    public Order placeOrder(String symbol, double qty, String side, Double priceLimit, Double stopLoss, Double takeProfit) {
+    public Order placeOrder(CompteEntity compte, String symbol, double qty, String side, Double priceLimit, Double stopLoss, Double takeProfit) {
         String url = apiBaseUrl + "/orders";
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("APCA-API-KEY-ID", apiKeyId);
-        headers.set("APCA-API-SECRET-KEY", apiKeySecret);
+        headers.set("APCA-API-KEY-ID", compte.getCle());
+        headers.set("APCA-API-SECRET-KEY", compte.getSecret());
 
         Map<String, Object> body = new HashMap<>();
         body.put("symbol", symbol);
@@ -120,10 +114,10 @@ public class AlpacaService {
                 try {
                     ErrResponseOrder respOrder = gson.fromJson(errorJson, ErrResponseOrder.class);
                     if ("sell".equals(side) && respOrder != null && TradeConstant.ALPACA_ORDER_CODE_QUANTITY_NON_DISPO == respOrder.getCode()) {
-                        List<Order> annulables = this.getOrders(symbol, true);
+                        List<Order> annulables = this.getOrders(compte, symbol, true);
                         int quantDispo = Integer.parseInt(respOrder.getAvailable());
                         for(Order ord : annulables) {
-                            this.cancelOrder(ord.getId());
+                            this.cancelOrder(compte, ord.getId());
                             if(quantDispo + Integer.parseInt(ord.getQty()) >= qty) {
                                 break;
                             } else {
@@ -154,11 +148,11 @@ public class AlpacaService {
         return gson.fromJson(responseJson, Order.class);
     }
 
-    public Double getLastPrice(String symbol) {
+    public Double getLastPrice(CompteEntity compte, String symbol) {
         String url = apiMarketBaseUrl + "/v2/stocks/" + symbol + "/quotes/latest";
         HttpHeaders headers = new HttpHeaders();
-        headers.set("APCA-API-KEY-ID", apiKeyId);
-        headers.set("APCA-API-SECRET-KEY", apiKeySecret);
+        headers.set("APCA-API-KEY-ID", compte.getCle());
+        headers.set("APCA-API-SECRET-KEY", compte.getSecret());
         HttpEntity<Void> request = new HttpEntity<>(headers);
         ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, request, Map.class);
         if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
@@ -170,14 +164,14 @@ public class AlpacaService {
         return null;
     }
 
-    public void streamLivePrice(String symbol, Consumer<String> onMessage) {
+    public void streamLivePrice(CompteEntity compte, String symbol, Consumer<String> onMessage) {
         try {
             String wsUrl = "wss://stream.data.alpaca.markets/v2/sip";
             WebSocketClient client = new WebSocketClient(new URI(wsUrl)) {
                 @Override
                 public void onOpen(ServerHandshake handshakedata) {
                     // Authentification
-                    String authMsg = String.format("{\"action\":\"auth\",\"key\":\"%s\",\"secret\":\"%s\"}", apiKeyId, apiKeySecret);
+                    String authMsg = String.format("{\"action\":\"auth\",\"key\":\"%s\",\"secret\":\"%s\"}", compte.getId(), compte.getSecret());
                     send(authMsg);
                     // Abonnement au flux de quotes
                     String subscribeMsg = String.format("{\"action\":\"subscribe\",\"quotes\":[\"%s\"]}", symbol);
@@ -209,11 +203,11 @@ public class AlpacaService {
     );
 
     // Vérifie s'il existe un ordre ouvert du côté opposé (buy/sell) pour ce symbole
-    private boolean hasOppositeOpenOrder(String symbol, String side) {
+    private boolean hasOppositeOpenOrder(CompteEntity compte, String symbol, String side) {
         String url = apiBaseUrl + "/orders?status=all&symbols=" + symbol;
         HttpHeaders headers = new HttpHeaders();
-        headers.set("APCA-API-KEY-ID", apiKeyId);
-        headers.set("APCA-API-SECRET-KEY", apiKeySecret);
+        headers.set("APCA-API-KEY-ID", compte.getCle());
+        headers.set("APCA-API-SECRET-KEY", compte.getSecret());
         HttpEntity<Void> request = new HttpEntity<>(headers);
         ResponseEntity<Map[]> response = restTemplate.exchange(url, HttpMethod.GET, request, Map[].class);
         if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
@@ -229,36 +223,36 @@ public class AlpacaService {
         return false;
     }
 
-    public String sellStock(String symbol, double qty) {
-        if (hasOppositeOpenOrder(symbol, "sell")) {
+    public String sellStock(CompteEntity compte, String symbol, double qty) {
+        if (hasOppositeOpenOrder(compte, symbol, "sell")) {
             return "Erreur : Un ordre d'achat ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant de vendre.";
         }
-        return placeOrder(symbol, qty, "sell", null, null, null).toString();
+        return placeOrder(compte, symbol, qty, "sell", null, null, null).toString();
     }
 
-    public String buyStock(String symbol, double qty) {
-        return buyStock(symbol, qty, null, null, null);
+    public String buyStock(CompteEntity compte, String symbol, double qty) {
+        return buyStock(compte, symbol, qty, null, null, null);
     }
 
-    public String buyStock(String symbol, double qty, Double priceLimit, Double stopLoss, Double takeProfit) {
-        if (hasOppositeOpenOrder(symbol, "buy")) {
-            List<Order> annulables = this.getOrders(symbol, true);
+    public String buyStock(CompteEntity compte, String symbol, double qty, Double priceLimit, Double stopLoss, Double takeProfit) {
+        if (hasOppositeOpenOrder(compte, symbol, "buy")) {
+            List<Order> annulables = this.getOrders(compte, symbol, true);
             for(Order ord : annulables) {
-                this.cancelOrder(ord.getId());
+                this.cancelOrder(compte, ord.getId());
             }
             //return "Erreur : Un ordre de vente ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant d'acheter.";
         }
-        return placeOrder(symbol, qty, "buy", priceLimit, stopLoss, takeProfit).toString();
+        return placeOrder(compte, symbol, qty, "buy", priceLimit, stopLoss, takeProfit).toString();
     }
 
-    public PortfolioDto getPortfolioWithPositions() {
+    public PortfolioDto getPortfolioWithPositions(CompteEntity compte) {
         PortfolioDto dto = new PortfolioDto();
 
         // Récupérer les positions
         String positionsUrl = apiBaseUrl + "/positions";
         HttpHeaders headers = new HttpHeaders();
-        headers.set("APCA-API-KEY-ID", apiKeyId);
-        headers.set("APCA-API-SECRET-KEY", apiKeySecret);
+        headers.set("APCA-API-KEY-ID", compte.getCle());
+        headers.set("APCA-API-SECRET-KEY", compte.getSecret());
         HttpEntity<Void> request = new HttpEntity<>(headers);
         ResponseEntity<Map[]> positionsResponse = restTemplate.exchange(positionsUrl, HttpMethod.GET, request, Map[].class);
         dto.setPositions(positionsResponse.getBody() != null ? Arrays.asList(positionsResponse.getBody()) : List.of());
@@ -272,18 +266,18 @@ public class AlpacaService {
         return dto;
     }
 
-    public String cancelOrder(String orderId) {
+    public String cancelOrder(CompteEntity compte, String orderId) {
         String url = apiBaseUrl + "/orders/" + orderId;
         HttpHeaders headers = new HttpHeaders();
-        headers.set("APCA-API-KEY-ID", apiKeyId);
-        headers.set("APCA-API-SECRET-KEY", apiKeySecret);
+        headers.set("APCA-API-KEY-ID", compte.getCle());
+        headers.set("APCA-API-SECRET-KEY", compte.getSecret());
         HttpEntity<Void> request = new HttpEntity<>(headers);
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.DELETE, request, String.class);
         return response.getBody() != null ? response.getBody() : "Annulation demandée.";
     }
 
-    public Portfolio getPortfolio() {
-        PortfolioDto dto = this.getPortfolioWithPositions();
+    public Portfolio getPortfolio(CompteEntity compte) {
+        PortfolioDto dto = this.getPortfolioWithPositions(compte);
         double cash = 0.0;
         if (dto.getAccount() != null && dto.getAccount().get("cash") != null) {
             try {
@@ -334,15 +328,15 @@ public class AlpacaService {
      * @param cancelable true = seulement les statuts annulables, false = tous
      * @return liste des ordres filtrés
      */
-    public List<Order> getOrders(String symbol, Boolean cancelable) {
+    public List<Order> getOrders(CompteEntity compte, String symbol, Boolean cancelable) {
         StringBuilder url = new StringBuilder(apiBaseUrl + "/orders?status=all");
         if (symbol != null && !symbol.trim().isEmpty()) {
             url.append("&symbols=").append(symbol.trim());
         }
         url.append("&limit=").append(limitOrders);
         HttpHeaders headers = new HttpHeaders();
-        headers.set("APCA-API-KEY-ID", apiKeyId);
-        headers.set("APCA-API-SECRET-KEY", apiKeySecret);
+        headers.set("APCA-API-KEY-ID", compte.getCle());
+        headers.set("APCA-API-SECRET-KEY", compte.getSecret());
         HttpEntity<Void> request = new HttpEntity<>(headers);
         ResponseEntity<String> response = restTemplate.exchange(url.toString(), HttpMethod.GET, request, String.class);
         Order[] orders = gson.fromJson(response.getBody(), Order[].class);
@@ -366,7 +360,7 @@ public class AlpacaService {
      * @param pageSize nombre d'articles par page (max 50, par défaut 10)
      * @return liste des actualités filtrées
      */
-    public Map<String, Object> getNews(List<String> symbols, String startDate, String endDate,
+    public Map<String, Object> getNews(CompteEntity compte, List<String> symbols, String startDate, String endDate,
                                       String sort, Boolean includeContent, Boolean excludeContentless,
                                       Integer pageSize) {
         StringBuilder url = new StringBuilder(apiMarketBaseUrl + "/v1beta1/news");
@@ -412,8 +406,8 @@ public class AlpacaService {
         }
 
         HttpHeaders headers = new HttpHeaders();
-        headers.set("APCA-API-KEY-ID", apiKeyId);
-        headers.set("APCA-API-SECRET-KEY", apiKeySecret);
+        headers.set("APCA-API-KEY-ID", compte.getCle());
+        headers.set("APCA-API-SECRET-KEY", compte.getSecret());
 
         HttpEntity<Void> request = new HttpEntity<>(headers);
 
@@ -488,8 +482,8 @@ public class AlpacaService {
      * @param pageSize nombre d'articles à récupérer (max 50)
      * @return liste des actualités pour ce symbole
      */
-    public Map<String, Object> getNewsForSymbol(String symbol, Integer pageSize) {
-        return getNews(Arrays.asList(symbol), null, null, "desc", false, true, pageSize);
+    public Map<String, Object> getNewsForSymbol(CompteEntity compte, String symbol, Integer pageSize) {
+        return getNews(compte, Arrays.asList(symbol), null, null, "desc", false, true, pageSize);
     }
 
     /**
@@ -497,8 +491,8 @@ public class AlpacaService {
      * @param pageSize nombre d'articles à récupérer (max 50)
      * @return liste des actualités récentes
      */
-    public Map<String, Object> getRecentNews(Integer pageSize) {
-        return getNews(null, null, null, "desc", false, true, pageSize);
+    public Map<String, Object> getRecentNews(CompteEntity compte, Integer pageSize) {
+        return getNews(compte, null, null, null, "desc", false, true, pageSize);
     }
 
     /**
@@ -507,8 +501,8 @@ public class AlpacaService {
      * @param pageSize nombre d'articles à récupérer (max 50)
      * @return liste des actualités avec contenu complet
      */
-    public Map<String, Object> getDetailedNewsForSymbol(String symbol, Integer pageSize) {
-        return getNews(Arrays.asList(symbol), null, null, "desc", true, true, pageSize);
+    public Map<String, Object> getDetailedNewsForSymbol(CompteEntity compte, String symbol, Integer pageSize) {
+        return getNews(compte, Arrays.asList(symbol), null, null, "desc", true, true, pageSize);
     }
 
 }

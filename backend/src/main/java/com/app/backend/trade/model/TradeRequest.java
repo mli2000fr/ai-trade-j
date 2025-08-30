@@ -4,6 +4,7 @@ public class TradeRequest {
     private String symbol;
     private String action; // "buy" ou "sell"
     private double quantity;
+    private String id;
 
     public String getSymbol() {
         return symbol;
@@ -22,5 +23,11 @@ public class TradeRequest {
     }
     public void setQuantity(double quantity) {
         this.quantity = quantity;
+    }
+    public String getId() {
+        return id;
+    }
+    public void setId(String id) {
+        this.id = id;
     }
 }
