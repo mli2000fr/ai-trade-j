@@ -1,5 +1,12 @@
 import React from 'react';
-import '../TradePage.css';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 
 interface TradeAIJsonResultProps {
   aiJsonResult: any;
@@ -10,55 +17,56 @@ const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult }) =
   if (Array.isArray(aiJsonResult)) {
     const hasPriceLimit = aiJsonResult.some((item: any) => item.price_limit !== undefined && item.price_limit !== null && item.price_limit !== '' || item.priceLimit !== undefined && item.priceLimit !== null && item.priceLimit !== '');
     return (
-      <div className="trade-ai-json-result">
-        <b className="trade-ai-json-title">Résultat AI :</b>
-        <div className="overflow-x-auto">
-          <table className="trade-ai-json-table">
-            <thead>
-              <tr>
-                <th>Symbole</th>
-                <th>Action</th>
-                <th>Quantité</th>
-                {hasPriceLimit && <th>Prix limite</th>}
-                <th>Stop loss</th>
-                <th>Take profit</th>
-              </tr>
-            </thead>
-            <tbody>
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>Résultat AI :</Typography>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Symbole</TableCell>
+                <TableCell>Action</TableCell>
+                <TableCell>Quantité</TableCell>
+                {hasPriceLimit && <TableCell>Prix limite</TableCell>}
+                <TableCell>Stop loss</TableCell>
+                <TableCell>Take profit</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {aiJsonResult.map((item: any, idx: number) => (
-                <tr key={idx} className={idx % 2 === 0 ? 'even-row' : 'odd-row'}>
-                  <td className="trade-ai-json-symbol">{item.symbol}</td>
-                  <td className="trade-ai-json-action">{item.action}</td>
-                  <td className="trade-ai-json-qty">{item.quantity ?? item.qty ?? ''}</td>
+                <TableRow key={idx}>
+                  <TableCell>{item.symbol}</TableCell>
+                  <TableCell>{item.action}</TableCell>
+                  <TableCell>{item.quantity ?? item.qty ?? ''}</TableCell>
                   {hasPriceLimit && (
-                    <td className="trade-ai-json-price">{item.price_limit ?? item.priceLimit ? (item.price_limit ?? item.priceLimit) + ' $' : '-'}</td>
+                    <TableCell>{item.price_limit ?? item.priceLimit ? (item.price_limit ?? item.priceLimit) + ' $' : '-'}</TableCell>
                   )}
-                  <td className="trade-ai-json-stop">{item.stop_loss ?? item.stopLoss ? (item.stop_loss ?? item.stopLoss) + ' $' : '-'}</td>
-                  <td className="trade-ai-json-take">{item.take_profit ?? item.takeProfit ? (item.take_profit ?? item.takeProfit) + ' $' : '-'}</td>
-                </tr>
+                  <TableCell>{item.stop_loss ?? item.stopLoss ? (item.stop_loss ?? item.stopLoss) + ' $' : '-'}</TableCell>
+                  <TableCell>{item.take_profit ?? item.takeProfit ? (item.take_profit ?? item.takeProfit) + ' $' : '-'}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
     );
   }
   return (
-    <div className="trade-ai-json-result">
-      <b className="trade-ai-json-title">Résultat AI :</b>
-      <table className="trade-ai-json-table trade-ai-json-table-single">
-        <tbody>
-          {Object.entries(aiJsonResult).map(([key, value]) => (
-            <tr key={key}>
-              <td className="trade-ai-json-key">{key}</td>
-              <td className="trade-ai-json-value">{String(value)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Paper sx={{ p: 2, mb: 2 }}>
+      <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>Résultat AI :</Typography>
+      <TableContainer>
+        <Table size="small">
+          <TableBody>
+            {Object.entries(aiJsonResult).map(([key, value]) => (
+              <TableRow key={key}>
+                <TableCell sx={{ fontWeight: 'bold' }}>{key}</TableCell>
+                <TableCell>{String(value)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Paper>
   );
 };
 
 export default TradeAIJsonResult;
-

@@ -7,6 +7,7 @@ import TradeAutoBlock from './composants/TradeAutoBlock';
 import TradeManualBlock from './composants/TradeManualBlock';
 import OrdersTable from './composants/OrdersTable';
 import TradeAIResults from './composants/TradeAIResults';
+import Box from '@mui/material/Box';
 
 const TRADE_API_URL = '/api/trade/trade';
 
@@ -272,7 +273,7 @@ const TradePage: React.FC = () => {
   };
 
   return (
-    <div className="trade-page">
+    <Box sx={{ maxWidth: 1100, mx: 'auto', p: { xs: 1, sm: 2, md: 3 } }}>
       {/* Alerte compte réel */}
       {selectedCompte && selectedCompte.real === true && <TradeAlertReal />}
       {/* Liste déroulante des comptes */}
@@ -326,8 +327,7 @@ const TradePage: React.FC = () => {
       />
       {/* Résultats AI et messages */}
       <TradeAIResults aiJsonResult={aiJsonResult} aiTextResult={aiTextResult} message={message} />
-
-    </div>
+    </Box>
   );
 };
 

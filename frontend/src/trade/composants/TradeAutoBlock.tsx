@@ -1,4 +1,9 @@
-import React from 'react';
+import React, { useRef } from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface TradeAutoBlockProps {
   autoSymbols: string;
@@ -9,48 +14,62 @@ interface TradeAutoBlockProps {
   onAnalyseGptChange: (text: string) => void;
 }
 
-const TradeAutoBlock: React.FC<TradeAutoBlockProps> = ({ autoSymbols, isExecuting, onChange, onTrade, analyseGptText, onAnalyseGptChange }) => (
-  <div className="trade-auto-block">
-    <h2 className="trade-auto-title">Trade Auto</h2>
-    <div className="trade-auto-input-row">
-      <label className="trade-auto-label" htmlFor="auto-symbols">Symboles&nbsp;</label>
-      <input
-        id="auto-symbols"
-        type="text"
-        className="trade-auto-input"
-        value={autoSymbols}
-        onChange={e => onChange(e.target.value)}
-        placeholder="AAPL,KO,NVDA,TSLA,AMZN,MSFT,AMD,META,SHOP,PLTR"
-      />
-    </div>
-    {/* Input pour fichier d'analyse GPT */}
-    <div className="trade-auto-input-row" style={{ marginTop: 8 }}>
-      <label className="trade-auto-label" htmlFor="analyse-gpt-file">Analyse GPT (optionnel, .txt)&nbsp;:</label>
-      <input
-        id="analyse-gpt-file"
-        type="file"
-        accept=".txt"
-        onChange={e => {
-          const file = e.target.files && e.target.files[0];
-          if (file) {
-            const reader = new FileReader();
-            reader.onload = ev => onAnalyseGptChange(ev.target?.result as string || '');
-            reader.readAsText(file);
-          } else {
-            onAnalyseGptChange('');
-          }
-        }}
-      />
-      {/* Affichage du nom du fichier sélectionné (optionnel) */}
-      {analyseGptText && <span style={{ marginLeft: 8, color: '#888', fontSize: 12 }}>Fichier chargé</span>}
-    </div>
-    <div className="trade-auto-btn-row">
-      <button onClick={onTrade} disabled={isExecuting || !autoSymbols.trim()} className="trade-auto-btn">
-        {isExecuting ? <span className="spinner trade-spinner"></span> : null}
-        {isExecuting ? 'Exécution...' : 'Exécuter'}
-      </button>
-    </div>
-  </div>
-);
+const TradeAutoBlock: React.FC<TradeAutoBlockProps> = ({ autoSymbols, isExecuting, onChange, onTrade, analyseGptText, onAnalyseGptChange }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  return (
+    <Box sx={{ mb: 3, p: 2, border: '1px solid #eee', borderRadius: 2 }}>
+      <Typography variant="h6" sx={{ mb: 2 }}>Trade Auto</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+        <TextField
+          label="Symboles"
+          value={autoSymbols}
+          onChange={e => onChange(e.target.value)}
+          placeholder="AAPL,KO,NVDA,TSLA,AMZN,MSFT,AMD,META,SHOP,PLTR"
+          size="small"
+          sx={{ minWidth: 300 }}
+        />
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+        <Button
+          variant="outlined"
+          component="label"
+          size="small"
+        >
+          Charger une analyse GPT (.txt)
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt"
+            hidden
+            onChange={e => {
+              const file = e.target.files && e.target.files[0];
+              if (file) {
+                const reader = new FileReader();
+                reader.onload = ev => onAnalyseGptChange(ev.target?.result as string || '');
+                reader.readAsText(file);
+              } else {
+                onAnalyseGptChange('');
+              }
+            }}
+          />
+        </Button>
+        {analyseGptText && (
+          <Typography variant="caption" color="success.main">Fichier chargé</Typography>
+        )}
+      </Box>
+      <Box>
+        <Button
+          onClick={onTrade}
+          disabled={isExecuting || !autoSymbols.trim()}
+          variant="contained"
+          size="large"
+        >
+          {isExecuting && <CircularProgress size={20} sx={{ mr: 1 }} />}
+          {isExecuting ? 'Exécution...' : 'Exécuter'}
+        </Button>
+      </Box>
+    </Box>
+  );
+};
 
 export default TradeAutoBlock;

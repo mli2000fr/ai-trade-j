@@ -5,12 +5,12 @@
   "private": true,
   "scripts": {
     "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
-    "start:backend": "cd backend && mvn spring-boot:run",
-    "start:frontend": "cd frontend && npm start",
+    "start:backend": "cd backend; mvn spring-boot:run",
+    "start:frontend": "cd frontend; npm start",
     "build": "npm run build:frontend",
-    "build:frontend": "cd frontend && npm run build",
-    "install:frontend": "cd frontend && npm install",
-    "clean": "cd backend && mvn clean && cd ../frontend && npm run build",
+    "build:frontend": "cd frontend; npm run build",
+    "install:frontend": "cd frontend; npm install",
+    "clean": "cd backend; mvn clean; cd ../frontend && npm run build",
     "dev": "npm run start"
   },
   "devDependencies": {
@@ -31,6 +31,10 @@
     "alpaca"
   ],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^7.3.1"
+  }
 }
-

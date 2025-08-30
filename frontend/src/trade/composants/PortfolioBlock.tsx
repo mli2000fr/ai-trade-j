@@ -1,4 +1,16 @@
 import React from 'react';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Typography from '@mui/material/Typography';
+import Grid from '@mui/material/Grid';
+import CircularProgress from '@mui/material/CircularProgress';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Paper from '@mui/material/Paper';
 
 interface PortfolioBlockProps {
   portfolio: any;
@@ -7,81 +19,102 @@ interface PortfolioBlockProps {
 }
 
 const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, loading }) => (
-  <div className="portfolio-block">
-    <h3>Mon portefeuille</h3>
-    {lastUpdate && (
-      <div className="portfolio-last-update">
-        Actualisé à {lastUpdate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-      </div>
-    )}
-    {loading && <div>Chargement...</div>}
-    {!loading && portfolio && (
-      <>
-        {portfolio.account && (
-          <div className="portfolio-account portfolio-account-cards">
-            <div className="account-card">
-              <div className="account-label">Valeur totale</div>
-              <div className="account-value">{Number(portfolio.account.equity).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} $</div>
-            </div>
-            <div className="account-card">
-              <div className="account-label">Buying Power</div>
-              <div className="account-value">{Number(portfolio.account.buying_power).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} $</div>
-            </div>
-            <div className="account-card">
-              <div className="account-label">Cash</div>
-              <div className="account-value">{Number(portfolio.account.cash).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} $</div>
-            </div>
-            {portfolio.account.portfolio_value && (
-              <div className="account-card">
-                <div className="account-label">Portfolio Value</div>
-                <div className="account-value">{Number(portfolio.account.portfolio_value).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} $</div>
-              </div>
-            )}
-            {portfolio.account.status && (
-              <div className="account-card">
-                <div className="account-label">Status</div>
-                <div className="account-value status-value">{portfolio.account.status}</div>
-              </div>
-            )}
-          </div>
-        )}
-        <div>
-          <b>Positions&nbsp;:</b>
-          {portfolio.positions.length === 0 ? (
-            <div>Aucune position en cours.</div>
-          ) : (
-            <table className="orders-table portfolio-positions-table">
-              <thead>
-                <tr>
-                  <th>Symbole</th>
-                  <th>Prix d'achat</th>
-                  <th>Prix actuel</th>
-                  <th>Quantité</th>
-                  <th>Total</th>
-                  <th>P & L pc</th>
-                  <th>P & L</th>
-                </tr>
-              </thead>
-              <tbody>
-                {portfolio.positions.map((pos: any, i: number) => (
-                  <tr key={i}>
-                    <td>{pos.symbol}</td>
-                    <td>{pos.avg_entry_price !== undefined && pos.avg_entry_price !== null ? Number(pos.avg_entry_price).toFixed(2) + ' $' : '-'}</td>
-                    <td>{pos.current_price !== undefined && pos.current_price !== null ? Number(pos.current_price).toFixed(2) + ' $' : '-'}</td>
-                    <td>{pos.qty}</td>
-                    <td>{pos.current_price !== undefined && pos.current_price !== null ? (Number(pos.qty) * Number(pos.current_price)).toFixed(2) + ' $' : '-'}</td>
-                    <td>{pos.unrealized_plpc !== undefined && pos.unrealized_plpc !== null ? (Number(pos.unrealized_plpc) * 100).toFixed(3) + ' %' : '-'}</td>
-                    <td>{pos.unrealized_pl !== undefined && pos.unrealized_pl !== null ? Number(pos.unrealized_pl).toFixed(2) + ' $' : '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+  <Card sx={{ mb: 3 }}>
+    <CardContent>
+      <Typography variant="h5" gutterBottom>Mon portefeuille</Typography>
+      {lastUpdate && (
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+          Actualisé à {lastUpdate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        </Typography>
+      )}
+      {loading && <CircularProgress sx={{ my: 2 }} />}
+      {!loading && portfolio && (
+        <>
+          {portfolio.account && (
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+              <Grid item xs={12} sm={6} md={3}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="subtitle2" color="text.secondary">Valeur totale</Typography>
+                    <Typography variant="h6">{Number(portfolio.account.equity).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} $</Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="subtitle2" color="text.secondary">Buying Power</Typography>
+                    <Typography variant="h6">{Number(portfolio.account.buying_power).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} $</Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Typography variant="subtitle2" color="text.secondary">Cash</Typography>
+                    <Typography variant="h6">{Number(portfolio.account.cash).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} $</Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              {portfolio.account.portfolio_value && (
+                <Grid item xs={12} sm={6} md={3}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Typography variant="subtitle2" color="text.secondary">Portfolio Value</Typography>
+                      <Typography variant="h6">{Number(portfolio.account.portfolio_value).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} $</Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              )}
+              {portfolio.account.status && (
+                <Grid item xs={12} sm={6} md={3}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Typography variant="subtitle2" color="text.secondary">Status</Typography>
+                      <Typography variant="h6">{portfolio.account.status}</Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              )}
+            </Grid>
           )}
-        </div>
-      </>
-    )}
-  </div>
+          <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}><b>Positions&nbsp;:</b></Typography>
+          {portfolio.positions.length === 0 ? (
+            <Typography>Aucune position en cours.</Typography>
+          ) : (
+            <TableContainer component={Paper} sx={{ mb: 2 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Symbole</TableCell>
+                    <TableCell>Prix d'achat</TableCell>
+                    <TableCell>Prix actuel</TableCell>
+                    <TableCell>Quantité</TableCell>
+                    <TableCell>Total</TableCell>
+                    <TableCell>P & L pc</TableCell>
+                    <TableCell>P & L</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {portfolio.positions.map((pos: any, i: number) => (
+                    <TableRow key={i}>
+                      <TableCell>{pos.symbol}</TableCell>
+                      <TableCell>{pos.avg_entry_price !== undefined && pos.avg_entry_price !== null ? Number(pos.avg_entry_price).toFixed(2) + ' $' : '-'}</TableCell>
+                      <TableCell>{pos.current_price !== undefined && pos.current_price !== null ? Number(pos.current_price).toFixed(2) + ' $' : '-'}</TableCell>
+                      <TableCell>{pos.qty}</TableCell>
+                      <TableCell>{pos.current_price !== undefined && pos.current_price !== null ? (Number(pos.qty) * Number(pos.current_price)).toFixed(2) + ' $' : '-'}</TableCell>
+                      <TableCell>{pos.unrealized_plpc !== undefined && pos.unrealized_plpc !== null ? (Number(pos.unrealized_plpc) * 100).toFixed(3) + ' %' : '-'}</TableCell>
+                      <TableCell>{pos.unrealized_pl !== undefined && pos.unrealized_pl !== null ? Number(pos.unrealized_pl).toFixed(2) + ' $' : '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </>
+      )}
+    </CardContent>
+  </Card>
 );
 
 export default PortfolioBlock;
-

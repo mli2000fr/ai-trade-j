@@ -1,4 +1,5 @@
 import React from 'react';
+import Alert from '@mui/material/Alert';
 import '../TradePage.css';
 
 interface TradeMessageProps {
@@ -7,8 +8,7 @@ interface TradeMessageProps {
 
 const TradeMessage: React.FC<TradeMessageProps> = ({ message }) => {
   if (!message) return null;
-  return <div className="trade-message trade-message-custom">{message}</div>;
+  return <Alert severity="info" sx={{ mt: 2 }}>{message}</Alert>;
 };
 
 export default TradeMessage;
-

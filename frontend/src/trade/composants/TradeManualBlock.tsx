@@ -1,4 +1,13 @@
 import React from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface TradeManualBlockProps {
   action: 'buy' | 'sell' | 'trade-ai';
@@ -23,47 +32,74 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
   onChangeQuantity,
   onTrade
 }) => (
-  <div className="trade-manual-block">
-    <h2 className="trade-manual-title">Trade Manuel</h2>
-    <div className="trade-manual-input-row">
-      <label className="trade-manual-label">Action&nbsp;
-        <select value={action} onChange={e => onChangeAction(e.target.value as 'buy' | 'sell' | 'trade-ai')}>
-          <option value="buy">Acheter</option>
-          <option value="sell">Vendre</option>
-          <option value="trade-ai">Ttrade AI</option>
-        </select>
-      </label>
-      {action === 'buy' || action === 'trade-ai' ? (
-        <label className="trade-manual-label">Symbole&nbsp;&nbsp;
-          <input value={symbol} onChange={e => onChangeSymbol(e.target.value.toUpperCase())} maxLength={8} className="trade-manual-input" />
-        </label>
+  <Box sx={{ mb: 3, p: 2, border: '1px solid #eee', borderRadius: 2 }}>
+    <Typography variant="h6" sx={{ mb: 2 }}>Trade Manuel</Typography>
+    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap', mb: 2 }}>
+      <FormControl size="small" sx={{ minWidth: 120 }}>
+        <InputLabel id="action-select-label">Action</InputLabel>
+        <Select
+          labelId="action-select-label"
+          value={action}
+          label="Action"
+          onChange={e => onChangeAction(e.target.value as 'buy' | 'sell' | 'trade-ai')}
+        >
+          <MenuItem value="buy">Acheter</MenuItem>
+          <MenuItem value="sell">Vendre</MenuItem>
+          <MenuItem value="trade-ai">Trade AI</MenuItem>
+        </Select>
+      </FormControl>
+      {(action === 'buy' || action === 'trade-ai') ? (
+        <TextField
+          label="Symbole"
+          value={symbol}
+          onChange={e => onChangeSymbol(e.target.value.toUpperCase())}
+          inputProps={{ maxLength: 8 }}
+          size="small"
+          sx={{ minWidth: 120 }}
+        />
       ) : (
-        <label className="trade-manual-label">Symbole&nbsp;
-          <select value={symbol} onChange={e => onChangeSymbol(e.target.value)} className="trade-manual-input">
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <InputLabel id="symbol-select-label">Symbole</InputLabel>
+          <Select
+            labelId="symbol-select-label"
+            value={symbol}
+            label="Symbole"
+            onChange={e => onChangeSymbol(e.target.value)}
+          >
             {ownedSymbols.length === 0 ? (
-              <option value="">Aucune position</option>
+              <MenuItem value="">Aucune position</MenuItem>
             ) : (
               ownedSymbols.map((sym: string) => (
-                <option key={sym} value={sym}>{sym}</option>
+                <MenuItem key={sym} value={sym}>{sym}</MenuItem>
               ))
             )}
-          </select>
-        </label>
+          </Select>
+        </FormControl>
       )}
       {action !== 'trade-ai' && (
-        <label className="trade-manual-label">Quantité&nbsp;
-          <input type="number" min={0.01} step="any" value={quantity} onChange={e => onChangeQuantity(parseFloat(e.target.value))} className="trade-manual-input" />
-        </label>
+        <TextField
+          label="Quantité"
+          type="number"
+          inputProps={{ min: 0.01, step: 'any' }}
+          value={quantity}
+          onChange={e => onChangeQuantity(parseFloat(e.target.value))}
+          size="small"
+          sx={{ minWidth: 100 }}
+        />
       )}
-    </div>
-    <div className="trade-manual-btn-row">
-      <button onClick={onTrade} disabled={isExecuting} className="trade-manual-btn">
-        {isExecuting ? <span className="spinner trade-spinner"></span> : null}
+    </Box>
+    <Box>
+      <Button
+        onClick={onTrade}
+        disabled={isExecuting}
+        variant="contained"
+        size="large"
+      >
+        {isExecuting && <CircularProgress size={20} sx={{ mr: 1 }} />}
         {isExecuting ? 'Exécution...' : 'Exécuter'}
-      </button>
-    </div>
-  </div>
+      </Button>
+    </Box>
+  </Box>
 );
 
 export default TradeManualBlock;
-

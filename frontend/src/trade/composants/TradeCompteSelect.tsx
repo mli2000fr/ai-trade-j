@@ -1,4 +1,10 @@
 import React from 'react';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import CircularProgress from '@mui/material/CircularProgress';
+import Alert from '@mui/material/Alert';
 
 interface Compte {
   id: number;
@@ -16,29 +22,29 @@ interface TradeCompteSelectProps {
 }
 
 const TradeCompteSelect: React.FC<TradeCompteSelectProps> = ({ comptes, selectedCompteId, loading, error, onSelect }) => (
-  <div className="trade-comptes-select">
-    <label className="trade-comptes-label">Compte&nbsp;:</label>
+  <FormControl fullWidth variant="outlined" size="small" sx={{ mb: 2 }}>
+    <InputLabel id="compte-select-label">Compte</InputLabel>
     {loading ? (
-      <span>Chargement des comptes...</span>
+      <CircularProgress size={24} sx={{ mt: 1, mb: 1 }} />
     ) : error ? (
-      <span className="trade-comptes-error">{error}</span>
+      <Alert severity="error">{error}</Alert>
     ) : (
-      <select
+      <Select
+        labelId="compte-select-label"
         value={selectedCompteId ?? ''}
+        label="Compte"
         onChange={e => onSelect(Number(e.target.value))}
-        className="trade-comptes-dropdown"
       >
         {comptes.map(compte => (
-          <option key={compte.id} value={compte.id}>
+          <MenuItem key={compte.id} value={compte.id}>
             {compte.nom}
             {compte.alias ? ` (${compte.alias})` : ''}
             {compte.real === true ? ' [REAL]' : compte.real === false ? ' [PAPER]' : ''}
-          </option>
+          </MenuItem>
         ))}
-      </select>
+      </Select>
     )}
-  </div>
+  </FormControl>
 );
 
 export default TradeCompteSelect;
-
