@@ -13,6 +13,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+/**
+ * Service pour interagir avec l'API Finnhub (données financières et statistiques).
+ */
 @Service
 public class FinnhubService {
 
@@ -28,6 +31,9 @@ public class FinnhubService {
 
     private static final String CONTENJ_VIDE = "aucune information trouvée";
 
+    /**
+     * Appelle l'API Finnhub pour un endpoint donné.
+     */
     private String callFinnhubApi(String endpoint, String params)  {
         try{
             RestTemplate restTemplate = new RestTemplate();
@@ -41,7 +47,9 @@ public class FinnhubService {
         }
     }
 
-    // Données financières (financialData)
+    /**
+     * Données financières (financialData).
+     */
     public String getFinancialData(String symbol)  {
         String response = callFinnhubApi("stock/financials-reported", "symbol=" + symbol);
         try {
@@ -63,7 +71,9 @@ public class FinnhubService {
         }
     }
 
-    // Statistiques clés par défaut (defaultKeyStatistics)
+    /**
+     * Statistiques clés par défaut (defaultKeyStatistics).
+     */
     public String getDefaultKeyStatistics(String symbol)  {
         String response = callFinnhubApi("stock/metric", "symbol=" + symbol + "&metric=all");
         try {

@@ -15,6 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.URI;
 import java.time.OffsetDateTime;
 import java.util.*;
@@ -22,8 +25,7 @@ import java.util.function.Consumer;
 
 @Service
 public class AlpacaService {
-
-
+    private static final Logger logger = LoggerFactory.getLogger(AlpacaService.class);
 
     @Value("${alpaca.markets.api.paper.url}")
     private String apiBaseUrl;
@@ -48,6 +50,17 @@ public class AlpacaService {
         this.orderRepository = orderRepository;
     }
 
+    /**
+     * Place un ordre sur Alpaca (achat, vente, limit, bracket, etc.).
+     * @param compte CompteEntity contenant les credentials
+     * @param symbol Symbole de l'action
+     * @param qty Quantité
+     * @param side "buy" ou "sell"
+     * @param priceLimit Limite de prix (optionnel)
+     * @param stopLoss Stop loss (optionnel)
+     * @param takeProfit Take profit (optionnel)
+     * @return Order créé
+     */
     public Order placeOrder(CompteEntity compte, String symbol, double qty, String side, Double priceLimit, Double stopLoss, Double takeProfit) {
         String url = apiBaseUrl + "/orders";
         HttpHeaders headers = new HttpHeaders();
@@ -100,10 +113,11 @@ public class AlpacaService {
             order = this.callOrder(url, request);
             responseJson = gson.toJson(order);
         } catch (org.springframework.web.client.HttpClientErrorException ex) {
-            // Cas d'erreur HTTP (ex: 403 Forbidden)
             errorJson = ex.getResponseBodyAsString();
+            logger.error("Erreur HTTP lors de la création de l'ordre Alpaca: {}", errorJson);
         } catch (Exception ex) {
             errorJson = ex.getMessage();
+            logger.error("Exception lors de la création de l'ordre Alpaca: {}", errorJson);
         }
         // Sauvegarde via repository JPA
         OrderEntity orderEntity = new OrderEntity(requestJson, responseJson, errorJson);
@@ -148,6 +162,9 @@ public class AlpacaService {
         return gson.fromJson(responseJson, Order.class);
     }
 
+    /**
+     * Récupère le dernier prix pour un symbole donné.
+     */
     public Double getLastPrice(CompteEntity compte, String symbol) {
         String url = apiMarketBaseUrl + "/v2/stocks/" + symbol + "/quotes/latest";
         HttpHeaders headers = new HttpHeaders();
@@ -164,6 +181,9 @@ public class AlpacaService {
         return null;
     }
 
+    /**
+     * Stream les prix en temps réel via WebSocket.
+     */
     public void streamLivePrice(CompteEntity compte, String symbol, Consumer<String> onMessage) {
         try {
             String wsUrl = "wss://stream.data.alpaca.markets/v2/sip";
@@ -194,6 +214,7 @@ public class AlpacaService {
             };
             client.connect();
         } catch (Exception e) {
+            logger.error("Erreur lors de la connexion WebSocket Alpaca", e);
             throw new RuntimeException("Erreur lors de la connexion WebSocket Alpaca", e);
         }
     }
@@ -223,6 +244,9 @@ public class AlpacaService {
         return false;
     }
 
+    /**
+     * Vend une action pour un compte donné.
+     */
     public String sellStock(CompteEntity compte, String symbol, double qty) {
         if (hasOppositeOpenOrder(compte, symbol, "sell")) {
             return "Erreur : Un ordre d'achat ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant de vendre.";
@@ -230,10 +254,16 @@ public class AlpacaService {
         return placeOrder(compte, symbol, qty, "sell", null, null, null).toString();
     }
 
+    /**
+     * Achète une action pour un compte donné.
+     */
     public String buyStock(CompteEntity compte, String symbol, double qty) {
         return buyStock(compte, symbol, qty, null, null, null);
     }
 
+    /**
+     * Achète une action avec options avancées (limit, stop, take profit).
+     */
     public String buyStock(CompteEntity compte, String symbol, double qty, Double priceLimit, Double stopLoss, Double takeProfit) {
         if (hasOppositeOpenOrder(compte, symbol, "buy")) {
             List<Order> annulables = this.getOrders(compte, symbol, true);
@@ -245,6 +275,9 @@ public class AlpacaService {
         return placeOrder(compte, symbol, qty, "buy", priceLimit, stopLoss, takeProfit).toString();
     }
 
+    /**
+     * Récupère le portefeuille et les positions pour un compte donné.
+     */
     public PortfolioDto getPortfolioWithPositions(CompteEntity compte) {
         PortfolioDto dto = new PortfolioDto();
 
@@ -266,6 +299,9 @@ public class AlpacaService {
         return dto;
     }
 
+    /**
+     * Annule un ordre pour un compte donné.
+     */
     public String cancelOrder(CompteEntity compte, String orderId) {
         String url = apiBaseUrl + "/orders/" + orderId;
         HttpHeaders headers = new HttpHeaders();
@@ -276,6 +312,9 @@ public class AlpacaService {
         return response.getBody() != null ? response.getBody() : "Annulation demandée.";
     }
 
+    /**
+     * Récupère le portefeuille (cash + positions) pour un compte donné.
+     */
     public Portfolio getPortfolio(CompteEntity compte) {
         PortfolioDto dto = this.getPortfolioWithPositions(compte);
         double cash = 0.0;
