@@ -64,21 +64,23 @@ public class AlpacaService {
      * @return Order créé
      */
     public Order placeOrder(CompteEntity compte, String symbol, double qty, String side, Double priceLimit, Double stopLoss, Double takeProfit, String idGpt, boolean forceCancelOpposite, boolean forceDayTrade) {
-
-        if(!forceDayTrade){
-            // Vérification anti-day trade centralisée
-            OppositionOrder oppositionOrder = hasOppositeOpenOrder(compte, symbol, side);
-            if (oppositionOrder.isOppositionFilled()) {
-                throw new DayTradingException("Erreur : Un ordre de vente existe déjà pour ce symbole. Veuillez attendre lendemain.");
-            }else if (oppositionOrder.isOppositionActived()) {
-                if(forceCancelOpposite){
-                    List<Order> annulables = this.getOrders(compte, symbol, true);
-                    for(Order ord : annulables) {
-                        this.cancelOrder(compte, ord.getId());
-                    }
-                } else {
+        // Vérification anti-day trade centralisée
+        OppositionOrder oppositionOrder = hasOppositeOpenOrder(compte, symbol, side);
+        if (oppositionOrder.isOppositionFilled() && !forceDayTrade) {
+            throw new DayTradingException("Erreur : Un ordre de vente existe déjà pour ce symbole. Veuillez attendre lendemain.");
+        }else if (oppositionOrder.isOppositionActived()) {
+            if(forceCancelOpposite){
+                List<Order> annulables = this.getOrders(compte, symbol, true);
+                for(Order ord : annulables) {
+                    this.cancelOrder(compte, ord.getId());
+                }
+            } else {
+                if("sell".equals(side)){
+                    throw new DayTradingException("Erreur : Potential wash trade detected. Opposite side market/stop order exists. Veuillez annuler l'ordre existant ou activer l'option forceCancelOpposite.");
+                }else if(!forceDayTrade){
                     throw new DayTradingException("Erreur : Un ordre opposé (achat/vente) est déjà ouvert pour ce symbole. Veuillez annuler l'ordre existant ou activer l'option forceCancelOpposite.");
                 }
+
             }
         }
 
@@ -147,8 +149,8 @@ public class AlpacaService {
             if (errorJson != null && errorJson.trim().startsWith("{")) {
                 OrderEntity orderEntity3 = new OrderEntity(String.valueOf(compte.getId()), null, side, requestJson, responseJson, errorJson, "FAILED", idGpt);
                 orderRepository.save(orderEntity3);
-                throw new RuntimeException("Erreur lors de la création de l'ordre Alpaca: " +request.getBody()+ " / " + errorJson);
             }
+            throw new RuntimeException("Erreur lors de la création de l'ordre Alpaca: " +request.getBody()+ " / " + errorJson);
         }
         return order;
     }

@@ -28,6 +28,8 @@ interface OrdersTableProps {
   cancellingOrderId: string | null;
   cancellableStatuses: string[];
   positions: any[];
+  ordersSize: number;
+  onOrdersSizeChange: (size: number) => void;
 }
 
 const OrdersTable: React.FC<OrdersTableProps> = ({
@@ -41,7 +43,9 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   onCancel,
   cancellingOrderId,
   cancellableStatuses,
-  positions
+  positions,
+  ordersSize,
+  onOrdersSizeChange
 }) => {
   const hasCancellable = orders.some(order => order.id && cancellableStatuses.includes(order.status));
   return (
@@ -63,6 +67,19 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
               .map(symbol => (
                 <MenuItem key={symbol} value={symbol}>{symbol}</MenuItem>
               ))}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 100 }}>
+          <InputLabel id="orders-size-label">Nombre</InputLabel>
+          <Select
+            labelId="orders-size-label"
+            value={ordersSize}
+            label="Nombre"
+            onChange={e => onOrdersSizeChange(Number(e.target.value))}
+          >
+            {[10, 20, 30, 40, 50].map(size => (
+              <MenuItem key={size} value={size}>{size}</MenuItem>
+            ))}
           </Select>
         </FormControl>
         <FormControl size="small" sx={{ flexDirection: 'row', alignItems: 'center' }}>

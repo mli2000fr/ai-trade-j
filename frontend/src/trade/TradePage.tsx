@@ -147,6 +147,8 @@ const TradePage: React.FC = () => {
       setMessage(text);
       setAiJsonResult(null);
       setAiTextResult(null);
+      setCancelOpposite(false);
+      setForceDayTrade(false);
       await loadPortfolio(true);
       await loadOrders();
     } catch (e) {
@@ -243,6 +245,7 @@ const TradePage: React.FC = () => {
   // Filtres pour les ordres récents
   const [filterSymbol, setFilterSymbol] = useState<string>('');
   const [filterCancelable, setFilterCancelable] = useState<boolean>(false);
+  const [ordersSize, setOrdersSize] = useState<number>(10);
 
   // Ajout état pour les ordres récupérés via l'API
   const [orders, setOrders] = useState<any[]>([]);
@@ -257,6 +260,7 @@ const TradePage: React.FC = () => {
       if (filterSymbol) params.push(`symbol=${encodeURIComponent(filterSymbol)}`);
       if (filterCancelable) params.push(`cancelable=true`);
       if (compteId) params.push(`id=${encodeURIComponent(compteId)}`);
+      if (ordersSize) params.push(`sizeOrders=${ordersSize}`);
       const url = '/api/trade/orders' + (params.length ? `?${params.join('&')}` : '');
       const res = await fetch(url);
       const data = await res.json();
@@ -303,6 +307,8 @@ const TradePage: React.FC = () => {
         cancellingOrderId={cancellingOrderId}
         cancellableStatuses={cancellableStatuses}
         positions={portfolio?.positions || []}
+        ordersSize={ordersSize}
+        onOrdersSizeChange={setOrdersSize}
       />
       {/* Bloc trade auto */}
       <TradeAutoBlock

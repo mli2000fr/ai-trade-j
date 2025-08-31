@@ -100,11 +100,13 @@ public class TradeController {
     public ResponseEntity<?> getOrders(
             @RequestParam(value = "symbol", required = false) String symbol,
             @RequestParam(value = "cancelable", required = false) Boolean cancelable,
-            @RequestParam(value = "id", required = false) String id) {
+            @RequestParam(value = "id", required = false) String id,
+            @RequestParam(value = "sizeOrders", required = false) Integer sizeOrders) {
         CompteEntity compte = compteService.getCompteCredentialsById(id);
         List<com.app.backend.trade.model.alpaca.Order> orders = alpacaService.getOrders(compte, symbol, cancelable);
         if (orders == null) orders = Collections.emptyList();
-        if (orders.size() > 10) orders = orders.subList(0, 10);
+        int limit = sizeOrders == null ? 10 : sizeOrders;
+        if (orders.size() > limit) orders = orders.subList(0, limit);
         return ResponseEntity.ok(orders);
     }
 
