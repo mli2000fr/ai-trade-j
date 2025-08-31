@@ -13,6 +13,7 @@ import java.util.List;
 @Getter
 @ToString
 public class ReponseAuto {
+    private Long idGpt;
     private List<OrderRequest> orders;
     private String analyseGpt;
 

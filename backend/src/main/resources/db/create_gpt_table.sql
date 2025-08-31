@@ -4,5 +4,6 @@ CREATE TABLE gpt (
     prompt LONGTEXT NOT NULL,
     reponse TEXT,
     aliasCompte VARCHAR(255),
+    id_compte TEXT
 );
 

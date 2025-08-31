@@ -24,6 +24,7 @@ public class OrderRequest {
     public Double take_profit;
     public boolean executeNow = true;
     public String statut = "";
+    public OppositionOrder oppositionOrder;
 
     // Méthode utilitaire pour normaliser les champs
     public void normalize() {

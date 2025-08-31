@@ -1,5 +1,6 @@
 package com.app.backend.trade.controller;
 
+import com.app.backend.trade.exception.DayTradingException;
 import com.app.backend.trade.model.*;
 import com.app.backend.trade.model.alpaca.Order;
 import com.app.backend.trade.service.*;
@@ -54,10 +55,10 @@ public class TradeHelper {
      * @param symbols liste des symboles séparés par des virgules
      * @return true si tous les symboles sont valides, exception sinon
      */
-    public boolean isSymbolsValid(String symbols)  {
+    public boolean isSymbolsValid(String idCompte, String symbols)  {
         String prompt = TradeUtils.readResourceFile("prompt/prompt_check_symbol.txt")
                 .replace("{{symbols}}", symbols);
-        ChatGptResponse response = chatGptService.askChatGpt(prompt);
+        ChatGptResponse response = chatGptService.askChatGpt(idCompte, prompt);
         if (response.getError() != null) {
             throw new RuntimeException("Erreur lors de l'analyse : " + response.getError());
         }
@@ -80,11 +81,18 @@ public class TradeHelper {
      * @return message de retour de l'IA ou erreur
      */
     public ReponseAuto tradeAIAuto(CompteEntity compte, List<String> symbols, String analyseGpt)  {
+        /*
+        if(true){
+            String test = TradeUtils.readResourceFile("test/test_gpt.txt");
+            ChatGptResponse res = new ChatGptResponse(Long.valueOf(15), test, null);
+            return processAIAuto(compte, res);
+        }*/
+
         if(symbols == null || symbols.isEmpty()){
             throw new RuntimeException("Aucun symbole fourni pour tradeAIAuto.");
         }
         String joinedSymbols = String.join(",", symbols);
-        this.isSymbolsValid(joinedSymbols);
+        this.isSymbolsValid(String.valueOf(compte.getId()), joinedSymbols);
         String promptEntete = TradeUtils.readResourceFile("prompt/prompt_"+tradeType+"_trade_auto_entete.txt");
         String promptPied = TradeUtils.readResourceFile("prompt/prompt_"+tradeType+"_trade_auto_pied.txt")
                 .replace("{{data_analyse_ia}}", (analyseGpt != null && !analyseGpt.isBlank()) ? analyseGpt : "not available");
@@ -101,11 +109,11 @@ public class TradeHelper {
             sleepForRateLimit();
         }
         promptFinal.append(promptPied);
-        ChatGptResponse response = chatGptService.askChatGpt(promptFinal.toString());
+        ChatGptResponse response = chatGptService.askChatGpt(String.valueOf(compte.getId()), promptFinal.toString());
         if (response.getError() != null) {
             throw new RuntimeException("Erreur lors de l'analyse : " + response.getError());
         }
-        return processAIAutoOrders(response.getMessage(), compte);
+        return processAIAuto(compte, response);
     }
 
     /**
@@ -119,40 +127,57 @@ public class TradeHelper {
         InfosAction infosAction = this.getInfosAction(compte, symbol, true);
         Map<String, Object> variables = getStringObjectMap(infosAction);
         String prompt = getPromptWithValues(promptTemplate, variables);
-        ChatGptResponse response = chatGptService.askChatGpt(prompt);
+        ChatGptResponse response = chatGptService.askChatGpt(String.valueOf(compte.getId()), prompt);
         if (response.getError() != null) {
             return "Erreur lors de l'analyse : " + response.getError();
         }
-        return processAIOrder(response.getMessage(), compte);
+        return processAIOrder(String.valueOf(response.getIdGpt()), response.getMessage(), compte);
     }
 
     // --- Méthodes privées utilitaires ---
 
     /**
-     * Parse et exécute les ordres retournés par l'IA (mode auto).
+     * Parse les ordres retournés par l'IA (mode auto).
      */
-    private ReponseAuto processAIAutoOrders(String message, CompteEntity compte) {
-        String[] parts = message != null ? message.split("===") : new String[0];
+    private ReponseAuto processAIAuto(CompteEntity compte, ChatGptResponse response) {
+        String[] parts = response.getMessage() != null ? response.getMessage().split("===") : new String[0];
         String orders = parts.length > 0 ? parts[0].trim() : "";
         String analyseGpt = parts.length > 1 ? parts[1].trim() : "";
         try {
             Type listType = new TypeToken<List<OrderRequest>>(){}.getType();
             List<OrderRequest> listOrders = new Gson().fromJson(orders, listType);
-            ReponseAuto ra = ReponseAuto.builder().analyseGpt(analyseGpt).orders(listOrders).build();
+            for(OrderRequest order : listOrders){
+                if (order.getQuantity() != null && order.getQuantity() != 0) {
+                    // on ne fait pas de trade journalier si on a déjà une position ouverte, si on veut le forcer, passer par trade manuel
+                    OppositionOrder oppositionOrder = alpacaService.hasOppositeOpenOrder(compte, order.symbol, order.side);
+                    order.setOppositionOrder(oppositionOrder);
+                    if(oppositionOrder.isDayTrading()){
+                        order.setStatut("SKIPPED_DAYTRADE");
+                        order.setExecuteNow(false);
+                    }
+                }
+            }
+            ReponseAuto ra = ReponseAuto.builder().idGpt(response.getIdGpt()).analyseGpt(analyseGpt).orders(listOrders).build();
             return ra;
         } catch (Exception e) {
-            throw new RuntimeException(message + "Erreur de parsing de l'ordre : " + e.getMessage());
+            throw new RuntimeException(response.getMessage() + "Erreur de parsing de l'ordre : " + e.getMessage());
         }
     }
 
-    public List<OrderRequest> processOrders(CompteEntity compte, List<OrderRequest> orders) {
+    public List<OrderRequest> processOrders(CompteEntity compte, String idGpt, List<OrderRequest> orders) {
         if (orders == null) return null;
         for (OrderRequest order : orders) {
             order.normalize();
             if (isOrderValid(order) && order.isExecuteNow()) {
                 boolean isSell = "sell".equals(order.side);
-                Order orderR = alpacaService.placeOrder(compte, order.symbol, order.qty, order.side, isSell ? null : order.priceLimit, isSell ? null : order.stopLoss, isSell ? null : order.takeProfit);
-                order.setStatut(orderR.getStatus());
+                try{
+                    Order orderR = alpacaService.placeOrder(compte, order.symbol, order.qty, order.side, isSell ? null : order.priceLimit, isSell ? null : order.stopLoss, isSell ? null : order.takeProfit, idGpt, true, false);
+                    order.setStatut(orderR.getStatus());
+                }catch(DayTradingException e){
+                    order.setStatut("FAILED_DAYTRADE");
+                }catch(Exception e){
+                    order.setStatut("FAILED");
+                }
             }
         }
         return orders;
@@ -161,7 +186,7 @@ public class TradeHelper {
     /**
      * Parse et exécute l'ordre retourné par l'IA (mode simple).
      */
-    private String processAIOrder(String message, CompteEntity compte) {
+    private String processAIOrder(String idGpt, String message, CompteEntity compte) {
         String[] parts = message != null ? message.split("===") : new String[0];
         String responseOrder = parts.length > 0 ? parts[0].trim() : "";
         try {
@@ -169,7 +194,7 @@ public class TradeHelper {
             order.normalize();
             if (isOrderValid(order)) {
                 boolean isSell = "sell".equals(order.side);
-                alpacaService.placeOrder(compte, order.symbol, order.qty, order.side, isSell ? null : order.priceLimit, isSell ? null : order.stopLoss, isSell ? null : order.takeProfit);
+                alpacaService.placeOrder(compte, order.symbol, order.qty, order.side, isSell ? null : order.priceLimit, isSell ? null : order.stopLoss, isSell ? null : order.takeProfit, idGpt, false, false);
             }
         } catch (Exception e) {
             return "Erreur de parsing de l'ordre : " + e.getMessage();

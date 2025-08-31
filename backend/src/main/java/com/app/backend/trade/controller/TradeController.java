@@ -34,9 +34,9 @@ public class TradeController {
         CompteEntity compte = compteService.getCompteCredentialsById(request.getId());
         String result;
         if ("buy".equalsIgnoreCase(request.getAction())) {
-            result = alpacaService.buyStock(compte, request.getSymbol(), request.getQuantity());
+            result = alpacaService.buyStock(compte, request);
         } else if ("sell".equalsIgnoreCase(request.getAction())) {
-            result = alpacaService.sellStock(compte, request.getSymbol(), request.getQuantity());
+            result = alpacaService.sellStock(compte, request);
         } else {
             return ResponseEntity.badRequest().body("Action invalide : doit être 'buy' ou 'sell'");
         }
@@ -68,9 +68,11 @@ public class TradeController {
      */
     @PostMapping("/trade-ai")
     public ResponseEntity<String> tradeAI(@RequestBody TradeRequest request)  {
+        throw new UnsupportedOperationException("Endpoint /trade-ai deprecated, utiliser /trade-ai-auto à la place");
+        /*
         CompteEntity compte = compteService.getCompteCredentialsById(request.getId());
         String result = tradeHelper.tradeAI(compte, request.getSymbol());
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(result);*/
     }
 
     /**
@@ -87,7 +89,7 @@ public class TradeController {
     @PostMapping("/execute-orders")
     public ResponseEntity<List<OrderRequest>> executeOrders(@RequestBody ExecuteOrdersRequest request) {
         CompteEntity compte = compteService.getCompteCredentialsById(request.getId());
-        List<OrderRequest> result = tradeHelper.processOrders(compte, request.getOrders());
+        List<OrderRequest> result = tradeHelper.processOrders(compte, request.getIdGpt(), request.getOrders());
         return ResponseEntity.ok(result);
     }
 

@@ -8,6 +8,8 @@ import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 
 interface TradeManualBlockProps {
   action: 'buy' | 'sell' | 'trade-ai';
@@ -15,10 +17,14 @@ interface TradeManualBlockProps {
   quantity: number;
   ownedSymbols: string[];
   isExecuting: boolean;
+  cancelOpposite: boolean;
+  forceDayTrade: boolean;
   onChangeAction: (action: 'buy' | 'sell' | 'trade-ai') => void;
   onChangeSymbol: (symbol: string) => void;
   onChangeQuantity: (quantity: number) => void;
   onTrade: () => void;
+  onChangeCancelOpposite: (value: boolean) => void;
+  onChangeForceDayTrade: (value: boolean) => void;
 }
 
 const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
@@ -27,10 +33,14 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
   quantity,
   ownedSymbols,
   isExecuting,
+  cancelOpposite,
+  forceDayTrade,
   onChangeAction,
   onChangeSymbol,
   onChangeQuantity,
-  onTrade
+  onTrade,
+  onChangeCancelOpposite,
+  onChangeForceDayTrade
 }) => (
   <Box sx={{ mb: 3, p: 2, border: '1px solid #eee', borderRadius: 2 }}>
     <Typography variant="h6" sx={{ mb: 2 }}>Trade Manuel</Typography>
@@ -77,15 +87,39 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
         </FormControl>
       )}
       {action !== 'trade-ai' && (
-        <TextField
-          label="Quantité"
-          type="number"
-          inputProps={{ min: 0.01, step: 'any' }}
-          value={quantity}
-          onChange={e => onChangeQuantity(parseFloat(e.target.value))}
-          size="small"
-          sx={{ minWidth: 100 }}
-        />
+        <>
+          <TextField
+            label="Quantité"
+            type="number"
+            inputProps={{ min: 0.01, step: 'any' }}
+            value={quantity}
+            onChange={e => onChangeQuantity(parseFloat(e.target.value))}
+            size="small"
+            sx={{ minWidth: 100 }}
+          />
+          <Box sx={{ width: '100%', display: 'flex', gap: 2, alignItems: 'center', mt: 1 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={cancelOpposite}
+                  onChange={e => onChangeCancelOpposite(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label="cancel opposite"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={forceDayTrade}
+                  onChange={e => onChangeForceDayTrade(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label="force day trade"
+            />
+          </Box>
+        </>
       )}
     </Box>
     <Box>

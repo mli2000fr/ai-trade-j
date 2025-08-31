@@ -1,5 +1,6 @@
 package com.app.backend.trade.service;
 
+import com.app.backend.trade.exception.DayTradingException;
 import com.app.backend.trade.model.*;
 import com.app.backend.trade.model.alpaca.AlpacaTransferActivity;
 import com.app.backend.trade.model.alpaca.ErrResponseOrder;
@@ -62,7 +63,25 @@ public class AlpacaService {
      * @param takeProfit Take profit (optionnel)
      * @return Order créé
      */
-    public Order placeOrder(CompteEntity compte, String symbol, double qty, String side, Double priceLimit, Double stopLoss, Double takeProfit) {
+    public Order placeOrder(CompteEntity compte, String symbol, double qty, String side, Double priceLimit, Double stopLoss, Double takeProfit, String idGpt, boolean forceCancelOpposite, boolean forceDayTrade) {
+
+        if(!forceDayTrade){
+            // Vérification anti-day trade centralisée
+            OppositionOrder oppositionOrder = hasOppositeOpenOrder(compte, symbol, side);
+            if (oppositionOrder.isOppositionFilled()) {
+                throw new DayTradingException("Erreur : Un ordre de vente existe déjà pour ce symbole. Veuillez attendre lendemain.");
+            }else if (oppositionOrder.isOppositionActived()) {
+                if(forceCancelOpposite){
+                    List<Order> annulables = this.getOrders(compte, symbol, true);
+                    for(Order ord : annulables) {
+                        this.cancelOrder(compte, ord.getId());
+                    }
+                } else {
+                    throw new DayTradingException("Erreur : Un ordre opposé (achat/vente) est déjà ouvert pour ce symbole. Veuillez annuler l'ordre existant ou activer l'option forceCancelOpposite.");
+                }
+            }
+        }
+
         String url = apiBaseUrl + "/orders";
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -121,36 +140,14 @@ public class AlpacaService {
             logger.error("Exception lors de la création de l'ordre Alpaca: {}", errorJson);
         }
         // Sauvegarde via repository JPA
-        OrderEntity orderEntity = new OrderEntity(requestJson, responseJson, errorJson);
+        OrderEntity orderEntity = new OrderEntity(String.valueOf(compte.getId()), order == null ? null : order.getId(), side, requestJson, responseJson, errorJson, order == null ? "FAILED" : order.getStatus(), idGpt);
         orderRepository.save(orderEntity);
-        if (order == null) {
+        if (order == null && errorJson != null) {
             // Tentative de parsing d'une erreur JSON Alpaca (ex: insufficient qty)
             if (errorJson != null && errorJson.trim().startsWith("{")) {
-                try {
-                    ErrResponseOrder respOrder = gson.fromJson(errorJson, ErrResponseOrder.class);
-                    if ("sell".equals(side) && respOrder != null && TradeConstant.ALPACA_ORDER_CODE_QUANTITY_NON_DISPO == respOrder.getCode()) {
-                        List<Order> annulables = this.getOrders(compte, symbol, true);
-                        int quantDispo = Integer.parseInt(respOrder.getAvailable());
-                        for(Order ord : annulables) {
-                            this.cancelOrder(compte, ord.getId());
-                            if(quantDispo + Integer.parseInt(ord.getQty()) >= qty) {
-                                break;
-                            } else {
-                                quantDispo += Integer.parseInt(ord.getQty());
-                            }
-                        }
-                        order = this.callOrder(url, request);
-                        responseJson = gson.toJson(order);
-                        OrderEntity orderEntity2 = new OrderEntity(requestJson, responseJson, errorJson);
-                        orderRepository.save(orderEntity2);
-                    } else {
-                        throw new RuntimeException("Erreur lors de la création de l'ordre Alpaca: " + errorJson);
-                    }
-                } catch (Exception ignore) {
-                    OrderEntity orderEntity3 = new OrderEntity(requestJson, responseJson, ignore.getMessage());
-                    orderRepository.save(orderEntity3);
-                    throw new RuntimeException("Erreur lors de la création de l'ordre Alpaca: " +request+ " / " + ignore.getMessage());
-                }
+                OrderEntity orderEntity3 = new OrderEntity(String.valueOf(compte.getId()), null, side, requestJson, responseJson, errorJson, "FAILED", idGpt);
+                orderRepository.save(orderEntity3);
+                throw new RuntimeException("Erreur lors de la création de l'ordre Alpaca: " +request.getBody()+ " / " + errorJson);
             }
         }
         return order;
@@ -224,56 +221,41 @@ public class AlpacaService {
         "new", "partially_filled", "accepted", "pending_new", "pending_replace", "pending_cancel"
     );
 
-    // Vérifie s'il existe un ordre ouvert du côté opposé (buy/sell) pour ce symbole
-    private boolean hasOppositeOpenOrder(CompteEntity compte, String symbol, String side) {
-        String url = apiBaseUrl + "/orders?status=all&symbols=" + symbol;
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("APCA-API-KEY-ID", compte.getCle());
-        headers.set("APCA-API-SECRET-KEY", compte.getSecret());
-        HttpEntity<Void> request = new HttpEntity<>(headers);
-        ResponseEntity<Map[]> response = restTemplate.exchange(url, HttpMethod.GET, request, Map[].class);
-        if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-            for (Map order : response.getBody()) {
-                String orderSide = (String) order.get("side");
-                String orderStatus = (String) order.get("status");
-                if (orderSide != null && !orderSide.equalsIgnoreCase(side)
-                        && orderStatus != null && ACTIVE_ORDER_STATUSES.contains(orderStatus)) {
-                    return true;
+    // Vérifie s'il existe un ordre exécuté OU ouvert du côté opposé (buy/sell) pour ce symbole aujourd'hui (anti-day trade)
+    public OppositionOrder hasOppositeOpenOrder(CompteEntity compte, String symbol, String side) {
+        List<Order> orders = this.getOrders(compte, symbol, false);
+        String oppositeSide = side.equalsIgnoreCase("buy") ? "sell" : "buy";
+        java.time.LocalDate today = java.time.LocalDate.now();
+        boolean oppositionFilled = false;
+        boolean oppositionActived = false;
+        for (Order o : orders) {
+            if (o.getSide() != null && o.getSide().equalsIgnoreCase(oppositeSide)) {
+                // Cas 1 : déjà exécuté aujourd'hui
+                if (o.getStatus() != null && o.getStatus().equalsIgnoreCase("filled")
+                        && o.getFilledAt() != null && o.getFilledAt().toLocalDate().isEqual(today)) {
+                    oppositionFilled = true;
+                }
+                // Cas 2 : ordre ouvert aujourd'hui (potentiellement exécutable)
+                if (o.getStatus() != null && ACTIVE_ORDER_STATUSES.contains(o.getStatus())) {
+                    oppositionActived = true;
                 }
             }
         }
-        return false;
+        return OppositionOrder.builder().oppositionActived(oppositionActived).oppositionFilled(oppositionFilled).build();
     }
 
     /**
      * Vend une action pour un compte donné.
      */
-    public String sellStock(CompteEntity compte, String symbol, double qty) {
-        if (hasOppositeOpenOrder(compte, symbol, "sell")) {
-            return "Erreur : Un ordre d'achat ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant de vendre.";
-        }
-        return placeOrder(compte, symbol, qty, "sell", null, null, null).toString();
+    public String sellStock(CompteEntity compte, TradeRequest request) {
+        return placeOrder(compte, request.getSymbol(), request.getQuantity(), "sell", null, null, null, null, request.isCancelOpposite(), request.isForceDayTrade()).toString();
     }
 
     /**
      * Achète une action pour un compte donné.
      */
-    public String buyStock(CompteEntity compte, String symbol, double qty) {
-        return buyStock(compte, symbol, qty, null, null, null);
-    }
-
-    /**
-     * Achète une action avec options avancées (limit, stop, take profit).
-     */
-    public String buyStock(CompteEntity compte, String symbol, double qty, Double priceLimit, Double stopLoss, Double takeProfit) {
-        if (hasOppositeOpenOrder(compte, symbol, "buy")) {
-            List<Order> annulables = this.getOrders(compte, symbol, true);
-            for(Order ord : annulables) {
-                this.cancelOrder(compte, ord.getId());
-            }
-            //return "Erreur : Un ordre de vente ouvert existe déjà pour ce symbole. Veuillez attendre son exécution ou l'annuler avant d'acheter.";
-        }
-        return placeOrder(compte, symbol, qty, "buy", priceLimit, stopLoss, takeProfit).toString();
+    public String buyStock(CompteEntity compte, TradeRequest request) {
+        return placeOrder(compte, request.getSymbol(), request.getQuantity(), "buy", null, null, null, null, request.isCancelOpposite(), request.isForceDayTrade()).toString();
     }
 
     /**
@@ -314,7 +296,11 @@ public class AlpacaService {
         headers.set("APCA-API-SECRET-KEY", compte.getSecret());
         HttpEntity<Void> request = new HttpEntity<>(headers);
         ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.DELETE, request, String.class);
-        return response.getBody() != null ? response.getBody() : "Annulation demandée.";
+        String responseStr = response.getBody() != null ? response.getBody() : "Annulation demandée.";
+
+        OrderEntity orderEntity = new OrderEntity(String.valueOf(compte.getId()), orderId, "cancel", "cancel " + orderId, responseStr, null, response.getStatusCode().toString(), null);
+        orderRepository.save(orderEntity);
+        return responseStr;
     }
 
     /**

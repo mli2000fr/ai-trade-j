@@ -5,6 +5,24 @@ public class TradeRequest {
     private String action; // "buy" ou "sell"
     private double quantity;
     private String id;
+    private boolean cancelOpposite;
+    private boolean forceDayTrade;
+
+    public boolean isCancelOpposite() {
+        return cancelOpposite;
+    }
+
+    public boolean isForceDayTrade() {
+        return forceDayTrade;
+    }
+
+    public void setForceDayTrade(boolean forceDayTrade) {
+        this.forceDayTrade = forceDayTrade;
+    }
+
+    public void setCancelOpposite(boolean cancelOpposite) {
+        this.cancelOpposite = cancelOpposite;
+    }
 
     public String getSymbol() {
         return symbol;

@@ -38,7 +38,7 @@ public class ChatGptService {
      * @param prompt texte à envoyer à l'API
      * @return réponse de ChatGPT ou message d'erreur
      */
-    public ChatGptResponse askChatGpt(String prompt) {
+    public ChatGptResponse askChatGpt(String idCompte, String prompt) {
 
         // Création du client avec ta clé API
         OpenAIClient client = OpenAIOkHttpClient.builder().apiKey(apiKey).build();
@@ -52,11 +52,11 @@ public class ChatGptService {
             String res = response.choices().get(0).message().content().orElse("aucune réponse donnée");
             TradeUtils.log("askChatGpt Réponse ChatGPT: " + res);
             // Sauvegarde en base
-            GptEntity gpt = new GptEntity(LocalDateTime.now(), prompt, res);
+            GptEntity gpt = new GptEntity(idCompte, LocalDateTime.now(), prompt, res);
             gptRepository.save(gpt);
-            return new ChatGptResponse(res, null);
+            return new ChatGptResponse(gpt.getId(), res, null);
         } catch (RestClientException e) {
-            return new ChatGptResponse(null, "Erreur d'appel à l'API OpenAI : " + e.getMessage());
+            return new ChatGptResponse(null, null, "Erreur d'appel à l'API OpenAI : " + e.getMessage());
         }
     }
 
