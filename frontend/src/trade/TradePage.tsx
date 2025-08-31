@@ -166,7 +166,6 @@ const TradePage: React.FC = () => {
     setPollingActive(false);
     try {
       const symboles = autoSymbols.split(',').map(s => s.trim()).filter(Boolean);
-      // Attendre la lecture du fichier si besoin
       let analyseGpt = analyseGptText;
       if (analyseGptFile && !analyseGptText) {
         analyseGpt = await new Promise<string>(resolve => {
@@ -180,21 +179,11 @@ const TradePage: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symboles, id: compteId, analyseGpt }),
       });
-      const text = await res.text();
-      const parts = text.split('===');
-      if (parts.length >= 2) {
-        try {
-          setAiJsonResult(JSON.parse(parts[0].trim()));
-        } catch {
-          setAiJsonResult(null);
-        }
-        setAiTextResult(parts.slice(1).join('===').trim());
-        setMessage('');
-      } else {
-        setAiJsonResult(null);
-        setAiTextResult(null);
-        setMessage(text);
-      }
+      if (!res.ok) throw new Error('Erreur lors de la transaction auto');
+      const data = await res.json();
+      setAiJsonResult(data.orders || null);
+      setAiTextResult(data.analyseGpt || null);
+      setMessage('');
       await loadPortfolio(true);
       await loadOrders();
     } catch (e) {
@@ -326,7 +315,16 @@ const TradePage: React.FC = () => {
         onTrade={handleTrade}
       />
       {/* Résultats AI et messages */}
-      <TradeAIResults aiJsonResult={aiJsonResult} aiTextResult={aiTextResult} message={message} />
+      <TradeAIResults
+        aiJsonResult={aiJsonResult}
+        aiTextResult={aiTextResult}
+        message={message}
+        compteId={compteId}
+        onOrdersUpdate={async () => {
+          await loadPortfolio(true);
+          await loadOrders();
+        }}
+      />
     </Box>
   );
 };

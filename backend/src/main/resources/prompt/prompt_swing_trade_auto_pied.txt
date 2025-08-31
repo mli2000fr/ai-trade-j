@@ -27,11 +27,12 @@ Part 1: JSON
 "quantity": NUMBER,
 "price_limit": NUMBER | null,
 "stop_loss": NUMBER | null,
-"take_profit": NUMBER | null
+"take_profit": NUMBER | null,
+"executeNow": BOOLEAN | false,
 }, {...}, ...]
 Rules for JSON values:
-- If action = "hold": quantity = 0, price_limit = null, stop_loss = null, take_profit = null.
-- If action = "buy" or "sell": quantity must be > 0.
+- If action = "hold": quantity = 0, price_limit = null, stop_loss = null, take_profit = null, executeNow = false.
+- If action = "buy" or "sell": quantity must be > 0, executeNow = true.
 - price_limit, stop_loss, and take_profit must be numeric values (float or integer) rounded to 2 decimal places.
 - All numeric values must be in USD unless otherwise specified.
 Do not add any extra fields, comments, or text.
