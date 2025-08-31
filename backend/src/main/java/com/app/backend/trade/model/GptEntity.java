@@ -16,12 +16,16 @@ public class GptEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String prompt;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "LONGTEXT")
     private String reponse;
+
+    @Column(columnDefinition = "TEXT")
+    private String idCompte;
 
     // Constructeurs
     public GptEntity() {}
-    public GptEntity(LocalDateTime date, String prompt, String reponse) {
+    public GptEntity(String idCompte, LocalDateTime date, String prompt, String reponse) {
+        this.idCompte = idCompte;
         this.date = date;
         this.prompt = prompt;
         this.reponse = reponse;
@@ -36,5 +40,13 @@ public class GptEntity {
     public void setPrompt(String prompt) { this.prompt = prompt; }
     public String getReponse() { return reponse; }
     public void setReponse(String reponse) { this.reponse = reponse; }
+
+    public String getIdCompte() {
+        return idCompte;
+    }
+
+    public void setIdCompte(String idCompte) {
+        this.idCompte = idCompte;
+    }
 }
 

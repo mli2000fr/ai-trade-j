@@ -17,21 +17,22 @@ Rules:
 
 Very important:
 - Never use more than 90% of the available cash when buying.
-- Do not place both a buy and a sell order for the same stock in the same recommendation.
+- Never recommend buying and selling the same stock on the same day. Positions must be held at least overnight (swing trade only, no day trade).
 
 ⚠️ Output: 2 parts separated by ===
 Part 1: JSON
 [{
 "symbol": "TICKER",
-"action": "buy" | "sell" | "hold",
+"side": "buy" | "sell" | "hold",
 "quantity": NUMBER,
 "price_limit": NUMBER | null,
 "stop_loss": NUMBER | null,
-"take_profit": NUMBER | null
+"take_profit": NUMBER | null,
+"executeNow": BOOLEAN | false,
 }, {...}, ...]
 Rules for JSON values:
-- If action = "hold": quantity = 0, price_limit = null, stop_loss = null, take_profit = null.
-- If action = "buy" or "sell": quantity must be > 0.
+- If side = "hold": quantity = 0, price_limit = null, stop_loss = null, take_profit = null, executeNow = false.
+- If side = "buy" or "sell": quantity must be > 0, executeNow = true.
 - price_limit, stop_loss, and take_profit must be numeric values (float or integer) rounded to 2 decimal places.
 - All numeric values must be in USD unless otherwise specified.
 Do not add any extra fields, comments, or text.

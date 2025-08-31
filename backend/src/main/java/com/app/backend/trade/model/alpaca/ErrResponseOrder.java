@@ -5,8 +5,26 @@ public class ErrResponseOrder {
     private int code;
     private String existing_qty;
     private String held_for_orders;
+    private String existing_order_id;
+    private String reject_reason;
     private String message;
     private String symbol;
+
+    public String getExisting_order_id() {
+        return existing_order_id;
+    }
+
+    public void setExisting_order_id(String existing_order_id) {
+        this.existing_order_id = existing_order_id;
+    }
+
+    public String getReject_reason() {
+        return reject_reason;
+    }
+
+    public void setReject_reason(String reject_reason) {
+        this.reject_reason = reject_reason;
+    }
 
     public String getAvailable() {
         return available;

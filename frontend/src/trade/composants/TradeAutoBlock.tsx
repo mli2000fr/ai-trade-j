@@ -24,7 +24,7 @@ const TradeAutoBlock: React.FC<TradeAutoBlockProps> = ({ autoSymbols, isExecutin
           label="Symboles"
           value={autoSymbols}
           onChange={e => onChange(e.target.value)}
-          placeholder="AAPL,KO,NVDA,TSLA,AMZN,MSFT,AMD,META,SHOP,PLTR"
+          placeholder=""
           size="small"
           sx={{ minWidth: 500 }}
         />

@@ -28,6 +28,8 @@ interface OrdersTableProps {
   cancellingOrderId: string | null;
   cancellableStatuses: string[];
   positions: any[];
+  ordersSize: number;
+  onOrdersSizeChange: (size: number) => void;
 }
 
 const OrdersTable: React.FC<OrdersTableProps> = ({
@@ -41,7 +43,9 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   onCancel,
   cancellingOrderId,
   cancellableStatuses,
-  positions
+  positions,
+  ordersSize,
+  onOrdersSizeChange
 }) => {
   const hasCancellable = orders.some(order => order.id && cancellableStatuses.includes(order.status));
   return (
@@ -65,6 +69,19 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
               ))}
           </Select>
         </FormControl>
+        <FormControl size="small" sx={{ minWidth: 100 }}>
+          <InputLabel id="orders-size-label">Nombre</InputLabel>
+          <Select
+            labelId="orders-size-label"
+            value={ordersSize}
+            label="Nombre"
+            onChange={e => onOrdersSizeChange(Number(e.target.value))}
+          >
+            {[10, 20, 30, 40, 50].map(size => (
+              <MenuItem key={size} value={size}>{size}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
         <FormControl size="small" sx={{ flexDirection: 'row', alignItems: 'center' }}>
           <Checkbox
             checked={filterCancelable}
@@ -86,7 +103,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Action</TableCell>
+                <TableCell>Side</TableCell>
                 <TableCell>Symbole</TableCell>
                 <TableCell>Quantité</TableCell>
                 <TableCell>Prix</TableCell>
@@ -96,7 +113,19 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
             </TableHead>
             <TableBody>
               {orders.map((order, i) => (
-                <TableRow key={i} sx={{ backgroundColor: order.side === 'buy' ? '#e3f2fd' : order.side === 'sell' ? '#ffebee' : undefined }}>
+                <TableRow
+                  key={i}
+                  sx={{
+                    backgroundColor:
+                      order.statut === 'FAILED_DAYTRADE' || order.statut === 'FAILED'
+                        ? '#ffcccc' // rouge clair si statut FAILED_DAYTRADE ou FAILED
+                        : order.side === 'buy'
+                        ? '#e3f2fd'
+                        : order.side === 'sell'
+                        ? '#ffebee'
+                        : undefined
+                  }}
+                >
                   <TableCell>{order.side}</TableCell>
                   <TableCell>{order.symbol}</TableCell>
                   <TableCell>{order.qty}</TableCell>

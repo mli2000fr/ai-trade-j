@@ -12,7 +12,7 @@ import Box from '@mui/material/Box';
 const TRADE_API_URL = '/api/trade/trade';
 
 const TradePage: React.FC = () => {
-  const [symbol, setSymbol] = useState('AAPL');
+  const [symbol, setSymbol] = useState('');
   const [action, setAction] = useState<'buy' | 'sell' | 'trade-ai'>('buy');
   const [quantity, setQuantity] = useState(1);
   const [message, setMessage] = useState('');
@@ -23,6 +23,7 @@ const TradePage: React.FC = () => {
   const [pollingActive, setPollingActive] = useState(true);
   const [aiJsonResult, setAiJsonResult] = useState<any | null>(null);
   const [aiTextResult, setAiTextResult] = useState<string | null>(null);
+  const [idGpt, setIdGpt] = useState<string | null>(null);
   const [autoSymbols, setAutoSymbols] = useState<string>('');
 
   // --- Gestion des comptes ---
@@ -115,15 +116,20 @@ const TradePage: React.FC = () => {
         const parts = text.split('===');
         if (parts.length >= 2) {
           try {
-            setAiJsonResult(JSON.parse(parts[0].trim()));
+            const aiJson = JSON.parse(parts[0].trim());
+            console.log('Réponse AI JSON:', aiJson);
+            setAiJsonResult(aiJson);
+            setIdGpt(aiJson.idGpt || aiJson.id || null); // Extraction de l'id GPT
           } catch {
             setAiJsonResult(null);
+            setIdGpt(null);
           }
-          setAiTextResult(parts.slice(1).join('===').trim());
+          setAiTextResult(parts.slice(1).join('===' ).trim());
           setMessage('');
         } else {
           setAiJsonResult(null);
           setAiTextResult(null);
+          setIdGpt(null);
           setMessage(text);
         }
         await loadPortfolio(true);
@@ -135,12 +141,14 @@ const TradePage: React.FC = () => {
       const res = await fetch(TRADE_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol, action, quantity, id: compteId }),
+        body: JSON.stringify({ symbol, action, quantity, id: compteId, cancelOpposite, forceDayTrade }),
       });
       const text = await res.text();
       setMessage(text);
       setAiJsonResult(null);
       setAiTextResult(null);
+      setCancelOpposite(false);
+      setForceDayTrade(false);
       await loadPortfolio(true);
       await loadOrders();
     } catch (e) {
@@ -166,7 +174,6 @@ const TradePage: React.FC = () => {
     setPollingActive(false);
     try {
       const symboles = autoSymbols.split(',').map(s => s.trim()).filter(Boolean);
-      // Attendre la lecture du fichier si besoin
       let analyseGpt = analyseGptText;
       if (analyseGptFile && !analyseGptText) {
         analyseGpt = await new Promise<string>(resolve => {
@@ -180,21 +187,12 @@ const TradePage: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symboles, id: compteId, analyseGpt }),
       });
-      const text = await res.text();
-      const parts = text.split('===');
-      if (parts.length >= 2) {
-        try {
-          setAiJsonResult(JSON.parse(parts[0].trim()));
-        } catch {
-          setAiJsonResult(null);
-        }
-        setAiTextResult(parts.slice(1).join('===').trim());
-        setMessage('');
-      } else {
-        setAiJsonResult(null);
-        setAiTextResult(null);
-        setMessage(text);
-      }
+      if (!res.ok) throw new Error('Erreur lors de la transaction auto');
+      const data = await res.json();
+      setAiJsonResult(data.orders || null);
+      setAiTextResult(data.analyseGpt || null);
+      setIdGpt(data.idGpt || data.id || null); // Extraction de l'id GPT pour le trade auto
+      setMessage('');
       await loadPortfolio(true);
       await loadOrders();
     } catch (e) {
@@ -247,6 +245,7 @@ const TradePage: React.FC = () => {
   // Filtres pour les ordres récents
   const [filterSymbol, setFilterSymbol] = useState<string>('');
   const [filterCancelable, setFilterCancelable] = useState<boolean>(false);
+  const [ordersSize, setOrdersSize] = useState<number>(10);
 
   // Ajout état pour les ordres récupérés via l'API
   const [orders, setOrders] = useState<any[]>([]);
@@ -261,6 +260,7 @@ const TradePage: React.FC = () => {
       if (filterSymbol) params.push(`symbol=${encodeURIComponent(filterSymbol)}`);
       if (filterCancelable) params.push(`cancelable=true`);
       if (compteId) params.push(`id=${encodeURIComponent(compteId)}`);
+      if (ordersSize) params.push(`sizeOrders=${ordersSize}`);
       const url = '/api/trade/orders' + (params.length ? `?${params.join('&')}` : '');
       const res = await fetch(url);
       const data = await res.json();
@@ -271,6 +271,10 @@ const TradePage: React.FC = () => {
       setOrdersLoading(false);
     }
   };
+
+  // Etat pour gérer la case à cocher 'cancel opposite'
+  const [cancelOpposite, setCancelOpposite] = useState(false);
+  const [forceDayTrade, setForceDayTrade] = useState(false);
 
   return (
     <Box sx={{ maxWidth: 1100, mx: 'auto', p: { xs: 1, sm: 2, md: 3 } }}>
@@ -303,6 +307,8 @@ const TradePage: React.FC = () => {
         cancellingOrderId={cancellingOrderId}
         cancellableStatuses={cancellableStatuses}
         positions={portfolio?.positions || []}
+        ordersSize={ordersSize}
+        onOrdersSizeChange={setOrdersSize}
       />
       {/* Bloc trade auto */}
       <TradeAutoBlock
@@ -320,13 +326,27 @@ const TradePage: React.FC = () => {
         quantity={quantity}
         ownedSymbols={ownedSymbols}
         isExecuting={isExecuting}
+        cancelOpposite={cancelOpposite}
+        forceDayTrade={forceDayTrade}
         onChangeAction={setAction}
         onChangeSymbol={setSymbol}
         onChangeQuantity={setQuantity}
         onTrade={handleTrade}
+        onChangeCancelOpposite={setCancelOpposite}
+        onChangeForceDayTrade={setForceDayTrade}
       />
       {/* Résultats AI et messages */}
-      <TradeAIResults aiJsonResult={aiJsonResult} aiTextResult={aiTextResult} message={message} />
+      <TradeAIResults
+        aiJsonResult={aiJsonResult}
+        aiTextResult={aiTextResult}
+        message={message}
+        compteId={compteId}
+        onOrdersUpdate={async () => {
+          await loadPortfolio(true);
+          await loadOrders();
+        }}
+        idGpt={idGpt ?? undefined}
+      />
     </Box>
   );
 };

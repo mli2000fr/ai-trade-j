@@ -1,4 +1,4 @@
-package com.app.backend.trade.controller;
+package com.app.backend.trade.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,9 +20,9 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     @ResponseBody
     public ResponseEntity<String> handleRuntimeException(RuntimeException ex) {
+        ex.printStackTrace();
         return ResponseEntity.badRequest().body(ex.getMessage());
     }
 
     // Ajoutez ici d'autres handlers si besoin
 }
-

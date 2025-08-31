@@ -34,9 +34,9 @@ public class TradeController {
         CompteEntity compte = compteService.getCompteCredentialsById(request.getId());
         String result;
         if ("buy".equalsIgnoreCase(request.getAction())) {
-            result = alpacaService.buyStock(compte, request.getSymbol(), request.getQuantity());
+            result = alpacaService.buyStock(compte, request);
         } else if ("sell".equalsIgnoreCase(request.getAction())) {
-            result = alpacaService.sellStock(compte, request.getSymbol(), request.getQuantity());
+            result = alpacaService.sellStock(compte, request);
         } else {
             return ResponseEntity.badRequest().body("Action invalide : doit être 'buy' ou 'sell'");
         }
@@ -68,19 +68,28 @@ public class TradeController {
      */
     @PostMapping("/trade-ai")
     public ResponseEntity<String> tradeAI(@RequestBody TradeRequest request)  {
+        throw new UnsupportedOperationException("Endpoint /trade-ai deprecated, utiliser /trade-ai-auto à la place");
+        /*
         CompteEntity compte = compteService.getCompteCredentialsById(request.getId());
         String result = tradeHelper.tradeAI(compte, request.getSymbol());
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(result);*/
     }
 
     /**
      * Effectue un trade automatique via l'IA pour un compte donné, avec analyse GPT optionnelle.
      */
     @PostMapping("/trade-ai-auto")
-    public ResponseEntity<String> tradeAIAuto(@RequestBody TradeAutoRequestGpt request)  {
+    public ResponseEntity<ReponseAuto> tradeAIAuto(@RequestBody TradeAutoRequestGpt request)  {
         CompteEntity compte = compteService.getCompteCredentialsById(request.getId());
         String analyseGpt = request.getAnalyseGpt() != null ? request.getAnalyseGpt() : "";
-        String result = tradeHelper.tradeAIAuto(compte, request.getSymboles(), analyseGpt);
+        ReponseAuto result = tradeHelper.tradeAIAuto(compte, request.getSymboles(), analyseGpt);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/execute-orders")
+    public ResponseEntity<List<OrderRequest>> executeOrders(@RequestBody ExecuteOrdersRequest request) {
+        CompteEntity compte = compteService.getCompteCredentialsById(request.getId());
+        List<OrderRequest> result = tradeHelper.processOrders(compte, request.getIdGpt(), request.getOrders());
         return ResponseEntity.ok(result);
     }
 
@@ -91,11 +100,13 @@ public class TradeController {
     public ResponseEntity<?> getOrders(
             @RequestParam(value = "symbol", required = false) String symbol,
             @RequestParam(value = "cancelable", required = false) Boolean cancelable,
-            @RequestParam(value = "id", required = false) String id) {
+            @RequestParam(value = "id", required = false) String id,
+            @RequestParam(value = "sizeOrders", required = false) Integer sizeOrders) {
         CompteEntity compte = compteService.getCompteCredentialsById(id);
         List<com.app.backend.trade.model.alpaca.Order> orders = alpacaService.getOrders(compte, symbol, cancelable);
         if (orders == null) orders = Collections.emptyList();
-        if (orders.size() > 10) orders = orders.subList(0, 10);
+        int limit = sizeOrders == null ? 10 : sizeOrders;
+        if (orders.size() > limit) orders = orders.subList(0, limit);
         return ResponseEntity.ok(orders);
     }
 
