@@ -44,7 +44,6 @@ const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult, com
     if (!compteId) return;
     setLoading(true);
     try {
-        debugger;
       const res = await fetch('/api/trade/execute-orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

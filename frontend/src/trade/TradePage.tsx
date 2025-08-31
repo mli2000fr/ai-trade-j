@@ -13,7 +13,7 @@ const TRADE_API_URL = '/api/trade/trade';
 
 const TradePage: React.FC = () => {
   const [symbol, setSymbol] = useState('');
-  const [action, setAction] = useState<'buy' | 'sell' | 'trade-ai'>('buy');
+  const [action, setAction] = useState<'buy' | 'sell'>('buy');
   const [quantity, setQuantity] = useState(1);
   const [message, setMessage] = useState('');
   const [portfolio, setPortfolio] = useState<{ positions: any[]; orders: any[]; account?: any } | null>(null);
@@ -106,38 +106,6 @@ const TradePage: React.FC = () => {
     setIsExecuting(true);
     setPollingActive(false);
     try {
-      if (action === 'trade-ai') {
-        const res = await fetch('/api/trade/trade-ai', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ symbol, id: compteId }),
-        });
-        const text = await res.text();
-        const parts = text.split('===');
-        if (parts.length >= 2) {
-          try {
-            const aiJson = JSON.parse(parts[0].trim());
-            console.log('Réponse AI JSON:', aiJson);
-            setAiJsonResult(aiJson);
-            setIdGpt(aiJson.idGpt || aiJson.id || null); // Extraction de l'id GPT
-          } catch {
-            setAiJsonResult(null);
-            setIdGpt(null);
-          }
-          setAiTextResult(parts.slice(1).join('===' ).trim());
-          setMessage('');
-        } else {
-          setAiJsonResult(null);
-          setAiTextResult(null);
-          setIdGpt(null);
-          setMessage(text);
-        }
-        await loadPortfolio(true);
-        await loadOrders();
-        setIsExecuting(false);
-        setPollingActive(true);
-        return;
-      }
       const res = await fetch(TRADE_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

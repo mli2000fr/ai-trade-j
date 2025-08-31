@@ -12,14 +12,14 @@ import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 
 interface TradeManualBlockProps {
-  action: 'buy' | 'sell' | 'trade-ai';
+  action: 'buy' | 'sell';
   symbol: string;
   quantity: number;
   ownedSymbols: string[];
   isExecuting: boolean;
   cancelOpposite: boolean;
   forceDayTrade: boolean;
-  onChangeAction: (action: 'buy' | 'sell' | 'trade-ai') => void;
+  onChangeAction: (action: 'buy' | 'sell') => void;
   onChangeSymbol: (symbol: string) => void;
   onChangeQuantity: (quantity: number) => void;
   onTrade: () => void;
@@ -51,76 +51,51 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
           labelId="action-select-label"
           value={action}
           label="Action"
-          onChange={e => onChangeAction(e.target.value as 'buy' | 'sell' | 'trade-ai')}
+          onChange={e => onChangeAction(e.target.value as 'buy' | 'sell')}
         >
           <MenuItem value="buy">Acheter</MenuItem>
           <MenuItem value="sell">Vendre</MenuItem>
-          <MenuItem value="trade-ai">Trade AI</MenuItem>
         </Select>
       </FormControl>
-      {(action === 'buy' || action === 'trade-ai') ? (
-        <TextField
-          label="Symbole"
-          value={symbol}
-          onChange={e => onChangeSymbol(e.target.value.toUpperCase())}
-          inputProps={{ maxLength: 8 }}
-          size="small"
-          sx={{ minWidth: 120 }}
+      <TextField
+        label="Symbole"
+        value={symbol}
+        onChange={e => onChangeSymbol(e.target.value.toUpperCase())}
+        inputProps={{ maxLength: 8 }}
+        size="small"
+        sx={{ minWidth: 120 }}
+      />
+      <TextField
+        label="Quantité"
+        type="number"
+        inputProps={{ min: 0.01, step: 'any' }}
+        value={quantity}
+        onChange={e => onChangeQuantity(parseFloat(e.target.value))}
+        size="small"
+        sx={{ minWidth: 100 }}
+      />
+      <Box sx={{ width: '100%', display: 'flex', gap: 2, alignItems: 'center', mt: 1 }}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={cancelOpposite}
+              onChange={e => onChangeCancelOpposite(e.target.checked)}
+              color="primary"
+            />
+          }
+          label="cancel opposite"
         />
-      ) : (
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel id="symbol-select-label">Symbole</InputLabel>
-          <Select
-            labelId="symbol-select-label"
-            value={symbol}
-            label="Symbole"
-            onChange={e => onChangeSymbol(e.target.value)}
-          >
-            {ownedSymbols.length === 0 ? (
-              <MenuItem value="">Aucune position</MenuItem>
-            ) : (
-              ownedSymbols.map((sym: string) => (
-                <MenuItem key={sym} value={sym}>{sym}</MenuItem>
-              ))
-            )}
-          </Select>
-        </FormControl>
-      )}
-      {action !== 'trade-ai' && (
-        <>
-          <TextField
-            label="Quantité"
-            type="number"
-            inputProps={{ min: 0.01, step: 'any' }}
-            value={quantity}
-            onChange={e => onChangeQuantity(parseFloat(e.target.value))}
-            size="small"
-            sx={{ minWidth: 100 }}
-          />
-          <Box sx={{ width: '100%', display: 'flex', gap: 2, alignItems: 'center', mt: 1 }}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={cancelOpposite}
-                  onChange={e => onChangeCancelOpposite(e.target.checked)}
-                  color="primary"
-                />
-              }
-              label="cancel opposite"
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={forceDayTrade}
+              onChange={e => onChangeForceDayTrade(e.target.checked)}
+              color="primary"
             />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={forceDayTrade}
-                  onChange={e => onChangeForceDayTrade(e.target.checked)}
-                  color="primary"
-                />
-              }
-              label="force day trade"
-            />
-          </Box>
-        </>
-      )}
+          }
+          label="force day trade"
+        />
+      </Box>
     </Box>
     <Box>
       <Button
