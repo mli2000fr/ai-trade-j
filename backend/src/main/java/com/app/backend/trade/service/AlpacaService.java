@@ -102,28 +102,40 @@ public class AlpacaService {
             body.put("time_in_force", "day");
         }
 
-        // Gestion des différents types d'ordre
-        if (priceLimit != null && (stopLoss == null && takeProfit == null)) {
-            // Ordre limit simple
-            body.put("type", "limit");
-            body.put("limit_price", priceLimit);
-        } else if ((stopLoss != null || takeProfit != null) && qty == Math.floor(qty)) {
-            // Bracket order (seulement si qty entier)
-            body.put("type", "market"); // Alpaca exige type=market pour bracket
-            body.put("order_class", "bracket");
-            if (takeProfit != null) {
-                Map<String, Object> tp = new HashMap<>();
-                tp.put("limit_price", takeProfit);
-                body.put("take_profit", tp);
+        if("sell".equals(side)){
+            if(takeProfit != null){
+                body.put("type", "limit");
+                body.put("limit_price", takeProfit);
+            }else if(stopLoss != null) {
+                body.put("type", "stop");
+                body.put("stop_price", stopLoss);
+            }else{
+                body.put("type", "market");
             }
-            if (stopLoss != null) {
-                Map<String, Object> sl = new HashMap<>();
-                sl.put("stop_price", stopLoss);
-                body.put("stop_loss", sl);
+        }else{
+            // Gestion des différents types d'ordre
+            if (priceLimit != null && (stopLoss == null && takeProfit == null)) {
+                // Ordre limit simple
+                body.put("type", "limit");
+                body.put("limit_price", priceLimit);
+            } else if ((stopLoss != null || takeProfit != null) && qty == Math.floor(qty)) {
+                // Bracket order (seulement si qty entier)
+                body.put("type", "market"); // Alpaca exige type=market pour bracket
+                body.put("order_class", "bracket");
+                if (takeProfit != null) {
+                    Map<String, Object> tp = new HashMap<>();
+                    tp.put("limit_price", takeProfit);
+                    body.put("take_profit", tp);
+                }
+                if (stopLoss != null) {
+                    Map<String, Object> sl = new HashMap<>();
+                    sl.put("stop_price", stopLoss);
+                    body.put("stop_loss", sl);
+                }
+            } else {
+                // Ordre market simple
+                body.put("type", "market");
             }
-        } else {
-            // Ordre market simple
-            body.put("type", "market");
         }
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
@@ -250,7 +262,21 @@ public class AlpacaService {
      * Vend une action pour un compte donné.
      */
     public String sellStock(CompteEntity compte, TradeRequest request) {
-        return placeOrder(compte, request.getSymbol(), request.getQuantity(), "sell", null, null, null, null, request.isCancelOpposite(), request.isForceDayTrade()).toString();
+
+        if(request.getStopLoss() != null || request.getTakeProfit() != null){
+            String resultat = "";
+            if(request.getTakeProfit() != null){
+                Order orderTakeProfit = placeOrder(compte, request.getSymbol(), request.getQuantity(), "sell", null, null, request.getTakeProfit(), null, request.isCancelOpposite(), request.isForceDayTrade());
+                resultat  = resultat + orderTakeProfit.toString();
+            }
+            if(request.getStopLoss() != null){
+                Order orderStopLoss = placeOrder(compte, request.getSymbol(), request.getQuantity(), "sell", null, request.getStopLoss(), null, null, request.isCancelOpposite(), request.isForceDayTrade());
+                resultat  = resultat + orderStopLoss.toString();
+            }
+            return resultat;
+        }else {
+            return placeOrder(compte, request.getSymbol(), request.getQuantity(), "sell", null, null, null, null, request.isCancelOpposite(), request.isForceDayTrade()).toString();
+        }
     }
 
     /**
@@ -284,6 +310,15 @@ public class AlpacaService {
         // Récupérer le montant initial (somme des dépôts/retraits)
         double initialDeposit = getInitialDeposit(compte);
         dto.setInitialDeposit(initialDeposit);
+
+        // Trier les positions par unrealized_plpc décroissant
+        if (dto.getPositions() != null) {
+            dto.getPositions().sort((a, b) -> {
+                Double plpcA = a.get("unrealized_plpc") != null ? Double.valueOf(a.get("unrealized_plpc").toString()) : Double.NEGATIVE_INFINITY;
+                Double plpcB = b.get("unrealized_plpc") != null ? Double.valueOf(b.get("unrealized_plpc").toString()) : Double.NEGATIVE_INFINITY;
+                return plpcB.compareTo(plpcA);
+            });
+        }
 
         return dto;
     }

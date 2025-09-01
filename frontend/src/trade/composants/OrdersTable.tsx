@@ -56,7 +56,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
 }) => {
   const hasCancellable = orders.some(order => order.id && cancellableStatuses.includes(order.status));
   return (
-      <Card sx={{ mb: 3 }}>
+      <Card sx={{ mb: 3, backgroundColor: '#f5f5f5' }}>
             <CardContent>
     <Box sx={{ mb: 3 }}>
       <Typography variant="h6" sx={{ mb: 2 }}>Ordres récents</Typography>
@@ -112,12 +112,14 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Side</TableCell>
-                <TableCell>Symbole</TableCell>
-                <TableCell>Quantité</TableCell>
-                <TableCell>Prix</TableCell>
-                <TableCell>Statut</TableCell>
-                {hasCancellable && <TableCell />}
+                <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Side</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Quantité</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Prix</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stop-loss</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Take-profit</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Statut</TableCell>
+                {hasCancellable && <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }} />}
               </TableRow>
             </TableHead>
             <TableBody>
@@ -140,6 +142,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                     <TableCell>{order.symbol}</TableCell>
                     <TableCell>{order.qty}</TableCell>
                     <TableCell>{order.filledAvgPrice !== undefined && order.filledAvgPrice !== null ? Number(order.filledAvgPrice).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : (order.limit_price !== undefined && order.limit_price !== null ? Number(order.limit_price).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : '-')}</TableCell>
+                    <TableCell>{order.stopPrice !== undefined && order.stopPrice !== null ? Number(order.stopPrice).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : '-'}</TableCell>
+                    <TableCell>{order.limitPrice !== undefined && order.limitPrice !== null ? Number(order.limitPrice).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : '-'}</TableCell>
                     <TableCell>{order.status}</TableCell>
                     {hasCancellable && (
                       <TableCell>

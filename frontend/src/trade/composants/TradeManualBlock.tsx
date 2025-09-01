@@ -54,7 +54,7 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
   onChangeTakeProfit,
   message
 }) => (
-  <Box sx={{ mb: 3, p: 2, border: '1px solid #eee', borderRadius: 2 }}>
+  <Box sx={{ mb: 3, p: 2, border: '1px solid #eee', borderRadius: 2, backgroundColor: '#f5f5f5' }}>
     <Typography variant="h6" sx={{ mb: 2 }}>Trade Manuel</Typography>
     <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap', mb: 2 }}>
       <FormControl size="small" sx={{ minWidth: 120 }}>
@@ -69,14 +69,34 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
           <MenuItem value="sell">Vendre</MenuItem>
         </Select>
       </FormControl>
-      <TextField
-        label="Symbole"
-        value={symbol}
-        onChange={e => onChangeSymbol(e.target.value.toUpperCase())}
-        inputProps={{ maxLength: 8 }}
-        size="small"
-        sx={{ minWidth: 120 }}
-      />
+      {action === 'sell' ? (
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <InputLabel id="symbol-select-label">Symbole</InputLabel>
+          <Select
+            labelId="symbol-select-label"
+            value={symbol}
+            label="Symbole"
+            onChange={e => onChangeSymbol(e.target.value as string)}
+          >
+            {ownedSymbols.length === 0 ? (
+              <MenuItem value="" disabled>Aucune position</MenuItem>
+            ) : (
+              ownedSymbols.map((s) => (
+                <MenuItem key={s} value={s}>{s}</MenuItem>
+              ))
+            )}
+          </Select>
+        </FormControl>
+      ) : (
+        <TextField
+          label="Symbole"
+          value={symbol}
+          onChange={e => onChangeSymbol(e.target.value.toUpperCase())}
+          inputProps={{ maxLength: 8 }}
+          size="small"
+          sx={{ minWidth: 120 }}
+        />
+      )}
       <TextField
         label="Quantité"
         type="number"
@@ -84,31 +104,26 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
         value={quantity}
         onChange={e => onChangeQuantity(parseFloat(e.target.value))}
         size="small"
-        sx={{ minWidth: 100 }}
+        sx={{ minWidth: 50 }}
       />
-      {/* Inputs conditionnels pour stop-loss et take-profit */}
-      {action === 'buy' && (
-        <>
-          <TextField
-            label="Stop-Loss"
-            type="number"
-            inputProps={{ min: 0, step: 'any' }}
-            value={stopLoss}
-            onChange={e => onChangeStopLoss(e.target.value === '' ? '' : parseFloat(e.target.value))}
-            size="small"
-            sx={{ minWidth: 120 }}
-          />
-          <TextField
-            label="Take-Profit"
-            type="number"
-            inputProps={{ min: 0, step: 'any' }}
-            value={takeProfit}
-            onChange={e => onChangeTakeProfit(e.target.value === '' ? '' : parseFloat(e.target.value))}
-            size="small"
-            sx={{ minWidth: 120 }}
-          />
-        </>
-      )}
+      <TextField
+        label="Stop-Loss"
+        type="number"
+        inputProps={{ min: 0, step: 'any' }}
+        value={stopLoss}
+        onChange={e => onChangeStopLoss(e.target.value === '' ? '' : parseFloat(e.target.value))}
+        size="small"
+        sx={{ minWidth: 120 }}
+      />
+      <TextField
+        label="Take-Profit"
+        type="number"
+        inputProps={{ min: 0, step: 'any' }}
+        value={takeProfit}
+        onChange={e => onChangeTakeProfit(e.target.value === '' ? '' : parseFloat(e.target.value))}
+        size="small"
+        sx={{ minWidth: 120 }}
+      />
       <Box sx={{ width: '100%', display: 'flex', gap: 2, alignItems: 'center', mt: 1 }}>
         <FormControlLabel
           control={
@@ -132,7 +147,7 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
         />
       </Box>
     </Box>
-    <Box>
+    <Box sx={{ display: 'flex', justifyContent: 'center' }}>
       <Button
         onClick={onTrade}
         disabled={disabled || isExecuting || !symbol || quantity <= 0}

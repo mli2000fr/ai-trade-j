@@ -164,25 +164,6 @@ public class TradeHelper {
     }
 
     /**
-     * Parse et exécute l'ordre retourné par l'IA (mode simple).
-     */
-    private String processAIOrder(String idGpt, String message, CompteEntity compte) {
-        String[] parts = message != null ? message.split("===") : new String[0];
-        String responseOrder = parts.length > 0 ? parts[0].trim() : "";
-        try {
-            OrderRequest order = new Gson().fromJson(responseOrder, OrderRequest.class);
-            order.normalize();
-            if (isOrderValid(order)) {
-                boolean isSell = "sell".equals(order.side);
-                alpacaService.placeOrder(compte, order.symbol, order.qty, order.side, isSell ? null : order.priceLimit, isSell ? null : order.stopLoss, isSell ? null : order.takeProfit, idGpt, false, false);
-            }
-        } catch (Exception e) {
-            return "Erreur de parsing de l'ordre : " + e.getMessage();
-        }
-        return message;
-    }
-
-    /**
      * Vérifie la validité d'un objet OrderRequest.
      */
     private boolean isOrderValid(OrderRequest order) {

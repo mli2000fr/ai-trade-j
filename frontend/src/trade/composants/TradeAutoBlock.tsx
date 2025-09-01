@@ -25,7 +25,7 @@ interface TradeAutoBlockProps {
 const TradeAutoBlock: React.FC<TradeAutoBlockProps> = ({ autoSymbols, isExecuting, disabled, onChange, onTrade, analyseGptText, onAnalyseGptChange, message, aiJsonResult, aiTextResult, compteId, onOrdersUpdate, idGpt }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   return (
-    <Box sx={{ mb: 3, p: 2, border: '1px solid #eee', borderRadius: 2 }}>
+    <Box sx={{ mb: 3, p: 2, border: '1px solid #eee', borderRadius: 2, backgroundColor: '#f5f5f5' }}>
       <Typography variant="h6" sx={{ mb: 2 }}>Trade Auto</Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
         <TextField
@@ -65,7 +65,7 @@ const TradeAutoBlock: React.FC<TradeAutoBlockProps> = ({ autoSymbols, isExecutin
           <Typography variant="caption" color="success.main">Fichier chargé</Typography>
         )}
       </Box>
-      <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 2 }}>
         <Button
           onClick={onTrade}
           disabled={disabled || isExecuting || !autoSymbols.trim()}

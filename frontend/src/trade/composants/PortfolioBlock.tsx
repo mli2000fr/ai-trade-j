@@ -25,7 +25,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
   const plPercent = initialDeposit !== undefined && initialDeposit !== 0 && !isNaN(initialDeposit) && equity !== undefined && !isNaN(equity) ? ((equity - initialDeposit) / initialDeposit) * 100 : undefined;
 
   return (
-    <Card sx={{ mb: 3 }}>
+    <Card sx={{ mb: 3, backgroundColor: '#f5f5f5' }}>
       <CardContent>
         <Typography variant="h5" gutterBottom>Mon portefeuille</Typography>
         {lastUpdate && (
@@ -116,13 +116,13 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Symbole</TableCell>
-                      <TableCell>Prix d'achat</TableCell>
-                      <TableCell>Prix actuel</TableCell>
-                      <TableCell>Quantité</TableCell>
-                      <TableCell>Total</TableCell>
-                      <TableCell>P & L pc</TableCell>
-                      <TableCell>P & L</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Prix d'achat</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Prix actuel</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Quantité</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Total</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>P & L pc</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>P & L</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>

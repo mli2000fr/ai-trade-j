@@ -116,7 +116,7 @@ const TradePage: React.FC = () => {
       const res = await fetch(TRADE_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol, action, quantity, id: compteId, cancelOpposite, forceDayTrade, stopLoss: action === 'buy' ? stopLoss || null : null, takeProfit: action === 'buy' ? takeProfit || null : null }),
+        body: JSON.stringify({ symbol, action, quantity, id: compteId, cancelOpposite, forceDayTrade, stopLoss, takeProfit }),
       });
       const text = await res.text();
       setMessageManual(text);
