@@ -1,4 +1,6 @@
 import React from 'react';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -49,6 +51,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
 }) => {
   const hasCancellable = orders.some(order => order.id && cancellableStatuses.includes(order.status));
   return (
+      <Card sx={{ mb: 3 }}>
+            <CardContent>
     <Box sx={{ mb: 3 }}>
       <Box sx={{ fontWeight: 'bold', mb: 1 }}>Ordres récents&nbsp;:</Box>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2, flexWrap: 'wrap' }}>
@@ -153,6 +157,9 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
         </TableContainer>
       )}
     </Box>
+
+      </CardContent>
+    </Card>
   );
 };
 
