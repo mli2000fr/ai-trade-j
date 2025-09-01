@@ -3,6 +3,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
+import Typography from '@mui/material/Typography';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
@@ -58,7 +59,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
       <Card sx={{ mb: 3 }}>
             <CardContent>
     <Box sx={{ mb: 3 }}>
-      <Box sx={{ fontWeight: 'bold', mb: 1 }}>Ordres récents&nbsp;:</Box>
+      <Typography variant="h6" sx={{ mb: 2 }}>Ordres récents</Typography>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2, flexWrap: 'wrap' }}>
         <FormControl size="small" sx={{ minWidth: 120 }}>
           <InputLabel id="filter-symbol-label">Symbole</InputLabel>
