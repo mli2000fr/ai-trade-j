@@ -32,6 +32,7 @@ interface TradeManualBlockProps {
   onChangeTakeProfit: (value: number | '') => void;
   message?: string;
   positions: { symbol: string; qty: number }[];
+  quantiteMaxResetTrigger?: number;
 }
 
 const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
@@ -54,9 +55,15 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
   onChangeStopLoss,
   onChangeTakeProfit,
   message,
-  positions
+  positions,
+  quantiteMaxResetTrigger
 }) => {
   const [quantiteMaxActive, setQuantiteMaxActive] = React.useState(false);
+
+  // Reset la case quantité max si le trigger change
+  React.useEffect(() => {
+    setQuantiteMaxActive(false);
+  }, [quantiteMaxResetTrigger]);
 
   React.useEffect(() => {
     if (quantiteMaxActive && action === 'sell') {

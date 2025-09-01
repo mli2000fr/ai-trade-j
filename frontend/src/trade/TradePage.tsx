@@ -263,11 +263,23 @@ const TradePage: React.FC = () => {
   const [stopLoss, setStopLoss] = useState<number | ''>('');
   const [takeProfit, setTakeProfit] = useState<number | ''>('');
 
+  // Ajout d'un trigger pour reset la case quantité max
+  const [quantiteMaxResetTrigger, setQuantiteMaxResetTrigger] = useState(0);
+
   // Réinitialiser stopLoss et takeProfit quand on change d'action
   useEffect(() => {
     setStopLoss('');
     setTakeProfit('');
   }, [action]);
+
+  // Fonction pour changer l'action et réinitialiser la quantité + décocher toutes les cases à cocher
+  const handleChangeAction = (newAction: 'buy' | 'sell') => {
+    setAction(newAction);
+    setQuantity(0);
+    setCancelOpposite(false);
+    setForceDayTrade(false);
+    setQuantiteMaxResetTrigger(t => t + 1);
+  };
 
   return (
     <Box sx={{ maxWidth: 1100, mx: 'auto', p: { xs: 1, sm: 2, md: 3 } }}>
@@ -315,7 +327,7 @@ const TradePage: React.FC = () => {
         disabled={isExecutingAuto || cancellingOrderId !== null}
         cancelOpposite={cancelOpposite}
         forceDayTrade={forceDayTrade}
-        onChangeAction={setAction}
+        onChangeAction={handleChangeAction}
         onChangeSymbol={setSymbol}
         onChangeQuantity={setQuantity}
         onTrade={handleTrade}
@@ -327,6 +339,7 @@ const TradePage: React.FC = () => {
         onChangeTakeProfit={setTakeProfit}
         message={messageManual}
         positions={portfolio?.positions || []}
+        quantiteMaxResetTrigger={quantiteMaxResetTrigger}
       />
       {/* Bloc trade auto */}
       <TradeAutoBlock
