@@ -100,7 +100,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
           <Box component="span">Annulables uniquement</Box>
         </FormControl>
         <Button onClick={onUpdate} disabled={loading} variant="contained" size="small">
-          {loading ? <CircularProgress size={18} /> : 'Update'}
+          Update
         </Button>
       </Box>
       {orders.length === 0 && !loading ? (
@@ -121,42 +121,44 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
               </TableRow>
             </TableHead>
             <TableBody>
-              {orders.map((order, i) => (
-                <TableRow
-                  key={i}
-                  sx={{
-                    backgroundColor:
-                      order.statut === 'FAILED_DAYTRADE' || order.statut === 'FAILED'
-                        ? '#ffcccc' // rouge clair si statut FAILED_DAYTRADE ou FAILED
-                        : order.side === 'buy'
-                        ? '#e3f2fd'
-                        : order.side === 'sell'
-                        ? '#ffebee'
-                        : undefined
-                  }}
-                >
-                  <TableCell>{order.side}</TableCell>
-                  <TableCell>{order.symbol}</TableCell>
-                  <TableCell>{order.qty}</TableCell>
-                  <TableCell>{order.filledAvgPrice !== undefined && order.filledAvgPrice !== null ? Number(order.filledAvgPrice).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : (order.limit_price !== undefined && order.limit_price !== null ? Number(order.limit_price).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : '-')}</TableCell>
-                  <TableCell>{order.status}</TableCell>
-                  {hasCancellable && (
-                    <TableCell>
-                      {order.id && cancellableStatuses.includes(order.status) && (
-                        <Button
-                          variant="outlined"
-                          color="error"
-                          size="small"
-                          disabled={disabled || cancellingOrderId === order.id}
-                          onClick={() => onCancel(order.id)}
-                        >
-                          {cancellingOrderId === order.id ? <CircularProgress size={16} /> : 'Annuler'}
-                        </Button>
-                      )}
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
+              {orders.map((order, i) => {
+                let bgColor = undefined;
+                // On garde la couleur de fond mais on retire la couleur de texte
+                if (order.statut === 'FAILED_DAYTRADE' || order.statut === 'FAILED') {
+                  bgColor = 'rgba(244, 67, 54, 0.08)';
+                } else if (order.side === 'buy') {
+                  bgColor = 'rgba(76, 175, 80, 0.08)';
+                } else if (order.side === 'sell') {
+                  bgColor = 'rgba(244, 67, 54, 0.08)';
+                }
+                return (
+                  <TableRow
+                    key={i}
+                    sx={{ backgroundColor: bgColor }}
+                  >
+                    <TableCell>{order.side}</TableCell>
+                    <TableCell>{order.symbol}</TableCell>
+                    <TableCell>{order.qty}</TableCell>
+                    <TableCell>{order.filledAvgPrice !== undefined && order.filledAvgPrice !== null ? Number(order.filledAvgPrice).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : (order.limit_price !== undefined && order.limit_price !== null ? Number(order.limit_price).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : '-')}</TableCell>
+                    <TableCell>{order.status}</TableCell>
+                    {hasCancellable && (
+                      <TableCell>
+                        {order.id && cancellableStatuses.includes(order.status) && (
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            size="small"
+                            disabled={disabled || cancellingOrderId === order.id}
+                            onClick={() => onCancel(order.id)}
+                          >
+                            {cancellingOrderId === order.id ? <CircularProgress size={16} /> : 'Annuler'}
+                          </Button>
+                        )}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
