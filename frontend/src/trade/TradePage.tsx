@@ -248,6 +248,12 @@ const TradePage: React.FC = () => {
   const [stopLoss, setStopLoss] = useState<number | ''>('');
   const [takeProfit, setTakeProfit] = useState<number | ''>('');
 
+  // Réinitialiser stopLoss et takeProfit quand on change d'action
+  useEffect(() => {
+    setStopLoss('');
+    setTakeProfit('');
+  }, [action]);
+
   return (
     <Box sx={{ maxWidth: 1100, mx: 'auto', p: { xs: 1, sm: 2, md: 3 } }}>
       {/* Alerte compte réel */}
