@@ -6,7 +6,6 @@ import PortfolioBlock from './composants/PortfolioBlock';
 import TradeAutoBlock from './composants/TradeAutoBlock';
 import TradeManualBlock from './composants/TradeManualBlock';
 import OrdersTable from './composants/OrdersTable';
-import TradeAIResults from './composants/TradeAIResults';
 import Box from '@mui/material/Box';
 
 const TRADE_API_URL = '/api/trade/trade';
@@ -15,11 +14,9 @@ const TradePage: React.FC = () => {
   const [symbol, setSymbol] = useState('');
   const [action, setAction] = useState<'buy' | 'sell'>('buy');
   const [quantity, setQuantity] = useState(1);
-  const [message, setMessage] = useState('');
   const [portfolio, setPortfolio] = useState<{ positions: any[]; orders: any[]; account?: any } | null>(null);
   const [portfolioLoading, setPortfolioLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [isExecuting, setIsExecuting] = useState(false);
   const [pollingActive, setPollingActive] = useState(true);
   const [aiJsonResult, setAiJsonResult] = useState<any | null>(null);
   const [aiTextResult, setAiTextResult] = useState<string | null>(null);
@@ -88,7 +85,6 @@ const TradePage: React.FC = () => {
       loadOrders();
       setAiJsonResult(null); // Vider le bloc Résultat AI
       setAiTextResult(null); // Vider le bloc Résultat AI
-      setMessage(''); // Vider le message
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCompteId]);
@@ -99,11 +95,22 @@ const TradePage: React.FC = () => {
   }, [portfolio]);
 
   // Soumission du trade
+  const [messageManual, setMessageManual] = useState('');
+  const [messageAuto, setMessageAuto] = useState('');
+  const [messageCancel, setMessageCancel] = useState('');
+
+  const [isExecutingManual, setIsExecutingManual] = useState(false);
+  const [isExecutingAuto, setIsExecutingAuto] = useState(false);
+
   const handleTrade = async () => {
-    setMessage('');
+    setMessageManual('');
+    setMessageAuto('');
+    setMessageCancel('');
     setAiJsonResult(null);
     setAiTextResult(null);
-    setIsExecuting(true);
+    setIdGpt(null);
+    setIsExecutingManual(true);
+    setIsExecutingAuto(false);
     setPollingActive(false);
     try {
       const res = await fetch(TRADE_API_URL, {
@@ -112,7 +119,7 @@ const TradePage: React.FC = () => {
         body: JSON.stringify({ symbol, action, quantity, id: compteId, cancelOpposite, forceDayTrade, stopLoss: action === 'buy' ? stopLoss || null : null, takeProfit: action === 'buy' ? takeProfit || null : null }),
       });
       const text = await res.text();
-      setMessage(text);
+      setMessageManual(text);
       setAiJsonResult(null);
       setAiTextResult(null);
       setCancelOpposite(false);
@@ -122,11 +129,12 @@ const TradePage: React.FC = () => {
       await loadPortfolio(true);
       await loadOrders();
     } catch (e) {
-      setMessage('Erreur lors de la transaction');
+      setMessageManual('Erreur lors de la transaction');
       setAiJsonResult(null);
       setAiTextResult(null);
+      setIdGpt(null);
     } finally {
-      setIsExecuting(false);
+      setIsExecutingManual(false);
       setPollingActive(true);
     }
   };
@@ -137,10 +145,11 @@ const TradePage: React.FC = () => {
 
   // Soumission du trade auto
   const handleTradeAuto = async () => {
-    setMessage('');
-    setAiJsonResult(null);
-    setAiTextResult(null);
-    setIsExecuting(true);
+    setMessageManual('');
+    setMessageAuto('');
+    setMessageCancel('');
+    setIsExecutingAuto(true);
+    setIsExecutingManual(false);
     setPollingActive(false);
     try {
       const symboles = autoSymbols.split(',').map(s => s.trim()).filter(Boolean);
@@ -161,16 +170,17 @@ const TradePage: React.FC = () => {
       const data = await res.json();
       setAiJsonResult(data.orders || null);
       setAiTextResult(data.analyseGpt || null);
-      setIdGpt(data.idGpt || data.id || null); // Extraction de l'id GPT pour le trade auto
-      setMessage('');
+      setIdGpt(data.idGpt || data.id || null);
+      setMessageAuto('Trade auto exécuté avec succès');
       await loadPortfolio(true);
       await loadOrders();
     } catch (e) {
-      setMessage('Erreur lors de la transaction auto');
+      setMessageAuto('Erreur lors de la transaction auto');
       setAiJsonResult(null);
       setAiTextResult(null);
+      setIdGpt(null);
     } finally {
-      setIsExecuting(false);
+      setIsExecutingAuto(false);
       setPollingActive(true);
     }
   };
@@ -183,21 +193,26 @@ const TradePage: React.FC = () => {
 
   // Annulation d'un ordre
   const handleCancelOrder = async (orderId: string) => {
+    setMessageManual('');
+    setMessageAuto('');
+    setMessageCancel('');
+    setAiJsonResult(null);
+    setAiTextResult(null);
+    setIdGpt(null);
     setCancellingOrderId(orderId);
-    setMessage('');
     try {
       const res = await fetch(`/api/trade/order/cancel/${compteId}/${orderId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
       const text = await res.text();
-      setMessage(text || 'Ordre annulé.');
+      setMessageCancel(text || 'Ordre annulé.');
       // Rafraîchir le portefeuille après annulation
       await loadPortfolio();
       // Rafraîchir le tableau des ordres après annulation
       await loadOrders();
     } catch (e) {
-      setMessage('Erreur lors de l\'annulation de l\'ordre.');
+      setMessageCancel('Erreur lors de l\'annulation de l\'ordre.');
     }
     setCancellingOrderId(null);
   };
@@ -283,19 +298,12 @@ const TradePage: React.FC = () => {
         onUpdate={loadOrders}
         onCancel={handleCancelOrder}
         cancellingOrderId={cancellingOrderId}
+        disabled={isExecutingManual || isExecutingAuto}
         cancellableStatuses={cancellableStatuses}
         positions={portfolio?.positions || []}
         ordersSize={ordersSize}
         onOrdersSizeChange={setOrdersSize}
-      />
-      {/* Bloc trade auto */}
-      <TradeAutoBlock
-        autoSymbols={autoSymbols}
-        isExecuting={isExecuting}
-        onChange={setAutoSymbols}
-        onTrade={handleTradeAuto}
-        analyseGptText={analyseGptText}
-        onAnalyseGptChange={setAnalyseGptText}
+        cancelMessage={messageCancel}
       />
       {/* Bloc trade manuel */}
       <TradeManualBlock
@@ -303,7 +311,8 @@ const TradePage: React.FC = () => {
         symbol={symbol}
         quantity={quantity}
         ownedSymbols={ownedSymbols}
-        isExecuting={isExecuting}
+        isExecuting={isExecutingManual}
+        disabled={isExecutingAuto || cancellingOrderId !== null}
         cancelOpposite={cancelOpposite}
         forceDayTrade={forceDayTrade}
         onChangeAction={setAction}
@@ -316,12 +325,20 @@ const TradePage: React.FC = () => {
         takeProfit={takeProfit}
         onChangeStopLoss={setStopLoss}
         onChangeTakeProfit={setTakeProfit}
+        message={messageManual}
       />
-      {/* Résultats AI et messages */}
-      <TradeAIResults
+      {/* Bloc trade auto */}
+      <TradeAutoBlock
+        autoSymbols={autoSymbols}
+        isExecuting={isExecutingAuto}
+        disabled={isExecutingManual || cancellingOrderId !== null}
+        onChange={setAutoSymbols}
+        onTrade={handleTradeAuto}
+        analyseGptText={analyseGptText}
+        onAnalyseGptChange={setAnalyseGptText}
+        message={messageAuto}
         aiJsonResult={aiJsonResult}
         aiTextResult={aiTextResult}
-        message={message}
         compteId={compteId}
         onOrdersUpdate={async () => {
           await loadPortfolio(true);

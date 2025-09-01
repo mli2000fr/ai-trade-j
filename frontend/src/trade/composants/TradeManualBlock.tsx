@@ -17,6 +17,7 @@ interface TradeManualBlockProps {
   quantity: number;
   ownedSymbols: string[];
   isExecuting: boolean;
+  disabled?: boolean;
   cancelOpposite: boolean;
   forceDayTrade: boolean;
   onChangeAction: (action: 'buy' | 'sell') => void;
@@ -29,6 +30,7 @@ interface TradeManualBlockProps {
   takeProfit: number | '';
   onChangeStopLoss: (value: number | '') => void;
   onChangeTakeProfit: (value: number | '') => void;
+  message?: string;
 }
 
 const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
@@ -37,6 +39,7 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
   quantity,
   ownedSymbols,
   isExecuting,
+  disabled,
   cancelOpposite,
   forceDayTrade,
   onChangeAction,
@@ -48,7 +51,8 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
   stopLoss,
   takeProfit,
   onChangeStopLoss,
-  onChangeTakeProfit
+  onChangeTakeProfit,
+  message
 }) => (
   <Box sx={{ mb: 3, p: 2, border: '1px solid #eee', borderRadius: 2 }}>
     <Typography variant="h6" sx={{ mb: 2 }}>Trade Manuel</Typography>
@@ -131,7 +135,7 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
     <Box>
       <Button
         onClick={onTrade}
-        disabled={isExecuting}
+        disabled={disabled || isExecuting || !symbol || quantity <= 0}
         variant="contained"
         size="large"
       >
@@ -139,6 +143,11 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
         {isExecuting ? 'Exécution...' : 'Exécuter'}
       </Button>
     </Box>
+    {message && (
+      <Typography variant="body2" color={message.toLowerCase().includes('erreur') ? 'error' : 'success.main'} sx={{ mt: 2 }}>
+        {message}
+      </Typography>
+    )}
   </Box>
 );
 

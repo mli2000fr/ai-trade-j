@@ -32,6 +32,8 @@ interface OrdersTableProps {
   positions: any[];
   ordersSize: number;
   onOrdersSizeChange: (size: number) => void;
+  cancelMessage?: string;
+  disabled?: boolean;
 }
 
 const OrdersTable: React.FC<OrdersTableProps> = ({
@@ -47,7 +49,9 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
   cancellableStatuses,
   positions,
   ordersSize,
-  onOrdersSizeChange
+  onOrdersSizeChange,
+  cancelMessage,
+  disabled
 }) => {
   const hasCancellable = orders.some(order => order.id && cancellableStatuses.includes(order.status));
   return (
@@ -142,7 +146,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                           variant="outlined"
                           color="error"
                           size="small"
-                          disabled={cancellingOrderId === order.id}
+                          disabled={disabled || cancellingOrderId === order.id}
                           onClick={() => onCancel(order.id)}
                         >
                           {cancellingOrderId === order.id ? <CircularProgress size={16} /> : 'Annuler'}
@@ -155,6 +159,11 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
             </TableBody>
           </Table>
         </TableContainer>
+      )}
+      {cancelMessage && (
+        <Box sx={{ mt: 2 }}>
+          <Alert severity={cancelMessage.toLowerCase().includes('erreur') ? 'error' : 'success'}>{cancelMessage}</Alert>
+        </Box>
       )}
     </Box>
 
