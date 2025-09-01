@@ -1,14 +1,15 @@
 package com.app.backend.trade.model;
 
-
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
-import lombok.Setter;
 import lombok.ToString;
 
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
-@Setter
-@Getter
 @ToString
 public class OrderRequest {
     public String symbol;
@@ -35,4 +36,3 @@ public class OrderRequest {
         if (takeProfit == null && take_profit != null) takeProfit = take_profit;
     }
 }
-

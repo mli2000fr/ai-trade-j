@@ -1,14 +1,16 @@
 package com.app.backend.trade.model;
 
 import com.google.gson.annotations.SerializedName;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.ToString;
 
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
-@Setter
-@Getter
 @ToString
 public class Position {
 
@@ -18,11 +20,4 @@ public class Position {
     private double costBasis;
     @SerializedName("market_Value")
     private double marketValue;
-
-    public Position(String symbol, int quantity, double costBasis, double marketValue) {
-        this.symbol = symbol;
-        this.quantity = quantity;
-        this.costBasis = costBasis;
-        this.marketValue = marketValue;
-    }
 }

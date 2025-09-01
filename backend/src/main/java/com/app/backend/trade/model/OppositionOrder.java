@@ -1,16 +1,17 @@
 package com.app.backend.trade.model;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.ToString;
 
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
-@Setter
-@Getter
 @ToString
 public class OppositionOrder {
-
     private boolean oppositionFilled;
     private boolean oppositionActived;
 

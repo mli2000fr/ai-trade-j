@@ -13,7 +13,7 @@ const TRADE_API_URL = '/api/trade/trade';
 
 const TradePage: React.FC = () => {
   const [symbol, setSymbol] = useState('');
-  const [action, setAction] = useState<'buy' | 'sell' | 'trade-ai'>('buy');
+  const [action, setAction] = useState<'buy' | 'sell'>('buy');
   const [quantity, setQuantity] = useState(1);
   const [message, setMessage] = useState('');
   const [portfolio, setPortfolio] = useState<{ positions: any[]; orders: any[]; account?: any } | null>(null);
@@ -106,42 +106,10 @@ const TradePage: React.FC = () => {
     setIsExecuting(true);
     setPollingActive(false);
     try {
-      if (action === 'trade-ai') {
-        const res = await fetch('/api/trade/trade-ai', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ symbol, id: compteId }),
-        });
-        const text = await res.text();
-        const parts = text.split('===');
-        if (parts.length >= 2) {
-          try {
-            const aiJson = JSON.parse(parts[0].trim());
-            console.log('Réponse AI JSON:', aiJson);
-            setAiJsonResult(aiJson);
-            setIdGpt(aiJson.idGpt || aiJson.id || null); // Extraction de l'id GPT
-          } catch {
-            setAiJsonResult(null);
-            setIdGpt(null);
-          }
-          setAiTextResult(parts.slice(1).join('===' ).trim());
-          setMessage('');
-        } else {
-          setAiJsonResult(null);
-          setAiTextResult(null);
-          setIdGpt(null);
-          setMessage(text);
-        }
-        await loadPortfolio(true);
-        await loadOrders();
-        setIsExecuting(false);
-        setPollingActive(true);
-        return;
-      }
       const res = await fetch(TRADE_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol, action, quantity, id: compteId, cancelOpposite, forceDayTrade }),
+        body: JSON.stringify({ symbol, action, quantity, id: compteId, cancelOpposite, forceDayTrade, stopLoss: action === 'buy' ? stopLoss || null : null, takeProfit: action === 'buy' ? takeProfit || null : null }),
       });
       const text = await res.text();
       setMessage(text);
@@ -149,6 +117,8 @@ const TradePage: React.FC = () => {
       setAiTextResult(null);
       setCancelOpposite(false);
       setForceDayTrade(false);
+      setStopLoss('');
+      setTakeProfit('');
       await loadPortfolio(true);
       await loadOrders();
     } catch (e) {
@@ -275,6 +245,14 @@ const TradePage: React.FC = () => {
   // Etat pour gérer la case à cocher 'cancel opposite'
   const [cancelOpposite, setCancelOpposite] = useState(false);
   const [forceDayTrade, setForceDayTrade] = useState(false);
+  const [stopLoss, setStopLoss] = useState<number | ''>('');
+  const [takeProfit, setTakeProfit] = useState<number | ''>('');
+
+  // Réinitialiser stopLoss et takeProfit quand on change d'action
+  useEffect(() => {
+    setStopLoss('');
+    setTakeProfit('');
+  }, [action]);
 
   return (
     <Box sx={{ maxWidth: 1100, mx: 'auto', p: { xs: 1, sm: 2, md: 3 } }}>
@@ -334,6 +312,10 @@ const TradePage: React.FC = () => {
         onTrade={handleTrade}
         onChangeCancelOpposite={setCancelOpposite}
         onChangeForceDayTrade={setForceDayTrade}
+        stopLoss={stopLoss}
+        takeProfit={takeProfit}
+        onChangeStopLoss={setStopLoss}
+        onChangeTakeProfit={setTakeProfit}
       />
       {/* Résultats AI et messages */}
       <TradeAIResults

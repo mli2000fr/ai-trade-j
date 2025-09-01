@@ -1,8 +1,14 @@
 package com.app.backend.trade.model;
 
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 @Entity
 @Table(name = "gpt")
 public class GptEntity {
@@ -22,31 +28,11 @@ public class GptEntity {
     @Column(columnDefinition = "TEXT")
     private String idCompte;
 
-    // Constructeurs
-    public GptEntity() {}
+    // Constructeur personnalisé utilisé dans ChatGptService
     public GptEntity(String idCompte, LocalDateTime date, String prompt, String reponse) {
         this.idCompte = idCompte;
         this.date = date;
         this.prompt = prompt;
         this.reponse = reponse;
     }
-
-    // Getters et setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-    public LocalDateTime getDate() { return date; }
-    public void setDate(LocalDateTime date) { this.date = date; }
-    public String getPrompt() { return prompt; }
-    public void setPrompt(String prompt) { this.prompt = prompt; }
-    public String getReponse() { return reponse; }
-    public void setReponse(String reponse) { this.reponse = reponse; }
-
-    public String getIdCompte() {
-        return idCompte;
-    }
-
-    public void setIdCompte(String idCompte) {
-        this.idCompte = idCompte;
-    }
 }
-

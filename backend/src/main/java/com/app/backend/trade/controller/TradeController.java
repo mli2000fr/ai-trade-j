@@ -64,18 +64,6 @@ public class TradeController {
     }
 
     /**
-     * Effectue un trade via l'IA pour un compte donné.
-     */
-    @PostMapping("/trade-ai")
-    public ResponseEntity<String> tradeAI(@RequestBody TradeRequest request)  {
-        throw new UnsupportedOperationException("Endpoint /trade-ai deprecated, utiliser /trade-ai-auto à la place");
-        /*
-        CompteEntity compte = compteService.getCompteCredentialsById(request.getId());
-        String result = tradeHelper.tradeAI(compte, request.getSymbol());
-        return ResponseEntity.ok(result);*/
-    }
-
-    /**
      * Effectue un trade automatique via l'IA pour un compte donné, avec analyse GPT optionnelle.
      */
     @PostMapping("/trade-ai-auto")

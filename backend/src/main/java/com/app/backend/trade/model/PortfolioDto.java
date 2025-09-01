@@ -1,42 +1,17 @@
 package com.app.backend.trade.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.util.List;
 import java.util.Map;
 
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class PortfolioDto {
     private List<Map<String, Object>> positions;
     private Map<String, Object> account;
     private double initialDeposit;
-
-    public PortfolioDto() {}
-
-    public PortfolioDto(List<Map<String, Object>> positions, Map<String, Object> account, double initialDeposit) {
-        this.positions = positions;
-        this.account = account;
-        this.initialDeposit = initialDeposit;
-    }
-
-    public List<Map<String, Object>> getPositions() {
-        return positions;
-    }
-
-    public void setPositions(List<Map<String, Object>> positions) {
-        this.positions = positions;
-    }
-
-    public Map<String, Object> getAccount() {
-        return account;
-    }
-
-    public void setAccount(Map<String, Object> account) {
-        this.account = account;
-    }
-
-    public double getInitialDeposit() {
-        return initialDeposit;
-    }
-
-    public void setInitialDeposit(double initialDeposit) {
-        this.initialDeposit = initialDeposit;
-    }
 }

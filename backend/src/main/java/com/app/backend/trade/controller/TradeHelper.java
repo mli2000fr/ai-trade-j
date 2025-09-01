@@ -117,26 +117,6 @@ public class TradeHelper {
     }
 
     /**
-     * Exécute un trade IA sur un symbole donné.
-     * @param compte compte utilisateur
-     * @param symbol symbole à trader
-     * @return message de retour de l'IA ou erreur
-     */
-    public String tradeAI(CompteEntity compte, String symbol)  {
-        String promptTemplate = TradeUtils.readResourceFile("prompt/prompt_trade.txt");
-        InfosAction infosAction = this.getInfosAction(compte, symbol, true);
-        Map<String, Object> variables = getStringObjectMap(infosAction);
-        String prompt = getPromptWithValues(promptTemplate, variables);
-        ChatGptResponse response = chatGptService.askChatGpt(String.valueOf(compte.getId()), prompt);
-        if (response.getError() != null) {
-            return "Erreur lors de l'analyse : " + response.getError();
-        }
-        return processAIOrder(String.valueOf(response.getIdGpt()), response.getMessage(), compte);
-    }
-
-    // --- Méthodes privées utilitaires ---
-
-    /**
      * Parse les ordres retournés par l'IA (mode auto).
      */
     private ReponseAuto processAIAuto(CompteEntity compte, ChatGptResponse response) {
