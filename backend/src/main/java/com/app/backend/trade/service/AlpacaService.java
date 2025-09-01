@@ -263,20 +263,14 @@ public class AlpacaService {
      */
     public String sellStock(CompteEntity compte, TradeRequest request) {
 
-        if(request.getStopLoss() != null || request.getTakeProfit() != null){
-            String resultat = "";
-            if(request.getTakeProfit() != null){
-                Order orderTakeProfit = placeOrder(compte, request.getSymbol(), request.getQuantity(), "sell", null, null, request.getTakeProfit(), null, request.isCancelOpposite(), request.isForceDayTrade());
-                resultat  = resultat + orderTakeProfit.toString();
-            }
-            if(request.getStopLoss() != null){
-                Order orderStopLoss = placeOrder(compte, request.getSymbol(), request.getQuantity(), "sell", null, request.getStopLoss(), null, null, request.isCancelOpposite(), request.isForceDayTrade());
-                resultat  = resultat + orderStopLoss.toString();
-            }
-            return resultat;
-        }else {
-            return placeOrder(compte, request.getSymbol(), request.getQuantity(), "sell", null, null, null, null, request.isCancelOpposite(), request.isForceDayTrade()).toString();
+        if(request.getTakeProfit() != null){
+            return placeOrder(compte, request.getSymbol(), request.getQuantity(), "sell", null, null, request.getTakeProfit(), null, request.isCancelOpposite(), request.isForceDayTrade()).toString();
         }
+        if(request.getStopLoss() != null){
+            return placeOrder(compte, request.getSymbol(), request.getQuantity(), "sell", null, request.getStopLoss(), null, null, request.isCancelOpposite(), request.isForceDayTrade()).toString();
+        }
+        return placeOrder(compte, request.getSymbol(), request.getQuantity(), "sell", null, null, null, null, request.isCancelOpposite(), request.isForceDayTrade()).toString();
+
     }
 
     /**

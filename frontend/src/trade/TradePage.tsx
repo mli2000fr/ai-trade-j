@@ -326,6 +326,7 @@ const TradePage: React.FC = () => {
         onChangeStopLoss={setStopLoss}
         onChangeTakeProfit={setTakeProfit}
         message={messageManual}
+        positions={portfolio?.positions || []}
       />
       {/* Bloc trade auto */}
       <TradeAutoBlock
