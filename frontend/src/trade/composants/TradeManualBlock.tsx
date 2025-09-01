@@ -25,6 +25,10 @@ interface TradeManualBlockProps {
   onTrade: () => void;
   onChangeCancelOpposite: (value: boolean) => void;
   onChangeForceDayTrade: (value: boolean) => void;
+  stopLoss: number | '';
+  takeProfit: number | '';
+  onChangeStopLoss: (value: number | '') => void;
+  onChangeTakeProfit: (value: number | '') => void;
 }
 
 const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
@@ -40,7 +44,11 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
   onChangeQuantity,
   onTrade,
   onChangeCancelOpposite,
-  onChangeForceDayTrade
+  onChangeForceDayTrade,
+  stopLoss,
+  takeProfit,
+  onChangeStopLoss,
+  onChangeTakeProfit
 }) => (
   <Box sx={{ mb: 3, p: 2, border: '1px solid #eee', borderRadius: 2 }}>
     <Typography variant="h6" sx={{ mb: 2 }}>Trade Manuel</Typography>
@@ -74,6 +82,29 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
         size="small"
         sx={{ minWidth: 100 }}
       />
+      {/* Inputs conditionnels pour stop-loss et take-profit */}
+      {action === 'buy' && (
+        <>
+          <TextField
+            label="Stop-Loss"
+            type="number"
+            inputProps={{ min: 0, step: 'any' }}
+            value={stopLoss}
+            onChange={e => onChangeStopLoss(e.target.value === '' ? '' : parseFloat(e.target.value))}
+            size="small"
+            sx={{ minWidth: 120 }}
+          />
+          <TextField
+            label="Take-Profit"
+            type="number"
+            inputProps={{ min: 0, step: 'any' }}
+            value={takeProfit}
+            onChange={e => onChangeTakeProfit(e.target.value === '' ? '' : parseFloat(e.target.value))}
+            size="small"
+            sx={{ minWidth: 120 }}
+          />
+        </>
+      )}
       <Box sx={{ width: '100%', display: 'flex', gap: 2, alignItems: 'center', mt: 1 }}>
         <FormControlLabel
           control={

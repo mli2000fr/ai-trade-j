@@ -257,7 +257,7 @@ public class AlpacaService {
      * Achète une action pour un compte donné.
      */
     public String buyStock(CompteEntity compte, TradeRequest request) {
-        return placeOrder(compte, request.getSymbol(), request.getQuantity(), "buy", null, null, null, null, request.isCancelOpposite(), request.isForceDayTrade()).toString();
+        return placeOrder(compte, request.getSymbol(), request.getQuantity(), "buy", null, request.getStopLoss(), request.getTakeProfit(), null, request.isCancelOpposite(), request.isForceDayTrade()).toString();
     }
 
     /**

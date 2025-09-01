@@ -109,7 +109,7 @@ const TradePage: React.FC = () => {
       const res = await fetch(TRADE_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol, action, quantity, id: compteId, cancelOpposite, forceDayTrade }),
+        body: JSON.stringify({ symbol, action, quantity, id: compteId, cancelOpposite, forceDayTrade, stopLoss: action === 'buy' ? stopLoss || null : null, takeProfit: action === 'buy' ? takeProfit || null : null }),
       });
       const text = await res.text();
       setMessage(text);
@@ -117,6 +117,8 @@ const TradePage: React.FC = () => {
       setAiTextResult(null);
       setCancelOpposite(false);
       setForceDayTrade(false);
+      setStopLoss('');
+      setTakeProfit('');
       await loadPortfolio(true);
       await loadOrders();
     } catch (e) {
@@ -243,6 +245,8 @@ const TradePage: React.FC = () => {
   // Etat pour gérer la case à cocher 'cancel opposite'
   const [cancelOpposite, setCancelOpposite] = useState(false);
   const [forceDayTrade, setForceDayTrade] = useState(false);
+  const [stopLoss, setStopLoss] = useState<number | ''>('');
+  const [takeProfit, setTakeProfit] = useState<number | ''>('');
 
   return (
     <Box sx={{ maxWidth: 1100, mx: 'auto', p: { xs: 1, sm: 2, md: 3 } }}>
@@ -302,6 +306,10 @@ const TradePage: React.FC = () => {
         onTrade={handleTrade}
         onChangeCancelOpposite={setCancelOpposite}
         onChangeForceDayTrade={setForceDayTrade}
+        stopLoss={stopLoss}
+        takeProfit={takeProfit}
+        onChangeStopLoss={setStopLoss}
+        onChangeTakeProfit={setTakeProfit}
       />
       {/* Résultats AI et messages */}
       <TradeAIResults

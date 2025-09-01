@@ -14,4 +14,6 @@ public class TradeRequest {
     private String id;
     private boolean cancelOpposite;
     private boolean forceDayTrade;
+    private Double stopLoss;
+    private Double takeProfit;
 }
