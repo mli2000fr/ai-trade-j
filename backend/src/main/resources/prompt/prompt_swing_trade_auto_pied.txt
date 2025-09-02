@@ -33,7 +33,7 @@ Part 1: JSON
 Rules for JSON values:
 - If side = "hold": quantity = 0, price_limit = null, stop_loss = null, take_profit = null, executeNow = false.
 - If side = "buy" or "sell": quantity must be > 0, executeNow = true.
-- If side = "sell" and price_limit = null, stop_loss = null, take_profit = null: execute a market order.
+- If side = "sell": stop_loss = null, take_profit = null.
 - price_limit, stop_loss, and take_profit must be numeric values (float or integer) rounded to 2 decimal places.
 - All numeric values must be in USD unless otherwise specified.
 Do not add any extra fields, comments, or text.

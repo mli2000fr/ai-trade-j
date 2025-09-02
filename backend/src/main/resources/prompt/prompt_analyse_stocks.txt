@@ -1,4 +1,4 @@
-You are a financial expert specialized in swing trading. Analyze these stocks: [] stockes].
+You are a financial expert specialized in swing trading. Analyze these stocks: [stocks].
 
 For each stock, provide in a structured way:
 
