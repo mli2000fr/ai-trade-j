@@ -13,7 +13,9 @@ public class InfosAction {
     private Double lastPrice;
     private String symbol;
     private String data;
-    private String sma;
+    private String sma200;
+    private String ema20;
+    private String ema50;
     private String rsi;
     private String macd;
     private String atr;

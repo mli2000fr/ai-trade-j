@@ -79,39 +79,9 @@ public class FinnhubService {
         try {
             ObjectMapper mapper = new ObjectMapper();
             JsonNode root = mapper.readTree(response);
-            if (root.has("series")) {
-                ObjectNode seriesNode = (ObjectNode) root.get("series");
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-                LocalDate minDate = LocalDate.now().minusDays(limit);
-                // Pour chaque type de série (annual, quarterly, etc.)
-                Iterator<String> seriesTypes = seriesNode.fieldNames();
-                while (seriesTypes.hasNext()) {
-                    String type = seriesTypes.next();
-                    JsonNode typeNode = seriesNode.get(type);
-                    if (typeNode != null && typeNode.isObject()) {
-                        ObjectNode typeObj = (ObjectNode) typeNode;
-                        Iterator<String> metricNames = typeObj.fieldNames();
-                        while (metricNames.hasNext()) {
-                            String metric = metricNames.next();
-                            JsonNode metricArray = typeObj.get(metric);
-                            if (metricArray != null && metricArray.isArray() && metricArray.size() > 0 && metricArray.get(0).has("period")) {
-                                ArrayNode filtered = mapper.createArrayNode();
-                                for (JsonNode item : metricArray) {
-                                    String period = item.get("period").asText();
-                                    try {
-                                        LocalDate periodDate = LocalDate.parse(period, formatter);
-                                        if (!periodDate.isBefore(minDate)) {
-                                            filtered.add(item);
-                                        }
-                                    } catch (Exception e) {
-                                        // ignorer dates invalides
-                                    }
-                                }
-                                typeObj.set(metric, filtered);
-                            }
-                        }
-                    }
-                }
+            // Supprimer la partie 'series' si elle existe
+            if (root.has("series") && root instanceof ObjectNode) {
+                ((ObjectNode) root).remove("series");
             }
             return mapper.writeValueAsString(root);
         } catch (Exception e) {

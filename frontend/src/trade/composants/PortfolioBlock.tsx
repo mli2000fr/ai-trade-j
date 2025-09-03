@@ -25,7 +25,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
   const plPercent = initialDeposit !== undefined && initialDeposit !== 0 && !isNaN(initialDeposit) && equity !== undefined && !isNaN(equity) ? ((equity - initialDeposit) / initialDeposit) * 100 : undefined;
 
   return (
-    <Card sx={{ mb: 3 }}>
+    <Card sx={{ mb: 3, backgroundColor: '#f5f5f5' }}>
       <CardContent>
         <Typography variant="h5" gutterBottom>Mon portefeuille</Typography>
         {lastUpdate && (
@@ -116,27 +116,40 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Symbole</TableCell>
-                      <TableCell>Prix d'achat</TableCell>
-                      <TableCell>Prix actuel</TableCell>
-                      <TableCell>Quantité</TableCell>
-                      <TableCell>Total</TableCell>
-                      <TableCell>P & L pc</TableCell>
-                      <TableCell>P & L</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Prix d'achat</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Prix actuel</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Quantité</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Total</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>P & L pc</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>P & L</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {portfolio.positions.map((pos: any, i: number) => (
-                      <TableRow key={i}>
-                        <TableCell>{pos.symbol}</TableCell>
-                        <TableCell>{pos.avg_entry_price !== undefined && pos.avg_entry_price !== null ? Number(pos.avg_entry_price).toFixed(2) + ' $' : '-'}</TableCell>
-                        <TableCell>{pos.current_price !== undefined && pos.current_price !== null ? Number(pos.current_price).toFixed(2) + ' $' : '-'}</TableCell>
-                        <TableCell>{pos.qty}</TableCell>
-                        <TableCell>{pos.current_price !== undefined && pos.current_price !== null ? (Number(pos.qty) * Number(pos.current_price)).toFixed(2) + ' $' : '-'}</TableCell>
-                        <TableCell>{pos.unrealized_plpc !== undefined && pos.unrealized_plpc !== null ? (Number(pos.unrealized_plpc) * 100).toFixed(3) + ' %' : '-'}</TableCell>
-                        <TableCell>{pos.unrealized_pl !== undefined && pos.unrealized_pl !== null ? Number(pos.unrealized_pl).toFixed(2) + ' $' : '-'}</TableCell>
-                      </TableRow>
-                    ))}
+                    {portfolio.positions.map((pos: any, i: number) => {
+                      const isNegative = pos.unrealized_pl < 0;
+                      const cellStyle = isNegative ? { color: 'error.main' } : {};
+                      return (
+                        <TableRow
+                          key={i}
+                          sx={
+                            pos.unrealized_pl > 0
+                              ? { backgroundColor: 'rgba(76, 175, 80, 0.08)' }
+                              : pos.unrealized_pl < 0
+                              ? { backgroundColor: 'rgba(244, 67, 54, 0.08)' }
+                              : {}
+                          }
+                        >
+                          <TableCell sx={cellStyle}>{pos.symbol}</TableCell>
+                          <TableCell sx={cellStyle}>{pos.avg_entry_price !== undefined && pos.avg_entry_price !== null ? Number(pos.avg_entry_price).toFixed(2) + ' $' : '-'}</TableCell>
+                          <TableCell sx={cellStyle}>{pos.current_price !== undefined && pos.current_price !== null ? Number(pos.current_price).toFixed(2) + ' $' : '-'}</TableCell>
+                          <TableCell sx={cellStyle}>{pos.qty}</TableCell>
+                          <TableCell sx={cellStyle}>{pos.current_price !== undefined && pos.current_price !== null ? (Number(pos.qty) * Number(pos.current_price)).toFixed(2) + ' $' : '-'}</TableCell>
+                          <TableCell sx={cellStyle}>{pos.unrealized_plpc !== undefined && pos.unrealized_plpc !== null ? (Number(pos.unrealized_plpc) * 100).toFixed(3) + ' %' : '-'}</TableCell>
+                          <TableCell sx={cellStyle}>{pos.unrealized_pl !== undefined && pos.unrealized_pl !== null ? Number(pos.unrealized_pl).toFixed(2) + ' $' : '-'}</TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </TableContainer>

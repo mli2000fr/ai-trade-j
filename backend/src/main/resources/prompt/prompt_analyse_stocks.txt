@@ -1,4 +1,4 @@
-You are a financial expert specialized in swing trading. Analyze these stocks: [] stockes].
+You are a financial expert specialized in swing trading. Analyze these stocks: {{stocks}}.
 
 For each stock, provide in a structured way:
 
@@ -15,3 +15,5 @@ Investment plan: entry/exit points, stop-loss, position sizing, capital allocati
 Use the most recent publicly available data (not real-time).
 Use clear sections, headings, and formatting for readability.
 Generate all content as full text ready to copy-paste, with clear sections and formatting.
+
+Please compile all these analyses into a file named analyse.txt so that I can download it.

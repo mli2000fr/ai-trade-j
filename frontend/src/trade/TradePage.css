@@ -3,13 +3,79 @@
 /* À conserver si TradeAlertReal n'est pas migré : */
 .trade-alert-real {
   color: #fff;
-  background: #d32f2f;
-  padding: 10px 16px;
-  border-radius: 6px;
-  margin-bottom: 12px;
-  font-weight: 600;
-  font-size: 1.05em;
+  background: linear-gradient(90deg, #d32f2f 60%, #ff6f61 100%);
+  padding: 12px 18px;
+  border-radius: 8px;
+  margin-bottom: 18px;
+  font-weight: 700;
+  font-size: 1.08em;
   text-align: center;
+  box-shadow: 0 2px 8px 0 rgba(211,47,47,0.10);
 }
 
-/* Vous pouvez supprimer le reste de ce fichier si tous les composants sont migrés vers Material UI. */
+/* Fond général élégant */
+.trade-page-root {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  min-height: 100vh;
+  font-family: 'Segoe UI', 'Roboto', 'Arial', sans-serif;
+  padding: 32px 0;
+}
+
+/* Bloc principal (Portfolio, Trade, etc.) */
+.trade-page-root > * {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 4px 24px 0 rgba(60, 72, 88, 0.10), 0 1.5px 4px 0 rgba(60, 72, 88, 0.08);
+  margin-bottom: 32px;
+  padding: 28px 24px;
+  transition: box-shadow 0.2s;
+}
+
+/* Espacement entre les blocs */
+.trade-page-root > *:last-child {
+  margin-bottom: 0;
+}
+
+/* Titres des blocs */
+.trade-page-root h2, .trade-page-root h3 {
+  font-weight: 700;
+  color: #2d3a4a;
+  margin-bottom: 18px;
+  letter-spacing: 0.01em;
+}
+
+/* Effet survol sur les boutons */
+.trade-page-root button, .trade-page-root .MuiButton-root {
+  border-radius: 8px !important;
+  transition: background 0.18s, box-shadow 0.18s;
+  font-weight: 600;
+}
+.trade-page-root button:hover, .trade-page-root .MuiButton-root:hover {
+  background: #e3eafc !important;
+  box-shadow: 0 2px 8px 0 rgba(60, 72, 88, 0.10);
+}
+
+/* Tableaux plus élégants */
+.trade-page-root table {
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+.trade-page-root th, .trade-page-root td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #e3eafc;
+}
+.trade-page-root tr:hover {
+  background: #f0f4fa;
+}
+
+/* Responsive */
+@media (max-width: 700px) {
+  .trade-page-root > * {
+    padding: 14px 6px;
+    margin-bottom: 18px;
+  }
+  .trade-page-root {
+    padding: 8px 0;
+  }
+}
