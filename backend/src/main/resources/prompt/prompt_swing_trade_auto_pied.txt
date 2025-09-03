@@ -38,13 +38,14 @@ Rules for JSON values:
 - All numeric values must be in USD unless otherwise specified.
 Do not add any extra fields, comments, or text.
 
-Part 2: Explanation (English)
+Part 2: Explanation (only in French)
 - Key technical, financial, and news factors
 - News Impact: describe how recent news affects sentiment, volatility, and swing setup
 - Medium-term trend and swing setup
 - Risk/reward reasoning
 - Portfolio impact, including sales of existing positions
 - Avoid repeating JSON; focus on reasoning only
+- The return in French, only in French, if it is in English, please translate into French
 
 Extra condition (based on AI analysis):
 - Integrate the following analysis into your reasoning (if available): [{{data_analyse_ia}}]

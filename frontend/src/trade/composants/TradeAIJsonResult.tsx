@@ -11,6 +11,7 @@ import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import { useState } from 'react';
 import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
 
 interface TradeAIJsonResultProps {
   aiJsonResult: any;
@@ -64,9 +65,31 @@ const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult, com
   const hasOrderToExecute = orders.some(order => order.executeNow !== false && Number(order.quantity ?? order.qty ?? 0) > 0);
   const hasSkippedDayTrade = orders.some((order: any) => order.statut === 'SKIPPED_DAYTRADE');
 
+  // Calcul des totaux dynamiques (somme des montants = quantité × prix limite)
+  const totalBuy = - orders
+    .filter(order => order.executeNow && order.side === 'buy')
+    .reduce((sum, order) => {
+      const qty = Number(order.quantity ?? order.qty ?? 0);
+      const price = Number(order.price_limit ?? order.priceLimit ?? 0);
+      return sum + (qty * price);
+    }, 0);
+  const totalSell = orders
+    .filter(order => order.executeNow && order.side === 'sell')
+    .reduce((sum, order) => {
+      const qty = Number(order.quantity ?? order.qty ?? 0);
+      const price = Number(order.price_limit ?? order.priceLimit ?? 0);
+      return sum + (qty * price);
+    }, 0);
+  const total = totalSell - totalBuy;
+
   return (
     <Paper sx={{ p: 2, mb: 2 }}>
-
+      {/* Affichage des totaux au-dessus du tableau */}
+      <Box sx={{ display: 'flex', gap: 4, mb: 1 }}>
+        <Typography variant="subtitle2" color="primary">Total Buy : {totalBuy.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} $</Typography>
+        <Typography variant="subtitle2" color="secondary">Total Sell : {totalSell.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} $</Typography>
+        <Typography variant="subtitle2" color="text.primary">Total : {total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} $</Typography>
+      </Box>
       <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>Résultat AI :</Typography>
       <TableContainer>
         <Table size="small">

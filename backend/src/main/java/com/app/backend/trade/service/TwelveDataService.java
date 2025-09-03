@@ -22,28 +22,51 @@ public class TwelveDataService {
     private int limit;
 
     /**
+     * EMA 20
+     */
+    public String getEMA20(String symbol)  {
+        return getEMA(symbol, 20, 60);
+    }
+    /**
+     * EMA 50
+     */
+    public String getEMA50(String symbol)  {
+        return getEMA(symbol, 50, 180);
+    }
+    /**
+     * EMA (Exponential Moving Average)
+     */
+    public String getEMA(String symbol, int periode, int nombre)  {
+        return getIndicator("ema", symbol, "interval=1day&time_period="+String.valueOf(periode)+"&start_date=" + TradeUtils.getStartDate(nombre));
+    }
+
+    public String getSMA200(String symbol)  {
+        return getSMA(symbol, 200, 300);
+    }
+
+    /**
      * SMA (Simple Moving Average)
      */
-    public String getSMA(String symbol)  {
-        return getIndicator("sma", symbol, "interval=1day&time_period=30&start_date=" + TradeUtils.getStartDate(limit));
+    public String getSMA(String symbol, int periode, int nombre)  {
+        return getIndicator("sma", symbol, "interval=1day&time_period="+String.valueOf(periode)+"&start_date=" + TradeUtils.getStartDate(nombre));
     }
     /**
      * RSI (Relative Strength Index)
      */
     public String getRSI(String symbol)  {
-        return getIndicator("rsi", symbol, "interval=1day&time_period=14&start_date=" + TradeUtils.getStartDate(limit));
+        return getIndicator("rsi", symbol, "interval=1day&time_period=14&start_date=" + TradeUtils.getStartDate(limit)); //60
     }
     /**
      * MACD (Moving Average Convergence Divergence)
      */
     public String getMACD(String symbol)  {
-        return getIndicator("macd", symbol, "interval=1day&short_period=12&long_period=26&signal_period=9&start_date=" + TradeUtils.getStartDate(limit));
+        return getIndicator("macd", symbol, "interval=1day&short_period=12&long_period=26&signal_period=9&start_date=" + TradeUtils.getStartDate(limit)); //60
     }
     /**
      * ATR (Average True Range)
      */
     public String getATR(String symbol)  {
-        return getIndicator("atr", symbol, "interval=1day&time_period=14&start_date=" + TradeUtils.getStartDate(limit));
+        return getIndicator("atr", symbol, "interval=1day&time_period=14&start_date=" + TradeUtils.getStartDate(limit)); //60
     }
     /**
      * Données de l'action (Time Series)

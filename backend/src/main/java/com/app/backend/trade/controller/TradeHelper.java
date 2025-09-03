@@ -80,7 +80,7 @@ public class TradeHelper {
      * @param analyseGpt texte d'analyse GPT (optionnel)
      * @return message de retour de l'IA ou erreur
      */
-    public ReponseAuto tradeAIAuto(CompteEntity compte, List<String> symbols, String analyseGpt)  {
+    public ReponseAuto tradeAIAuto(CompteEntity compte, List<String> symbols, String analyseGpt) {
         /*
         if(true){
             String test = TradeUtils.readResourceFile("test/test_gpt.txt");
@@ -88,32 +88,51 @@ public class TradeHelper {
             return processAIAuto(compte, res);
         }*/
 
-        if(symbols == null || symbols.isEmpty()){
+        if (symbols == null || symbols.isEmpty()) {
             throw new RuntimeException("Aucun symbole fourni pour tradeAIAuto.");
         }
         String joinedSymbols = String.join(",", symbols);
         this.isSymbolsValid(String.valueOf(compte.getId()), joinedSymbols);
-        String promptEntete = TradeUtils.readResourceFile("prompt/prompt_"+tradeType+"_trade_auto_entete.txt");
-        String promptPied = TradeUtils.readResourceFile("prompt/prompt_"+tradeType+"_trade_auto_pied.txt")
+        String promptEntete = TradeUtils.readResourceFile("prompt/prompt_" + tradeType + "_trade_auto_entete.txt");
+        String promptPied = TradeUtils.readResourceFile("prompt/prompt_" + tradeType + "_trade_auto_pied.txt")
                 .replace("{{data_analyse_ia}}", (analyseGpt != null && !analyseGpt.isBlank()) ? analyseGpt : "not available");
         String promptSymbol = TradeUtils.readResourceFile("prompt/prompt_trade_auto_symbol.txt");
         String portfolioJson = new Gson().toJson(this.getPortfolio(compte));
+        String newsGenerals = "No information found";
+        try{
+            Map<String, Object> newsMap = alpacaService.getRecentNews(compte, 50);
+            if (newsMap != null && newsMap.containsKey("news")) {
+                newsGenerals = new Gson().toJson(newsMap.get("news"));
+            }
+        } catch (Exception e) {
+            TradeUtils.log("Error getRecentNews: " + e.getMessage());
+        }
         StringBuilder promptFinal = new StringBuilder(promptEntete.replace("{{symbols}}", joinedSymbols)
-                .replace("{{data_portfolio}}", portfolioJson));
-        for(String symbol : symbols){
+                .replace("{{data_portfolio}}", portfolioJson)
+                .replace("{{data_general_news}}", newsGenerals));
+
+        for (String symbol : symbols) {
             symbol = symbol.trim();
-            if(symbol.isEmpty()) continue;
+            if (symbol.isEmpty()) continue;
             InfosAction infosAction = this.getInfosAction(compte, symbol, true);
             Map<String, Object> variables = getStringObjectMap(infosAction);
             promptFinal.append(getPromptWithValues(promptSymbol, variables));
             sleepForRateLimit();
         }
         promptFinal.append(promptPied);
+
+        /*
+        if(true){
+            String test = promptFinal.toString();
+            return ReponseAuto.builder().build();
+        }*/
+
         ChatGptResponse response = chatGptService.askChatGpt(String.valueOf(compte.getId()), promptFinal.toString());
         if (response.getError() != null) {
             throw new RuntimeException("Erreur lors de l'analyse : " + response.getError());
         }
         return processAIAuto(compte, response);
+
     }
 
     /**
@@ -131,6 +150,10 @@ public class TradeHelper {
                     // on ne fait pas de trade journalier si on a déjà une position ouverte, si on veut le forcer, passer par trade manuel
                     OppositionOrder oppositionOrder = alpacaService.hasOppositeOpenOrder(compte, order.symbol, order.side);
                     order.setOppositionOrder(oppositionOrder);
+                    if((order.getPrice_limit() == null || order.getPrice_limit() == 0)
+                            && order.getQuantity() != null && order.getQuantity() > 0){
+                        order.setPrice_limit(alpacaService.getLastPrice(compte, order.symbol));
+                    }
                     if(oppositionOrder.isDayTrading()){
                         order.setStatut("SKIPPED_DAYTRADE");
                         order.setExecuteNow(false);
@@ -209,7 +232,9 @@ public class TradeHelper {
         }
         Double lastPrice = alpacaService.getLastPrice(compte, symbol);
         String data = twelveDataService.getDataAction(symbol);
-        String sma = twelveDataService.getSMA(symbol);
+        String ema20 = twelveDataService.getEMA20(symbol);
+        String ema50 = twelveDataService.getEMA50(symbol);
+        String sma200 = twelveDataService.getSMA200(symbol);
         String rsi = twelveDataService.getRSI(symbol);
         String macd = twelveDataService.getMACD(symbol);
         String atr = twelveDataService.getATR(symbol);
@@ -229,7 +254,9 @@ public class TradeHelper {
                 lastPrice,
                 symbol,
                 data,
-                sma,
+                ema20,
+                ema50,
+                sma200,
                 rsi,
                 macd,
                 atr,
@@ -247,9 +274,16 @@ public class TradeHelper {
     private static Map<String, Object> getStringObjectMap(InfosAction infosAction) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("symbol", infosAction.getSymbol());
-        variables.put("data_price", infosAction.getLastPrice());
+        if(infosAction.getLastPrice() != null && infosAction.getLastPrice() != 0){
+            variables.put("data_price", "- last_price: " + infosAction.getLastPrice());
+        }else{
+            variables.put("data_price", "");
+        }
+
         variables.put("data_value_daily", infosAction.getData());
-        variables.put("data_sma", infosAction.getSma());
+        variables.put("data_ema20", infosAction.getEma20());
+        variables.put("data_ema50", infosAction.getEma50());
+        variables.put("data_sma200", infosAction.getSma200());
         variables.put("data_rsi", infosAction.getRsi());
         variables.put("data_macd", infosAction.getMacd());
         variables.put("data_atr", infosAction.getAtr());

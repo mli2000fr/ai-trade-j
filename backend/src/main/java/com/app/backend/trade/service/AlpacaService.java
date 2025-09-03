@@ -178,18 +178,65 @@ public class AlpacaService {
      * Récupère le dernier prix pour un symbole donné.
      */
     public Double getLastPrice(CompteEntity compte, String symbol) {
-        String url = apiMarketBaseUrl + "/v2/stocks/" + symbol + "/quotes/latest";
+        // 1. Essayer quotes/latest
+        String urlQuote = apiMarketBaseUrl + "/v2/stocks/" + symbol + "/quotes/latest";
         HttpHeaders headers = new HttpHeaders();
         headers.set("APCA-API-KEY-ID", compte.getCle());
         headers.set("APCA-API-SECRET-KEY", compte.getSecret());
         HttpEntity<Void> request = new HttpEntity<>(headers);
-        ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, request, Map.class);
-        if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-            Map<String, Object> quote = (Map<String, Object>) response.getBody().get("quote");
-            if (quote != null && quote.get("ap") != null) {
-                return Double.valueOf(quote.get("ap").toString()); // "ap" = ask price
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(urlQuote, HttpMethod.GET, request, Map.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Map<String, Object> quote = (Map<String, Object>) response.getBody().get("quote");
+                if (quote != null && quote.get("ap") != null) {
+                    Double askPrice = Double.valueOf(quote.get("ap").toString());
+                    if (askPrice != null && askPrice > 0) {
+                        return askPrice;
+                    }
+                }
             }
+        } catch (Exception e) {
+            logger.warn("Erreur lors de l'appel à quotes/latest : {}", e.getMessage());
         }
+        // 2. Essayer trades/latest
+        String urlTrade = apiMarketBaseUrl + "/v2/stocks/" + symbol + "/trades/latest";
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(urlTrade, HttpMethod.GET, request, Map.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Map<String, Object> trade = (Map<String, Object>) response.getBody().get("trade");
+                if (trade != null && trade.get("p") != null) {
+                    Double lastTradePrice = Double.valueOf(trade.get("p").toString());
+                    if (lastTradePrice != null && lastTradePrice > 0) {
+                        return lastTradePrice;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Erreur lors de l'appel à trades/latest : {}", e.getMessage());
+        }
+        // 3. Essayer bars (close de la dernière bougie)
+        String urlBar = apiMarketBaseUrl + "/v2/stocks/" + symbol + "/bars?timeframe=1Min&limit=1";
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(urlBar, HttpMethod.GET, request, Map.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Object barsObj = response.getBody().get("bars");
+                if (barsObj instanceof List) {
+                    List bars = (List) barsObj;
+                    if (!bars.isEmpty() && bars.get(0) instanceof Map) {
+                        Map bar = (Map) bars.get(0);
+                        if (bar.get("c") != null) {
+                            Double closePrice = Double.valueOf(bar.get("c").toString());
+                            if (closePrice != null && closePrice > 0) {
+                                return closePrice;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Erreur lors de l'appel à bars : {}", e.getMessage());
+        }
+        // Si aucune source ne donne un prix valide
         return null;
     }
 
