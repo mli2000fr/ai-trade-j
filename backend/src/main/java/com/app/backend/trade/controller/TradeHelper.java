@@ -16,7 +16,6 @@ import org.ta4j.core.Rule;
 
 import java.lang.reflect.Type;
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,7 +64,7 @@ public class TradeHelper {
      * @return true si tous les symboles sont valides, exception sinon
      */
     public boolean isSymbolsValid(String idCompte, String symbols)  {
-        String prompt = TradeUtils.readResourceFile("prompt/prompt_check_symbol.txt")
+        String prompt = TradeUtils.readResourceFile("trade/prompt/prompt_check_symbol.txt")
                 .replace("{{symbols}}", symbols);
         ChatGptResponse response = chatGptService.askChatGpt(idCompte, prompt);
         if (response.getError() != null) {
@@ -102,10 +101,10 @@ public class TradeHelper {
         }
         String joinedSymbols = String.join(",", symbols);
         this.isSymbolsValid(String.valueOf(compte.getId()), joinedSymbols);
-        String promptEntete = TradeUtils.readResourceFile("prompt/prompt_" + tradeType + "_trade_auto_entete.txt");
-        String promptPied = TradeUtils.readResourceFile("prompt/prompt_" + tradeType + "_trade_auto_pied.txt")
+        String promptEntete = TradeUtils.readResourceFile("trade/prompt/prompt_" + tradeType + "_trade_auto_entete.txt");
+        String promptPied = TradeUtils.readResourceFile("trade/prompt/prompt_" + tradeType + "_trade_auto_pied.txt")
                 .replace("{{data_analyse_ia}}", (analyseGpt != null && !analyseGpt.isBlank()) ? analyseGpt : "not available");
-        String promptSymbol = TradeUtils.readResourceFile("prompt/prompt_trade_auto_symbol.txt");
+        String promptSymbol = TradeUtils.readResourceFile("trade/prompt/prompt_trade_auto_symbol.txt");
         String portfolioJson = new Gson().toJson(this.getPortfolio(compte));
         String newsGenerals = "No information found";
         try{
