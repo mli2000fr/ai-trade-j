@@ -128,14 +128,14 @@ const StrategyManagerBlock: React.FC = () => {
                     />
                   }
                   label={
-                    <Stack direction="row" alignItems="center" spacing={1}>
+                    <Stack direction="column" alignItems="flex-start" spacing={0.2}>
                       <Typography fontWeight={selected.includes(name) ? 'bold' : 'normal'}>{name}</Typography>
                       <Typography variant="caption" color="text.secondary">
                         {STRATEGY_DESCRIPTIONS[name] || 'Aucune description.'}
                       </Typography>
                     </Stack>
                   }
-                  sx={{ alignItems: 'flex-start', mb: 1 }}
+                  sx={{ alignItems: 'center', mb: 1 }}
                 />
               ))}
             </FormGroup>

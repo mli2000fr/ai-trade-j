@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import TradePage from './trade/TradePage';
 import logo from './logo.svg';
 import './App.css';
@@ -21,8 +21,8 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<TradePage />} />
-        <Route path="/trade" element={<TradePage />} />
+        <Route path="/trade/*" element={<TradePage />} />
+        <Route path="*" element={<Navigate to="/trade/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
   );
