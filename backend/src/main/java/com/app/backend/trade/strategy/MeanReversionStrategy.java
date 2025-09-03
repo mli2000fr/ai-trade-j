@@ -6,6 +6,9 @@ import org.ta4j.core.indicators.SMAIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 import org.ta4j.core.rules.OverIndicatorRule;
 import org.ta4j.core.rules.UnderIndicatorRule;
+import org.ta4j.core.Indicator;
+import org.ta4j.core.indicators.AbstractIndicator;
+import org.ta4j.core.num.Num;
 
 public class MeanReversionStrategy implements TradeStrategy {
     private final int smaPeriod;
@@ -24,16 +27,28 @@ public class MeanReversionStrategy implements TradeStrategy {
     public Rule getEntryRule(BarSeries series) {
         ClosePriceIndicator close = new ClosePriceIndicator(series);
         SMAIndicator sma = new SMAIndicator(close, smaPeriod);
+        Indicator<Num> thresholdSma = new AbstractIndicator<Num>(series) {
+            @Override
+            public Num getValue(int index) {
+                return sma.getValue(index).multipliedBy(series.numOf(1 - thresholdPercent / 100));
+            }
+        };
         // Achat si le prix est sous la SMA de plus de thresholdPercent
-        return new UnderIndicatorRule(close, sma.numOf(1 - thresholdPercent / 100).multipliedBy(sma));
+        return new UnderIndicatorRule(close, thresholdSma);
     }
 
     @Override
     public Rule getExitRule(BarSeries series) {
         ClosePriceIndicator close = new ClosePriceIndicator(series);
         SMAIndicator sma = new SMAIndicator(close, smaPeriod);
+        Indicator<Num> thresholdSma = new AbstractIndicator<Num>(series) {
+            @Override
+            public Num getValue(int index) {
+                return sma.getValue(index).multipliedBy(series.numOf(1 + thresholdPercent / 100));
+            }
+        };
         // Vente si le prix est au-dessus de la SMA de plus de thresholdPercent
-        return new OverIndicatorRule(close, sma.numOf(1 + thresholdPercent / 100).multipliedBy(sma));
+        return new OverIndicatorRule(close, thresholdSma);
     }
 
     @Override

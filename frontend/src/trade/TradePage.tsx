@@ -7,6 +7,8 @@ import TradeAutoBlock from './composants/TradeAutoBlock';
 import TradeManualBlock from './composants/TradeManualBlock';
 import OrdersTable from './composants/OrdersTable';
 import Box from '@mui/material/Box';
+import StrategyManagerBlock from './composants/StrategyManagerBlock';
+import TestSignalForm from './composants/TestSignalForm';
 
 const TRADE_API_URL = '/api/trade/trade';
 
@@ -363,6 +365,9 @@ const TradePage: React.FC = () => {
         }}
         idGpt={idGpt ?? undefined}
       />
+      {/* Gestion des stratégies et test de signal */}
+      <StrategyManagerBlock />
+      <TestSignalForm />
     </Box>
   );
 };

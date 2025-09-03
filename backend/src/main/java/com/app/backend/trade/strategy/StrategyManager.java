@@ -9,7 +9,7 @@ import java.util.*;
  * Peut combiner les signaux (majorité, pondération, etc.) ou sélectionner une stratégie active.
  */
 public class StrategyManager {
-    private final List<TradeStrategy> strategies;
+    private List<TradeStrategy> strategies;
     private CombinationMode combinationMode;
     private TradeStrategy selectedStrategy;
 
@@ -38,8 +38,23 @@ public class StrategyManager {
         }
     }
 
-    public List<TradeStrategy> getStrategies() {
+    public void setActiveStrategies(List<TradeStrategy> newStrategies) {
+        this.strategies = new ArrayList<>(newStrategies);
+        if (!strategies.isEmpty()) {
+            this.selectedStrategy = strategies.get(0);
+        }
+    }
+
+    public List<TradeStrategy> getActiveStrategies() {
         return Collections.unmodifiableList(strategies);
+    }
+
+    public List<TradeStrategy> getStrategies() {
+        return getActiveStrategies();
+    }
+
+    public CombinationMode getCombinationMode() {
+        return this.combinationMode;
     }
 
     public Rule getCombinedEntryRule(BarSeries series) {
@@ -113,4 +128,3 @@ public class StrategyManager {
         };
     }
 }
-

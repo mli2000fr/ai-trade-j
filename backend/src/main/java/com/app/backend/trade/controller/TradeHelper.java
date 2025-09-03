@@ -7,13 +7,16 @@ import com.app.backend.trade.service.*;
 import com.app.backend.trade.util.TradeUtils;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import java.lang.reflect.Type;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
+import org.ta4j.core.BaseBarSeries;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
 
+import java.lang.reflect.Type;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -309,6 +312,33 @@ public class TradeHelper {
      */
     public boolean getCombinedSignal(BarSeries series, int index, boolean isEntry) {
         Rule rule = isEntry ? strategyService.getEntryRule(series) : strategyService.getExitRule(series);
-        return rule.isSatisfied(index);
+        boolean result = rule.isSatisfied(index);
+        String log = "Test signal " + (isEntry ? "ENTREE" : "SORTIE") +
+                " | index=" + index +
+                " | prix=" + (series.getBar(index) != null ? series.getBar(index).getClosePrice() : "?") +
+                " | stratégies actives=" + strategyService.getActiveStrategyNames() +
+                " | mode=" + strategyService.getStrategyManager().getCombinationMode().name() +
+                " | résultat=" + result;
+        strategyService.addLog(log);
+        return result;
+    }
+
+    /**
+     * Teste le signal combiné sur une série de prix fournie (format simple).
+     * @param closePrices liste des prix de clôture (double)
+     * @param isEntry true pour entrée (achat), false pour sortie (vente)
+     * @return true si le signal est validé sur la dernière barre
+     */
+    public boolean testCombinedSignalOnClosePrices(List<Double> closePrices, boolean isEntry) {
+        if (closePrices == null || closePrices.size() < 2) return false;
+        BarSeries series = new BaseBarSeries();
+        ZonedDateTime now = ZonedDateTime.now();
+        for (int i = 0; i < closePrices.size(); i++) {
+            // Ajoute une barre fictive avec juste le close (open/high/low identiques)
+            double price = closePrices.get(i);
+            series.addBar(now.plusMinutes(i), price, price, price, price, 1d);
+        }
+        int lastIndex = series.getEndIndex();
+        return getCombinedSignal(series, lastIndex, isEntry);
     }
 }

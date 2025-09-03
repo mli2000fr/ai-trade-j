@@ -2,6 +2,7 @@ package com.app.backend.trade.controller;
 
 import com.app.backend.trade.model.*;
 import com.app.backend.trade.service.*;
+import com.app.backend.trade.strategy.StrategyManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,14 +17,17 @@ public class TradeController {
     private final TradeHelper tradeHelper;
     private final AlpacaService alpacaService;
     private final CompteService compteService;
+    private final StrategyService strategyService;
 
     @Autowired
     public TradeController(AlpacaService alpacaService,
                            TradeHelper tradeHelper,
-                           CompteService compteService) {
+                           CompteService compteService,
+                           StrategyService strategyService) {
         this.alpacaService = alpacaService;
         this.tradeHelper = tradeHelper;
         this.compteService = compteService;
+        this.strategyService = strategyService;
     }
 
     /**
@@ -166,5 +170,49 @@ public class TradeController {
         List<CompteEntity> comptes = compteService.getAllComptes();
         if (comptes.isEmpty()) throw new IllegalStateException("Aucun compte disponible");
         return compteService.getCompteCredentialsById(comptes.get(0).getId().toString());
+    }
+
+    /**
+     * Liste les stratégies disponibles, actives et le mode de combinaison.
+     */
+    @GetMapping("/strategies")
+    public ResponseEntity<StrategyListDto> getStrategies() {
+        return ResponseEntity.ok(new StrategyListDto(
+                strategyService.getAllStrategyNames(),
+                strategyService.getActiveStrategyNames(),
+                strategyService.getStrategyManager().getCombinationMode().name(),
+                strategyService.getLogs()
+        ));
+    }
+
+    /**
+     * Modifie dynamiquement les stratégies actives.
+     */
+    @PostMapping("/strategies/active")
+    public ResponseEntity<Void> setActiveStrategies(@RequestBody SetActiveStrategiesRequest req) {
+        strategyService.setActiveStrategiesByNames(req.getStrategyNames());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Modifie dynamiquement le mode de combinaison.
+     */
+    @PostMapping("/strategies/mode")
+    public ResponseEntity<Void> setCombinationMode(@RequestBody SetCombinationModeRequest req) {
+        strategyService.setCombinationMode(StrategyManager.CombinationMode.valueOf(req.getCombinationMode()));
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Teste le signal combiné sur une série de prix de clôture fournie.
+     * Body: { "closePrices": [123.4, 124.1, ...], "isEntry": true }
+     * Retourne true si le signal est validé sur la dernière barre.
+     */
+    @PostMapping("/strategies/test-signal")
+    public ResponseEntity<Map<String, Object>> testCombinedSignal(@RequestBody Map<String, Object> body) {
+        List<Double> closePrices = (List<Double>) body.get("closePrices");
+        boolean isEntry = body.get("isEntry") != null && Boolean.TRUE.equals(body.get("isEntry"));
+        boolean result = tradeHelper.testCombinedSignalOnClosePrices(closePrices, isEntry);
+        return ResponseEntity.ok(Collections.singletonMap("signal", result));
     }
 }
