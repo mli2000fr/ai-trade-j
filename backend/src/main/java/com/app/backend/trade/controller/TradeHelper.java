@@ -11,6 +11,9 @@ import java.lang.reflect.Type;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
+import org.ta4j.core.BarSeries;
+import org.ta4j.core.Rule;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,18 +32,21 @@ public class TradeHelper {
     private final TwelveDataService twelveDataService;
     private final FinnhubService finnhubService;
     private final EodhdService eodhdService;
+    private final StrategyService strategyService;
 
     @Autowired
     public TradeHelper(AlpacaService alpacaService,
                        ChatGptService chatGptService,
                        FinnhubService finnhubService,
                        TwelveDataService twelveDataService,
-                       EodhdService eodhdService) {
+                       EodhdService eodhdService,
+                       StrategyService strategyService) {
         this.alpacaService = alpacaService;
         this.chatGptService = chatGptService;
         this.twelveDataService = twelveDataService;
         this.finnhubService = finnhubService;
         this.eodhdService = eodhdService;
+        this.strategyService = strategyService;
     }
 
     /**
@@ -293,5 +299,16 @@ public class TradeHelper {
         variables.put("data_news", infosAction.getNews());
         variables.put("data_portfolio", infosAction.getPortfolio());
         return variables;
+    }
+
+    /**
+     * Retourne un signal d'achat/vente combiné selon les stratégies actives et le mode choisi.
+     * @param series série de prix (BarSeries)
+     * @param isEntry true pour entrée (achat), false pour sortie (vente)
+     * @return true si le signal est validé
+     */
+    public boolean getCombinedSignal(BarSeries series, int index, boolean isEntry) {
+        Rule rule = isEntry ? strategyService.getEntryRule(series) : strategyService.getExitRule(series);
+        return rule.isSatisfied(index);
     }
 }
