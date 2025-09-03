@@ -85,6 +85,9 @@ const TradePage: React.FC = () => {
       loadOrders();
       setAiJsonResult(null); // Vider le bloc Résultat AI
       setAiTextResult(null); // Vider le bloc Résultat AI
+      setMessageManual(''); // Vider le message du bloc trade manuel
+      setMessageAuto('');
+      setMessageCancel('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCompteId]);
@@ -282,7 +285,7 @@ const TradePage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ maxWidth: 1100, mx: 'auto', p: { xs: 1, sm: 2, md: 3 } }}>
+    <Box className="trade-page-root" sx={{ maxWidth: 1100, mx: 'auto', p: { xs: 1, sm: 2, md: 3 } }}>
       {/* Alerte compte réel */}
       {selectedCompte && selectedCompte.real === true && <TradeAlertReal />}
       {/* Liste déroulante des comptes */}

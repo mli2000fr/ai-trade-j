@@ -119,6 +119,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                 <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stop-loss</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Take-profit</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Statut</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Date</TableCell>
                 {hasCancellable && <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }} />}
               </TableRow>
             </TableHead>
@@ -145,6 +146,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({
                     <TableCell>{order.stopPrice !== undefined && order.stopPrice !== null ? Number(order.stopPrice).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : '-'}</TableCell>
                     <TableCell>{order.limitPrice !== undefined && order.limitPrice !== null ? Number(order.limitPrice).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' $' : '-'}</TableCell>
                     <TableCell>{order.status}</TableCell>
+                    <TableCell>{order.updatedAt ? new Date(order.updatedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-'}</TableCell>
                     {hasCancellable && (
                       <TableCell>
                         {order.id && cancellableStatuses.includes(order.status) && (
