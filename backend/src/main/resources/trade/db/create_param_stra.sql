@@ -1,5 +1,6 @@
 CREATE TABLE trade_ai.param_stra (
-    symbol VARCHAR(20) PRIMARY KEY,
+    id_symbol VARCHAR(64) PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,
     created_at DATETIME,
     modified_at DATETIME,
     breakout_lookbackp INT,
@@ -19,5 +20,6 @@ CREATE TABLE trade_ai.param_stra (
     sma_longp INT,
     sma_best_r DOUBLE,
     trend_p INT,
-    trend_best_r DOUBLE
+    trend_best_r DOUBLE,
+    FOREIGN KEY (id_symbol) REFERENCES trade_ai.alpaca_asset(id)
 );

@@ -695,6 +695,60 @@ public class StrategieBackTest {
         };
         return runWalkForwardBacktest(series, windowOptSize, windowTestSize, optimizer, backtestFunc);
     }
+
+    /**
+     * Affiche les résultats d'une liste de WalkForwardResult (TrendFollowing) dans la console
+     */
+    public static void printWalkForwardResults(List<WalkForwardResult> results) {
+        for (WalkForwardResult res : results) {
+            TrendFollowingParams params = (TrendFollowingParams) res.params;
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", Trend params: period=" + params.trendPeriod +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+
+    /**
+     * Exporte les résultats d'une liste de WalkForwardResult (TrendFollowing) en JSON
+     * Nécessite la dépendance Gson (com.google.gson.Gson)
+     */
+    public static String exportWalkForwardResultsToJson(List<WalkForwardResult> results) {
+        com.google.gson.JsonArray arr = new com.google.gson.JsonArray();
+        for (WalkForwardResult res : results) {
+            TrendFollowingParams params = (TrendFollowingParams) res.params;
+            RiskResult metrics = res.result;
+            com.google.gson.JsonObject obj = new com.google.gson.JsonObject();
+            obj.addProperty("startOptIdx", res.startOptIdx);
+            obj.addProperty("endOptIdx", res.endOptIdx);
+            obj.addProperty("startTestIdx", res.startTestIdx);
+            obj.addProperty("endTestIdx", res.endTestIdx);
+            com.google.gson.JsonObject paramObj = new com.google.gson.JsonObject();
+            paramObj.addProperty("trendPeriod", params.trendPeriod);
+            paramObj.addProperty("performance", params.performance);
+            obj.add("params", paramObj);
+            com.google.gson.JsonObject resultObj = new com.google.gson.JsonObject();
+            resultObj.addProperty("rendement", metrics.rendement);
+            resultObj.addProperty("maxDrawdown", metrics.maxDrawdown);
+            resultObj.addProperty("tradeCount", metrics.tradeCount);
+            resultObj.addProperty("winRate", metrics.winRate);
+            resultObj.addProperty("avgPnL", metrics.avgPnL);
+            resultObj.addProperty("profitFactor", metrics.profitFactor);
+            resultObj.addProperty("avgTradeBars", metrics.avgTradeBars);
+            resultObj.addProperty("maxTradeGain", metrics.maxTradeGain);
+            resultObj.addProperty("maxTradeLoss", metrics.maxTradeLoss);
+            obj.add("result", resultObj);
+            arr.add(obj);
+        }
+        return new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(arr);
+    }
 }
 
 /*
@@ -717,13 +771,19 @@ for (StrategieBackTest.RollingWindowResult res : rollingResults) {
         \", profit factor: \" + metrics.profitFactor
     );
 }
-Pour les autres stratégies, il suffit d’adapter le cast du paramètre :
-Pour Breakout : (BreakoutParams) res.params
-Pour MeanReversion : (MeanReversionParams) res.params
-Pour RSI : (RsiParams) res.params
-Pour SMA Crossover : (SmaCrossoverParams) res.params
-Pour TrendFollowing : (TrendFollowingParams) res.params
+Pour les autres stratégies, il suffit d’adapter le cast du paramètre:
+Pour Breakout: (BreakoutParams) res.params
+Pour MeanReversion: (MeanReversionParams) res.params
+Pour RSI: (RsiParams) res.params
+Pour SMA Crossover: (SmaCrossoverParams) res.params
+Pour TrendFollowing: (TrendFollowingParams) res.params
+
+List<StrategieBackTest.WalkForwardResult> walkResults = backTest.runWalkForwardBacktestTrendFollowing(...);
+StrategieBackTest.printWalkForwardResults(walkResults);
+String json = StrategieBackTest.exportWalkForwardResultsToJson(walkResults);
+System.out.println(json);
 
 List<StrategieBackTest.WalkForwardResult> walkResults = backTest.runWalkForwardBacktestMacd(
         series, 300, 100, 8, 16, 20, 30, 6, 12
 );*/
+

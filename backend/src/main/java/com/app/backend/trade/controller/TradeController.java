@@ -172,53 +172,5 @@ public class TradeController {
         return compteService.getCompteCredentialsById(comptes.get(0).getId().toString());
     }
 
-    /**
-     * Liste les stratégies disponibles, actives et le mode de combinaison.
-     */
-    @GetMapping("/strategies")
-    public ResponseEntity<StrategyListDto> getStrategies() {
-        return ResponseEntity.ok(new StrategyListDto(
-                strategyService.getAllStrategyNames(),
-                strategyService.getActiveStrategyNames(),
-                strategyService.getStrategyManager().getCombinationMode().name(),
-                strategyService.getLogs()
-        ));
-    }
 
-    /**
-     * Modifie dynamiquement les stratégies actives.
-     */
-    @PostMapping("/strategies/active")
-    public ResponseEntity<Void> setActiveStrategies(@RequestBody SetActiveStrategiesRequest req) {
-        strategyService.setActiveStrategiesByNames(req.getStrategyNames());
-        return ResponseEntity.ok().build();
-    }
-
-    /**
-     * Modifie dynamiquement le mode de combinaison.
-     */
-    @PostMapping("/strategies/mode")
-    public ResponseEntity<Void> setCombinationMode(@RequestBody SetCombinationModeRequest req) {
-        strategyService.setCombinationMode(StrategyManager.CombinationMode.valueOf(req.getCombinationMode()));
-        return ResponseEntity.ok().build();
-    }
-
-    /**
-     * Teste le signal combiné sur une série de prix de clôture fournie.
-     * Body: { "closePrices": [123.4, 124.1, ...], "isEntry": true }
-     * Retourne true si le signal est validé sur la dernière barre.
-     */
-    @GetMapping("/strategies/test-signal")
-    public ResponseEntity<Map<String, Object>> testCombinedSignal(@RequestParam(value = "symbol", required = false) String symbol,
-                                                                  @RequestParam(value = "isEntry", required = false) Boolean isEntry) {
-        tradeHelper.updateDailyValuAllSymbolsToSup();
-        boolean result = tradeHelper.testCombinedSignalOnClosePrices(symbol, isEntry);
-        return ResponseEntity.ok(Collections.singletonMap("signal", result));
-    }
-
-    @GetMapping("/strategies/update-daily-valu")
-    public ResponseEntity<Boolean> testCombinedSignal() {
-        tradeHelper.updateDailyValuAllSymbols();
-        return ResponseEntity.ok(true);
-    }
 }

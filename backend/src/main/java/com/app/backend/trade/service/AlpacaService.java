@@ -659,7 +659,6 @@ public class AlpacaService {
 
     /**
      * Récupère l'historique des barres (candles) pour un symbole donné.
-     * @param compte CompteEntity contenant les credentials
      * @param symbol Symbole de l'action (ex: "AAPL")
      * @param startDate Date de début (format ISO 8601, ex: "2023-01-01T00:00:00Z")
      * @param endDate Date de fin (format ISO 8601, ex: "2023-01-31T23:59:59Z")
@@ -748,7 +747,7 @@ public class AlpacaService {
         return result;
     }
 
-    public  boolean updateDailyValue(String symbol) {
+    public  List<DailyValue> updateDailyValue(String symbol) {
 
         // 1. Chercher la date la plus récente pour ce symbol dans la table daily_value
         String sql = "SELECT MAX(date) FROM daily_value WHERE symbol = ?";
@@ -768,11 +767,7 @@ public class AlpacaService {
             dateStart = nextDay.toString(); // format YYYY-MM-DD
         }
         // 2. Appeler getHistoricalBars avec la date de start calculée
-        List<DailyValue> lsiteValues = getHistoricalBars(symbol, dateStart);
-        for(DailyValue dv : lsiteValues){
-            insertDailyValue(symbol, dv);
-        }
-        return true;
+        return getHistoricalBars(symbol, dateStart);
     }
 
 
@@ -780,7 +775,7 @@ public class AlpacaService {
     /**
      * Récupère la liste des symboles disponibles sur IEX via Alpaca.
      */
-    public List<String> getIexSymbols() {
+    public List<AlpacaAsset> getIexSymbolsFromAlpaca() {
         CompteEntity compte = compteService.getAllComptes().get(0);
         String url = apiBaseUrl + "/assets?feed=iex";
         HttpHeaders headers = new HttpHeaders();
@@ -793,13 +788,13 @@ public class AlpacaService {
                 com.google.gson.reflect.TypeToken<List<AlpacaAsset>> typeToken =
                         new com.google.gson.reflect.TypeToken<>() {};
                 List<AlpacaAsset> assets = gson.fromJson(response.getBody(), typeToken.getType());
-                List<String> symbolsActive = new ArrayList<>();
+                List<AlpacaAsset> symbolsActive = new ArrayList<>();
                 for (AlpacaAsset asset : assets) {
                     if ("active".equalsIgnoreCase(asset.getStatus())
                             && asset.getExchange() != null
                             && !"CRYPTO".equalsIgnoreCase(asset.getExchange())
                             && !"OTC".equalsIgnoreCase(asset.getExchange())) {
-                        symbolsActive.add(asset.getSymbol());
+                        symbolsActive.add(asset);
                     }
                 }
                 return symbolsActive;
@@ -809,6 +804,22 @@ public class AlpacaService {
         }
         return Collections.emptyList();
     }
+
+    public void saveSymbolsToDatabase(List<AlpacaAsset> assets) {
+        String sql = "INSERT IGNORE INTO alpaca_asset (id, symbol, exchange, status, name, created_at) VALUES (?, ?, ?, ?, ?, ?)";
+        for (AlpacaAsset asset : assets) {
+            jdbcTemplate.update(sql,
+                asset.getId(),
+                asset.getSymbol(),
+                asset.getExchange(),
+                asset.getStatus(),
+                asset.getName(),
+                new java.sql.Timestamp(System.currentTimeMillis())
+            );
+        }
+    }
+
+
 
     /**
      * Insère une ligne dans la table daily_value avec symbol et une instance de DailyValue.
@@ -841,5 +852,13 @@ public class AlpacaService {
                 dailyValue.getNumberOfTrades(),
                 dailyValue.getVolumeWeightedAveragePrice()
         );
+    }
+
+    /**
+     * Récupère tous les symboles depuis la table alpaca_asset
+     */
+    public List<String> getAllAssetSymbolsFromDb() {
+        String sql = "SELECT symbol FROM alpaca_asset WHERE status = 'active'";
+        return jdbcTemplate.queryForList(sql, String.class);
     }
 }
