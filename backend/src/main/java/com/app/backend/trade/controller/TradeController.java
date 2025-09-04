@@ -208,11 +208,10 @@ public class TradeController {
      * Body: { "closePrices": [123.4, 124.1, ...], "isEntry": true }
      * Retourne true si le signal est validé sur la dernière barre.
      */
-    @PostMapping("/strategies/test-signal")
-    public ResponseEntity<Map<String, Object>> testCombinedSignal(@RequestBody Map<String, Object> body) {
-        List<Double> closePrices = (List<Double>) body.get("closePrices");
-        boolean isEntry = body.get("isEntry") != null && Boolean.TRUE.equals(body.get("isEntry"));
-        boolean result = tradeHelper.testCombinedSignalOnClosePrices(closePrices, isEntry);
+    @GetMapping("/strategies/test-signal")
+    public ResponseEntity<Map<String, Object>> testCombinedSignal(@RequestParam(value = "symbol", required = false) String symbol,
+                                                                  @RequestParam(value = "isEntry", required = false) Boolean isEntry) {
+        boolean result = tradeHelper.testCombinedSignalOnClosePrices(symbol, isEntry);
         return ResponseEntity.ok(Collections.singletonMap("signal", result));
     }
 }

@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "trade/gpt")
+@Table(name = "gpt")
 public class GptEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

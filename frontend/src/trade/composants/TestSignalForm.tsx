@@ -15,7 +15,7 @@ interface TestSignalResult {
 }
 
 const TestSignalForm: React.FC = () => {
-  const [closePrices, setClosePrices] = useState<string>('');
+  const [symbol, setSymbol] = useState<string>('');
   const [isEntry, setIsEntry] = useState<boolean>(true);
   const [result, setResult] = useState<TestSignalResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -27,23 +27,13 @@ const TestSignalForm: React.FC = () => {
     setResult(null);
     setLoading(true);
     try {
-      // Supporte séparateur virgule, espace ou retour à la ligne
-      const prices = closePrices
-        .split(/[\s,;]+/)
-        .map(s => s.trim())
-        .filter(Boolean)
-        .map(Number)
-        .filter(n => !isNaN(n));
-      if (prices.length < 2) {
-        setError('Veuillez saisir au moins 2 prix de clôture valides.');
+      if (!symbol.trim()) {
+        setError('Veuillez saisir un symbole.');
         setLoading(false);
         return;
       }
-      const response = await fetch('/api/trade/strategies/test-signal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ closePrices: prices, isEntry }),
-      });
+      const params = new URLSearchParams({ symbol: symbol.trim(), isEntry: String(isEntry) });
+      const response = await fetch(`/api/trade/strategies/test-signal?${params.toString()}`);
       if (!response.ok) throw new Error('Erreur API');
       const data: TestSignalResult = await response.json();
       setResult(data);
@@ -61,14 +51,13 @@ const TestSignalForm: React.FC = () => {
         <form onSubmit={handleSubmit}>
           <Stack spacing={2}>
             <TextField
-              label="Prix de clôture (séparés par virgule, espace ou retour à la ligne)"
-              value={closePrices}
-              onChange={e => setClosePrices(e.target.value)}
-              multiline
-              minRows={4}
+              label="Symbole"
+              value={symbol}
+              onChange={e => setSymbol(e.target.value)}
               fullWidth
+              required
               size="small"
-              placeholder="ex: 123.4, 124.1, 125.0, 126.2"
+              placeholder="ex: AAPL, TSLA, BTCUSD"
               disabled={loading}
             />
             <RadioGroup

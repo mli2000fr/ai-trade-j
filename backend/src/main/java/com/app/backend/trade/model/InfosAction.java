@@ -12,7 +12,7 @@ import lombok.ToString;
 public class InfosAction {
     private Double lastPrice;
     private String symbol;
-    private String data;
+    private String historical;
     private String sma200;
     private String ema20;
     private String ema50;

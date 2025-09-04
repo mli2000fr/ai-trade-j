@@ -35,6 +35,7 @@ public class TradeHelper {
     private final FinnhubService finnhubService;
     private final EodhdService eodhdService;
     private final StrategyService strategyService;
+    private final CompteService compteService;
 
     @Autowired
     public TradeHelper(AlpacaService alpacaService,
@@ -42,13 +43,15 @@ public class TradeHelper {
                        FinnhubService finnhubService,
                        TwelveDataService twelveDataService,
                        EodhdService eodhdService,
-                       StrategyService strategyService) {
+                       StrategyService strategyService,
+                       CompteService compteService) {
         this.alpacaService = alpacaService;
         this.chatGptService = chatGptService;
         this.twelveDataService = twelveDataService;
         this.finnhubService = finnhubService;
         this.eodhdService = eodhdService;
         this.strategyService = strategyService;
+        this.compteService = compteService;
     }
 
     /**
@@ -239,7 +242,8 @@ public class TradeHelper {
             portfolioJson = new Gson().toJson(portfolio);
         }
         Double lastPrice = alpacaService.getLastPrice(compte, symbol);
-        String data = twelveDataService.getDataAction(symbol);
+        //String data = twelveDataService.getDataAction(symbol);
+        String historical = alpacaService.getHistoricalBarsJson(compte, symbol, 200);
         String ema20 = twelveDataService.getEMA20(symbol);
         String ema50 = twelveDataService.getEMA50(symbol);
         String sma200 = twelveDataService.getSMA200(symbol);
@@ -261,7 +265,7 @@ public class TradeHelper {
         return new InfosAction(
                 lastPrice,
                 symbol,
-                data,
+                historical,
                 ema20,
                 ema50,
                 sma200,
@@ -288,7 +292,7 @@ public class TradeHelper {
             variables.put("data_price", "");
         }
 
-        variables.put("data_value_daily", infosAction.getData());
+        variables.put("data_historical_daily", infosAction.getHistorical());
         variables.put("data_ema20", infosAction.getEma20());
         variables.put("data_ema50", infosAction.getEma50());
         variables.put("data_sma200", infosAction.getSma200());
@@ -322,22 +326,38 @@ public class TradeHelper {
         return result;
     }
 
-    /**
-     * Teste le signal combiné sur une série de prix fournie (format simple).
-     * @param closePrices liste des prix de clôture (double)
-     * @param isEntry true pour entrée (achat), false pour sortie (vente)
-     * @return true si le signal est validé sur la dernière barre
-     */
-    public boolean testCombinedSignalOnClosePrices(List<Double> closePrices, boolean isEntry) {
-        if (closePrices == null || closePrices.size() < 2) return false;
-        BarSeries series = new BaseBarSeries();
-        ZonedDateTime now = ZonedDateTime.now();
-        for (int i = 0; i < closePrices.size(); i++) {
-            // Ajoute une barre fictive avec juste le close (open/high/low identiques)
-            double price = closePrices.get(i);
-            series.addBar(now.plusMinutes(i), price, price, price, price, 1d);
-        }
+
+    public boolean testCombinedSignalOnClosePrices(String symbol, boolean isEntry) {
+
+        List<CompteEntity> comptes = compteService.getAllComptes();
+        List<String> listeSymbols = alpacaService.getIexSymbols(comptes.get(0));
+
+        List<DailyValue> listeValues = alpacaService.getHistoricalBars(comptes.get(0), symbol, 750);
+        BarSeries series = toBarSeries(listeValues);
         int lastIndex = series.getEndIndex();
         return getCombinedSignal(series, lastIndex, isEntry);
     }
+
+    /**
+     * Convertit une liste de DailyValue en BarSeries (ta4j).
+     */
+    private BarSeries toBarSeries(List<DailyValue> values) {
+        BarSeries series = new BaseBarSeries();
+        for (DailyValue v : values) {
+            try {
+                series.addBar(
+                        ZonedDateTime.parse(v.getDate()),
+                        Double.parseDouble(v.getOpen()),
+                        Double.parseDouble(v.getHigh()),
+                        Double.parseDouble(v.getLow()),
+                        Double.parseDouble(v.getClose()),
+                        Double.parseDouble(v.getVolume())
+                );
+            } catch (Exception e) {
+                TradeUtils.log("Erreur conversion DailyValue en BarSeries: " + e.getMessage());
+            }
+        }
+        return series;
+    }
 }
+

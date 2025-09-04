@@ -25,13 +25,13 @@ public class TwelveDataService {
      * EMA 20
      */
     public String getEMA20(String symbol)  {
-        return getEMA(symbol, 20, 60);
+        return getEMA(symbol, 20, 100);
     }
     /**
      * EMA 50
      */
     public String getEMA50(String symbol)  {
-        return getEMA(symbol, 50, 180);
+        return getEMA(symbol, 50, 100);
     }
     /**
      * EMA (Exponential Moving Average)
@@ -41,7 +41,7 @@ public class TwelveDataService {
     }
 
     public String getSMA200(String symbol)  {
-        return getSMA(symbol, 200, 300);
+        return getSMA(symbol, 200, 400);
     }
 
     /**

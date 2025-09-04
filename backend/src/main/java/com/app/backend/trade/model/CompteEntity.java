@@ -1,5 +1,6 @@
 package com.app.backend.trade.model;
 
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -12,6 +13,7 @@ import jakarta.persistence.*;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
+@Builder
 @Table(name = "compte")
 public class CompteEntity {
     /** Identifiant unique du compte (clé primaire). */

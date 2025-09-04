@@ -24,6 +24,9 @@ public class TradeUtils {
         LocalDate date = LocalDate.now().minusDays(histo);
         return date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
     }
+    public static String getDateToDay() {
+        return LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+    }
 
     /**
      * Lit le contenu d'un fichier de ressources et le retourne sous forme de String.

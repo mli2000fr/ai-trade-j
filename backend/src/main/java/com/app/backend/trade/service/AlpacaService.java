@@ -2,12 +2,11 @@ package com.app.backend.trade.service;
 
 import com.app.backend.trade.exception.DayTradingException;
 import com.app.backend.trade.model.*;
+import com.app.backend.trade.model.alpaca.AlpacaAsset;
 import com.app.backend.trade.model.alpaca.AlpacaTransferActivity;
-import com.app.backend.trade.model.alpaca.ErrResponseOrder;
 import com.app.backend.trade.model.alpaca.OffsetDateTimeAdapter;
 import com.app.backend.trade.model.alpaca.Order;
 import com.app.backend.trade.repository.OrderRepository;
-import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -19,7 +18,6 @@ import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.net.URI;
 import java.time.OffsetDateTime;
 import java.util.*;
@@ -649,6 +647,107 @@ public class AlpacaService {
             }
         }
         return sum;
+    }
+
+    /**
+     * Récupère l'historique des barres (candles) pour un symbole donné.
+     * @param compte CompteEntity contenant les credentials
+     * @param symbol Symbole de l'action (ex: "AAPL")
+     * @param startDate Date de début (format ISO 8601, ex: "2023-01-01T00:00:00Z")
+     * @param endDate Date de fin (format ISO 8601, ex: "2023-01-31T23:59:59Z")
+     * @param timeframe Unité de temps (ex: "1Min", "5Min", "1Hour", "1Day")
+     * @return bars en String JSON
+     * c : close — prix de clôture de la bougie (ici 182.775)
+     * h : high — prix le plus haut atteint pendant la période (185.86)
+     * l : low — prix le plus bas atteint pendant la période (181.845)
+     * n : number of trades — nombre de transactions durant la période (865)
+     * o : open — prix d’ouverture de la bougie (185.86)
+     * t : timestamp — date et heure de la bougie (2025-03-18T04:00:00Z)
+     * v : volume — volume total échangé durant la période (22150)
+     * vw : volume weighted average price — prix moyen pondéré par le volume (182.894341)
+     */
+    public String getHistoricalBars(CompteEntity compte, String symbol, String startDate, String endDate, String timeframe) {
+        String url = apiMarketBaseUrl + "/v2/stocks/" + symbol + "/bars?start=" + startDate + "&end=" + endDate + "&timeframe=" + timeframe + "&feed=iex";
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("APCA-API-KEY-ID", compte.getCle());
+        headers.set("APCA-API-SECRET-KEY", compte.getSecret());
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, request, Map.class);
+            logger.info("Réponse brute Alpaca getHistoricalBars: {}", response.getBody());
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Object barsObj = response.getBody().get("bars");
+                if (barsObj != null) {
+                    return gson.toJson(barsObj);
+                }
+                return "[]";
+            }
+        } catch (Exception e) {
+            logger.error("Erreur lors de la récupération des barres historiques Alpaca: {}", e.getMessage());
+            throw new RuntimeException("Erreur lors de la récupération des barres historiques Alpaca: " + e.getMessage(), e);
+        }
+        return "";
+    }
+    public String getHistoricalBarsJson(CompteEntity compte, String symbol, int limit) {
+        return getHistoricalBars(compte, symbol, TradeUtils.getStartDate(limit), TradeUtils.getDateToDay(), "1Day");
+    }
+    public List<DailyValue> getHistoricalBars(CompteEntity compte, String symbol, Integer limit) {
+        String json = getHistoricalBars(compte, symbol, TradeUtils.getStartDate(limit == null ? 800 : limit), TradeUtils.getDateToDay(), "1Day");
+        List<DailyValue> result = new ArrayList<>();
+        if (json == null || json.isEmpty()) return result;
+        try {
+            // Nettoyage éventuel du format (si json commence/termine par [ ou {)
+            // On suppose que le format est une liste de maps (ex: [{...}, {...}])
+            List<Map<String, Object>> bars = gson.fromJson(json, List.class);
+            for (Map<String, Object> bar : bars) {
+                DailyValue dv = DailyValue.builder()
+                        .date(bar.getOrDefault("t", "").toString())
+                        .open(bar.getOrDefault("o", "").toString())
+                        .high(bar.getOrDefault("h", "").toString())
+                        .low(bar.getOrDefault("l", "").toString())
+                        .close(bar.getOrDefault("c", "").toString())
+                        .volume(bar.getOrDefault("v", "").toString())
+                        .numberOfTrades(bar.getOrDefault("n", "").toString())
+                        .volumeWeightedAveragePrice(bar.getOrDefault("vw", "").toString())
+                        .build();
+                result.add(dv);
+            }
+        } catch (Exception e) {
+            logger.error("Erreur lors du parsing des barres historiques Alpaca: {}", e.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * Récupère la liste des symboles disponibles sur IEX via Alpaca.
+     */
+    public List<String> getIexSymbols(CompteEntity compte) {
+        String url = apiBaseUrl + "/assets?feed=iex";
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("APCA-API-KEY-ID", compte.getCle());
+        headers.set("APCA-API-SECRET-KEY", compte.getSecret());
+        HttpEntity<Void> request = new HttpEntity<>(headers);
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, request, String.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                com.google.gson.reflect.TypeToken<List<AlpacaAsset>> typeToken =
+                        new com.google.gson.reflect.TypeToken<>() {};
+                List<AlpacaAsset> assets = gson.fromJson(response.getBody(), typeToken.getType());
+                List<String> symbolsActive = new ArrayList<>();
+                for (AlpacaAsset asset : assets) {
+                    if ("active".equalsIgnoreCase(asset.getStatus())
+                            && asset.getExchange() != null
+                            && !"CRYPTO".equalsIgnoreCase(asset.getExchange())
+                            && !"OTC".equalsIgnoreCase(asset.getExchange())) {
+                        symbolsActive.add(asset.getSymbol());
+                    }
+                }
+                return symbolsActive;
+            }
+        } catch (Exception e) {
+            logger.error("Erreur lors de la récupération des symboles IEX Alpaca: {}", e.getMessage());
+        }
+        return Collections.emptyList();
     }
 
 }
