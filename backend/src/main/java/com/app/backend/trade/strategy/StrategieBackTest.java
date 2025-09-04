@@ -51,6 +51,15 @@ public class StrategieBackTest {
         double positionSize = 0.0;
         double maxDrawdown = 0.0;
         double peakCapital = initialCapital;
+        int tradeCount = 0;
+        int winCount = 0;
+        double totalGain = 0.0;
+        double totalLoss = 0.0;
+        double sumPnL = 0.0;
+        double maxGain = Double.NEGATIVE_INFINITY;
+        double maxLoss = Double.POSITIVE_INFINITY;
+        int totalTradeBars = 0;
+        int tradeStartIndex = 0;
         for (int i = 0; i < series.getBarCount(); i++) {
             double price = series.getBar(i).getClosePrice().doubleValue();
             if (!inPosition && entryRule.isSatisfied(i)) {
@@ -58,6 +67,7 @@ public class StrategieBackTest {
                 positionSize = capital * riskPerTrade;
                 entryPrice = price;
                 inPosition = true;
+                tradeStartIndex = i;
             } else if (inPosition) {
                 // Gestion du stop loss / take profit
                 double stopLossPrice = entryPrice * (1 - stopLossPct);
@@ -71,6 +81,17 @@ public class StrategieBackTest {
                     if (takeProfitHit) exitPrice = takeProfitPrice;
                     double pnl = positionSize * ((exitPrice - entryPrice) / entryPrice);
                     capital += pnl;
+                    tradeCount++;
+                    sumPnL += pnl;
+                    if (pnl > 0) {
+                        winCount++;
+                        totalGain += pnl;
+                        if (pnl > maxGain) maxGain = pnl;
+                    } else {
+                        totalLoss += Math.abs(pnl);
+                        if (pnl < maxLoss) maxLoss = pnl;
+                    }
+                    totalTradeBars += (i - tradeStartIndex + 1);
                     inPosition = false;
                     // Drawdown
                     if (capital > peakCapital) peakCapital = capital;
@@ -84,20 +105,60 @@ public class StrategieBackTest {
             double price = series.getBar(series.getEndIndex()).getClosePrice().doubleValue();
             double pnl = positionSize * ((price - entryPrice) / entryPrice);
             capital += pnl;
+            tradeCount++;
+            sumPnL += pnl;
+            if (pnl > 0) {
+                winCount++;
+                totalGain += pnl;
+                if (pnl > maxGain) maxGain = pnl;
+            } else {
+                totalLoss += Math.abs(pnl);
+                if (pnl < maxLoss) maxLoss = pnl;
+            }
+            totalTradeBars += (series.getEndIndex() - tradeStartIndex + 1);
         }
         double rendement = (capital / initialCapital) - 1.0;
-        return new RiskResult(rendement, maxDrawdown);
+        double winRate = tradeCount > 0 ? (double) winCount / tradeCount : 0.0;
+        double avgPnL = tradeCount > 0 ? sumPnL / tradeCount : 0.0;
+        double profitFactor = totalLoss > 0 ? totalGain / totalLoss : 0.0;
+        double avgTradeBars = tradeCount > 0 ? (double) totalTradeBars / tradeCount : 0.0;
+        double maxTradeGain = (maxGain == Double.NEGATIVE_INFINITY) ? 0.0 : maxGain;
+        double maxTradeLoss = (maxLoss == Double.POSITIVE_INFINITY) ? 0.0 : maxLoss;
+        return new RiskResult(rendement, maxDrawdown, tradeCount, winRate, avgPnL, profitFactor, avgTradeBars, maxTradeGain, maxTradeLoss);
     }
 
     /**
-     * Classe de retour pour le backtest avec gestion du risque
+     * Classe de retour pour le backtest avec gestion du risque et métriques avancées
+     * rendement: rendement total du backtest (capital final / capital initial - 1)
+     * maxDrawdown: drawdown maximal observé (plus forte baisse du capital)
+     * tradeCount: nombre total de trades réalisés
+     * winRate: pourcentage de trades gagnants (win rate)
+     * avgPnL: gain ou perte moyen par trade
+     * profitFactor: profit factor (somme des gains / somme des pertes)
+     * avgTradeBars: nombre moyen de bougies par trade (durée moyenne d’un trade)
+     * maxTradeGain: maximum gain réalisé sur un trade
+     * maxTradeLoss: maximum perte réalisée sur un trade
      */
     public static class RiskResult {
         public final double rendement;
         public final double maxDrawdown;
-        public RiskResult(double rendement, double maxDrawdown) {
+        public final int tradeCount;
+        public final double winRate;
+        public final double avgPnL;
+        public final double profitFactor;
+        public final double avgTradeBars;
+        public final double maxTradeGain;
+        public final double maxTradeLoss;
+        public RiskResult(double rendement, double maxDrawdown, int tradeCount, double winRate, double avgPnL, double profitFactor, double avgTradeBars, double maxTradeGain, double maxTradeLoss) {
             this.rendement = rendement;
             this.maxDrawdown = maxDrawdown;
+            this.tradeCount = tradeCount;
+            this.winRate = winRate;
+            this.avgPnL = avgPnL;
+            this.profitFactor = profitFactor;
+            this.avgTradeBars = avgTradeBars;
+            this.maxTradeGain = maxTradeGain;
+            this.maxTradeLoss = maxTradeLoss;
         }
     }
 
