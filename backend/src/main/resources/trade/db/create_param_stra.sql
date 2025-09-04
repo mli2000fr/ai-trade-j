@@ -1,15 +1,23 @@
-CREATE TABLE param_stra (
+CREATE TABLE trade_ai.param_stra (
     symbol VARCHAR(20) PRIMARY KEY,
+    created_at DATETIME,
+    modified_at DATETIME,
     breakout_lookbackp INT,
+    breakout_best_r DOUBLE,
     macd_shortp INT,
     macd_longp INT,
     macd_signalp INT,
+    macd_best_r DOUBLE,
     meanr_smap INT,
     meanr_thresholdp DOUBLE,
+    meanr_best_r DOUBLE,
     rsi_p INT,
     rsi_oversoldt DOUBLE,
     rsi_overbought DOUBLE,
+    rsi_best_r DOUBLE,
     sma_shortp INT,
     sma_longp INT,
-    trend_p INT
+    sma_best_r DOUBLE,
+    trend_p INT,
+    trend_best_r DOUBLE
 );
