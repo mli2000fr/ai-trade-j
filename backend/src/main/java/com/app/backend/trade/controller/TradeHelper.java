@@ -336,6 +336,19 @@ public class TradeHelper {
     }
 
 
+    public void updateDailyValuAllSymbolsToSup(){
+        List<String> listegetIexSymbols = this.alpacaService.getIexSymbols();
+        int error = 0;
+        for(int i = 4349; i < listegetIexSymbols.size(); i++){
+            try{
+                alpacaService.updateDailyValue(listegetIexSymbols.get(i));
+                Thread.sleep(200);
+            }catch(Exception e){
+                error++;
+            }
+        }
+    }
+
 
     public void updateDailyValuAllSymbols(){
         List<String> listegetIexSymbols = this.alpacaService.getIexSymbols();

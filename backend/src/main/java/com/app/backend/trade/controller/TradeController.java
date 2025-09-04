@@ -211,7 +211,7 @@ public class TradeController {
     @GetMapping("/strategies/test-signal")
     public ResponseEntity<Map<String, Object>> testCombinedSignal(@RequestParam(value = "symbol", required = false) String symbol,
                                                                   @RequestParam(value = "isEntry", required = false) Boolean isEntry) {
-        tradeHelper.updateDailyValuAllSymbols();
+        tradeHelper.updateDailyValuAllSymbolsToSup();
         boolean result = tradeHelper.testCombinedSignalOnClosePrices(symbol, isEntry);
         return ResponseEntity.ok(Collections.singletonMap("signal", result));
     }
