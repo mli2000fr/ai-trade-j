@@ -3,6 +3,8 @@ package com.app.backend.trade.strategy;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
 
+import java.util.List;
+
 public class StrategieBackTest {
 
     private final static double INITIAL_CAPITAL = 1000;
@@ -131,7 +133,7 @@ public class StrategieBackTest {
      * Classe de retour pour le backtest avec gestion du risque et métriques avancées
      *
      * rendement : rendement total du backtest (capital final / capital initial - 1)
-     * maxDrawdown : drawdown maximal observé (plus forte baisse du capital)
+     * maxDrawdown : drawdown maximal observ�� (plus forte baisse du capital)
      * tradeCount : nombre total de trades réalisés
      * winRate : pourcentage de trades gagnants (win rate)
      * avgPnL : gain ou perte moyen par trade
@@ -501,9 +503,227 @@ public class StrategieBackTest {
         }
     }
 
-    /*
-    StrategieBackTest backTest = new StrategieBackTest();
-    BarSeries series = ...; // tes bougies
-    StrategieBackTest.Optimizer macdOptimizer = (BarSeries optSeries) ->
-            backTest.optimiseMacdParameters(optSeries, 8, 16, 20, 30, 6, 12);*/
+
+    // Rolling Window et Walk-Forward pour MACD
+    public java.util.List<RollingWindowResult> runRollingWindowBacktestMacd(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int stepSize,
+            int shortMin, int shortMax,
+            int longMin, int longMax,
+            int signalMin, int signalMax
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseMacdParameters(optSeries, shortMin, shortMax, longMin, longMax, signalMin, signalMax);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            MacdParams p = (MacdParams) params;
+            return backtestMacdStrategy(testSeries, p.shortPeriod, p.longPeriod, p.signalPeriod);
+        };
+        return runRollingWindowBacktest(series, windowOptSize, windowTestSize, stepSize, optimizer, backtestFunc);
+    }
+
+    public java.util.List<WalkForwardResult> runWalkForwardBacktestMacd(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int shortMin, int shortMax,
+            int longMin, int longMax,
+            int signalMin, int signalMax
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseMacdParameters(optSeries, shortMin, shortMax, longMin, longMax, signalMin, signalMax);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            MacdParams p = (MacdParams) params;
+            return backtestMacdStrategy(testSeries, p.shortPeriod, p.longPeriod, p.signalPeriod);
+        };
+        return runWalkForwardBacktest(series, windowOptSize, windowTestSize, optimizer, backtestFunc);
+    }
+
+    // Rolling Window et Walk-Forward pour Breakout
+    public java.util.List<RollingWindowResult> runRollingWindowBacktestBreakout(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int stepSize,
+            int lookbackMin, int lookbackMax
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseBreakoutParameters(optSeries, lookbackMin, lookbackMax);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            BreakoutParams p = (BreakoutParams) params;
+            return backtestBreakoutStrategy(testSeries, p.lookbackPeriod);
+        };
+        return runRollingWindowBacktest(series, windowOptSize, windowTestSize, stepSize, optimizer, backtestFunc);
+    }
+
+    public java.util.List<WalkForwardResult> runWalkForwardBacktestBreakout(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int lookbackMin, int lookbackMax
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseBreakoutParameters(optSeries, lookbackMin, lookbackMax);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            BreakoutParams p = (BreakoutParams) params;
+            return backtestBreakoutStrategy(testSeries, p.lookbackPeriod);
+        };
+        return runWalkForwardBacktest(series, windowOptSize, windowTestSize, optimizer, backtestFunc);
+    }
+
+    // Rolling Window et Walk-Forward pour MeanReversion
+    public java.util.List<RollingWindowResult> runRollingWindowBacktestMeanReversion(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int stepSize,
+            int smaMin, int smaMax,
+            double thresholdMin, double thresholdMax, double thresholdStep
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseMeanReversionParameters(optSeries, smaMin, smaMax, thresholdMin, thresholdMax, thresholdStep);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            MeanReversionParams p = (MeanReversionParams) params;
+            return backtestMeanReversionStrategy(testSeries, p.smaPeriod, p.threshold);
+        };
+        return runRollingWindowBacktest(series, windowOptSize, windowTestSize, stepSize, optimizer, backtestFunc);
+    }
+
+    public java.util.List<WalkForwardResult> runWalkForwardBacktestMeanReversion(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int smaMin, int smaMax,
+            double thresholdMin, double thresholdMax, double thresholdStep
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseMeanReversionParameters(optSeries, smaMin, smaMax, thresholdMin, thresholdMax, thresholdStep);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            MeanReversionParams p = (MeanReversionParams) params;
+            return backtestMeanReversionStrategy(testSeries, p.smaPeriod, p.threshold);
+        };
+        return runWalkForwardBacktest(series, windowOptSize, windowTestSize, optimizer, backtestFunc);
+    }
+
+    // Rolling Window et Walk-Forward pour RSI
+    public java.util.List<RollingWindowResult> runRollingWindowBacktestRsi(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int stepSize,
+            int rsiMin, int rsiMax,
+            double oversoldMin, double oversoldMax, double oversoldStep,
+            double overboughtMin, double overboughtMax, double overboughtStep
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseRsiParameters(optSeries, rsiMin, rsiMax, oversoldMin, oversoldMax, oversoldStep, overboughtMin, overboughtMax, overboughtStep);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            RsiParams p = (RsiParams) params;
+            return backtestRsiStrategy(testSeries, p.rsiPeriod, p.oversold, p.overbought);
+        };
+        return runRollingWindowBacktest(series, windowOptSize, windowTestSize, stepSize, optimizer, backtestFunc);
+    }
+
+    public java.util.List<WalkForwardResult> runWalkForwardBacktestRsi(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int rsiMin, int rsiMax,
+            double oversoldMin, double oversoldMax, double oversoldStep,
+            double overboughtMin, double overboughtMax, double overboughtStep
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseRsiParameters(optSeries, rsiMin, rsiMax, oversoldMin, oversoldMax, oversoldStep, overboughtMin, overboughtMax, overboughtStep);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            RsiParams p = (RsiParams) params;
+            return backtestRsiStrategy(testSeries, p.rsiPeriod, p.oversold, p.overbought);
+        };
+        return runWalkForwardBacktest(series, windowOptSize, windowTestSize, optimizer, backtestFunc);
+    }
+
+    // Rolling Window et Walk-Forward pour SMA Crossover
+    public java.util.List<RollingWindowResult> runRollingWindowBacktestSmaCrossover(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int stepSize,
+            int shortMin, int shortMax,
+            int longMin, int longMax
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseSmaCrossoverParameters(optSeries, shortMin, shortMax, longMin, longMax);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            SmaCrossoverParams p = (SmaCrossoverParams) params;
+            return backtestSmaCrossoverStrategy(testSeries, p.shortPeriod, p.longPeriod);
+        };
+        return runRollingWindowBacktest(series, windowOptSize, windowTestSize, stepSize, optimizer, backtestFunc);
+    }
+
+    public java.util.List<WalkForwardResult> runWalkForwardBacktestSmaCrossover(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int shortMin, int shortMax,
+            int longMin, int longMax
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseSmaCrossoverParameters(optSeries, shortMin, shortMax, longMin, longMax);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            SmaCrossoverParams p = (SmaCrossoverParams) params;
+            return backtestSmaCrossoverStrategy(testSeries, p.shortPeriod, p.longPeriod);
+        };
+        return runWalkForwardBacktest(series, windowOptSize, windowTestSize, optimizer, backtestFunc);
+    }
+
+    // Rolling Window et Walk-Forward pour TrendFollowing
+    public java.util.List<RollingWindowResult> runRollingWindowBacktestTrendFollowing(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int stepSize,
+            int trendMin, int trendMax
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseTrendFollowingParameters(optSeries, trendMin, trendMax);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            TrendFollowingParams p = (TrendFollowingParams) params;
+            return backtestTrendFollowingStrategy(testSeries, p.trendPeriod);
+        };
+        return runRollingWindowBacktest(series, windowOptSize, windowTestSize, stepSize, optimizer, backtestFunc);
+    }
+
+    public java.util.List<WalkForwardResult> runWalkForwardBacktestTrendFollowing(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int trendMin, int trendMax
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseTrendFollowingParameters(optSeries, trendMin, trendMax);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            TrendFollowingParams p = (TrendFollowingParams) params;
+            return backtestTrendFollowingStrategy(testSeries, p.trendPeriod);
+        };
+        return runWalkForwardBacktest(series, windowOptSize, windowTestSize, optimizer, backtestFunc);
+    }
 }
+
+/*
+exemple utilisation:
+List<StrategieBackTest.RollingWindowResult> rollingResults = backTest.runRollingWindowBacktestRsi(
+    series, 300, 100, 100, 10, 20, 30, 40, 1, 70, 90, 1
+);
+
+for (StrategieBackTest.RollingWindowResult res : rollingResults) {
+    StrategieBackTest.RsiParams params = (StrategieBackTest.RsiParams) res.params;
+    StrategieBackTest.RiskResult metrics = res.result;
+    System.out.println(
+        \"Fenêtre optimisation: \" + res.startOptIdx + \"-\" + res.endOptIdx +
+        \", fenêtre test: \" + res.startTestIdx + \"-\" + res.endTestIdx +
+        \", RSI params: period=\" + params.rsiPeriod + \", oversold=\" + params.oversold + \", overbought=\" + params.overbought +
+        \", rendement test: \" + metrics.rendement +
+        \", drawdown: \" + metrics.maxDrawdown +
+        \", win rate: \" + metrics.winRate +
+        \", nb trades: \" + metrics.tradeCount +
+        \", profit factor: \" + metrics.profitFactor
+    );
+}
+Pour les autres stratégies, il suffit d’adapter le cast du paramètre :
+Pour Breakout : (BreakoutParams) res.params
+Pour MeanReversion : (MeanReversionParams) res.params
+Pour RSI : (RsiParams) res.params
+Pour SMA Crossover : (SmaCrossoverParams) res.params
+Pour TrendFollowing : (TrendFollowingParams) res.params
+
+List<StrategieBackTest.WalkForwardResult> walkResults = backTest.runWalkForwardBacktestMacd(
+        series, 300, 100, 8, 16, 20, 30, 6, 12
+);*/
