@@ -4,6 +4,12 @@ import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
 
 public class StrategieBackTest {
+
+    private final static double INITIAL_CAPITAL = 1000;
+    private final static double RISK_PER_TRADE = 0.02;
+    private final static double STOP_LOSS_PCT_STOP = 0.03;
+    private final static double TAKE_PROFIL_PCT = 0.05;
+
     // Backtest générique pour une stratégie TradeStrategy
     private double backtestStrategy(TradeStrategy strategy, BarSeries series) {
         Rule entryRule = strategy.getEntryRule(series);
@@ -29,40 +35,106 @@ public class StrategieBackTest {
         return totalReturn - 1.0; // rendement total (ex: 0.25 = +25%)
     }
 
+    /**
+     * Backtest avec gestion du risque (stop loss, take profit, money management)
+     * Retourne un objet RiskResult avec rendement et drawdown maximal
+     */
+    public RiskResult backtestStrategyRisk(TradeStrategy strategy, BarSeries series) {
+        return backtestStrategyRisk(strategy, series, INITIAL_CAPITAL, RISK_PER_TRADE, STOP_LOSS_PCT_STOP, TAKE_PROFIL_PCT);
+    }
+    public RiskResult backtestStrategyRisk(TradeStrategy strategy, BarSeries series, double initialCapital, double riskPerTrade, double stopLossPct, double takeProfitPct) {
+        Rule entryRule = strategy.getEntryRule(series);
+        Rule exitRule = strategy.getExitRule(series);
+        boolean inPosition = false;
+        double entryPrice = 0.0;
+        double capital = initialCapital;
+        double positionSize = 0.0;
+        double maxDrawdown = 0.0;
+        double peakCapital = initialCapital;
+        for (int i = 0; i < series.getBarCount(); i++) {
+            double price = series.getBar(i).getClosePrice().doubleValue();
+            if (!inPosition && entryRule.isSatisfied(i)) {
+                // Entrée en position
+                positionSize = capital * riskPerTrade;
+                entryPrice = price;
+                inPosition = true;
+            } else if (inPosition) {
+                // Gestion du stop loss / take profit
+                double stopLossPrice = entryPrice * (1 - stopLossPct);
+                double takeProfitPrice = entryPrice * (1 + takeProfitPct);
+                boolean stopLossHit = price <= stopLossPrice;
+                boolean takeProfitHit = price >= takeProfitPrice;
+                boolean exitSignal = exitRule.isSatisfied(i);
+                if (stopLossHit || takeProfitHit || exitSignal) {
+                    double exitPrice = price;
+                    if (stopLossHit) exitPrice = stopLossPrice;
+                    if (takeProfitHit) exitPrice = takeProfitPrice;
+                    double pnl = positionSize * ((exitPrice - entryPrice) / entryPrice);
+                    capital += pnl;
+                    inPosition = false;
+                    // Drawdown
+                    if (capital > peakCapital) peakCapital = capital;
+                    double drawdown = (peakCapital - capital) / peakCapital;
+                    if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+                }
+            }
+        }
+        // Si une position reste ouverte à la fin, on la clôture au dernier prix
+        if (inPosition) {
+            double price = series.getBar(series.getEndIndex()).getClosePrice().doubleValue();
+            double pnl = positionSize * ((price - entryPrice) / entryPrice);
+            capital += pnl;
+        }
+        double rendement = (capital / initialCapital) - 1.0;
+        return new RiskResult(rendement, maxDrawdown);
+    }
+
+    /**
+     * Classe de retour pour le backtest avec gestion du risque
+     */
+    public static class RiskResult {
+        public final double rendement;
+        public final double maxDrawdown;
+        public RiskResult(double rendement, double maxDrawdown) {
+            this.rendement = rendement;
+            this.maxDrawdown = maxDrawdown;
+        }
+    }
+
     // Backtest pour BreakoutStrategy
-    public double backtestBreakoutStrategy(BarSeries series, int lookbackPeriod) {
+    public RiskResult backtestBreakoutStrategy(BarSeries series, int lookbackPeriod) {
         BreakoutStrategy strategy = new BreakoutStrategy(lookbackPeriod);
-        return backtestStrategy(strategy, series);
+        return backtestStrategyRisk(strategy, series);
     }
 
     // Backtest pour MacdStrategy
-    public double backtestMacdStrategy(BarSeries series, int shortPeriod, int longPeriod, int signalPeriod) {
+    public RiskResult backtestMacdStrategy(BarSeries series, int shortPeriod, int longPeriod, int signalPeriod) {
         MacdStrategy strategy = new MacdStrategy(shortPeriod, longPeriod, signalPeriod);
-        return backtestStrategy(strategy, series);
+        return backtestStrategyRisk(strategy, series);
     }
 
     // Backtest pour MeanReversionStrategy
-    public double backtestMeanReversionStrategy(BarSeries series, int smaPeriod, double threshold) {
+    public RiskResult backtestMeanReversionStrategy(BarSeries series, int smaPeriod, double threshold) {
         MeanReversionStrategy strategy = new MeanReversionStrategy(smaPeriod, threshold);
-        return backtestStrategy(strategy, series);
+        return backtestStrategyRisk(strategy, series);
     }
 
     // Backtest pour RsiStrategy
-    public double backtestRsiStrategy(BarSeries series, int rsiPeriod, double oversoldThreshold, double overboughtThreshold) {
+    public RiskResult backtestRsiStrategy(BarSeries series, int rsiPeriod, double oversoldThreshold, double overboughtThreshold) {
         RsiStrategy strategy = new RsiStrategy(rsiPeriod, oversoldThreshold, overboughtThreshold);
-        return backtestStrategy(strategy, series);
+        return backtestStrategyRisk(strategy, series);
     }
 
     // Backtest pour SmaCrossoverStrategy
-    public double backtestSmaCrossoverStrategy(BarSeries series, int shortPeriod, int longPeriod) {
+    public RiskResult backtestSmaCrossoverStrategy(BarSeries series, int shortPeriod, int longPeriod) {
         SmaCrossoverStrategy strategy = new SmaCrossoverStrategy(shortPeriod, longPeriod);
-        return backtestStrategy(strategy, series);
+        return backtestStrategyRisk(strategy, series);
     }
 
     // Backtest pour TrendFollowingStrategy
-    public double backtestTrendFollowingStrategy(BarSeries series, int trendPeriod) {
+    public RiskResult backtestTrendFollowingStrategy(BarSeries series, int trendPeriod) {
         TrendFollowingStrategy strategy = new TrendFollowingStrategy(trendPeriod);
-        return backtestStrategy(strategy, series);
+        return backtestStrategyRisk(strategy, series);
     }
 
     /**
@@ -74,9 +146,9 @@ public class StrategieBackTest {
         for (int shortPeriod = shortMin; shortPeriod <= shortMax; shortPeriod++) {
             for (int longPeriod = longMin; longPeriod <= longMax; longPeriod++) {
                 for (int signalPeriod = signalMin; signalPeriod <= signalMax; signalPeriod++) {
-                    double result = backtestMacdStrategy(series, shortPeriod, longPeriod, signalPeriod);
-                    if (result > bestReturn) {
-                        bestReturn = result;
+                    RiskResult result = backtestMacdStrategy(series, shortPeriod, longPeriod, signalPeriod);
+                    if (result.rendement  > bestReturn) {
+                        bestReturn = result.rendement ;
                         bestShort = shortPeriod;
                         bestLong = longPeriod;
                         bestSignal = signalPeriod;
@@ -94,9 +166,9 @@ public class StrategieBackTest {
         double bestReturn = Double.NEGATIVE_INFINITY;
         int bestLookback = lookbackMin;
         for (int lookback = lookbackMin; lookback <= lookbackMax; lookback++) {
-            double result = backtestBreakoutStrategy(series, lookback);
-            if (result > bestReturn) {
-                bestReturn = result;
+            RiskResult result = backtestBreakoutStrategy(series, lookback);
+            if (result.rendement  > bestReturn) {
+                bestReturn = result.rendement ;
                 bestLookback = lookback;
             }
         }
@@ -112,9 +184,9 @@ public class StrategieBackTest {
         double bestThreshold = thresholdMin;
         for (int sma = smaMin; sma <= smaMax; sma++) {
             for (double threshold = thresholdMin; threshold <= thresholdMax; threshold += thresholdStep) {
-                double result = backtestMeanReversionStrategy(series, sma, threshold);
-                if (result > bestReturn) {
-                    bestReturn = result;
+                RiskResult result = backtestMeanReversionStrategy(series, sma, threshold);
+                if (result.rendement  > bestReturn) {
+                    bestReturn = result.rendement ;
                     bestSma = sma;
                     bestThreshold = threshold;
                 }
@@ -134,9 +206,9 @@ public class StrategieBackTest {
         for (int rsi = rsiMin; rsi <= rsiMax; rsi++) {
             for (double oversold = oversoldMin; oversold <= oversoldMax; oversold += oversoldStep) {
                 for (double overbought = overboughtMin; overbought <= overboughtMax; overbought += overboughtStep) {
-                    double result = backtestRsiStrategy(series, rsi, oversold, overbought);
-                    if (result > bestReturn) {
-                        bestReturn = result;
+                    RiskResult result = backtestRsiStrategy(series, rsi, oversold, overbought);
+                    if (result.rendement  > bestReturn) {
+                        bestReturn = result.rendement ;
                         bestRsi = rsi;
                         bestOversold = oversold;
                         bestOverbought = overbought;
@@ -156,9 +228,9 @@ public class StrategieBackTest {
         int bestLong = longMin;
         for (int shortPeriod = shortMin; shortPeriod <= shortMax; shortPeriod++) {
             for (int longPeriod = longMin; longPeriod <= longMax; longPeriod++) {
-                double result = backtestSmaCrossoverStrategy(series, shortPeriod, longPeriod);
-                if (result > bestReturn) {
-                    bestReturn = result;
+                RiskResult result = backtestSmaCrossoverStrategy(series, shortPeriod, longPeriod);
+                if (result.rendement  > bestReturn) {
+                    bestReturn = result.rendement ;
                     bestShort = shortPeriod;
                     bestLong = longPeriod;
                 }
@@ -174,9 +246,9 @@ public class StrategieBackTest {
         double bestReturn = Double.NEGATIVE_INFINITY;
         int bestTrend = trendMin;
         for (int trendPeriod = trendMin; trendPeriod <= trendMax; trendPeriod++) {
-            double result = backtestTrendFollowingStrategy(series, trendPeriod);
-            if (result > bestReturn) {
-                bestReturn = result;
+            RiskResult result = backtestTrendFollowingStrategy(series, trendPeriod);
+            if (result.rendement > bestReturn) {
+                bestReturn = result.rendement;
                 bestTrend = trendPeriod;
             }
         }
