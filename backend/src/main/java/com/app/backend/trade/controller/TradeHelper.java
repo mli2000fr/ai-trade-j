@@ -243,7 +243,7 @@ public class TradeHelper {
         }
         Double lastPrice = alpacaService.getLastPrice(compte, symbol);
         //String data = twelveDataService.getDataAction(symbol);
-        String historical = alpacaService.getHistoricalBarsJson(compte, symbol, 200);
+        String historical = alpacaService.getHistoricalBarsJson(symbol, 200);
         String ema20 = twelveDataService.getEMA20(symbol);
         String ema50 = twelveDataService.getEMA50(symbol);
         String sma200 = twelveDataService.getSMA200(symbol);
@@ -329,13 +329,27 @@ public class TradeHelper {
 
     public boolean testCombinedSignalOnClosePrices(String symbol, boolean isEntry) {
 
-        List<CompteEntity> comptes = compteService.getAllComptes();
-        List<String> listeSymbols = alpacaService.getIexSymbols(comptes.get(0));
-
-        List<DailyValue> listeValues = alpacaService.getHistoricalBars(comptes.get(0), symbol, 750);
+        List<DailyValue> listeValues = alpacaService.getHistoricalBars(symbol, TradeUtils.getStartDate(700));
         BarSeries series = toBarSeries(listeValues);
         int lastIndex = series.getEndIndex();
         return getCombinedSignal(series, lastIndex, isEntry);
+    }
+
+
+
+    public void updateDailyValuAllSymbols(){
+        List<String> listegetIexSymbols = this.alpacaService.getIexSymbols();
+        int error = 0;
+        for(String symbol : listegetIexSymbols){
+            try{
+                alpacaService.updateDailyValue(symbol);
+                Thread.sleep(200);
+            }catch(Exception e){
+                error++;
+                TradeUtils.log("Erreur updateDailyValue("+symbol+") : " + e.getMessage());
+            }
+        }
+        TradeUtils.log("updateDailyValuAllSymbols: total "+listegetIexSymbols.size()+", error" + error);
     }
 
     /**

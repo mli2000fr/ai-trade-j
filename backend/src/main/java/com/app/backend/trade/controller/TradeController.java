@@ -211,7 +211,14 @@ public class TradeController {
     @GetMapping("/strategies/test-signal")
     public ResponseEntity<Map<String, Object>> testCombinedSignal(@RequestParam(value = "symbol", required = false) String symbol,
                                                                   @RequestParam(value = "isEntry", required = false) Boolean isEntry) {
+        tradeHelper.updateDailyValuAllSymbols();
         boolean result = tradeHelper.testCombinedSignalOnClosePrices(symbol, isEntry);
         return ResponseEntity.ok(Collections.singletonMap("signal", result));
+    }
+
+    @GetMapping("/strategies/update-daily-valu")
+    public ResponseEntity<Boolean> testCombinedSignal() {
+        tradeHelper.updateDailyValuAllSymbols();
+        return ResponseEntity.ok(true);
     }
 }

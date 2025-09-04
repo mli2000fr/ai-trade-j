@@ -10,8 +10,10 @@ import com.app.backend.trade.repository.OrderRepository;
 import com.app.backend.trade.util.TradeUtils;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.java_websocket.client.WebSocketClient;
@@ -41,13 +43,19 @@ public class AlpacaService {
 
     private final RestTemplate restTemplate = new RestTemplate();
     private final OrderRepository orderRepository;
+    private final CompteService compteService;
 
     private final Gson gson = new GsonBuilder()
             .registerTypeAdapter(OffsetDateTime.class, new OffsetDateTimeAdapter())
             .create();
 
-    public AlpacaService(OrderRepository orderRepository) {
+    private final JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    public AlpacaService(OrderRepository orderRepository, JdbcTemplate jdbcTemplate, CompteService compteService) {
         this.orderRepository = orderRepository;
+        this.jdbcTemplate = jdbcTemplate;
+        this.compteService = compteService;
     }
 
     /**
@@ -666,33 +674,55 @@ public class AlpacaService {
      * v : volume — volume total échangé durant la période (22150)
      * vw : volume weighted average price — prix moyen pondéré par le volume (182.894341)
      */
-    public String getHistoricalBars(CompteEntity compte, String symbol, String startDate, String endDate, String timeframe) {
+    public String getHistoricalBars(String symbol, String startDate, String endDate, String timeframe) {
         String url = apiMarketBaseUrl + "/v2/stocks/" + symbol + "/bars?start=" + startDate + "&end=" + endDate + "&timeframe=" + timeframe + "&feed=iex";
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("APCA-API-KEY-ID", compte.getCle());
-        headers.set("APCA-API-SECRET-KEY", compte.getSecret());
-        HttpEntity<Void> request = new HttpEntity<>(headers);
-        try {
-            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, request, Map.class);
-            logger.info("Réponse brute Alpaca getHistoricalBars: {}", response.getBody());
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                Object barsObj = response.getBody().get("bars");
-                if (barsObj != null) {
-                    return gson.toJson(barsObj);
+        List<CompteEntity> listeCompte = compteService.getAllComptes();
+        int maxRetries = 5;
+        int delay = 1000; // 1 seconde
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                int indexCompte = attempt % listeCompte.size();
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("APCA-API-KEY-ID", listeCompte.get(indexCompte).getCle());
+                headers.set("APCA-API-SECRET-KEY", listeCompte.get(indexCompte).getSecret());
+                HttpEntity<Void> request = new HttpEntity<>(headers);
+                ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, request, Map.class);
+                logger.info("Réponse brute Alpaca getHistoricalBars: {}", response.getBody());
+                if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                    Object barsObj = response.getBody().get("bars");
+                    if (barsObj != null) {
+                        return gson.toJson(barsObj);
+                    }
+                    return "[]";
+                } else if (response.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
+                    logger.warn("Rate limit atteint (429), tentative {} sur {}", attempt + 1, maxRetries);
+                } else {
+                    logger.error("Erreur HTTP {} lors de la récupération des barres historiques Alpaca: {}", response.getStatusCode(), response.getBody());
+                    break;
                 }
-                return "[]";
+            } catch (org.springframework.web.client.HttpClientErrorException.TooManyRequests e) {
+                logger.warn("Rate limit atteint (429), tentative {} sur {}", attempt + 1, maxRetries);
+            } catch (Exception e) {
+                logger.error("Erreur lors de la récupération des barres historiques Alpaca: {}", e.getMessage());
+                if (attempt == maxRetries - 1) {
+                    throw new RuntimeException("Erreur lors de la récupération des barres historiques Alpaca: " + e.getMessage(), e);
+                }
             }
-        } catch (Exception e) {
-            logger.error("Erreur lors de la récupération des barres historiques Alpaca: {}", e.getMessage());
-            throw new RuntimeException("Erreur lors de la récupération des barres historiques Alpaca: " + e.getMessage(), e);
+            try {
+                Thread.sleep(delay);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            delay *= 2; // backoff exponentiel
         }
         return "";
     }
-    public String getHistoricalBarsJson(CompteEntity compte, String symbol, int limit) {
-        return getHistoricalBars(compte, symbol, TradeUtils.getStartDate(limit), TradeUtils.getDateToDay(), "1Day");
+    public String getHistoricalBarsJson(String symbol, int limit) {
+        return getHistoricalBars(symbol, TradeUtils.getStartDate(limit), TradeUtils.getDateToDay(), "1Day");
     }
-    public List<DailyValue> getHistoricalBars(CompteEntity compte, String symbol, Integer limit) {
-        String json = getHistoricalBars(compte, symbol, TradeUtils.getStartDate(limit == null ? 800 : limit), TradeUtils.getDateToDay(), "1Day");
+    public List<DailyValue> getHistoricalBars(String symbol, String startDate) {
+        String json = getHistoricalBars(symbol, startDate, TradeUtils.getDateToDay(), "1Day");
         List<DailyValue> result = new ArrayList<>();
         if (json == null || json.isEmpty()) return result;
         try {
@@ -718,10 +748,40 @@ public class AlpacaService {
         return result;
     }
 
+    public  boolean updateDailyValue(String symbol) {
+
+        // 1. Chercher la date la plus récente pour ce symbol dans la table daily_value
+        String sql = "SELECT MAX(date) FROM daily_value WHERE symbol = ?";
+        java.sql.Date lastDate = null;
+        try {
+            lastDate = jdbcTemplate.queryForObject(sql, new Object[]{symbol}, java.sql.Date.class);
+        } catch (Exception e) {
+            logger.warn("Aucune date trouvée pour le symbole {} dans daily_value ou erreur SQL: {}", symbol, e.getMessage());
+        }
+        String dateStart;
+        if (lastDate == null) {
+            // Si aucune ligne trouvée, on prend la date de start par défaut
+            dateStart = TradeUtils.getStartDate(800);
+        } else {
+            // Sinon, on ajoute un jour à la date la plus récente
+            java.time.LocalDate nextDay = lastDate.toLocalDate().plusDays(1);
+            dateStart = nextDay.toString(); // format YYYY-MM-DD
+        }
+        // 2. Appeler getHistoricalBars avec la date de start calculée
+        List<DailyValue> lsiteValues = getHistoricalBars(symbol, dateStart);
+        for(DailyValue dv : lsiteValues){
+            insertDailyValue(symbol, dv);
+        }
+        return true;
+    }
+
+
+
     /**
      * Récupère la liste des symboles disponibles sur IEX via Alpaca.
      */
-    public List<String> getIexSymbols(CompteEntity compte) {
+    public List<String> getIexSymbols() {
+        CompteEntity compte = compteService.getAllComptes().get(0);
         String url = apiBaseUrl + "/assets?feed=iex";
         HttpHeaders headers = new HttpHeaders();
         headers.set("APCA-API-KEY-ID", compte.getCle());
@@ -750,4 +810,36 @@ public class AlpacaService {
         return Collections.emptyList();
     }
 
+    /**
+     * Insère une ligne dans la table daily_value avec symbol et une instance de DailyValue.
+     * La colonne date est stockée en type DATE (MySQL), donc conversion si nécessaire.
+     */
+    public void insertDailyValue(String symbol, DailyValue dailyValue) {
+        // Conversion de la date (ex: "2025-03-18T04:00:00Z" ou "2025-03-18") en java.sql.Date
+        java.sql.Date sqlDate = null;
+        if (dailyValue.getDate() != null && !dailyValue.getDate().isEmpty()) {
+            String dateStr = dailyValue.getDate();
+            // Extraction de la partie date (YYYY-MM-DD)
+            if (dateStr.length() >= 10) {
+                dateStr = dateStr.substring(0, 10);
+            }
+            try {
+                sqlDate = java.sql.Date.valueOf(dateStr);
+            } catch (Exception e) {
+                logger.warn("Format de date inattendu pour DailyValue: {}", dailyValue.getDate());
+            }
+        }
+        String sql = "INSERT INTO daily_value (symbol, date, open, high, low, close, volume, number_of_trades, volume_weighted_average_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        jdbcTemplate.update(sql,
+                symbol,
+                sqlDate,
+                dailyValue.getOpen(),
+                dailyValue.getHigh(),
+                dailyValue.getLow(),
+                dailyValue.getClose(),
+                dailyValue.getVolume(),
+                dailyValue.getNumberOfTrades(),
+                dailyValue.getVolumeWeightedAveragePrice()
+        );
+    }
 }
