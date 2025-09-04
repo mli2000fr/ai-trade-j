@@ -129,25 +129,35 @@ public class StrategieBackTest {
 
     /**
      * Classe de retour pour le backtest avec gestion du risque et métriques avancées
-     * rendement: rendement total du backtest (capital final / capital initial - 1)
-     * maxDrawdown: drawdown maximal observé (plus forte baisse du capital)
-     * tradeCount: nombre total de trades réalisés
-     * winRate: pourcentage de trades gagnants (win rate)
-     * avgPnL: gain ou perte moyen par trade
-     * profitFactor: profit factor (somme des gains / somme des pertes)
-     * avgTradeBars: nombre moyen de bougies par trade (durée moyenne d’un trade)
-     * maxTradeGain: maximum gain réalisé sur un trade
-     * maxTradeLoss: maximum perte réalisée sur un trade
+     *
+     * rendement : rendement total du backtest (capital final / capital initial - 1)
+     * maxDrawdown : drawdown maximal observé (plus forte baisse du capital)
+     * tradeCount : nombre total de trades réalisés
+     * winRate : pourcentage de trades gagnants (win rate)
+     * avgPnL : gain ou perte moyen par trade
+     * profitFactor : profit factor (somme des gains / somme des pertes)
+     * avgTradeBars : nombre moyen de bougies par trade (durée moyenne d’un trade)
+     * maxTradeGain : maximum gain réalisé sur un trade
+     * maxTradeLoss : maximum perte réalisée sur un trade
      */
     public static class RiskResult {
+        /** Rendement total du backtest (capital final / capital initial - 1) */
         public final double rendement;
+        /** Drawdown maximal observé (plus forte baisse du capital) */
         public final double maxDrawdown;
+        /** Nombre total de trades réalisés */
         public final int tradeCount;
+        /** Pourcentage de trades gagnants (win rate) */
         public final double winRate;
+        /** Gain ou perte moyen par trade */
         public final double avgPnL;
+        /** Profit factor (somme des gains / somme des pertes) */
         public final double profitFactor;
+        /** Nombre moyen de bougies par trade (durée moyenne d'un trade) */
         public final double avgTradeBars;
+        /** Maximum gain réalisé sur un trade */
         public final double maxTradeGain;
+        /** Maximum perte réalisée sur un trade */
         public final double maxTradeLoss;
         public RiskResult(double rendement, double maxDrawdown, int tradeCount, double winRate, double avgPnL, double profitFactor, double avgTradeBars, double maxTradeGain, double maxTradeLoss) {
             this.rendement = rendement;
@@ -316,6 +326,125 @@ public class StrategieBackTest {
         return new TrendFollowingParams(bestTrend, bestReturn);
     }
 
+    /**
+     * Interface fonctionnelle pour l'optimisation de paramètres
+     */
+    @FunctionalInterface
+    public interface Optimizer {
+        Object optimise(BarSeries series);
+    }
+
+    /**
+     * Interface fonctionnelle pour le backtest avec paramètres optimisés
+     */
+    @FunctionalInterface
+    public interface ParamBacktest {
+        RiskResult backtest(BarSeries series, Object params);
+    }
+
+    /**
+     * Rolling Window Backtest
+     * Optimise sur une fenêtre, teste sur la suivante, répète en glissant la fenêtre
+     */
+    public static class RollingWindowResult {
+        public final int startOptIdx;
+        public final int endOptIdx;
+        public final int startTestIdx;
+        public final int endTestIdx;
+        public final Object params;
+        public final RiskResult result;
+        public RollingWindowResult(int startOptIdx, int endOptIdx, int startTestIdx, int endTestIdx, Object params, RiskResult result) {
+            this.startOptIdx = startOptIdx;
+            this.endOptIdx = endOptIdx;
+            this.startTestIdx = startTestIdx;
+            this.endTestIdx = endTestIdx;
+            this.params = params;
+            this.result = result;
+        }
+    }
+
+    /*
+    La série de bougies (BarSeries)
+    La taille de la fenêtre d’optimisation
+    La taille de la fenêtre de test (validation)
+    Les plages de paramètres à optimiser
+    Le type de stratégie à utiliser (via une interface ou un enum, ou simplement en passant la fonction d’optimisation et de backtest en paramètre)
+     */
+    public java.util.List<RollingWindowResult> runRollingWindowBacktest(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int stepSize,
+            Optimizer optimizer,
+            ParamBacktest backtestFunc
+    ) {
+        java.util.List<RollingWindowResult> results = new java.util.ArrayList<>();
+        int totalBars = series.getBarCount();
+        for (int startOpt = 0; startOpt + windowOptSize + windowTestSize <= totalBars; startOpt += stepSize) {
+            int endOpt = startOpt + windowOptSize - 1;
+            int startTest = endOpt + 1;
+            int endTest = startTest + windowTestSize - 1;
+            BarSeries optSeries = series.getSubSeries(startOpt, endOpt + 1);
+            BarSeries testSeries = series.getSubSeries(startTest, endTest + 1);
+            Object params = optimizer.optimise(optSeries);
+            RiskResult result = backtestFunc.backtest(testSeries, params);
+            results.add(new RollingWindowResult(startOpt, endOpt, startTest, endTest, params, result));
+        }
+        return results;
+    }
+
+    /**
+     * Walk-Forward Analysis
+     * Optimise sur une fenêtre, teste sur la suivante, avance la fenêtre et répète
+     */
+    public static class WalkForwardResult {
+        public final int startOptIdx;
+        public final int endOptIdx;
+        public final int startTestIdx;
+        public final int endTestIdx;
+        public final Object params;
+        public final RiskResult result;
+        public WalkForwardResult(int startOptIdx, int endOptIdx, int startTestIdx, int endTestIdx, Object params, RiskResult result) {
+            this.startOptIdx = startOptIdx;
+            this.endOptIdx = endOptIdx;
+            this.startTestIdx = startTestIdx;
+            this.endTestIdx = endTestIdx;
+            this.params = params;
+            this.result = result;
+        }
+    }
+
+    /*
+    La série de bougies (BarSeries)
+    La taille de la fenêtre d’optimisation
+    La taille de la fenêtre de test (validation)
+    Les plages de paramètres à optimiser
+    Le type de stratégie à utiliser (via une interface ou un enum, ou simplement en passant la fonction d’optimisation et de backtest en paramètre)
+     */
+    public java.util.List<WalkForwardResult> runWalkForwardBacktest(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            Optimizer optimizer,
+            ParamBacktest backtestFunc
+    ) {
+        java.util.List<WalkForwardResult> results = new java.util.ArrayList<>();
+        int totalBars = series.getBarCount();
+        int startOpt = 0;
+        while (startOpt + windowOptSize + windowTestSize <= totalBars) {
+            int endOpt = startOpt + windowOptSize - 1;
+            int startTest = endOpt + 1;
+            int endTest = startTest + windowTestSize - 1;
+            BarSeries optSeries = series.getSubSeries(startOpt, endOpt + 1);
+            BarSeries testSeries = series.getSubSeries(startTest, endTest + 1);
+            Object params = optimizer.optimise(optSeries);
+            RiskResult result = backtestFunc.backtest(testSeries, params);
+            results.add(new WalkForwardResult(startOpt, endOpt, startTest, endTest, params, result));
+            startOpt = startTest; // Avance la fenêtre
+        }
+        return results;
+    }
+
     // Classes de paramètres pour le retour des optimisations
     public static class MacdParams {
         public final int shortPeriod, longPeriod, signalPeriod;
@@ -371,4 +500,10 @@ public class StrategieBackTest {
             this.performance = performance;
         }
     }
+
+    /*
+    StrategieBackTest backTest = new StrategieBackTest();
+    BarSeries series = ...; // tes bougies
+    StrategieBackTest.Optimizer macdOptimizer = (BarSeries optSeries) ->
+            backTest.optimiseMacdParameters(optSeries, 8, 16, 20, 30, 6, 12);*/
 }
