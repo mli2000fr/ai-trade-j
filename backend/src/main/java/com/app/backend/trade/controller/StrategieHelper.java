@@ -1018,12 +1018,21 @@ public class StrategieHelper {
         public final String exitName;
         public final Object exitParams;
         public final StrategieBackTest.RiskResult result;
-        public BestInOutStrategy(String entryName, Object entryParams, String exitName, Object exitParams, StrategieBackTest.RiskResult result) {
+        public final double initialCapital;
+        public final double riskPerTrade;
+        public final double stopLossPct;
+        public final double takeProfitPct;
+        public BestInOutStrategy(String entryName, Object entryParams, String exitName, Object exitParams, StrategieBackTest.RiskResult result,
+                                double initialCapital, double riskPerTrade, double stopLossPct, double takeProfitPct) {
             this.entryName = entryName;
             this.entryParams = entryParams;
             this.exitName = exitName;
             this.exitParams = exitParams;
             this.result = result;
+            this.initialCapital = initialCapital;
+            this.riskPerTrade = riskPerTrade;
+            this.stopLossPct = stopLossPct;
+            this.takeProfitPct = takeProfitPct;
         }
     }
 
@@ -1102,7 +1111,7 @@ public class StrategieHelper {
                                    + " | Drawdown: " + String.format("%.2f", result.maxDrawdown * 100) + "%");
                 if (result.rendement > bestPerf) {
                     bestPerf = result.rendement;
-                    bestCombo = new BestInOutStrategy(entryName, entryParams, exitName, exitParams, result);
+                    bestCombo = new BestInOutStrategy(entryName, entryParams, exitName, exitParams, result, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT_STOP, StrategieBackTest.TAKE_PROFIL_PCT);
                 }
             }
         }
@@ -1165,6 +1174,10 @@ public class StrategieHelper {
                     avg_trade_bars = ?,
                     max_trade_gain = ?,
                     max_trade_loss = ?,
+                    initial_capital = ?,
+                    risk_per_trade = ?,
+                    stop_loss_pct = ?,
+                    take_profit_pct = ?,
                     updated_date = CURRENT_TIMESTAMP
                 WHERE symbol = ?
             """;
@@ -1182,6 +1195,10 @@ public class StrategieHelper {
                 best.result.avgTradeBars,
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
+                best.initialCapital,
+                best.riskPerTrade,
+                best.stopLossPct,
+                best.takeProfitPct,
                 symbol
             );
         } else {
@@ -1191,8 +1208,9 @@ public class StrategieHelper {
                     symbol, entry_strategy_name, entry_strategy_params,
                     exit_strategy_name, exit_strategy_params,
                     rendement, trade_count, win_rate, max_drawdown, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss,
+                    initial_capital, risk_per_trade, stop_loss_pct, take_profit_pct,
                     created_date, updated_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """;
             jdbcTemplate.update(insertSql,
                 symbol,
@@ -1209,6 +1227,10 @@ public class StrategieHelper {
                 best.result.avgTradeBars,
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
+                best.initialCapital,
+                best.riskPerTrade,
+                best.stopLossPct,
+                best.takeProfitPct,
                 java.sql.Date.valueOf(java.time.LocalDate.now())
             );
         }
@@ -1238,7 +1260,11 @@ public class StrategieHelper {
                 );
                 Object entryParams = parseStrategyParams(entryName, entryParamsJson);
                 Object exitParams = parseStrategyParams(exitName, exitParamsJson);
-                return new BestInOutStrategy(entryName, entryParams, exitName, exitParams, result);
+                double initialCapital = rs.getDouble("initial_capital");
+                double riskPerTrade = rs.getDouble("risk_per_trade");
+                double stopLossPct = rs.getDouble("stop_loss_pct");
+                double takeProfitPct = rs.getDouble("take_profit_pct");
+                return new BestInOutStrategy(entryName, entryParams, exitName, exitParams, result, initialCapital, riskPerTrade, stopLossPct, takeProfitPct);
             }, symbol);
         } catch (org.springframework.dao.EmptyResultDataAccessException e) {
             logger.warn("Aucun BestInOutStrategy trouvé pour le symbole: {}", symbol);

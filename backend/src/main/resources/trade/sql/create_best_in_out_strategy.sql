@@ -14,5 +14,11 @@ CREATE TABLE best_in_out_strategy (
     max_trade_gain DOUBLE,
     max_trade_loss DOUBLE,
     created_date DATE,
-    updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+        -- param de test
+        initial_capital DOUBLE,
+        risk_per_trade DOUBLE,
+        stop_loss_pct DOUBLE,
+        take_profit_pct DOUBLE
 );
