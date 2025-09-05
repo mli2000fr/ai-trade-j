@@ -1061,11 +1061,16 @@ public class StrategieHelper {
                 com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
                 com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
                 StrategieBackTest.RiskResult result = strategieBackTest.backtestStrategyRisk(combined, series);
+                System.out.println("IN: " + entryName + " | OUT: " + exitName + " | Rendement: " + String.format("%.4f", result.rendement * 100) + "% | Trades: " + result.tradeCount + " | WinRate: " + String.format("%.2f", result.winRate * 100) + "% | Drawdown: " + String.format("%.2f", result.maxDrawdown * 100) + "%");
                 if (result.rendement > bestPerf) {
                     bestPerf = result.rendement;
                     bestCombo = new BestInOutStrategy(entryName, entryParams, exitName, exitParams, result);
                 }
             }
+        }
+        System.out.println("=== MEILLEUR COUPLE IN/OUT ===");
+        if (bestCombo != null) {
+            System.out.println("IN: " + bestCombo.entryName + " | OUT: " + bestCombo.exitName + " | Rendement: " + String.format("%.4f", bestCombo.result.rendement * 100) + "% | Trades: " + bestCombo.result.tradeCount);
         }
         return bestCombo;
     }
