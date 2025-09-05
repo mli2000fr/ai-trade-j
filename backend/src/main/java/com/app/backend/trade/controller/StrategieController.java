@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -118,5 +119,10 @@ public class StrategieController {
         return ResponseEntity.ok(true);
     }
 
-}
+    @GetMapping("/strategies/best_performance_actions")
+    public ResponseEntity<List<StrategieHelper.BestInOutStrategy>> getBestPerfActions(@RequestParam(value = "limit", required = false) Integer limit) {
+        List<StrategieHelper.BestInOutStrategy> lsiteStr = strategieHelper.getBestPerfActions(limit);
+        return ResponseEntity.ok(lsiteStr);
+    }
 
+}

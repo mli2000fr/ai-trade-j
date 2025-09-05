@@ -1,12 +1,12 @@
 import React from 'react';
 import StrategyManagerBlock from '../composants/StrategyManagerBlock';
-import TestSignalForm from '../composants/TestSignalForm';
+import BestPerformanceSymbolBlock from '../composants/BestPerformanceSymbolBlock';
 
 const StrategiesPage: React.FC = () => {
   return (
     <div>
       <StrategyManagerBlock />
-      <TestSignalForm />
+      <BestPerformanceSymbolBlock />
     </div>
   );
 };
