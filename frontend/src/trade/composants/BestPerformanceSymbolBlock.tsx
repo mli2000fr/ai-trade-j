@@ -167,6 +167,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               <Typography variant="subtitle1"><b>Symbole :</b> {selected.symbol}</Typography>
               <Typography variant="subtitle1"><b>Stratégie Entrée :</b> {selected.entryName}</Typography>
               <Typography variant="body2">Paramètres entrée : <pre>{JSON.stringify(selected.entryParams, null, 2)}</pre></Typography>
+              <Typography variant="subtitle1"><b>Stratégie Sortie :</b> {selected.exitName}</Typography>
+              <Typography variant="body2">Paramètres sortie : <pre>{JSON.stringify(selected.exitParams, null, 2)}</pre></Typography>
                 <ul>
                 <li>Drawdown : {(selected.result.maxDrawdown * 100).toFixed(2)}%</li>
                 <li>Profit Factor : {selected.result.profitFactor.toFixed(2)}</li>
