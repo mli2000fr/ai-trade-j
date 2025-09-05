@@ -44,11 +44,15 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [data, setData] = useState<BestInOutStrategy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<BestInOutStrategy | null>(null);
+  const [checkedRows, setCheckedRows] = useState<{[key: number]: boolean}>({});
+  const [limit, setLimit] = useState<number>(20);
+
   useEffect(() => {
-    fetch('/api/stra/strategies/best_performance_actions?limit=20')
+    setLoading(true);
+    setError(null);
+    fetch(`/api/stra/strategies/best_performance_actions?limit=${limit}`)
       .then(res => {
         if (!res.ok) throw new Error('Erreur API');
         return res.json();
@@ -56,7 +60,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [limit]);
 
   return (
     <>
@@ -65,6 +69,21 @@ const BestPerformanceSymbolBlock: React.FC = () => {
           <Typography variant="h6" gutterBottom>
             Best Performance-Symbol
           </Typography>
+          {/* Liste déroulante au-dessus du tableau */}
+          <div style={{ marginBottom: 16 }}>
+            <label htmlFor="limit-select" style={{ marginRight: 8 }}>Afficher :</label>
+            <select
+              id="limit-select"
+              value={limit}
+              onChange={e => setLimit(Number(e.target.value))}
+              style={{ padding: '4px 8px' }}
+            >
+              <option value={20}>20</option>
+              <option value={30}>30</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
           {loading ? (
             <CircularProgress />
           ) : error ? (
@@ -74,6 +93,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow>
+                    <TableCell></TableCell> {/* Case à cocher */}
                     <TableCell>Symbole</TableCell>
                     <TableCell>Entrée</TableCell>
                     <TableCell>Sortie</TableCell>
@@ -88,6 +108,13 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                 <TableBody>
                   {data.map((row, idx) => (
                     <TableRow key={idx}>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={!!checkedRows[idx]}
+                          onChange={e => setCheckedRows({...checkedRows, [idx]: e.target.checked})}
+                        />
+                      </TableCell>
                       <TableCell>{row.symbol}</TableCell>
                       <TableCell>{row.entryName}</TableCell>
                       <TableCell>{row.exitName}</TableCell>
@@ -102,7 +129,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    ))}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -117,13 +144,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               <Typography variant="subtitle1"><b>Symbole :</b> {selected.symbol}</Typography>
               <Typography variant="subtitle1"><b>Stratégie Entrée :</b> {selected.entryName}</Typography>
               <Typography variant="body2">Paramètres entrée : <pre>{JSON.stringify(selected.entryParams, null, 2)}</pre></Typography>
-              <Typography variant="subtitle1"><b>Stratégie Sortie :</b> {selected.exitName}</Typography>
-              <Typography variant="body2">Paramètres sortie : <pre>{JSON.stringify(selected.exitParams, null, 2)}</pre></Typography>
-              <Typography variant="subtitle1"><b>Performance :</b></Typography>
-              <ul>
-                <li>Rendement : {(selected.result.rendement * 100).toFixed(2)}%</li>
-                <li>Trades : {selected.result.tradeCount}</li>
-                <li>WinRate : {(selected.result.winRate * 100).toFixed(1)}%</li>
+                <ul>
                 <li>Drawdown : {(selected.result.maxDrawdown * 100).toFixed(2)}%</li>
                 <li>Profit Factor : {selected.result.profitFactor.toFixed(2)}</li>
                 <li>Profit moyen : {selected.result.avgPnL.toFixed(2)}</li>
