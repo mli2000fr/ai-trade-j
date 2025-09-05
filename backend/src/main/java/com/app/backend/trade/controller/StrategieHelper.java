@@ -1054,17 +1054,30 @@ public class StrategieHelper {
     public void calculCroisedStrategies(){
         List<String> listeDbSymbols = this.getAllAssetSymbolsEligibleFromDb();
         int error = 0;
+        int nbInsert = 0;
         for(String symbol : listeDbSymbols){
+            boolean isCalcul = true;
             try{
-                BestInOutStrategy result = optimseBestInOutByWalkForward(symbol);
-                this.saveBestInOutStrategy(symbol, result);
-                Thread.sleep(200);
+                if(INSERT_ONLY){
+                    String checkSql = "SELECT COUNT(*) FROM best_in_out_strategy WHERE symbol = ?";
+                    int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
+                    if(count > 0){
+                        isCalcul = false;
+                        TradeUtils.log("calculCroisedStrategies: symbole "+symbol+" déjà en base, on passe");
+                    }
+                }
+                if(isCalcul){
+                    nbInsert++;
+                    BestInOutStrategy result = optimseBestInOutByWalkForward(symbol);
+                    this.saveBestInOutStrategy(symbol, result);
+                    Thread.sleep(200);
+                }
             }catch(Exception e){
                 error++;
                 TradeUtils.log("Erreur calcul("+symbol+") : " + e.getMessage());
             }
         }
-        TradeUtils.log("calculCroisedStrategies: total "+listeDbSymbols.size()+", error" + error);
+        TradeUtils.log("calculCroisedStrategies: total: "+listeDbSymbols.size()+", nbInsert: "+nbInsert+", error: " + error);
     }
 
     /**
@@ -1160,10 +1173,6 @@ public class StrategieHelper {
         String entryParamsJson = new com.google.gson.Gson().toJson(best.entryParams);
         String exitParamsJson = new com.google.gson.Gson().toJson(best.exitParams);
         if (count > 0) {
-            if(INSERT_ONLY) {
-                // Ne rien faire si on ne veut qu'insérer
-                return;
-            }
             // Mise à jour
             String updateSql = """
                 UPDATE best_in_out_strategy SET
