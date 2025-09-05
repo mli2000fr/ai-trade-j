@@ -1046,8 +1046,9 @@ public class StrategieHelper {
         System.out.println("=== RESTITUTION CROISÉS IN/OUT ===");
         if (bestCombo != null) {
             System.out.println("IN: " + bestCombo.entryName + " | OUT: " + bestCombo.exitName + " | Rendement: " + String.format("%.4f", bestCombo.result.rendement * 100) + "% | Trades: " + bestCombo.result.tradeCount);
-            System.out.println("Paramètres IN: " + bestCombo.entryParams);
-            System.out.println("Paramètres OUT: " + bestCombo.exitParams);
+            com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
+            System.out.println("Paramètres IN: " + gson.toJson(bestCombo.entryParams));
+            System.out.println("Paramètres OUT: " + gson.toJson(bestCombo.exitParams));
         }
     }
 
