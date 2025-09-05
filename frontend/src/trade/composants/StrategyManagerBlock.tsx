@@ -154,10 +154,10 @@ const StrategyManagerBlock: React.FC = () => {
             <Button
               variant="contained"
               color="success"
-              onClick={() => callApi('/strategies/optimise-param', 'Optimise Param')}
+              onClick={() => callApi('/strategies/calcul_croised_strategies', 'Calcule croised strategies')}
               disabled={loading !== null}
             >
-              {loading === 'Optimise Param' ? <CircularProgress size={24} /> : 'Optimise Param'}
+              {loading === 'Calcule croised strategies' ? <CircularProgress size={24} /> : 'Calcule croised strategies'}
             </Button>
           </Stack>
           {success && <Alert severity="success" sx={{ mt: 2 }}>{success}</Alert>}

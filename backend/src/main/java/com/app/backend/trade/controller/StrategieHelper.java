@@ -1027,6 +1027,34 @@ public class StrategieHelper {
         }
     }
 
+    public void testAllCrossedStrategies(String symbol){
+        BestInOutStrategy result = optimseBestInOutByWalkForward(symbol);
+        this.saveBestInOutStrategy(symbol, result);
+
+        BestInOutStrategy bestCombo = this.getBestInOutStrategy(symbol);
+        System.out.println("=== RESTITUTION CROISÉS IN/OUT ===");
+        if (bestCombo != null) {
+            System.out.println("IN: " + bestCombo.entryName + " | OUT: " + bestCombo.exitName + " | Rendement: " + String.format("%.4f", bestCombo.result.rendement * 100) + "% | Trades: " + bestCombo.result.tradeCount);
+            System.out.println("Paramètres IN: " + bestCombo.entryParams);
+            System.out.println("Paramètres OUT: " + bestCombo.exitParams);
+        }
+    }
+
+    public void calculCroisedStrategies(){
+        List<String> listeDbSymbols = this.getAllAssetSymbolsEligibleFromDb();
+        int error = 0;
+        for(String symbol : listeDbSymbols){
+            try{
+                BestInOutStrategy result = optimseBestInOutByWalkForward(symbol);
+                this.saveBestInOutStrategy(symbol, result);
+                Thread.sleep(200);
+            }catch(Exception e){
+                error++;
+                TradeUtils.log("Erreur calcul("+symbol+") : " + e.getMessage());
+            }
+        }
+        TradeUtils.log("calculCroisedStrategies: total "+listeDbSymbols.size()+", error" + error);
+    }
 
     /**
      * Teste automatiquement toutes les combinaisons croisées de stratégies pour in (entrée) et out (sortie).
@@ -1109,6 +1137,135 @@ public class StrategieHelper {
                 return new com.app.backend.trade.strategy.MeanReversionStrategy(mr.smaPeriod, mr.threshold);
             default:
                 throw new IllegalArgumentException("Stratégie inconnue: " + name);
+        }
+    }
+
+    /**
+     * Sauvegarde la meilleure combinaison in/out pour un symbole
+     */
+    public void saveBestInOutStrategy(String symbol, BestInOutStrategy best) {
+        String checkSql = "SELECT COUNT(*) FROM best_in_out_strategy WHERE symbol = ?";
+        int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
+        String entryParamsJson = new com.google.gson.Gson().toJson(best.entryParams);
+        String exitParamsJson = new com.google.gson.Gson().toJson(best.exitParams);
+        if (count > 0) {
+            // Mise à jour
+            String updateSql = """
+                UPDATE best_in_out_strategy SET
+                    entry_strategy_name = ?,
+                    entry_strategy_params = ?,
+                    exit_strategy_name = ?,
+                    exit_strategy_params = ?,
+                    rendement = ?,
+                    trade_count = ?,
+                    win_rate = ?,
+                    max_drawdown = ?,
+                    avg_pnl = ?,
+                    profit_factor = ?,
+                    avg_trade_bars = ?,
+                    max_trade_gain = ?,
+                    max_trade_loss = ?,
+                    updated_date = CURRENT_TIMESTAMP
+                WHERE symbol = ?
+            """;
+            jdbcTemplate.update(updateSql,
+                best.entryName,
+                entryParamsJson,
+                best.exitName,
+                exitParamsJson,
+                best.result.rendement,
+                best.result.tradeCount,
+                best.result.winRate,
+                best.result.maxDrawdown,
+                best.result.avgPnL,
+                best.result.profitFactor,
+                best.result.avgTradeBars,
+                best.result.maxTradeGain,
+                best.result.maxTradeLoss,
+                symbol
+            );
+        } else {
+            // Insertion
+            String insertSql = """
+                INSERT INTO best_in_out_strategy (
+                    symbol, entry_strategy_name, entry_strategy_params,
+                    exit_strategy_name, exit_strategy_params,
+                    rendement, trade_count, win_rate, max_drawdown, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss,
+                    created_date, updated_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """;
+            jdbcTemplate.update(insertSql,
+                symbol,
+                best.entryName,
+                entryParamsJson,
+                best.exitName,
+                exitParamsJson,
+                best.result.rendement,
+                best.result.tradeCount,
+                best.result.winRate,
+                best.result.maxDrawdown,
+                best.result.avgPnL,
+                best.result.profitFactor,
+                best.result.avgTradeBars,
+                best.result.maxTradeGain,
+                best.result.maxTradeLoss,
+                java.sql.Date.valueOf(java.time.LocalDate.now())
+            );
+        }
+    }
+
+    /**
+     * Récupère la meilleure combinaison in/out pour un symbole
+     */
+    public BestInOutStrategy getBestInOutStrategy(String symbol) {
+        String sql = "SELECT * FROM best_in_out_strategy WHERE symbol = ?";
+        try {
+            return jdbcTemplate.queryForObject(sql, (rs, rowNum) -> {
+                String entryName = rs.getString("entry_strategy_name");
+                String entryParamsJson = rs.getString("entry_strategy_params");
+                String exitName = rs.getString("exit_strategy_name");
+                String exitParamsJson = rs.getString("exit_strategy_params");
+                StrategieBackTest.RiskResult result = new StrategieBackTest.RiskResult(
+                    rs.getDouble("rendement"),
+                    rs.getDouble("max_drawdown"),
+                    rs.getInt("trade_count"),
+                    rs.getDouble("win_rate"),
+                    rs.getDouble("avg_pnl"),
+                    rs.getDouble("profit_factor"),
+                    rs.getDouble("avg_trade_bars"),
+                    rs.getDouble("max_trade_gain"),
+                    rs.getDouble("max_trade_loss")
+                );
+                Object entryParams = parseStrategyParams(entryName, entryParamsJson);
+                Object exitParams = parseStrategyParams(exitName, exitParamsJson);
+                return new BestInOutStrategy(entryName, entryParams, exitName, exitParams, result);
+            }, symbol);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            logger.warn("Aucun BestInOutStrategy trouvé pour le symbole: {}", symbol);
+            return null;
+        }
+    }
+
+    /**
+     * Utilitaire pour parser les paramètres JSON selon le type de stratégie
+     */
+    private Object parseStrategyParams(String name, String json) {
+        com.google.gson.Gson gson = new com.google.gson.Gson();
+        switch (name) {
+            case "Improved Trend":
+                return gson.fromJson(json, StrategieBackTest.ImprovedTrendFollowingParams.class);
+            case "SMA Crossover":
+                return gson.fromJson(json, StrategieBackTest.SmaCrossoverParams.class);
+            case "RSI":
+                return gson.fromJson(json, StrategieBackTest.RsiParams.class);
+            case "Breakout":
+                return gson.fromJson(json, StrategieBackTest.BreakoutParams.class);
+            case "MACD":
+                return gson.fromJson(json, StrategieBackTest.MacdParams.class);
+            case "Mean Reversion":
+                return gson.fromJson(json, StrategieBackTest.MeanReversionParams.class);
+            default:
+                return null;
         }
     }
 }

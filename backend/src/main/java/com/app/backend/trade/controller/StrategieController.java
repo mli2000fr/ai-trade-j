@@ -101,10 +101,16 @@ public class StrategieController {
 
     @GetMapping("/strategies/test_croised_strategies")
     public ResponseEntity<Boolean> testAllCrossedStrategies() {
-        strategieHelper.optimseBestInOutByWalkForward("NVDA");
+        strategieHelper.testAllCrossedStrategies("NVDA");
         return ResponseEntity.ok(true);
     }
 
+
+    @GetMapping("/strategies/calcul_croised_strategies")
+    public ResponseEntity<Boolean> calculCroisedStrategies() {
+        strategieHelper.calculCroisedStrategies();
+        return ResponseEntity.ok(true);
+    }
 
     @GetMapping("/strategies/test_analyse_sf")
     public ResponseEntity<Boolean> test_analyse_wf() {
