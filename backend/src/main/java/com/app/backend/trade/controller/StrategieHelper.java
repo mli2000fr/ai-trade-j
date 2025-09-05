@@ -502,8 +502,9 @@ public class StrategieHelper {
                 breakout_lookback_period, breakout_performance,
                 macd_short_period, macd_long_period, macd_signal_period, macd_performance,
                 mr_sma_period, mr_threshold, mr_performance,
-                best_strategy_name, best_strategy_performance, detailed_results
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                best_strategy_name, best_strategy_performance, detailed_results,
+                initial_capital, risk_per_trade, stop_loss_pct, take_profit_pct
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
         jdbcTemplate.update(sql,
@@ -542,7 +543,12 @@ public class StrategieHelper {
             // Best strategy
             bestParams.getBestStrategyName(),
             bestParams.getBestPerformance(),
-            convertDetailedResultsToJson(bestParams.detailedResults)
+            convertDetailedResultsToJson(bestParams.detailedResults),
+            // Paramètres de référence du backtest
+            StrategieBackTest.INITIAL_CAPITAL,  // INITIAL_CAPITAL
+            StrategieBackTest.RISK_PER_TRADE,     // RISK_PER_TRADE
+            StrategieBackTest.STOP_LOSS_PCT_STOP,     // STOP_LOSS_PCT_STOP
+            StrategieBackTest.TAKE_PROFIL_PCT      // TAKE_PROFIT_PCT
         );
 
         logger.info("Nouveaux meilleurs paramètres insérés pour le symbole: {}", symbol);
@@ -562,7 +568,8 @@ public class StrategieHelper {
                 breakout_lookback_period = ?, breakout_performance = ?,
                 macd_short_period = ?, macd_long_period = ?, macd_signal_period = ?, macd_performance = ?,
                 mr_sma_period = ?, mr_threshold = ?, mr_performance = ?,
-                best_strategy_name = ?, best_strategy_performance = ?, detailed_results = ?
+                best_strategy_name = ?, best_strategy_performance = ?, detailed_results = ?,
+                initial_capital = ?, risk_per_trade = ?, stop_loss_pct = ?, take_profit_pct = ?
             WHERE symbol = ?
             """;
 
@@ -601,6 +608,11 @@ public class StrategieHelper {
             bestParams.getBestStrategyName(),
             bestParams.getBestPerformance(),
             convertDetailedResultsToJson(bestParams.detailedResults),
+            // Paramètres de référence du backtest
+            StrategieBackTest.INITIAL_CAPITAL,  // INITIAL_CAPITAL
+            StrategieBackTest.RISK_PER_TRADE,     // RISK_PER_TRADE
+            StrategieBackTest.STOP_LOSS_PCT_STOP,     // STOP_LOSS_PCT_STOP
+            StrategieBackTest.TAKE_PROFIL_PCT, // TAKE_PROFIT_PCT
             symbol
         );
 

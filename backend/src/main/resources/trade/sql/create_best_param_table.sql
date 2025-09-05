@@ -49,8 +49,15 @@ CREATE TABLE IF NOT EXISTS best_param (
     -- Detailed results JSON (pour métriques complètes)
     detailed_results JSON,
 
+    -- param de test
+    initial_capital DOUBLE,
+    risk_per_trade DOUBLE,
+    stop_loss_pct DOUBLE,
+    take_profit_pct DOUBLE,
+
     INDEX idx_symbol (symbol),
     INDEX idx_created_date (created_date),
     INDEX idx_best_strategy (best_strategy_name)
+
 );
 
