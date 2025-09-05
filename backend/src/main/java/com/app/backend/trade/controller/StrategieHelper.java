@@ -255,7 +255,7 @@ public class StrategieHelper {
         return this.alpacaService.getHistoricalBars(symbol, dateStart);
     }
 
-    public void testAnalyse() {
+    public StrategieBackTest.AllBestParams testAnalyse() {
         BarSeries series = this.mapping(this.getDailyValuesFromDb("AAPL"));
 
         System.out.println("=== DIAGNOSTIC DE LA SÉRIE ===");
@@ -310,21 +310,111 @@ public class StrategieHelper {
 
         System.out.println("\n=== CLASSEMENT PAR RENDEMENT ===");
         java.util.Map<String, Double> performances = new java.util.HashMap<>();
-        if (!walkResults.isEmpty()) performances.put("Trend Following", walkResults.get(0).result.rendement);
-        if (!improvedTrendResults.isEmpty()) performances.put("Improved Trend", improvedTrendResults.get(0).result.rendement);
-        if (!smaCrossResults.isEmpty()) performances.put("SMA Crossover", smaCrossResults.get(0).result.rendement);
-        if (!rsiResults.isEmpty()) performances.put("RSI", rsiResults.get(0).result.rendement);
-        if (!breakoutResults.isEmpty()) performances.put("Breakout", breakoutResults.get(0).result.rendement);
-        if (!macdResults.isEmpty()) performances.put("MACD", macdResults.get(0).result.rendement);
-        if (!meanRevResults.isEmpty()) performances.put("Mean Reversion", meanRevResults.get(0).result.rendement);
+        java.util.Map<String, StrategieBackTest.RiskResult> detailedResults = new java.util.HashMap<>();
+
+        if (!walkResults.isEmpty()) {
+            performances.put("Trend Following", walkResults.get(0).result.rendement);
+            detailedResults.put("Trend Following", walkResults.get(0).result);
+        }
+        if (!improvedTrendResults.isEmpty()) {
+            performances.put("Improved Trend", improvedTrendResults.get(0).result.rendement);
+            detailedResults.put("Improved Trend", improvedTrendResults.get(0).result);
+        }
+        if (!smaCrossResults.isEmpty()) {
+            performances.put("SMA Crossover", smaCrossResults.get(0).result.rendement);
+            detailedResults.put("SMA Crossover", smaCrossResults.get(0).result);
+        }
+        if (!rsiResults.isEmpty()) {
+            performances.put("RSI", rsiResults.get(0).result.rendement);
+            detailedResults.put("RSI", rsiResults.get(0).result);
+        }
+        if (!breakoutResults.isEmpty()) {
+            performances.put("Breakout", breakoutResults.get(0).result.rendement);
+            detailedResults.put("Breakout", breakoutResults.get(0).result);
+        }
+        if (!macdResults.isEmpty()) {
+            performances.put("MACD", macdResults.get(0).result.rendement);
+            detailedResults.put("MACD", macdResults.get(0).result);
+        }
+        if (!meanRevResults.isEmpty()) {
+            performances.put("Mean Reversion", meanRevResults.get(0).result.rendement);
+            detailedResults.put("Mean Reversion", meanRevResults.get(0).result);
+        }
 
         performances.entrySet().stream()
             .sorted(java.util.Map.Entry.<String, Double>comparingByValue().reversed())
             .forEach(entry -> System.out.println(entry.getKey() + ": " + String.format("%.4f", entry.getValue() * 100) + "%"));
 
-        System.out.println("\n=== EXPORT JSON TOUTES LES STRATEGIES ===");
-        String json = StrategieBackTest.exportWalkForwardResultsToJson(improvedTrendResults);
-        System.out.println("JSON Improved Trend Following exported: " + json.length() + " caractères");
+        // Extraction des meilleurs paramètres
+        StrategieBackTest.TrendFollowingParams bestTrendFollowing = !walkResults.isEmpty() ?
+            (StrategieBackTest.TrendFollowingParams) walkResults.get(0).params : null;
+        StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = !improvedTrendResults.isEmpty() ?
+            (StrategieBackTest.ImprovedTrendFollowingParams) improvedTrendResults.get(0).params : null;
+        StrategieBackTest.SmaCrossoverParams bestSmaCrossover = !smaCrossResults.isEmpty() ?
+            (StrategieBackTest.SmaCrossoverParams) smaCrossResults.get(0).params : null;
+        StrategieBackTest.RsiParams bestRsi = !rsiResults.isEmpty() ?
+            (StrategieBackTest.RsiParams) rsiResults.get(0).params : null;
+        StrategieBackTest.BreakoutParams bestBreakout = !breakoutResults.isEmpty() ?
+            (StrategieBackTest.BreakoutParams) breakoutResults.get(0).params : null;
+        StrategieBackTest.MacdParams bestMacd = !macdResults.isEmpty() ?
+            (StrategieBackTest.MacdParams) macdResults.get(0).params : null;
+        StrategieBackTest.MeanReversionParams bestMeanReversion = !meanRevResults.isEmpty() ?
+            (StrategieBackTest.MeanReversionParams) meanRevResults.get(0).params : null;
+
+        // Création de l'objet de retour avec tous les meilleurs paramètres
+        StrategieBackTest.AllBestParams allBestParams = new StrategieBackTest.AllBestParams(
+            bestTrendFollowing,
+            bestImprovedTrend,
+            bestSmaCrossover,
+            bestRsi,
+            bestBreakout,
+            bestMacd,
+            bestMeanReversion,
+            performances,
+            detailedResults
+        );
+
+        System.out.println("\n=== RÉSUMÉ DES MEILLEURS PARAMÈTRES ===");
+        System.out.println("Meilleure stratégie: " + allBestParams.getBestStrategyName() +
+                          " (Performance: " + String.format("%.4f", allBestParams.getBestPerformance() * 100) + "%)");
+
+        if (bestTrendFollowing != null) {
+            System.out.println("Trend Following - Period: " + bestTrendFollowing.trendPeriod);
+        }
+        if (bestImprovedTrend != null) {
+            System.out.println("Improved Trend - Period: " + bestImprovedTrend.trendPeriod +
+                              ", Short MA: " + bestImprovedTrend.shortMaPeriod +
+                              ", Long MA: " + bestImprovedTrend.longMaPeriod +
+                              ", Threshold: " + String.format("%.3f", bestImprovedTrend.breakoutThreshold) +
+                              ", RSI Filter: " + bestImprovedTrend.useRsiFilter);
+        }
+        if (bestSmaCrossover != null) {
+            System.out.println("SMA Crossover - Short: " + bestSmaCrossover.shortPeriod +
+                              ", Long: " + bestSmaCrossover.longPeriod);
+        }
+        if (bestRsi != null) {
+            System.out.println("RSI - Period: " + bestRsi.rsiPeriod +
+                              ", Oversold: " + bestRsi.oversold +
+                              ", Overbought: " + bestRsi.overbought);
+        }
+        if (bestBreakout != null) {
+            System.out.println("Breakout - Lookback: " + bestBreakout.lookbackPeriod);
+        }
+        if (bestMacd != null) {
+            System.out.println("MACD - Short: " + bestMacd.shortPeriod +
+                              ", Long: " + bestMacd.longPeriod +
+                              ", Signal: " + bestMacd.signalPeriod);
+        }
+        if (bestMeanReversion != null) {
+            System.out.println("Mean Reversion - SMA: " + bestMeanReversion.smaPeriod +
+                              ", Threshold: " + String.format("%.2f", bestMeanReversion.threshold));
+        }
+
+        System.out.println("\n=== EXPORT JSON TOUS LES BEST PARAMS ===");
+        String jsonAllParams = allBestParams.toJson();
+        System.out.println("JSON complet exporté: " + jsonAllParams.length() + " caractères");
+
+        return allBestParams;
     }
 
     public BarSeries mapping(List<DailyValue> listeValues) {

@@ -870,6 +870,157 @@ public class StrategieBackTest {
         return new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(arr);
     }
 
+    /**
+     * Classe pour stocker tous les meilleurs paramètres de toutes les stratégies
+     */
+    public static class AllBestParams {
+        public final TrendFollowingParams trendFollowing;
+        public final ImprovedTrendFollowingParams improvedTrendFollowing;
+        public final SmaCrossoverParams smaCrossover;
+        public final RsiParams rsi;
+        public final BreakoutParams breakout;
+        public final MacdParams macd;
+        public final MeanReversionParams meanReversion;
+
+        // Performance ranking pour faciliter l'analyse
+        public final java.util.Map<String, Double> performanceRanking;
+        public final java.util.Map<String, RiskResult> detailedResults;
+
+        public AllBestParams(TrendFollowingParams trendFollowing,
+                            ImprovedTrendFollowingParams improvedTrendFollowing,
+                            SmaCrossoverParams smaCrossover,
+                            RsiParams rsi,
+                            BreakoutParams breakout,
+                            MacdParams macd,
+                            MeanReversionParams meanReversion,
+                            java.util.Map<String, Double> performanceRanking,
+                            java.util.Map<String, RiskResult> detailedResults) {
+            this.trendFollowing = trendFollowing;
+            this.improvedTrendFollowing = improvedTrendFollowing;
+            this.smaCrossover = smaCrossover;
+            this.rsi = rsi;
+            this.breakout = breakout;
+            this.macd = macd;
+            this.meanReversion = meanReversion;
+            this.performanceRanking = performanceRanking;
+            this.detailedResults = detailedResults;
+        }
+
+        /**
+         * Retourne les paramètres de la meilleure stratégie
+         */
+        public Object getBestStrategyParams() {
+            String bestStrategy = performanceRanking.entrySet().stream()
+                .max(java.util.Map.Entry.comparingByValue())
+                .map(java.util.Map.Entry::getKey)
+                .orElse("Mean Reversion");
+
+            switch (bestStrategy) {
+                case "Trend Following": return trendFollowing;
+                case "Improved Trend": return improvedTrendFollowing;
+                case "SMA Crossover": return smaCrossover;
+                case "RSI": return rsi;
+                case "Breakout": return breakout;
+                case "MACD": return macd;
+                case "Mean Reversion": return meanReversion;
+                default: return meanReversion;
+            }
+        }
+
+        /**
+         * Retourne le nom de la meilleure stratégie
+         */
+        public String getBestStrategyName() {
+            return performanceRanking.entrySet().stream()
+                .max(java.util.Map.Entry.comparingByValue())
+                .map(java.util.Map.Entry::getKey)
+                .orElse("Mean Reversion");
+        }
+
+        /**
+         * Retourne la performance de la meilleure stratégie
+         */
+        public double getBestPerformance() {
+            return performanceRanking.values().stream()
+                .mapToDouble(Double::doubleValue)
+                .max()
+                .orElse(0.0);
+        }
+
+        /**
+         * Export en JSON pour sauvegarde/analyse
+         */
+        public String toJson() {
+            com.google.gson.JsonObject obj = new com.google.gson.JsonObject();
+
+            // Trend Following
+            com.google.gson.JsonObject tfObj = new com.google.gson.JsonObject();
+            tfObj.addProperty("trendPeriod", trendFollowing.trendPeriod);
+            tfObj.addProperty("performance", trendFollowing.performance);
+            obj.add("trendFollowing", tfObj);
+
+            // Improved Trend Following
+            com.google.gson.JsonObject itfObj = new com.google.gson.JsonObject();
+            itfObj.addProperty("trendPeriod", improvedTrendFollowing.trendPeriod);
+            itfObj.addProperty("shortMaPeriod", improvedTrendFollowing.shortMaPeriod);
+            itfObj.addProperty("longMaPeriod", improvedTrendFollowing.longMaPeriod);
+            itfObj.addProperty("breakoutThreshold", improvedTrendFollowing.breakoutThreshold);
+            itfObj.addProperty("useRsiFilter", improvedTrendFollowing.useRsiFilter);
+            itfObj.addProperty("rsiPeriod", improvedTrendFollowing.rsiPeriod);
+            itfObj.addProperty("performance", improvedTrendFollowing.performance);
+            obj.add("improvedTrendFollowing", itfObj);
+
+            // SMA Crossover
+            com.google.gson.JsonObject smaObj = new com.google.gson.JsonObject();
+            smaObj.addProperty("shortPeriod", smaCrossover.shortPeriod);
+            smaObj.addProperty("longPeriod", smaCrossover.longPeriod);
+            smaObj.addProperty("performance", smaCrossover.performance);
+            obj.add("smaCrossover", smaObj);
+
+            // RSI
+            com.google.gson.JsonObject rsiObj = new com.google.gson.JsonObject();
+            rsiObj.addProperty("rsiPeriod", rsi.rsiPeriod);
+            rsiObj.addProperty("oversold", rsi.oversold);
+            rsiObj.addProperty("overbought", rsi.overbought);
+            rsiObj.addProperty("performance", rsi.performance);
+            obj.add("rsi", rsiObj);
+
+            // Breakout
+            com.google.gson.JsonObject breakoutObj = new com.google.gson.JsonObject();
+            breakoutObj.addProperty("lookbackPeriod", breakout.lookbackPeriod);
+            breakoutObj.addProperty("performance", breakout.performance);
+            obj.add("breakout", breakoutObj);
+
+            // MACD
+            com.google.gson.JsonObject macdObj = new com.google.gson.JsonObject();
+            macdObj.addProperty("shortPeriod", macd.shortPeriod);
+            macdObj.addProperty("longPeriod", macd.longPeriod);
+            macdObj.addProperty("signalPeriod", macd.signalPeriod);
+            macdObj.addProperty("performance", macd.performance);
+            obj.add("macd", macdObj);
+
+            // Mean Reversion
+            com.google.gson.JsonObject mrObj = new com.google.gson.JsonObject();
+            mrObj.addProperty("smaPeriod", meanReversion.smaPeriod);
+            mrObj.addProperty("threshold", meanReversion.threshold);
+            mrObj.addProperty("performance", meanReversion.performance);
+            obj.add("meanReversion", mrObj);
+
+            // Performance ranking
+            com.google.gson.JsonObject rankingObj = new com.google.gson.JsonObject();
+            performanceRanking.forEach(rankingObj::addProperty);
+            obj.add("performanceRanking", rankingObj);
+
+            // Best strategy summary
+            com.google.gson.JsonObject bestObj = new com.google.gson.JsonObject();
+            bestObj.addProperty("strategyName", getBestStrategyName());
+            bestObj.addProperty("performance", getBestPerformance());
+            obj.add("bestStrategy", bestObj);
+
+            return new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(obj);
+        }
+    }
+
     // Classes de paramètres pour le retour des optimisations
     public static class MacdParams {
         public final int shortPeriod, longPeriod, signalPeriod;
