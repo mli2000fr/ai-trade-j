@@ -27,6 +27,8 @@ public class StrategieHelper {
     private final JdbcTemplate jdbcTemplate;
     private final StrategieBackTest strategieBackTest;
 
+    private static final boolean INSERT_ONLY = true;
+
     @Autowired
     public StrategieHelper(AlpacaService alpacaService,
                            StrategyService strategyService,
@@ -1158,6 +1160,10 @@ public class StrategieHelper {
         String entryParamsJson = new com.google.gson.Gson().toJson(best.entryParams);
         String exitParamsJson = new com.google.gson.Gson().toJson(best.exitParams);
         if (count > 0) {
+            if(INSERT_ONLY) {
+                // Ne rien faire si on ne veut qu'insérer
+                return;
+            }
             // Mise à jour
             String updateSql = """
                 UPDATE best_in_out_strategy SET
