@@ -101,7 +101,7 @@ public class StrategieController {
 
     @GetMapping("/strategies/test_croised_strategies")
     public ResponseEntity<Boolean> testAllCrossedStrategies() {
-        strategieHelper.testAllCrossedStrategies("NVDA");
+        strategieHelper.optimseBestInOutByWalkForward("NVDA");
         return ResponseEntity.ok(true);
     }
 

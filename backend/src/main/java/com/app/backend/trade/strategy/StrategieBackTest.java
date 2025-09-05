@@ -704,160 +704,57 @@ public class StrategieBackTest {
     }
 
     /**
-     * Affiche les résultats d'une liste de WalkForwardResult (TrendFollowing) dans la console
+     * Optimisation des paramètres pour toutes les combinaisons de stratégies IN/OUT
+     * Teste plusieurs combinaisons de stratégies d'entrée et de sortie, optimise les paramètres et retourne la meilleure stratégie combinée
      */
-    public static void printWalkForwardResults(List<WalkForwardResult> results) {
-        for (WalkForwardResult res : results) {
-            TrendFollowingParams params = (TrendFollowingParams) res.params;
-            RiskResult metrics = res.result;
-            System.out.println(
-                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
-                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
-                ", Trend params: period=" + params.trendPeriod +
-                ", rendement test: " + metrics.rendement +
-                ", drawdown: " + metrics.maxDrawdown +
-                ", win rate: " + metrics.winRate +
-                ", nb trades: " + metrics.tradeCount +
-                ", profit factor: " + metrics.profitFactor
-            );
+    public BestInOutStrategy testAllCrossedStrategies(
+            BarSeries series,
+            int smaShortMin, int smaShortMax, int smaLongMin, int smaLongMax,
+            int rsiMin, int rsiMax, double oversoldMin, double oversoldMax, double oversoldStep, double overboughtMin, double overboughtMax, double overboughtStep,
+            int trendMin, int trendMax
+    ) {
+        double bestReturn = Double.NEGATIVE_INFINITY;
+        BestInOutStrategy bestCombo = null;
+
+        // SMA Crossover IN / RSI OUT
+        SmaCrossoverParams smaParams = optimiseSmaCrossoverParameters(series, smaShortMin, smaShortMax, smaLongMin, smaLongMax);
+        RsiParams rsiParams = optimiseRsiParameters(series, rsiMin, rsiMax, oversoldMin, oversoldMax, oversoldStep, overboughtMin, overboughtMax, overboughtStep);
+        CombinedTradeStrategy smaRsiStrategy = new CombinedTradeStrategy(
+                new SmaCrossoverStrategy(smaParams.shortPeriod, smaParams.longPeriod),
+                new RsiStrategy(rsiParams.rsiPeriod, rsiParams.oversold, rsiParams.overbought)
+        );
+        RiskResult resultSmaRsi = backtestStrategyRisk(smaRsiStrategy, series);
+        if (resultSmaRsi.rendement > bestReturn) {
+            bestReturn = resultSmaRsi.rendement;
+            bestCombo = new BestInOutStrategy("SMA Crossover", smaParams, "RSI", rsiParams, resultSmaRsi);
         }
-    }
 
-    /**
-     * Affiche les résultats d'une liste de WalkForwardResult (SMA Crossover) dans la console
-     */
-    public static void printWalkForwardResultsSmaCrossover(List<WalkForwardResult> results) {
-        for (WalkForwardResult res : results) {
-            SmaCrossoverParams params = (SmaCrossoverParams) res.params;
-            RiskResult metrics = res.result;
-            System.out.println(
-                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
-                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
-                ", SMA params: short=" + params.shortPeriod + ", long=" + params.longPeriod +
-                ", rendement test: " + metrics.rendement +
-                ", drawdown: " + metrics.maxDrawdown +
-                ", win rate: " + metrics.winRate +
-                ", nb trades: " + metrics.tradeCount +
-                ", profit factor: " + metrics.profitFactor
-            );
+        // RSI IN / TrendFollowing OUT
+        TrendFollowingParams trendParams = optimiseTrendFollowingParameters(series, trendMin, trendMax);
+        CombinedTradeStrategy rsiTrendStrategy = new CombinedTradeStrategy(
+                new RsiStrategy(rsiParams.rsiPeriod, rsiParams.oversold, rsiParams.overbought),
+                new TrendFollowingStrategy(trendParams.trendPeriod)
+        );
+        RiskResult resultRsiTrend = backtestStrategyRisk(rsiTrendStrategy, series);
+        if (resultRsiTrend.rendement > bestReturn) {
+            bestReturn = resultRsiTrend.rendement;
+            bestCombo = new BestInOutStrategy("RSI", rsiParams, "TrendFollowing", trendParams, resultRsiTrend);
         }
-    }
 
-    /**
-     * Affiche les résultats d'une liste de WalkForwardResult (RSI) dans la console
-     */
-    public static void printWalkForwardResultsRsi(List<WalkForwardResult> results) {
-        for (WalkForwardResult res : results) {
-            RsiParams params = (RsiParams) res.params;
-            RiskResult metrics = res.result;
-            System.out.println(
-                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
-                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
-                ", RSI params: period=" + params.rsiPeriod + ", oversold=" + params.oversold + ", overbought=" + params.overbought +
-                ", rendement test: " + metrics.rendement +
-                ", drawdown: " + metrics.maxDrawdown +
-                ", win rate: " + metrics.winRate +
-                ", nb trades: " + metrics.tradeCount +
-                ", profit factor: " + metrics.profitFactor
-            );
+        // TrendFollowing IN / SMA Crossover OUT
+        CombinedTradeStrategy trendSmaStrategy = new CombinedTradeStrategy(
+                new TrendFollowingStrategy(trendParams.trendPeriod),
+                new SmaCrossoverStrategy(smaParams.shortPeriod, smaParams.longPeriod)
+        );
+        RiskResult resultTrendSma = backtestStrategyRisk(trendSmaStrategy, series);
+        if (resultTrendSma.rendement > bestReturn) {
+            bestReturn = resultTrendSma.rendement;
+            bestCombo = new BestInOutStrategy("TrendFollowing", trendParams, "SMA Crossover", smaParams, resultTrendSma);
         }
-    }
 
-    /**
-     * Affiche les résultats d'une liste de WalkForwardResult (MACD) dans la console
-     */
-    public static void printWalkForwardResultsMacd(List<WalkForwardResult> results) {
-        for (WalkForwardResult res : results) {
-            MacdParams params = (MacdParams) res.params;
-            RiskResult metrics = res.result;
-            System.out.println(
-                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
-                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
-                ", MACD params: short=" + params.shortPeriod + ", long=" + params.longPeriod + ", signal=" + params.signalPeriod +
-                ", rendement test: " + metrics.rendement +
-                ", drawdown: " + metrics.maxDrawdown +
-                ", win rate: " + metrics.winRate +
-                ", nb trades: " + metrics.tradeCount +
-                ", profit factor: " + metrics.profitFactor
-            );
-        }
-    }
+        // On peut ajouter d'autres combinaisons ici selon les stratégies disponibles
 
-    /**
-     * Affiche les résultats génériques d'une liste de WalkForwardResult dans la console
-     */
-    public static void printWalkForwardResultsGeneric(List<WalkForwardResult> results) {
-        for (WalkForwardResult res : results) {
-            RiskResult metrics = res.result;
-            System.out.println(
-                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
-                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
-                ", params: " + res.params.toString() +
-                ", rendement test: " + metrics.rendement +
-                ", drawdown: " + metrics.maxDrawdown +
-                ", win rate: " + metrics.winRate +
-                ", nb trades: " + metrics.tradeCount +
-                ", profit factor: " + metrics.profitFactor
-            );
-        }
-    }
-
-    /**
-     * Exporte les résultats d'une liste de WalkForwardResult en JSON
-     * Nécessite la dépendance Gson (com.google.gson.Gson)
-     */
-    public static String exportWalkForwardResultsToJson(List<WalkForwardResult> results) {
-        com.google.gson.JsonArray arr = new com.google.gson.JsonArray();
-        for (WalkForwardResult res : results) {
-            com.google.gson.JsonObject obj = new com.google.gson.JsonObject();
-            obj.addProperty("startOptIdx", res.startOptIdx);
-            obj.addProperty("endOptIdx", res.endOptIdx);
-            obj.addProperty("startTestIdx", res.startTestIdx);
-            obj.addProperty("endTestIdx", res.endTestIdx);
-
-            // Gestion générique des paramètres selon le type
-            com.google.gson.JsonObject paramObj = new com.google.gson.JsonObject();
-            if (res.params instanceof TrendFollowingParams) {
-                TrendFollowingParams params = (TrendFollowingParams) res.params;
-                paramObj.addProperty("trendPeriod", params.trendPeriod);
-                paramObj.addProperty("performance", params.performance);
-            } else if (res.params instanceof SmaCrossoverParams) {
-                SmaCrossoverParams params = (SmaCrossoverParams) res.params;
-                paramObj.addProperty("shortPeriod", params.shortPeriod);
-                paramObj.addProperty("longPeriod", params.longPeriod);
-                paramObj.addProperty("performance", params.performance);
-            } else if (res.params instanceof RsiParams) {
-                RsiParams params = (RsiParams) res.params;
-                paramObj.addProperty("rsiPeriod", params.rsiPeriod);
-                paramObj.addProperty("oversold", params.oversold);
-                paramObj.addProperty("overbought", params.overbought);
-                paramObj.addProperty("performance", params.performance);
-            } else if (res.params instanceof MacdParams) {
-                MacdParams params = (MacdParams) res.params;
-                paramObj.addProperty("shortPeriod", params.shortPeriod);
-                paramObj.addProperty("longPeriod", params.longPeriod);
-                paramObj.addProperty("signalPeriod", params.signalPeriod);
-                paramObj.addProperty("performance", params.performance);
-            } else {
-                paramObj.addProperty("params", res.params.toString());
-            }
-            obj.add("params", paramObj);
-
-            RiskResult metrics = res.result;
-            com.google.gson.JsonObject resultObj = new com.google.gson.JsonObject();
-            resultObj.addProperty("rendement", metrics.rendement);
-            resultObj.addProperty("maxDrawdown", metrics.maxDrawdown);
-            resultObj.addProperty("tradeCount", metrics.tradeCount);
-            resultObj.addProperty("winRate", metrics.winRate);
-            resultObj.addProperty("avgPnL", metrics.avgPnL);
-            resultObj.addProperty("profitFactor", metrics.profitFactor);
-            resultObj.addProperty("avgTradeBars", metrics.avgTradeBars);
-            resultObj.addProperty("maxTradeGain", metrics.maxTradeGain);
-            resultObj.addProperty("maxTradeLoss", metrics.maxTradeLoss);
-            obj.add("result", resultObj);
-            arr.add(obj);
-        }
-        return new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(arr);
+        return bestCombo;
     }
 
     /**
@@ -1041,6 +938,15 @@ public class StrategieBackTest {
             this.overbought = overbought;
             this.performance = performance;
         }
+        @Override
+        public String toString() {
+            return "RsiParams{" +
+                    "rsiPeriod=" + rsiPeriod +
+                    ", oversold=" + oversold +
+                    ", overbought=" + overbought +
+                    ", performance=" + performance +
+                    '}';
+        }
     }
 
     public static class SmaCrossoverParams {
@@ -1051,6 +957,14 @@ public class StrategieBackTest {
             this.longPeriod = longPeriod;
             this.performance = performance;
         }
+        @Override
+        public String toString() {
+            return "SmaCrossoverParams{" +
+                    "shortPeriod=" + shortPeriod +
+                    ", longPeriod=" + longPeriod +
+                    ", performance=" + performance +
+                    '}';
+        }
     }
 
     public static class TrendFollowingParams {
@@ -1059,6 +973,13 @@ public class StrategieBackTest {
         public TrendFollowingParams(int trendPeriod, double performance) {
             this.trendPeriod = trendPeriod;
             this.performance = performance;
+        }
+        @Override
+        public String toString() {
+            return "TrendFollowingParams{" +
+                    "trendPeriod=" + trendPeriod +
+                    ", performance=" + performance +
+                    '}';
         }
     }
 
@@ -1080,6 +1001,18 @@ public class StrategieBackTest {
             this.useRsiFilter = useRsiFilter;
             this.rsiPeriod = rsiPeriod;
             this.performance = performance;
+        }
+        @Override
+        public String toString() {
+            return "ImprovedTrendFollowingParams{" +
+                    "trendPeriod=" + trendPeriod +
+                    ", shortMaPeriod=" + shortMaPeriod +
+                    ", longMaPeriod=" + longMaPeriod +
+                    ", breakoutThreshold=" + breakoutThreshold +
+                    ", useRsiFilter=" + useRsiFilter +
+                    ", rsiPeriod=" + rsiPeriod +
+                    ", performance=" + performance +
+                    '}';
         }
     }
 
@@ -1176,6 +1109,182 @@ public class StrategieBackTest {
      */
     public static void printRollingWindowResultsGeneric(List<RollingWindowResult> results) {
         for (RollingWindowResult res : results) {
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", params: " + res.params.toString() +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+
+    /**
+     * Structure pour stocker la meilleure combinaison IN/OUT et ses paramètres
+     */
+    public static class BestInOutStrategy {
+        public final String entryName;
+        public final Object entryParams;
+        public final String exitName;
+        public final Object exitParams;
+        public final RiskResult result;
+
+        public BestInOutStrategy(String entryName, Object entryParams, String exitName, Object exitParams, RiskResult result) {
+            this.entryName = entryName;
+            this.entryParams = entryParams;
+            this.exitName = exitName;
+            this.exitParams = exitParams;
+            this.result = result;
+        }
+    }
+
+    /**
+     * Exporte les résultats d'une liste de WalkForwardResult en JSON
+     * Nécessite la dépendance Gson (com.google.gson.Gson)
+     */
+    public static String exportWalkForwardResultsToJson(List<WalkForwardResult> results) {
+        com.google.gson.JsonArray arr = new com.google.gson.JsonArray();
+        for (WalkForwardResult res : results) {
+            com.google.gson.JsonObject obj = new com.google.gson.JsonObject();
+            obj.addProperty("startOptIdx", res.startOptIdx);
+            obj.addProperty("endOptIdx", res.endOptIdx);
+            obj.addProperty("startTestIdx", res.startTestIdx);
+            obj.addProperty("endTestIdx", res.endTestIdx);
+
+            // Gestion générique des paramètres selon le type
+            com.google.gson.JsonObject paramObj = new com.google.gson.JsonObject();
+            if (res.params instanceof TrendFollowingParams) {
+                TrendFollowingParams params = (TrendFollowingParams) res.params;
+                paramObj.addProperty("trendPeriod", params.trendPeriod);
+                paramObj.addProperty("performance", params.performance);
+            } else if (res.params instanceof SmaCrossoverParams) {
+                SmaCrossoverParams params = (SmaCrossoverParams) res.params;
+                paramObj.addProperty("shortPeriod", params.shortPeriod);
+                paramObj.addProperty("longPeriod", params.longPeriod);
+                paramObj.addProperty("performance", params.performance);
+            } else if (res.params instanceof RsiParams) {
+                RsiParams params = (RsiParams) res.params;
+                paramObj.addProperty("rsiPeriod", params.rsiPeriod);
+                paramObj.addProperty("oversold", params.oversold);
+                paramObj.addProperty("overbought", params.overbought);
+                paramObj.addProperty("performance", params.performance);
+            } else if (res.params instanceof MacdParams) {
+                MacdParams params = (MacdParams) res.params;
+                paramObj.addProperty("shortPeriod", params.shortPeriod);
+                paramObj.addProperty("longPeriod", params.longPeriod);
+                paramObj.addProperty("signalPeriod", params.signalPeriod);
+                paramObj.addProperty("performance", params.performance);
+            } else {
+                paramObj.addProperty("params", res.params.toString());
+            }
+            obj.add("params", paramObj);
+
+            RiskResult metrics = res.result;
+            com.google.gson.JsonObject resultObj = new com.google.gson.JsonObject();
+            resultObj.addProperty("rendement", metrics.rendement);
+            resultObj.addProperty("maxDrawdown", metrics.maxDrawdown);
+            resultObj.addProperty("tradeCount", metrics.tradeCount);
+            resultObj.addProperty("winRate", metrics.winRate);
+            resultObj.addProperty("avgPnL", metrics.avgPnL);
+            resultObj.addProperty("profitFactor", metrics.profitFactor);
+            resultObj.addProperty("avgTradeBars", metrics.avgTradeBars);
+            resultObj.addProperty("maxTradeGain", metrics.maxTradeGain);
+            resultObj.addProperty("maxTradeLoss", metrics.maxTradeLoss);
+            obj.add("result", resultObj);
+            arr.add(obj);
+        }
+        return new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(arr);
+    }
+
+    /**
+     * Affiche les résultats d'une liste de WalkForwardResult (TrendFollowing) dans la console
+     */
+    public static void printWalkForwardResults(List<WalkForwardResult> results) {
+        for (WalkForwardResult res : results) {
+            TrendFollowingParams params = (TrendFollowingParams) res.params;
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", Trend params: period=" + params.trendPeriod +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+
+    /**
+     * Affiche les résultats d'une liste de WalkForwardResult (SMA Crossover) dans la console
+     */
+    public static void printWalkForwardResultsSmaCrossover(List<WalkForwardResult> results) {
+        for (WalkForwardResult res : results) {
+            SmaCrossoverParams params = (SmaCrossoverParams) res.params;
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", SMA params: short=" + params.shortPeriod + ", long=" + params.longPeriod +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+
+    /**
+     * Affiche les résultats d'une liste de WalkForwardResult (RSI) dans la console
+     */
+    public static void printWalkForwardResultsRsi(List<WalkForwardResult> results) {
+        for (WalkForwardResult res : results) {
+            RsiParams params = (RsiParams) res.params;
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", RSI params: period=" + params.rsiPeriod + ", oversold=" + params.oversold + ", overbought=" + params.overbought +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+
+    /**
+     * Affiche les résultats d'une liste de WalkForwardResult (MACD) dans la console
+     */
+    public static void printWalkForwardResultsMacd(List<WalkForwardResult> results) {
+        for (WalkForwardResult res : results) {
+            MacdParams params = (MacdParams) res.params;
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", MACD params: short=" + params.shortPeriod + ", long=" + params.longPeriod + ", signal=" + params.signalPeriod +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+
+    /**
+     * Affiche les résultats génériques d'une liste de WalkForwardResult dans la console
+     */
+    public static void printWalkForwardResultsGeneric(List<WalkForwardResult> results) {
+        for (WalkForwardResult res : results) {
             RiskResult metrics = res.result;
             System.out.println(
                 "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +

@@ -1027,59 +1027,12 @@ public class StrategieHelper {
         }
     }
 
-    public BestInOutStrategy optimseBestInOutByWalkForward(String symbol) {
-        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol));
-        // Générer les meilleurs paramètres pour chaque stratégie
-        StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(series, 10, 30, 5, 15, 15, 25, 0.001, 0.01, 0.002);
-        StrategieBackTest.SmaCrossoverParams bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(series, 5, 20, 10, 50);
-        StrategieBackTest.RsiParams bestRsi = strategieBackTest.optimiseRsiParameters(series, 10, 20, 20, 40, 5, 60, 80, 5);
-        StrategieBackTest.BreakoutParams bestBreakout = strategieBackTest.optimiseBreakoutParameters(series, 5, 50);
-        StrategieBackTest.MacdParams bestMacd = strategieBackTest.optimiseMacdParameters(series, 8, 16, 20, 30, 6, 12);
-        StrategieBackTest.MeanReversionParams bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(series, 10, 30, 1.0, 5.0, 0.5);
-
-        // Liste des stratégies et paramètres
-        java.util.List<Object[]> strategies = java.util.Arrays.asList(
-            new Object[]{"Improved Trend", bestImprovedTrend},
-            new Object[]{"SMA Crossover", bestSmaCrossover},
-            new Object[]{"RSI", bestRsi},
-            new Object[]{"Breakout", bestBreakout},
-            new Object[]{"MACD", bestMacd},
-            new Object[]{"Mean Reversion", bestMeanReversion}
-        );
-
-        double bestPerf = Double.NEGATIVE_INFINITY;
-        BestInOutStrategy bestCombo = null;
-
-        for (Object[] entry : strategies) {
-            for (Object[] exit : strategies) {
-                String entryName = (String) entry[0];
-                Object entryParams = entry[1];
-                String exitName = (String) exit[0];
-                Object exitParams = exit[1];
-                // Instancier les stratégies
-                com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(entryName, entryParams);
-                com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
-                com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
-                StrategieBackTest.RiskResult result = strategieBackTest.backtestStrategyRisk(combined, series);
-                System.out.println("IN: " + entryName + " | OUT: " + exitName + " | Rendement: " + String.format("%.4f", result.rendement * 100) + "% | Trades: " + result.tradeCount + " | WinRate: " + String.format("%.2f", result.winRate * 100) + "% | Drawdown: " + String.format("%.2f", result.maxDrawdown * 100) + "%");
-                if (result.rendement > bestPerf) {
-                    bestPerf = result.rendement;
-                    bestCombo = new BestInOutStrategy(entryName, entryParams, exitName, exitParams, result);
-                }
-            }
-        }
-        System.out.println("=== MEILLEUR COUPLE IN/OUT ===");
-        if (bestCombo != null) {
-            System.out.println("IN: " + bestCombo.entryName + " | OUT: " + bestCombo.exitName + " | Rendement: " + String.format("%.4f", bestCombo.result.rendement * 100) + "% | Trades: " + bestCombo.result.tradeCount);
-        }
-        return bestCombo;
-    }
 
     /**
      * Teste automatiquement toutes les combinaisons croisées de stratégies pour in (entrée) et out (sortie).
      * Affiche les résultats pour chaque couple et retourne le meilleur couple.
      */
-    public BestInOutStrategy testAllCrossedStrategies(String symbol) {
+    public BestInOutStrategy optimseBestInOutByWalkForward(String symbol) {
         BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol));
         // Optimisation des paramètres pour chaque stratégie
         StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(series, 10, 30, 5, 15, 15, 25, 0.001, 0.01, 0.002);
@@ -1113,7 +1066,12 @@ public class StrategieHelper {
                 com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
                 com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
                 StrategieBackTest.RiskResult result = strategieBackTest.backtestStrategyRisk(combined, series);
-                System.out.println("IN: " + entryName + " | OUT: " + exitName + " | Rendement: " + String.format("%.4f", result.rendement * 100) + "% | Trades: " + result.tradeCount + " | WinRate: " + String.format("%.2f", result.winRate * 100) + "% | Drawdown: " + String.format("%.2f", result.maxDrawdown * 100) + "%");
+                System.out.println("IN: " + entryName + " " + entryParams.toString() +
+                                   " | OUT: " + exitName + " " + exitParams.toString() +
+                                   " | Rendement: " + String.format("%.4f", result.rendement * 100) + "%"
+                                   + " | Trades: " + result.tradeCount
+                                   + " | WinRate: " + String.format("%.2f", result.winRate * 100) + "%"
+                                   + " | Drawdown: " + String.format("%.2f", result.maxDrawdown * 100) + "%");
                 if (result.rendement > bestPerf) {
                     bestPerf = result.rendement;
                     bestCombo = new BestInOutStrategy(entryName, entryParams, exitName, exitParams, result);
@@ -1123,6 +1081,8 @@ public class StrategieHelper {
         System.out.println("=== MEILLEUR COUPLE IN/OUT ===");
         if (bestCombo != null) {
             System.out.println("IN: " + bestCombo.entryName + " | OUT: " + bestCombo.exitName + " | Rendement: " + String.format("%.4f", bestCombo.result.rendement * 100) + "% | Trades: " + bestCombo.result.tradeCount);
+            System.out.println("Paramètres IN: " + bestCombo.entryParams);
+            System.out.println("Paramètres OUT: " + bestCombo.exitParams);
         }
         return bestCombo;
     }
