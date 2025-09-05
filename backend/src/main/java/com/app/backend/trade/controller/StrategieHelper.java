@@ -1108,6 +1108,7 @@ public class StrategieHelper {
         double bestPerf = Double.NEGATIVE_INFINITY;
         BestInOutStrategy bestCombo = null;
         System.out.println("=== TESTS CROISÉS IN/OUT ===");
+        com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
         for (Object[] entry : strategies) {
             for (Object[] exit : strategies) {
                 String entryName = (String) entry[0];
@@ -1119,8 +1120,8 @@ public class StrategieHelper {
                 com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
                 com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
                 StrategieBackTest.RiskResult result = strategieBackTest.backtestStrategyRisk(combined, series);
-                System.out.println("IN: " + entryName + " " + entryParams.toString() +
-                                   " | OUT: " + exitName + " " + exitParams.toString() +
+                System.out.println("IN: " + entryName + " " + gson.toJson(entryParams) +
+                                   " | OUT: " + exitName + " " + gson.toJson(exitParams) +
                                    " | Rendement: " + String.format("%.4f", result.rendement * 100) + "%"
                                    + " | Trades: " + result.tradeCount
                                    + " | WinRate: " + String.format("%.2f", result.winRate * 100) + "%"
@@ -1134,8 +1135,8 @@ public class StrategieHelper {
         System.out.println("=== MEILLEUR COUPLE IN/OUT ===");
         if (bestCombo != null) {
             System.out.println("IN: " + bestCombo.entryName + " | OUT: " + bestCombo.exitName + " | Rendement: " + String.format("%.4f", bestCombo.result.rendement * 100) + "% | Trades: " + bestCombo.result.tradeCount);
-            System.out.println("Paramètres IN: " + bestCombo.entryParams);
-            System.out.println("Paramètres OUT: " + bestCombo.exitParams);
+            System.out.println("Paramètres IN: " + gson.toJson(bestCombo.entryParams));
+            System.out.println("Paramètres OUT: " + gson.toJson(bestCombo.exitParams));
         }
         return bestCombo;
     }
