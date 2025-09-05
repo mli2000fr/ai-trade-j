@@ -48,7 +48,7 @@ const StrategyManagerBlock: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/trade/strategies');
+      const res = await fetch('/api/stra/strategies');
       if (!res.ok) throw new Error('Erreur API');
       const data: StrategyListDto = await res.json();
       setStrategies(data);
@@ -75,7 +75,7 @@ const StrategyManagerBlock: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      await fetch('/api/trade/strategies/active', {
+      await fetch('/api/stra/strategies/active', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ strategyNames: newSelected }),
@@ -94,7 +94,7 @@ const StrategyManagerBlock: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      await fetch('/api/trade/strategies/mode', {
+      await fetch('/api/stra/strategies/mode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ combinationMode: newMode }),

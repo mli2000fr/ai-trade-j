@@ -33,7 +33,7 @@ const TestSignalForm: React.FC = () => {
         return;
       }
       const params = new URLSearchParams({ symbol: symbol.trim(), isEntry: String(isEntry) });
-      const response = await fetch(`/api/trade/strategies/test-signal?${params.toString()}`);
+      const response = await fetch(`/api/stra/strategies/test-signal?${params.toString()}`);
       if (!response.ok) throw new Error('Erreur API');
       const data: TestSignalResult = await response.json();
       setResult(data);

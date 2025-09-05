@@ -3,8 +3,6 @@ package com.app.backend.trade.controller;
 import com.app.backend.trade.model.SetActiveStrategiesRequest;
 import com.app.backend.trade.model.SetCombinationModeRequest;
 import com.app.backend.trade.model.StrategyListDto;
-import com.app.backend.trade.service.AlpacaService;
-import com.app.backend.trade.service.CompteService;
 import com.app.backend.trade.service.StrategyService;
 import com.app.backend.trade.strategy.StrategyManager;
 import org.springframework.beans.factory.annotation.Autowired;
