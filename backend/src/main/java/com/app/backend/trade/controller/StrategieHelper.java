@@ -281,8 +281,8 @@ public class StrategieHelper {
 
     }
 
-    public void test_analyse_ByWalkForward(){
-        optimseParamByWalkForward("NVDA");
+    public void test_analyse_ByWalkForward(String symbol){
+        optimseParamByWalkForward(symbol);
     }
 
     public StrategieBackTest.AllBestParams optimseParamByWalkForward(String symbol) {
@@ -1009,6 +1009,141 @@ public class StrategieHelper {
         int rowsAffected = jdbcTemplate.update(sql, symbol);
         if (rowsAffected > 0) {
             logger.info("Meilleurs paramètres supprimés pour le symbole: {}", symbol);
+        }
+    }
+
+    public static class BestInOutStrategy {
+        public final String entryName;
+        public final Object entryParams;
+        public final String exitName;
+        public final Object exitParams;
+        public final StrategieBackTest.RiskResult result;
+        public BestInOutStrategy(String entryName, Object entryParams, String exitName, Object exitParams, StrategieBackTest.RiskResult result) {
+            this.entryName = entryName;
+            this.entryParams = entryParams;
+            this.exitName = exitName;
+            this.exitParams = exitParams;
+            this.result = result;
+        }
+    }
+
+    public BestInOutStrategy optimseBestInOutByWalkForward(String symbol) {
+        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol));
+        // Générer les meilleurs paramètres pour chaque stratégie
+        StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(series, 10, 30, 5, 15, 15, 25, 0.001, 0.01, 0.002);
+        StrategieBackTest.SmaCrossoverParams bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(series, 5, 20, 10, 50);
+        StrategieBackTest.RsiParams bestRsi = strategieBackTest.optimiseRsiParameters(series, 10, 20, 20, 40, 5, 60, 80, 5);
+        StrategieBackTest.BreakoutParams bestBreakout = strategieBackTest.optimiseBreakoutParameters(series, 5, 50);
+        StrategieBackTest.MacdParams bestMacd = strategieBackTest.optimiseMacdParameters(series, 8, 16, 20, 30, 6, 12);
+        StrategieBackTest.MeanReversionParams bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(series, 10, 30, 1.0, 5.0, 0.5);
+
+        // Liste des stratégies et paramètres
+        java.util.List<Object[]> strategies = java.util.Arrays.asList(
+            new Object[]{"Improved Trend", bestImprovedTrend},
+            new Object[]{"SMA Crossover", bestSmaCrossover},
+            new Object[]{"RSI", bestRsi},
+            new Object[]{"Breakout", bestBreakout},
+            new Object[]{"MACD", bestMacd},
+            new Object[]{"Mean Reversion", bestMeanReversion}
+        );
+
+        double bestPerf = Double.NEGATIVE_INFINITY;
+        BestInOutStrategy bestCombo = null;
+
+        for (Object[] entry : strategies) {
+            for (Object[] exit : strategies) {
+                String entryName = (String) entry[0];
+                Object entryParams = entry[1];
+                String exitName = (String) exit[0];
+                Object exitParams = exit[1];
+                // Instancier les stratégies
+                com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(entryName, entryParams);
+                com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
+                com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
+                StrategieBackTest.RiskResult result = strategieBackTest.backtestStrategyRisk(combined, series);
+                if (result.rendement > bestPerf) {
+                    bestPerf = result.rendement;
+                    bestCombo = new BestInOutStrategy(entryName, entryParams, exitName, exitParams, result);
+                }
+            }
+        }
+        return bestCombo;
+    }
+
+    /**
+     * Teste automatiquement toutes les combinaisons croisées de stratégies pour in (entrée) et out (sortie).
+     * Affiche les résultats pour chaque couple et retourne le meilleur couple.
+     */
+    public BestInOutStrategy testAllCrossedStrategies(String symbol) {
+        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol));
+        // Optimisation des paramètres pour chaque stratégie
+        StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(series, 10, 30, 5, 15, 15, 25, 0.001, 0.01, 0.002);
+        StrategieBackTest.SmaCrossoverParams bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(series, 5, 20, 10, 50);
+        StrategieBackTest.RsiParams bestRsi = strategieBackTest.optimiseRsiParameters(series, 10, 20, 20, 40, 5, 60, 80, 5);
+        StrategieBackTest.BreakoutParams bestBreakout = strategieBackTest.optimiseBreakoutParameters(series, 5, 50);
+        StrategieBackTest.MacdParams bestMacd = strategieBackTest.optimiseMacdParameters(series, 8, 16, 20, 30, 6, 12);
+        StrategieBackTest.MeanReversionParams bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(series, 10, 30, 1.0, 5.0, 0.5);
+
+        // Liste des stratégies et paramètres
+        java.util.List<Object[]> strategies = java.util.Arrays.asList(
+            new Object[]{"Improved Trend", bestImprovedTrend},
+            new Object[]{"SMA Crossover", bestSmaCrossover},
+            new Object[]{"RSI", bestRsi},
+            new Object[]{"Breakout", bestBreakout},
+            new Object[]{"MACD", bestMacd},
+            new Object[]{"Mean Reversion", bestMeanReversion}
+        );
+
+        double bestPerf = Double.NEGATIVE_INFINITY;
+        BestInOutStrategy bestCombo = null;
+        System.out.println("=== TESTS CROISÉS IN/OUT ===");
+        for (Object[] entry : strategies) {
+            for (Object[] exit : strategies) {
+                String entryName = (String) entry[0];
+                Object entryParams = entry[1];
+                String exitName = (String) exit[0];
+                Object exitParams = exit[1];
+                // Instancier les stratégies
+                com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(entryName, entryParams);
+                com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
+                com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
+                StrategieBackTest.RiskResult result = strategieBackTest.backtestStrategyRisk(combined, series);
+                System.out.println("IN: " + entryName + " | OUT: " + exitName + " | Rendement: " + String.format("%.4f", result.rendement * 100) + "% | Trades: " + result.tradeCount + " | WinRate: " + String.format("%.2f", result.winRate * 100) + "% | Drawdown: " + String.format("%.2f", result.maxDrawdown * 100) + "%");
+                if (result.rendement > bestPerf) {
+                    bestPerf = result.rendement;
+                    bestCombo = new BestInOutStrategy(entryName, entryParams, exitName, exitParams, result);
+                }
+            }
+        }
+        System.out.println("=== MEILLEUR COUPLE IN/OUT ===");
+        if (bestCombo != null) {
+            System.out.println("IN: " + bestCombo.entryName + " | OUT: " + bestCombo.exitName + " | Rendement: " + String.format("%.4f", bestCombo.result.rendement * 100) + "% | Trades: " + bestCombo.result.tradeCount);
+        }
+        return bestCombo;
+    }
+
+    private com.app.backend.trade.strategy.TradeStrategy createStrategy(String name, Object params) {
+        switch (name) {
+            case "Improved Trend":
+                StrategieBackTest.ImprovedTrendFollowingParams p = (StrategieBackTest.ImprovedTrendFollowingParams) params;
+                return new com.app.backend.trade.strategy.ImprovedTrendFollowingStrategy(p.trendPeriod, p.shortMaPeriod, p.longMaPeriod, p.breakoutThreshold, p.useRsiFilter, p.rsiPeriod);
+            case "SMA Crossover":
+                StrategieBackTest.SmaCrossoverParams s = (StrategieBackTest.SmaCrossoverParams) params;
+                return new com.app.backend.trade.strategy.SmaCrossoverStrategy(s.shortPeriod, s.longPeriod);
+            case "RSI":
+                StrategieBackTest.RsiParams r = (StrategieBackTest.RsiParams) params;
+                return new com.app.backend.trade.strategy.RsiStrategy(r.rsiPeriod, r.oversold, r.overbought);
+            case "Breakout":
+                StrategieBackTest.BreakoutParams b = (StrategieBackTest.BreakoutParams) params;
+                return new com.app.backend.trade.strategy.BreakoutStrategy(b.lookbackPeriod);
+            case "MACD":
+                StrategieBackTest.MacdParams m = (StrategieBackTest.MacdParams) params;
+                return new com.app.backend.trade.strategy.MacdStrategy(m.shortPeriod, m.longPeriod, m.signalPeriod);
+            case "Mean Reversion":
+                StrategieBackTest.MeanReversionParams mr = (StrategieBackTest.MeanReversionParams) params;
+                return new com.app.backend.trade.strategy.MeanReversionStrategy(mr.smaPeriod, mr.threshold);
+            default:
+                throw new IllegalArgumentException("Stratégie inconnue: " + name);
         }
     }
 }

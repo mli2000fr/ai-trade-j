@@ -87,13 +87,6 @@ public class StrategieController {
     }
 
 
-    @GetMapping("/strategies/test_analyse_sf")
-    public ResponseEntity<Boolean> test_analyse_wf() {
-        strategieHelper.test_analyse_ByWalkForward();
-        return ResponseEntity.ok(true);
-    }
-
-
     @GetMapping("/strategies/test_analyse_rw")
     public ResponseEntity<Boolean> test_analyse_rw() {
         strategieHelper.test_analyse_RollingWindow();
@@ -105,4 +98,19 @@ public class StrategieController {
         strategieHelper.optimseParamForAllSymbol();
         return ResponseEntity.ok(true);
     }
+
+    @GetMapping("/strategies/test_croised_strategies")
+    public ResponseEntity<Boolean> testAllCrossedStrategies() {
+        strategieHelper.testAllCrossedStrategies("NVDA");
+        return ResponseEntity.ok(true);
+    }
+
+
+    @GetMapping("/strategies/test_analyse_sf")
+    public ResponseEntity<Boolean> test_analyse_wf() {
+        strategieHelper.test_analyse_ByWalkForward("NVDA");
+        return ResponseEntity.ok(true);
+    }
+
 }
+

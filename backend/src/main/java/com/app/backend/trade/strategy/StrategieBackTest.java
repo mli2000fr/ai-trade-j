@@ -11,9 +11,9 @@ public class StrategieBackTest {
 
     // Paramètres de backtest plus réalistes
     public final static double INITIAL_CAPITAL = 10000;  // Capital initial de 10 000$ (plus réaliste)
-    public final static double RISK_PER_TRADE = 0.01;    // Risque par trade de 1% (plus conservateur)
-    public final static double STOP_LOSS_PCT_STOP = 0.02; // Stop loss à 2% (plus serré)
-    public final static double TAKE_PROFIL_PCT = 0.06;    // Take profit à 6% (ratio risque/récompense 1:3)
+    public final static double RISK_PER_TRADE = 0.1;    // Risque par trade de 1% (plus conservateur)
+    public final static double STOP_LOSS_PCT_STOP = 0.04; // Stop loss à 2% (plus serré)
+    public final static double TAKE_PROFIL_PCT = 0.08;    // Take profit à 6% (ratio risque/récompense 1:3)
 
     // Backtest générique pour une stratégie TradeStrategy
     private double backtestStrategy(TradeStrategy strategy, BarSeries series) {
@@ -1080,6 +1080,34 @@ public class StrategieBackTest {
             this.useRsiFilter = useRsiFilter;
             this.rsiPeriod = rsiPeriod;
             this.performance = performance;
+        }
+    }
+
+    /**
+     * Stratégie combinée : permet d'utiliser une stratégie pour l'entrée et une autre pour la sortie
+     */
+    public static class CombinedTradeStrategy implements TradeStrategy {
+        private final TradeStrategy entryStrategy;
+        private final TradeStrategy exitStrategy;
+
+        public CombinedTradeStrategy(TradeStrategy entryStrategy, TradeStrategy exitStrategy) {
+            this.entryStrategy = entryStrategy;
+            this.exitStrategy = exitStrategy;
+        }
+
+        @Override
+        public org.ta4j.core.Rule getEntryRule(org.ta4j.core.BarSeries series) {
+            return entryStrategy.getEntryRule(series);
+        }
+
+        @Override
+        public org.ta4j.core.Rule getExitRule(org.ta4j.core.BarSeries series) {
+            return exitStrategy.getExitRule(series);
+        }
+
+        @Override
+        public String getName() {
+            return "Combined(" + entryStrategy.getName() + " / " + exitStrategy.getName() + ")";
         }
     }
 
