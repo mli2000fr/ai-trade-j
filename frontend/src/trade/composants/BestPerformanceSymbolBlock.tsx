@@ -16,6 +16,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 interface BestInOutStrategy {
   symbol: string;
@@ -62,6 +63,16 @@ const BestPerformanceSymbolBlock: React.FC = () => {
       .finally(() => setLoading(false));
   }, [limit]);
 
+  const handleCopy = () => {
+    const selectedSymbols = data
+      .map((row, idx) => checkedRows[idx] ? row.symbol : null)
+      .filter(Boolean)
+      .join(',');
+    if (selectedSymbols) {
+      navigator.clipboard.writeText(selectedSymbols);
+    }
+  };
+
   return (
     <>
       <Card sx={{ mb: 2 }}>
@@ -83,6 +94,18 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               <option value={50}>50</option>
               <option value={100}>100</option>
             </select>
+            {/* Bouton copier */}
+            <Button
+              variant="contained"
+              color="primary"
+              size="small"
+              startIcon={<ContentCopyIcon />}
+              style={{ marginLeft: 16 }}
+              onClick={handleCopy}
+              disabled={Object.values(checkedRows).every(v => !v)}
+            >
+              Copier
+            </Button>
           </div>
           {loading ? (
             <CircularProgress />
