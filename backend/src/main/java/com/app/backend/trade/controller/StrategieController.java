@@ -88,9 +88,9 @@ public class StrategieController {
 
 
 
-    @GetMapping("/strategies/test_analyse")
-    public ResponseEntity<Boolean> testAnalyse() {
-        strategieHelper.testAnalyse();
+    @GetMapping("/strategies/optimise-param")
+    public ResponseEntity<Boolean> optimseParamForAllSymbol() {
+        strategieHelper.optimseParamForAllSymbol();
         return ResponseEntity.ok(true);
     }
 }

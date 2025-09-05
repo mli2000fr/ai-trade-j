@@ -182,6 +182,15 @@ public class StrategieHelper {
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
+
+    /**
+     * Récupère tous les symboles depuis la table alpaca_asset
+     */
+    public List<String> getAllAssetSymbolsEligibleFromDb() {
+        String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true;";
+        return jdbcTemplate.queryForList(sql, String.class);
+    }
+
     /**
      * Récupère tous les symboles depuis la table alpaca_asset
      */
@@ -255,8 +264,25 @@ public class StrategieHelper {
         return this.alpacaService.getHistoricalBars(symbol, dateStart);
     }
 
-    public StrategieBackTest.AllBestParams testAnalyse() {
-        BarSeries series = this.mapping(this.getDailyValuesFromDb("AAPL"));
+    public void optimseParamForAllSymbol(){
+        List<String> listeDbSymbols = this.getAllAssetSymbolsEligibleFromDb();
+        int error = 0;
+        for(String symbol : listeDbSymbols){
+            try{
+                StrategieBackTest.AllBestParams params = this.optimseParam(symbol);
+                this.saveBestParams(symbol, params);
+                Thread.sleep(200);
+            }catch(Exception e){
+                error++;
+                TradeUtils.log("Erreur optimseParam("+symbol+") : " + e.getMessage());
+            }
+        }
+        TradeUtils.log("optimseParamForAllSymbol: total "+listeDbSymbols.size()+", error" + error);
+
+    }
+
+    public StrategieBackTest.AllBestParams optimseParam(String symbol) {
+        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol));
 
         System.out.println("=== DIAGNOSTIC DE LA SÉRIE ===");
         System.out.println("Nombre de bougies: " + series.getBarCount());
@@ -414,6 +440,8 @@ public class StrategieHelper {
         String jsonAllParams = allBestParams.toJson();
         System.out.println("JSON complet exporté: " + jsonAllParams.length() + " caractères");
 
+        this.saveBestParams("AAPL", allBestParams);
+
         return allBestParams;
     }
 
@@ -452,4 +480,335 @@ public class StrategieHelper {
     }
 
 
+    /**
+     * Sauvegarde les meilleurs paramètres pour un symbole en base de données
+     * @param symbol le symbole de l'action
+     * @param bestParams les meilleurs paramètres à sauvegarder
+     */
+    public void saveBestParams(String symbol, StrategieBackTest.AllBestParams bestParams) {
+        String checkSql = "SELECT COUNT(*) FROM best_param WHERE symbol = ?";
+        int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
+
+        if (count > 0) {
+            // Mise à jour
+            updateBestParams(symbol, bestParams);
+        } else {
+            // Insertion
+            insertBestParams(symbol, bestParams);
+        }
+    }
+
+    /**
+     * Insère de nouveaux meilleurs paramètres
+     */
+    private void insertBestParams(String symbol, StrategieBackTest.AllBestParams bestParams) {
+        String sql = """
+            INSERT INTO best_param (
+                symbol, created_date, performance_ranking,
+                tf_trend_period, tf_performance,
+                itf_trend_period, itf_short_ma_period, itf_long_ma_period, itf_breakout_threshold, 
+                itf_use_rsi_filter, itf_rsi_period, itf_performance,
+                sma_short_period, sma_long_period, sma_performance,
+                rsi_period, rsi_oversold, rsi_overbought, rsi_performance,
+                breakout_lookback_period, breakout_performance,
+                macd_short_period, macd_long_period, macd_signal_period, macd_performance,
+                mr_sma_period, mr_threshold, mr_performance,
+                best_strategy_name, best_strategy_performance, detailed_results
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+
+        jdbcTemplate.update(sql,
+            symbol,
+            java.sql.Date.valueOf(java.time.LocalDate.now()),
+            convertMapToJson(bestParams.performanceRanking),
+            // Trend Following
+            bestParams.trendFollowing != null ? bestParams.trendFollowing.trendPeriod : null,
+            bestParams.trendFollowing != null ? bestParams.trendFollowing.performance : null,
+            // Improved Trend Following
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.trendPeriod : null,
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.shortMaPeriod : null,
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.longMaPeriod : null,
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.breakoutThreshold : null,
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.useRsiFilter : null,
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.rsiPeriod : null,
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.performance : null,
+            // SMA Crossover
+            bestParams.smaCrossover != null ? bestParams.smaCrossover.shortPeriod : null,
+            bestParams.smaCrossover != null ? bestParams.smaCrossover.longPeriod : null,
+            bestParams.smaCrossover != null ? bestParams.smaCrossover.performance : null,
+            // RSI
+            bestParams.rsi != null ? bestParams.rsi.rsiPeriod : null,
+            bestParams.rsi != null ? bestParams.rsi.oversold : null,
+            bestParams.rsi != null ? bestParams.rsi.overbought : null,
+            bestParams.rsi != null ? bestParams.rsi.performance : null,
+            // Breakout
+            bestParams.breakout != null ? bestParams.breakout.lookbackPeriod : null,
+            bestParams.breakout != null ? bestParams.breakout.performance : null,
+            // MACD
+            bestParams.macd != null ? bestParams.macd.shortPeriod : null,
+            bestParams.macd != null ? bestParams.macd.longPeriod : null,
+            bestParams.macd != null ? bestParams.macd.signalPeriod : null,
+            bestParams.macd != null ? bestParams.macd.performance : null,
+            // Mean Reversion
+            bestParams.meanReversion != null ? bestParams.meanReversion.smaPeriod : null,
+            bestParams.meanReversion != null ? bestParams.meanReversion.threshold : null,
+            bestParams.meanReversion != null ? bestParams.meanReversion.performance : null,
+            // Best strategy
+            bestParams.getBestStrategyName(),
+            bestParams.getBestPerformance(),
+            convertDetailedResultsToJson(bestParams.detailedResults)
+        );
+
+        logger.info("Nouveaux meilleurs paramètres insérés pour le symbole: {}", symbol);
+    }
+
+    /**
+     * Met à jour les meilleurs paramètres existants
+     */
+    private void updateBestParams(String symbol, StrategieBackTest.AllBestParams bestParams) {
+        String sql = """
+            UPDATE best_param SET
+                updated_date = CURRENT_TIMESTAMP, performance_ranking = ?,
+                tf_trend_period = ?, tf_performance = ?,
+                itf_trend_period = ?, itf_short_ma_period = ?, itf_long_ma_period = ?, itf_breakout_threshold = ?, 
+                itf_use_rsi_filter = ?, itf_rsi_period = ?, itf_performance = ?,
+                sma_short_period = ?, sma_long_period = ?, sma_performance = ?,
+                rsi_period = ?, rsi_oversold = ?, rsi_overbought = ?, rsi_performance = ?,
+                breakout_lookback_period = ?, breakout_performance = ?,
+                macd_short_period = ?, macd_long_period = ?, macd_signal_period = ?, macd_performance = ?,
+                mr_sma_period = ?, mr_threshold = ?, mr_performance = ?,
+                best_strategy_name = ?, best_strategy_performance = ?, detailed_results = ?
+            WHERE symbol = ?
+            """;
+
+        jdbcTemplate.update(sql,
+            convertMapToJson(bestParams.performanceRanking),
+            // Trend Following
+            bestParams.trendFollowing != null ? bestParams.trendFollowing.trendPeriod : null,
+            bestParams.trendFollowing != null ? bestParams.trendFollowing.performance : null,
+            // Improved Trend Following
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.trendPeriod : null,
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.shortMaPeriod : null,
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.longMaPeriod : null,
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.breakoutThreshold : null,
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.useRsiFilter : null,
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.rsiPeriod : null,
+            bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.performance : null,
+            // SMA Crossover
+            bestParams.smaCrossover != null ? bestParams.smaCrossover.shortPeriod : null,
+            bestParams.smaCrossover != null ? bestParams.smaCrossover.longPeriod : null,
+            bestParams.smaCrossover != null ? bestParams.smaCrossover.performance : null,
+            // RSI
+            bestParams.rsi != null ? bestParams.rsi.rsiPeriod : null,
+            bestParams.rsi != null ? bestParams.rsi.oversold : null,
+            bestParams.rsi != null ? bestParams.rsi.overbought : null,
+            bestParams.rsi != null ? bestParams.rsi.performance : null,
+            // Breakout
+            bestParams.breakout != null ? bestParams.breakout.lookbackPeriod : null,
+            bestParams.breakout != null ? bestParams.breakout.performance : null,
+            // MACD
+            bestParams.macd != null ? bestParams.macd.shortPeriod : null,
+            bestParams.macd != null ? bestParams.macd.longPeriod : null,
+            bestParams.macd != null ? bestParams.macd.signalPeriod : null,
+            bestParams.macd != null ? bestParams.macd.performance : null,
+            // Mean Reversion
+            bestParams.meanReversion != null ? bestParams.meanReversion.smaPeriod : null,
+            bestParams.meanReversion != null ? bestParams.meanReversion.threshold : null,
+            bestParams.meanReversion != null ? bestParams.meanReversion.performance : null,
+            // Best strategy
+            bestParams.getBestStrategyName(),
+            bestParams.getBestPerformance(),
+            convertDetailedResultsToJson(bestParams.detailedResults),
+            symbol
+        );
+
+        logger.info("Meilleurs paramètres mis à jour pour le symbole: {}", symbol);
+    }
+
+    /**
+     * Récupère les meilleurs paramètres pour un symbole depuis la base de données
+     * @param symbol le symbole de l'action
+     * @return AllBestParams reconstruit ou null si non trouvé
+     */
+    public StrategieBackTest.AllBestParams getBestParams(String symbol) {
+        String sql = """
+            SELECT * FROM best_param WHERE symbol = ?
+            """;
+
+        try {
+            return jdbcTemplate.queryForObject(sql, (rs, rowNum) -> {
+                // Reconstruction des objets de paramètres
+                StrategieBackTest.TrendFollowingParams tfParams = null;
+                if (rs.getObject("tf_trend_period") != null) {
+                    tfParams = new StrategieBackTest.TrendFollowingParams(
+                        rs.getInt("tf_trend_period"),
+                        rs.getDouble("tf_performance")
+                    );
+                }
+
+                StrategieBackTest.ImprovedTrendFollowingParams itfParams = null;
+                if (rs.getObject("itf_trend_period") != null) {
+                    itfParams = new StrategieBackTest.ImprovedTrendFollowingParams(
+                        rs.getInt("itf_trend_period"),
+                        rs.getInt("itf_short_ma_period"),
+                        rs.getInt("itf_long_ma_period"),
+                        rs.getDouble("itf_breakout_threshold"),
+                        rs.getBoolean("itf_use_rsi_filter"),
+                        rs.getInt("itf_rsi_period"),
+                        rs.getDouble("itf_performance")
+                    );
+                }
+
+                StrategieBackTest.SmaCrossoverParams smaParams = null;
+                if (rs.getObject("sma_short_period") != null) {
+                    smaParams = new StrategieBackTest.SmaCrossoverParams(
+                        rs.getInt("sma_short_period"),
+                        rs.getInt("sma_long_period"),
+                        rs.getDouble("sma_performance")
+                    );
+                }
+
+                StrategieBackTest.RsiParams rsiParams = null;
+                if (rs.getObject("rsi_period") != null) {
+                    rsiParams = new StrategieBackTest.RsiParams(
+                        rs.getInt("rsi_period"),
+                        rs.getDouble("rsi_oversold"),
+                        rs.getDouble("rsi_overbought"),
+                        rs.getDouble("rsi_performance")
+                    );
+                }
+
+                StrategieBackTest.BreakoutParams breakoutParams = null;
+                if (rs.getObject("breakout_lookback_period") != null) {
+                    breakoutParams = new StrategieBackTest.BreakoutParams(
+                        rs.getInt("breakout_lookback_period"),
+                        rs.getDouble("breakout_performance")
+                    );
+                }
+
+                StrategieBackTest.MacdParams macdParams = null;
+                if (rs.getObject("macd_short_period") != null) {
+                    macdParams = new StrategieBackTest.MacdParams(
+                        rs.getInt("macd_short_period"),
+                        rs.getInt("macd_long_period"),
+                        rs.getInt("macd_signal_period"),
+                        rs.getDouble("macd_performance")
+                    );
+                }
+
+                StrategieBackTest.MeanReversionParams mrParams = null;
+                if (rs.getObject("mr_sma_period") != null) {
+                    mrParams = new StrategieBackTest.MeanReversionParams(
+                        rs.getInt("mr_sma_period"),
+                        rs.getDouble("mr_threshold"),
+                        rs.getDouble("mr_performance")
+                    );
+                }
+
+                // Reconstruction des maps depuis JSON
+                java.util.Map<String, Double> performanceRanking = convertJsonToPerformanceMap(rs.getString("performance_ranking"));
+                java.util.Map<String, StrategieBackTest.RiskResult> detailedResults = convertJsonToDetailedResults(rs.getString("detailed_results"));
+
+                return new StrategieBackTest.AllBestParams(
+                    tfParams, itfParams, smaParams, rsiParams, breakoutParams, macdParams, mrParams,
+                    performanceRanking, detailedResults
+                );
+            }, symbol);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            logger.warn("Aucun meilleur paramètre trouvé pour le symbole: {}", symbol);
+            return null;
+        }
+    }
+
+    /**
+     * Méthodes utilitaires pour la conversion JSON
+     */
+    private String convertMapToJson(java.util.Map<String, Double> map) {
+        if (map == null) return null;
+        com.google.gson.JsonObject jsonObj = new com.google.gson.JsonObject();
+        map.forEach(jsonObj::addProperty);
+        return new com.google.gson.Gson().toJson(jsonObj);
+    }
+
+    private String convertDetailedResultsToJson(java.util.Map<String, StrategieBackTest.RiskResult> detailedResults) {
+        if (detailedResults == null) return null;
+        com.google.gson.JsonObject jsonObj = new com.google.gson.JsonObject();
+        detailedResults.forEach((key, result) -> {
+            com.google.gson.JsonObject resultObj = new com.google.gson.JsonObject();
+            resultObj.addProperty("rendement", result.rendement);
+            resultObj.addProperty("maxDrawdown", result.maxDrawdown);
+            resultObj.addProperty("tradeCount", result.tradeCount);
+            resultObj.addProperty("winRate", result.winRate);
+            resultObj.addProperty("avgPnL", result.avgPnL);
+            resultObj.addProperty("profitFactor", result.profitFactor);
+            resultObj.addProperty("avgTradeBars", result.avgTradeBars);
+            resultObj.addProperty("maxTradeGain", result.maxTradeGain);
+            resultObj.addProperty("maxTradeLoss", result.maxTradeLoss);
+            jsonObj.add(key, resultObj);
+        });
+        return new com.google.gson.Gson().toJson(jsonObj);
+    }
+
+    private java.util.Map<String, Double> convertJsonToPerformanceMap(String json) {
+        if (json == null) return new java.util.HashMap<>();
+        try {
+            com.google.gson.JsonObject jsonObj = new com.google.gson.JsonParser().parse(json).getAsJsonObject();
+            java.util.Map<String, Double> map = new java.util.HashMap<>();
+            jsonObj.entrySet().forEach(entry ->
+                map.put(entry.getKey(), entry.getValue().getAsDouble()));
+            return map;
+        } catch (Exception e) {
+            logger.warn("Erreur conversion JSON vers Map<String, Double>: {}", e.getMessage());
+            return new java.util.HashMap<>();
+        }
+    }
+
+    private java.util.Map<String, StrategieBackTest.RiskResult> convertJsonToDetailedResults(String json) {
+        if (json == null) return new java.util.HashMap<>();
+        try {
+            com.google.gson.JsonObject jsonObj = new com.google.gson.JsonParser().parse(json).getAsJsonObject();
+            java.util.Map<String, StrategieBackTest.RiskResult> map = new java.util.HashMap<>();
+
+            jsonObj.entrySet().forEach(entry -> {
+                com.google.gson.JsonObject resultObj = entry.getValue().getAsJsonObject();
+                StrategieBackTest.RiskResult riskResult = new StrategieBackTest.RiskResult(
+                    resultObj.get("rendement").getAsDouble(),
+                    resultObj.get("maxDrawdown").getAsDouble(),
+                    resultObj.get("tradeCount").getAsInt(),
+                    resultObj.get("winRate").getAsDouble(),
+                    resultObj.get("avgPnL").getAsDouble(),
+                    resultObj.get("profitFactor").getAsDouble(),
+                    resultObj.get("avgTradeBars").getAsDouble(),
+                    resultObj.get("maxTradeGain").getAsDouble(),
+                    resultObj.get("maxTradeLoss").getAsDouble()
+                );
+                map.put(entry.getKey(), riskResult);
+            });
+            return map;
+        } catch (Exception e) {
+            logger.warn("Erreur conversion JSON vers Map<String, RiskResult>: {}", e.getMessage());
+            return new java.util.HashMap<>();
+        }
+    }
+
+    /**
+     * Récupère tous les symboles ayant des meilleurs paramètres sauvegardés
+     * @return Liste des symboles
+     */
+    public List<String> getAllSymbolsWithBestParams() {
+        String sql = "SELECT symbol FROM best_param ORDER BY updated_date DESC";
+        return jdbcTemplate.queryForList(sql, String.class);
+    }
+
+    /**
+     * Supprime les meilleurs paramètres pour un symbole
+     * @param symbol le symbole à supprimer
+     */
+    public void deleteBestParams(String symbol) {
+        String sql = "DELETE FROM best_param WHERE symbol = ?";
+        int rowsAffected = jdbcTemplate.update(sql, symbol);
+        if (rowsAffected > 0) {
+            logger.info("Meilleurs paramètres supprimés pour le symbole: {}", symbol);
+        }
+    }
 }
