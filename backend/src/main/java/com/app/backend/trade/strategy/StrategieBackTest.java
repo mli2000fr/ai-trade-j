@@ -666,6 +666,25 @@ public class StrategieBackTest {
     }
 
     // Rolling Window et Walk-Forward pour ImprovedTrendFollowing
+    public java.util.List<RollingWindowResult> runRollingWindowBacktestImprovedTrendFollowing(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int stepSize,
+            int trendMin, int trendMax,
+            int shortMaMin, int shortMaMax,
+            int longMaMin, int longMaMax,
+            double thresholdMin, double thresholdMax, double thresholdStep
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseImprovedTrendFollowingParameters(optSeries,
+            trendMin, trendMax, shortMaMin, shortMaMax, longMaMin, longMaMax, thresholdMin, thresholdMax, thresholdStep);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            ImprovedTrendFollowingParams p = (ImprovedTrendFollowingParams) params;
+            return backtestImprovedTrendFollowingStrategy(testSeries, p.trendPeriod, p.shortMaPeriod, p.longMaPeriod, p.breakoutThreshold, p.useRsiFilter, p.rsiPeriod);
+        };
+        return runRollingWindowBacktest(series, windowOptSize, windowTestSize, stepSize, optimizer, backtestFunc);
+    }
+
     public java.util.List<WalkForwardResult> runWalkForwardBacktestImprovedTrendFollowing(
             BarSeries series,
             int windowOptSize,
@@ -1063,5 +1082,83 @@ public class StrategieBackTest {
             this.performance = performance;
         }
     }
-}
 
+    /**
+     * Affiche les résultats d'une liste de RollingWindowResult (SMA Crossover) dans la console
+     */
+    public static void printRollingWindowResultsSmaCrossover(List<RollingWindowResult> results) {
+        for (RollingWindowResult res : results) {
+            SmaCrossoverParams params = (SmaCrossoverParams) res.params;
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", SMA params: short=" + params.shortPeriod + ", long=" + params.longPeriod +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+
+    /**
+     * Affiche les résultats d'une liste de RollingWindowResult (RSI) dans la console
+     */
+    public static void printRollingWindowResultsRsi(List<RollingWindowResult> results) {
+        for (RollingWindowResult res : results) {
+            RsiParams params = (RsiParams) res.params;
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", RSI params: period=" + params.rsiPeriod + ", oversold=" + params.oversold + ", overbought=" + params.overbought +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+
+    /**
+     * Affiche les résultats d'une liste de RollingWindowResult (MACD) dans la console
+     */
+    public static void printRollingWindowResultsMacd(List<RollingWindowResult> results) {
+        for (RollingWindowResult res : results) {
+            MacdParams params = (MacdParams) res.params;
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", MACD params: short=" + params.shortPeriod + ", long=" + params.longPeriod + ", signal=" + params.signalPeriod +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+
+    /**
+     * Affiche les résultats génériques d'une liste de RollingWindowResult dans la console
+     */
+    public static void printRollingWindowResultsGeneric(List<RollingWindowResult> results) {
+        for (RollingWindowResult res : results) {
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", params: " + res.params.toString() +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+}

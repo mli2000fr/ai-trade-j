@@ -269,7 +269,7 @@ public class StrategieHelper {
         int error = 0;
         for(String symbol : listeDbSymbols){
             try{
-                StrategieBackTest.AllBestParams params = this.optimseParam(symbol);
+                StrategieBackTest.AllBestParams params = this.optimseParamByWalkForward(symbol);
                 this.saveBestParams(symbol, params);
                 Thread.sleep(200);
             }catch(Exception e){
@@ -281,11 +281,11 @@ public class StrategieHelper {
 
     }
 
-    public void test_analyse(){
-        optimseParam("NVDA");
+    public void test_analyse_ByWalkForward(){
+        optimseParamByWalkForward("NVDA");
     }
 
-    public StrategieBackTest.AllBestParams optimseParam(String symbol) {
+    public StrategieBackTest.AllBestParams optimseParamByWalkForward(String symbol) {
         BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol));
 
         System.out.println("=== DIAGNOSTIC DE LA SÉRIE ===");
@@ -431,6 +431,218 @@ public class StrategieHelper {
         System.out.println("JSON complet exporté: " + jsonAllParams.length() + " caractères");
 
         this.saveBestParams(symbol, allBestParams);
+
+        return allBestParams;
+    }
+
+    public void test_analyse_RollingWindow(){
+        optimseParamByRollingWindow("NVDA");
+    }
+
+    public StrategieBackTest.AllBestParams optimseParamByRollingWindow(String symbol) {
+        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol));
+
+        System.out.println("=== DIAGNOSTIC DE LA SÉRIE (ROLLING WINDOW) ===");
+        System.out.println("Nombre de bougies: " + series.getBarCount());
+        System.out.println("Date début: " + series.getFirstBar().getEndTime());
+        System.out.println("Date fin: " + series.getLastBar().getEndTime());
+        System.out.println("Prix min: " + series.getBar(series.getBeginIndex()).getLowPrice());
+        System.out.println("Prix max: " + series.getBar(series.getBeginIndex()).getHighPrice());
+
+        // Paramètres pour Rolling Window (stepSize = 50 pour glisser la fenêtre progressivement)
+        int stepSize = 50;
+
+        System.out.println("\n=== TEST IMPROVED TREND FOLLOWING (ROLLING WINDOW) ===");
+        List<StrategieBackTest.RollingWindowResult> improvedTrendResults = strategieBackTest.runRollingWindowBacktestImprovedTrendFollowing(
+            series, 300, 200, stepSize,
+            10, 30,    // trendMin, trendMax
+            5, 15,     // shortMaMin, shortMaMax
+            15, 25,    // longMaMin, longMaMax
+            0.001, 0.01, 0.002  // thresholdMin, thresholdMax, thresholdStep
+        );
+        StrategieBackTest.printRollingWindowResultsGeneric(improvedTrendResults);
+
+        System.out.println("\n=== TEST SMA CROSSOVER (ROLLING WINDOW) ===");
+        List<StrategieBackTest.RollingWindowResult> smaCrossResults = strategieBackTest.runRollingWindowBacktestSmaCrossover(series, 300, 200, stepSize, 5, 20, 10, 50);
+        StrategieBackTest.printRollingWindowResultsSmaCrossover(smaCrossResults);
+
+        System.out.println("\n=== TEST RSI (ROLLING WINDOW) ===");
+        List<StrategieBackTest.RollingWindowResult> rsiResults = strategieBackTest.runRollingWindowBacktestRsi(series, 300, 200, stepSize, 10, 20, 20, 40, 5, 60, 80, 5);
+        StrategieBackTest.printRollingWindowResultsRsi(rsiResults);
+
+        System.out.println("\n=== TEST BREAKOUT (ROLLING WINDOW) ===");
+        List<StrategieBackTest.RollingWindowResult> breakoutResults = strategieBackTest.runRollingWindowBacktestBreakout(series, 300, 200, stepSize, 5, 50);
+        StrategieBackTest.printRollingWindowResultsGeneric(breakoutResults);
+
+        System.out.println("\n=== TEST MACD (ROLLING WINDOW) ===");
+        List<StrategieBackTest.RollingWindowResult> macdResults = strategieBackTest.runRollingWindowBacktestMacd(series, 300, 200, stepSize, 8, 16, 20, 30, 6, 12);
+        StrategieBackTest.printRollingWindowResultsMacd(macdResults);
+
+        System.out.println("\n=== TEST MEAN REVERSION (ROLLING WINDOW) ===");
+        List<StrategieBackTest.RollingWindowResult> meanRevResults = strategieBackTest.runRollingWindowBacktestMeanReversion(series, 300, 200, stepSize, 10, 30, 1.0, 5.0, 0.5);
+        StrategieBackTest.printRollingWindowResultsGeneric(meanRevResults);
+
+        System.out.println("\n=== COMPARAISON DES PERFORMANCES (ROLLING WINDOW) ===");
+        System.out.println("Improved Trend Following: " + (improvedTrendResults.isEmpty() ? "Aucun résultat" : improvedTrendResults.size() + " fenêtres testées"));
+        System.out.println("SMA Crossover: " + (smaCrossResults.isEmpty() ? "Aucun résultat" : smaCrossResults.size() + " fenêtres testées"));
+        System.out.println("RSI: " + (rsiResults.isEmpty() ? "Aucun résultat" : rsiResults.size() + " fenêtres testées"));
+        System.out.println("Breakout: " + (breakoutResults.isEmpty() ? "Aucun résultat" : breakoutResults.size() + " fenêtres testées"));
+        System.out.println("MACD: " + (macdResults.isEmpty() ? "Aucun résultat" : macdResults.size() + " fenêtres testées"));
+        System.out.println("Mean Reversion: " + (meanRevResults.isEmpty() ? "Aucun résultat" : meanRevResults.size() + " fenêtres testées"));
+
+        // Calculer la performance moyenne de chaque stratégie sur toutes les fenêtres
+        System.out.println("\n=== CLASSEMENT PAR RENDEMENT MOYEN (ROLLING WINDOW) ===");
+        java.util.Map<String, Double> performances = new java.util.HashMap<>();
+        java.util.Map<String, StrategieBackTest.RiskResult> detailedResults = new java.util.HashMap<>();
+
+        if (!improvedTrendResults.isEmpty()) {
+            double avgReturn = improvedTrendResults.stream()
+                .mapToDouble(r -> r.result.rendement)
+                .average()
+                .orElse(0.0);
+            performances.put("Improved Trend", avgReturn);
+            // Prendre le meilleur résultat pour les paramètres
+            StrategieBackTest.RollingWindowResult bestResult = improvedTrendResults.stream()
+                .max((r1, r2) -> Double.compare(r1.result.rendement, r2.result.rendement))
+                .orElse(improvedTrendResults.get(0));
+            detailedResults.put("Improved Trend", bestResult.result);
+        }
+        if (!smaCrossResults.isEmpty()) {
+            double avgReturn = smaCrossResults.stream()
+                .mapToDouble(r -> r.result.rendement)
+                .average()
+                .orElse(0.0);
+            performances.put("SMA Crossover", avgReturn);
+            StrategieBackTest.RollingWindowResult bestResult = smaCrossResults.stream()
+                .max((r1, r2) -> Double.compare(r1.result.rendement, r2.result.rendement))
+                .orElse(smaCrossResults.get(0));
+            detailedResults.put("SMA Crossover", bestResult.result);
+        }
+        if (!rsiResults.isEmpty()) {
+            double avgReturn = rsiResults.stream()
+                .mapToDouble(r -> r.result.rendement)
+                .average()
+                .orElse(0.0);
+            performances.put("RSI", avgReturn);
+            StrategieBackTest.RollingWindowResult bestResult = rsiResults.stream()
+                .max((r1, r2) -> Double.compare(r1.result.rendement, r2.result.rendement))
+                .orElse(rsiResults.get(0));
+            detailedResults.put("RSI", bestResult.result);
+        }
+        if (!breakoutResults.isEmpty()) {
+            double avgReturn = breakoutResults.stream()
+                .mapToDouble(r -> r.result.rendement)
+                .average()
+                .orElse(0.0);
+            performances.put("Breakout", avgReturn);
+            StrategieBackTest.RollingWindowResult bestResult = breakoutResults.stream()
+                .max((r1, r2) -> Double.compare(r1.result.rendement, r2.result.rendement))
+                .orElse(breakoutResults.get(0));
+            detailedResults.put("Breakout", bestResult.result);
+        }
+        if (!macdResults.isEmpty()) {
+            double avgReturn = macdResults.stream()
+                .mapToDouble(r -> r.result.rendement)
+                .average()
+                .orElse(0.0);
+            performances.put("MACD", avgReturn);
+            StrategieBackTest.RollingWindowResult bestResult = macdResults.stream()
+                .max((r1, r2) -> Double.compare(r1.result.rendement, r2.result.rendement))
+                .orElse(macdResults.get(0));
+            detailedResults.put("MACD", bestResult.result);
+        }
+        if (!meanRevResults.isEmpty()) {
+            double avgReturn = meanRevResults.stream()
+                .mapToDouble(r -> r.result.rendement)
+                .average()
+                .orElse(0.0);
+            performances.put("Mean Reversion", avgReturn);
+            StrategieBackTest.RollingWindowResult bestResult = meanRevResults.stream()
+                .max((r1, r2) -> Double.compare(r1.result.rendement, r2.result.rendement))
+                .orElse(meanRevResults.get(0));
+            detailedResults.put("Mean Reversion", bestResult.result);
+        }
+
+        performances.entrySet().stream()
+            .sorted(java.util.Map.Entry.<String, Double>comparingByValue().reversed())
+            .forEach(entry -> System.out.println(entry.getKey() + " (moyenne): " + String.format("%.4f", entry.getValue() * 100) + "%"));
+
+        // Extraction des meilleurs paramètres (ceux qui ont donné le meilleur résultat unique)
+        StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = !improvedTrendResults.isEmpty() ?
+            (StrategieBackTest.ImprovedTrendFollowingParams) improvedTrendResults.stream()
+                .max((r1, r2) -> Double.compare(r1.result.rendement, r2.result.rendement))
+                .get().params : null;
+        StrategieBackTest.SmaCrossoverParams bestSmaCrossover = !smaCrossResults.isEmpty() ?
+            (StrategieBackTest.SmaCrossoverParams) smaCrossResults.stream()
+                .max((r1, r2) -> Double.compare(r1.result.rendement, r2.result.rendement))
+                .get().params : null;
+        StrategieBackTest.RsiParams bestRsi = !rsiResults.isEmpty() ?
+            (StrategieBackTest.RsiParams) rsiResults.stream()
+                .max((r1, r2) -> Double.compare(r1.result.rendement, r2.result.rendement))
+                .get().params : null;
+        StrategieBackTest.BreakoutParams bestBreakout = !breakoutResults.isEmpty() ?
+            (StrategieBackTest.BreakoutParams) breakoutResults.stream()
+                .max((r1, r2) -> Double.compare(r1.result.rendement, r2.result.rendement))
+                .get().params : null;
+        StrategieBackTest.MacdParams bestMacd = !macdResults.isEmpty() ?
+            (StrategieBackTest.MacdParams) macdResults.stream()
+                .max((r1, r2) -> Double.compare(r1.result.rendement, r2.result.rendement))
+                .get().params : null;
+        StrategieBackTest.MeanReversionParams bestMeanReversion = !meanRevResults.isEmpty() ?
+            (StrategieBackTest.MeanReversionParams) meanRevResults.stream()
+                .max((r1, r2) -> Double.compare(r1.result.rendement, r2.result.rendement))
+                .get().params : null;
+
+        // Création de l'objet de retour avec tous les meilleurs paramètres
+        StrategieBackTest.AllBestParams allBestParams = new StrategieBackTest.AllBestParams(
+            bestImprovedTrend,
+            bestSmaCrossover,
+            bestRsi,
+            bestBreakout,
+            bestMacd,
+            bestMeanReversion,
+            performances,
+            detailedResults
+        );
+
+        System.out.println("\n=== RÉSUMÉ DES MEILLEURS PARAMÈTRES (ROLLING WINDOW) ===");
+        System.out.println("Meilleure stratégie (moyenne): " + allBestParams.getBestStrategyName() +
+                          " (Performance moyenne: " + String.format("%.4f", allBestParams.getBestPerformance() * 100) + "%)");
+
+        if (bestImprovedTrend != null) {
+            System.out.println("Improved Trend - Period: " + bestImprovedTrend.trendPeriod +
+                              ", Short MA: " + bestImprovedTrend.shortMaPeriod +
+                              ", Long MA: " + bestImprovedTrend.longMaPeriod +
+                              ", Threshold: " + String.format("%.3f", bestImprovedTrend.breakoutThreshold) +
+                              ", RSI Filter: " + bestImprovedTrend.useRsiFilter);
+        }
+        if (bestSmaCrossover != null) {
+            System.out.println("SMA Crossover - Short: " + bestSmaCrossover.shortPeriod +
+                              ", Long: " + bestSmaCrossover.longPeriod);
+        }
+        if (bestRsi != null) {
+            System.out.println("RSI - Period: " + bestRsi.rsiPeriod +
+                              ", Oversold: " + bestRsi.oversold +
+                              ", Overbought: " + bestRsi.overbought);
+        }
+        if (bestBreakout != null) {
+            System.out.println("Breakout - Lookback: " + bestBreakout.lookbackPeriod);
+        }
+        if (bestMacd != null) {
+            System.out.println("MACD - Short: " + bestMacd.shortPeriod +
+                              ", Long: " + bestMacd.longPeriod +
+                              ", Signal: " + bestMacd.signalPeriod);
+        }
+        if (bestMeanReversion != null) {
+            System.out.println("Mean Reversion - SMA: " + bestMeanReversion.smaPeriod +
+                              ", Threshold: " + String.format("%.2f", bestMeanReversion.threshold));
+        }
+
+        System.out.println("\n=== EXPORT JSON TOUS LES BEST PARAMS (ROLLING WINDOW) ===");
+        String jsonAllParams = allBestParams.toJson();
+        System.out.println("JSON complet exporté: " + jsonAllParams.length() + " caractères");
+
+        this.saveBestParams(symbol + "_rolling", allBestParams);
 
         return allBestParams;
     }
