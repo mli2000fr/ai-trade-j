@@ -1,10 +1,12 @@
 package com.app.backend.trade.strategy;
 
+import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
 
 import java.util.List;
 
+@Controller
 public class StrategieBackTest {
 
     private final static double INITIAL_CAPITAL = 1000;
@@ -44,6 +46,7 @@ public class StrategieBackTest {
     public RiskResult backtestStrategyRisk(TradeStrategy strategy, BarSeries series) {
         return backtestStrategyRisk(strategy, series, INITIAL_CAPITAL, RISK_PER_TRADE, STOP_LOSS_PCT_STOP, TAKE_PROFIL_PCT);
     }
+
     public RiskResult backtestStrategyRisk(TradeStrategy strategy, BarSeries series, double initialCapital, double riskPerTrade, double stopLossPct, double takeProfitPct) {
         Rule entryRule = strategy.getEntryRule(series);
         Rule exitRule = strategy.getExitRule(series);
@@ -161,6 +164,7 @@ public class StrategieBackTest {
         public final double maxTradeGain;
         /** Maximum perte réalisée sur un trade */
         public final double maxTradeLoss;
+
         public RiskResult(double rendement, double maxDrawdown, int tradeCount, double winRate, double avgPnL, double profitFactor, double avgTradeBars, double maxTradeGain, double maxTradeLoss) {
             this.rendement = rendement;
             this.maxDrawdown = maxDrawdown;
@@ -210,6 +214,18 @@ public class StrategieBackTest {
         return backtestStrategyRisk(strategy, series);
     }
 
+    // Backtest pour ImprovedTrendFollowingStrategy
+    public RiskResult backtestImprovedTrendFollowingStrategy(BarSeries series, int trendPeriod, int shortMaPeriod, int longMaPeriod, double breakoutThreshold, boolean useRsiFilter, int rsiPeriod) {
+        ImprovedTrendFollowingStrategy strategy = new ImprovedTrendFollowingStrategy(trendPeriod, shortMaPeriod, longMaPeriod, breakoutThreshold, useRsiFilter, rsiPeriod);
+        return backtestStrategyRisk(strategy, series);
+    }
+
+    // Backtest pour ImprovedTrendFollowingStrategy avec paramètres par défaut
+    public RiskResult backtestImprovedTrendFollowingStrategy(BarSeries series, int trendPeriod) {
+        ImprovedTrendFollowingStrategy strategy = new ImprovedTrendFollowingStrategy(trendPeriod);
+        return backtestStrategyRisk(strategy, series);
+    }
+
     /**
      * Optimisation des paramètres pour MacdStrategy
      */
@@ -220,8 +236,8 @@ public class StrategieBackTest {
             for (int longPeriod = longMin; longPeriod <= longMax; longPeriod++) {
                 for (int signalPeriod = signalMin; signalPeriod <= signalMax; signalPeriod++) {
                     RiskResult result = backtestMacdStrategy(series, shortPeriod, longPeriod, signalPeriod);
-                    if (result.rendement  > bestReturn) {
-                        bestReturn = result.rendement ;
+                    if (result.rendement > bestReturn) {
+                        bestReturn = result.rendement;
                         bestShort = shortPeriod;
                         bestLong = longPeriod;
                         bestSignal = signalPeriod;
@@ -240,8 +256,8 @@ public class StrategieBackTest {
         int bestLookback = lookbackMin;
         for (int lookback = lookbackMin; lookback <= lookbackMax; lookback++) {
             RiskResult result = backtestBreakoutStrategy(series, lookback);
-            if (result.rendement  > bestReturn) {
-                bestReturn = result.rendement ;
+            if (result.rendement > bestReturn) {
+                bestReturn = result.rendement;
                 bestLookback = lookback;
             }
         }
@@ -258,8 +274,8 @@ public class StrategieBackTest {
         for (int sma = smaMin; sma <= smaMax; sma++) {
             for (double threshold = thresholdMin; threshold <= thresholdMax; threshold += thresholdStep) {
                 RiskResult result = backtestMeanReversionStrategy(series, sma, threshold);
-                if (result.rendement  > bestReturn) {
-                    bestReturn = result.rendement ;
+                if (result.rendement > bestReturn) {
+                    bestReturn = result.rendement;
                     bestSma = sma;
                     bestThreshold = threshold;
                 }
@@ -280,8 +296,8 @@ public class StrategieBackTest {
             for (double oversold = oversoldMin; oversold <= oversoldMax; oversold += oversoldStep) {
                 for (double overbought = overboughtMin; overbought <= overboughtMax; overbought += overboughtStep) {
                     RiskResult result = backtestRsiStrategy(series, rsi, oversold, overbought);
-                    if (result.rendement  > bestReturn) {
-                        bestReturn = result.rendement ;
+                    if (result.rendement > bestReturn) {
+                        bestReturn = result.rendement;
                         bestRsi = rsi;
                         bestOversold = oversold;
                         bestOverbought = overbought;
@@ -302,8 +318,8 @@ public class StrategieBackTest {
         for (int shortPeriod = shortMin; shortPeriod <= shortMax; shortPeriod++) {
             for (int longPeriod = longMin; longPeriod <= longMax; longPeriod++) {
                 RiskResult result = backtestSmaCrossoverStrategy(series, shortPeriod, longPeriod);
-                if (result.rendement  > bestReturn) {
-                    bestReturn = result.rendement ;
+                if (result.rendement > bestReturn) {
+                    bestReturn = result.rendement;
                     bestShort = shortPeriod;
                     bestLong = longPeriod;
                 }
@@ -326,6 +342,43 @@ public class StrategieBackTest {
             }
         }
         return new TrendFollowingParams(bestTrend, bestReturn);
+    }
+
+    /**
+     * Optimisation des paramètres pour ImprovedTrendFollowingStrategy
+     */
+    public ImprovedTrendFollowingParams optimiseImprovedTrendFollowingParameters(BarSeries series,
+            int trendMin, int trendMax, int shortMaMin, int shortMaMax, int longMaMin, int longMaMax,
+            double thresholdMin, double thresholdMax, double thresholdStep) {
+        double bestReturn = Double.NEGATIVE_INFINITY;
+        int bestTrend = trendMin;
+        int bestShortMa = shortMaMin;
+        int bestLongMa = longMaMin;
+        double bestThreshold = thresholdMin;
+        boolean bestUseRsi = true;
+        int bestRsiPeriod = 14;
+
+        for (int trendPeriod = trendMin; trendPeriod <= trendMax; trendPeriod += 2) {
+            for (int shortMa = shortMaMin; shortMa <= shortMaMax; shortMa += 2) {
+                for (int longMa = longMaMin; longMa <= longMaMax; longMa += 3) {
+                    if (shortMa >= longMa) continue; // shortMa doit être < longMa
+                    for (double threshold = thresholdMin; threshold <= thresholdMax; threshold += thresholdStep) {
+                        for (boolean useRsi : new boolean[]{true, false}) {
+                            RiskResult result = backtestImprovedTrendFollowingStrategy(series, trendPeriod, shortMa, longMa, threshold, useRsi, 14);
+                            if (result.rendement > bestReturn) {
+                                bestReturn = result.rendement;
+                                bestTrend = trendPeriod;
+                                bestShortMa = shortMa;
+                                bestLongMa = longMa;
+                                bestThreshold = threshold;
+                                bestUseRsi = useRsi;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return new ImprovedTrendFollowingParams(bestTrend, bestShortMa, bestLongMa, bestThreshold, bestUseRsi, bestRsiPeriod, bestReturn);
     }
 
     /**
@@ -355,6 +408,7 @@ public class StrategieBackTest {
         public final int endTestIdx;
         public final Object params;
         public final RiskResult result;
+
         public RollingWindowResult(int startOptIdx, int endOptIdx, int startTestIdx, int endTestIdx, Object params, RiskResult result) {
             this.startOptIdx = startOptIdx;
             this.endOptIdx = endOptIdx;
@@ -406,6 +460,7 @@ public class StrategieBackTest {
         public final int endTestIdx;
         public final Object params;
         public final RiskResult result;
+
         public WalkForwardResult(int startOptIdx, int endOptIdx, int startTestIdx, int endTestIdx, Object params, RiskResult result) {
             this.startOptIdx = startOptIdx;
             this.endOptIdx = endOptIdx;
@@ -446,63 +501,6 @@ public class StrategieBackTest {
         }
         return results;
     }
-
-    // Classes de paramètres pour le retour des optimisations
-    public static class MacdParams {
-        public final int shortPeriod, longPeriod, signalPeriod;
-        public final double performance;
-        public MacdParams(int shortPeriod, int longPeriod, int signalPeriod, double performance) {
-            this.shortPeriod = shortPeriod;
-            this.longPeriod = longPeriod;
-            this.signalPeriod = signalPeriod;
-            this.performance = performance;
-        }
-    }
-    public static class BreakoutParams {
-        public final int lookbackPeriod;
-        public final double performance;
-        public BreakoutParams(int lookbackPeriod, double performance) {
-            this.lookbackPeriod = lookbackPeriod;
-            this.performance = performance;
-        }
-    }
-    public static class MeanReversionParams {
-        public final int smaPeriod;
-        public final double threshold, performance;
-        public MeanReversionParams(int smaPeriod, double threshold, double performance) {
-            this.smaPeriod = smaPeriod;
-            this.threshold = threshold;
-            this.performance = performance;
-        }
-    }
-    public static class RsiParams {
-        public final int rsiPeriod;
-        public final double oversold, overbought, performance;
-        public RsiParams(int rsiPeriod, double oversold, double overbought, double performance) {
-            this.rsiPeriod = rsiPeriod;
-            this.oversold = oversold;
-            this.overbought = overbought;
-            this.performance = performance;
-        }
-    }
-    public static class SmaCrossoverParams {
-        public final int shortPeriod, longPeriod;
-        public final double performance;
-        public SmaCrossoverParams(int shortPeriod, int longPeriod, double performance) {
-            this.shortPeriod = shortPeriod;
-            this.longPeriod = longPeriod;
-            this.performance = performance;
-        }
-    }
-    public static class TrendFollowingParams {
-        public final int trendPeriod;
-        public final double performance;
-        public TrendFollowingParams(int trendPeriod, double performance) {
-            this.trendPeriod = trendPeriod;
-            this.performance = performance;
-        }
-    }
-
 
     // Rolling Window et Walk-Forward pour MACD
     public java.util.List<RollingWindowResult> runRollingWindowBacktestMacd(
@@ -666,6 +664,25 @@ public class StrategieBackTest {
         return runWalkForwardBacktest(series, windowOptSize, windowTestSize, optimizer, backtestFunc);
     }
 
+    // Rolling Window et Walk-Forward pour ImprovedTrendFollowing
+    public java.util.List<WalkForwardResult> runWalkForwardBacktestImprovedTrendFollowing(
+            BarSeries series,
+            int windowOptSize,
+            int windowTestSize,
+            int trendMin, int trendMax,
+            int shortMaMin, int shortMaMax,
+            int longMaMin, int longMaMax,
+            double thresholdMin, double thresholdMax, double thresholdStep
+    ) {
+        Optimizer optimizer = (BarSeries optSeries) -> optimiseImprovedTrendFollowingParameters(optSeries,
+            trendMin, trendMax, shortMaMin, shortMaMax, longMaMin, longMaMax, thresholdMin, thresholdMax, thresholdStep);
+        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
+            ImprovedTrendFollowingParams p = (ImprovedTrendFollowingParams) params;
+            return backtestImprovedTrendFollowingStrategy(testSeries, p.trendPeriod, p.shortMaPeriod, p.longMaPeriod, p.breakoutThreshold, p.useRsiFilter, p.rsiPeriod);
+        };
+        return runWalkForwardBacktest(series, windowOptSize, windowTestSize, optimizer, backtestFunc);
+    }
+
     // Rolling Window et Walk-Forward pour TrendFollowing
     public java.util.List<RollingWindowResult> runRollingWindowBacktestTrendFollowing(
             BarSeries series,
@@ -717,23 +734,126 @@ public class StrategieBackTest {
     }
 
     /**
-     * Exporte les résultats d'une liste de WalkForwardResult (TrendFollowing) en JSON
+     * Affiche les résultats d'une liste de WalkForwardResult (SMA Crossover) dans la console
+     */
+    public static void printWalkForwardResultsSmaCrossover(List<WalkForwardResult> results) {
+        for (WalkForwardResult res : results) {
+            SmaCrossoverParams params = (SmaCrossoverParams) res.params;
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", SMA params: short=" + params.shortPeriod + ", long=" + params.longPeriod +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+
+    /**
+     * Affiche les résultats d'une liste de WalkForwardResult (RSI) dans la console
+     */
+    public static void printWalkForwardResultsRsi(List<WalkForwardResult> results) {
+        for (WalkForwardResult res : results) {
+            RsiParams params = (RsiParams) res.params;
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", RSI params: period=" + params.rsiPeriod + ", oversold=" + params.oversold + ", overbought=" + params.overbought +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+
+    /**
+     * Affiche les résultats d'une liste de WalkForwardResult (MACD) dans la console
+     */
+    public static void printWalkForwardResultsMacd(List<WalkForwardResult> results) {
+        for (WalkForwardResult res : results) {
+            MacdParams params = (MacdParams) res.params;
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", MACD params: short=" + params.shortPeriod + ", long=" + params.longPeriod + ", signal=" + params.signalPeriod +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+
+    /**
+     * Affiche les résultats génériques d'une liste de WalkForwardResult dans la console
+     */
+    public static void printWalkForwardResultsGeneric(List<WalkForwardResult> results) {
+        for (WalkForwardResult res : results) {
+            RiskResult metrics = res.result;
+            System.out.println(
+                "Fenêtre optimisation: " + res.startOptIdx + "-" + res.endOptIdx +
+                ", fenêtre test: " + res.startTestIdx + "-" + res.endTestIdx +
+                ", params: " + res.params.toString() +
+                ", rendement test: " + metrics.rendement +
+                ", drawdown: " + metrics.maxDrawdown +
+                ", win rate: " + metrics.winRate +
+                ", nb trades: " + metrics.tradeCount +
+                ", profit factor: " + metrics.profitFactor
+            );
+        }
+    }
+
+    /**
+     * Exporte les résultats d'une liste de WalkForwardResult en JSON
      * Nécessite la dépendance Gson (com.google.gson.Gson)
      */
     public static String exportWalkForwardResultsToJson(List<WalkForwardResult> results) {
         com.google.gson.JsonArray arr = new com.google.gson.JsonArray();
         for (WalkForwardResult res : results) {
-            TrendFollowingParams params = (TrendFollowingParams) res.params;
-            RiskResult metrics = res.result;
             com.google.gson.JsonObject obj = new com.google.gson.JsonObject();
             obj.addProperty("startOptIdx", res.startOptIdx);
             obj.addProperty("endOptIdx", res.endOptIdx);
             obj.addProperty("startTestIdx", res.startTestIdx);
             obj.addProperty("endTestIdx", res.endTestIdx);
+
+            // Gestion générique des paramètres selon le type
             com.google.gson.JsonObject paramObj = new com.google.gson.JsonObject();
-            paramObj.addProperty("trendPeriod", params.trendPeriod);
-            paramObj.addProperty("performance", params.performance);
+            if (res.params instanceof TrendFollowingParams) {
+                TrendFollowingParams params = (TrendFollowingParams) res.params;
+                paramObj.addProperty("trendPeriod", params.trendPeriod);
+                paramObj.addProperty("performance", params.performance);
+            } else if (res.params instanceof SmaCrossoverParams) {
+                SmaCrossoverParams params = (SmaCrossoverParams) res.params;
+                paramObj.addProperty("shortPeriod", params.shortPeriod);
+                paramObj.addProperty("longPeriod", params.longPeriod);
+                paramObj.addProperty("performance", params.performance);
+            } else if (res.params instanceof RsiParams) {
+                RsiParams params = (RsiParams) res.params;
+                paramObj.addProperty("rsiPeriod", params.rsiPeriod);
+                paramObj.addProperty("oversold", params.oversold);
+                paramObj.addProperty("overbought", params.overbought);
+                paramObj.addProperty("performance", params.performance);
+            } else if (res.params instanceof MacdParams) {
+                MacdParams params = (MacdParams) res.params;
+                paramObj.addProperty("shortPeriod", params.shortPeriod);
+                paramObj.addProperty("longPeriod", params.longPeriod);
+                paramObj.addProperty("signalPeriod", params.signalPeriod);
+                paramObj.addProperty("performance", params.performance);
+            } else {
+                paramObj.addProperty("params", res.params.toString());
+            }
             obj.add("params", paramObj);
+
+            RiskResult metrics = res.result;
             com.google.gson.JsonObject resultObj = new com.google.gson.JsonObject();
             resultObj.addProperty("rendement", metrics.rendement);
             resultObj.addProperty("maxDrawdown", metrics.maxDrawdown);
@@ -748,6 +868,88 @@ public class StrategieBackTest {
             arr.add(obj);
         }
         return new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(arr);
+    }
+
+    // Classes de paramètres pour le retour des optimisations
+    public static class MacdParams {
+        public final int shortPeriod, longPeriod, signalPeriod;
+        public final double performance;
+        public MacdParams(int shortPeriod, int longPeriod, int signalPeriod, double performance) {
+            this.shortPeriod = shortPeriod;
+            this.longPeriod = longPeriod;
+            this.signalPeriod = signalPeriod;
+            this.performance = performance;
+        }
+    }
+
+    public static class BreakoutParams {
+        public final int lookbackPeriod;
+        public final double performance;
+        public BreakoutParams(int lookbackPeriod, double performance) {
+            this.lookbackPeriod = lookbackPeriod;
+            this.performance = performance;
+        }
+    }
+
+    public static class MeanReversionParams {
+        public final int smaPeriod;
+        public final double threshold, performance;
+        public MeanReversionParams(int smaPeriod, double threshold, double performance) {
+            this.smaPeriod = smaPeriod;
+            this.threshold = threshold;
+            this.performance = performance;
+        }
+    }
+
+    public static class RsiParams {
+        public final int rsiPeriod;
+        public final double oversold, overbought, performance;
+        public RsiParams(int rsiPeriod, double oversold, double overbought, double performance) {
+            this.rsiPeriod = rsiPeriod;
+            this.oversold = oversold;
+            this.overbought = overbought;
+            this.performance = performance;
+        }
+    }
+
+    public static class SmaCrossoverParams {
+        public final int shortPeriod, longPeriod;
+        public final double performance;
+        public SmaCrossoverParams(int shortPeriod, int longPeriod, double performance) {
+            this.shortPeriod = shortPeriod;
+            this.longPeriod = longPeriod;
+            this.performance = performance;
+        }
+    }
+
+    public static class TrendFollowingParams {
+        public final int trendPeriod;
+        public final double performance;
+        public TrendFollowingParams(int trendPeriod, double performance) {
+            this.trendPeriod = trendPeriod;
+            this.performance = performance;
+        }
+    }
+
+    public static class ImprovedTrendFollowingParams {
+        public final int trendPeriod;
+        public final int shortMaPeriod;
+        public final int longMaPeriod;
+        public final double breakoutThreshold;
+        public final boolean useRsiFilter;
+        public final int rsiPeriod;
+        public final double performance;
+
+        public ImprovedTrendFollowingParams(int trendPeriod, int shortMaPeriod, int longMaPeriod,
+                                            double breakoutThreshold, boolean useRsiFilter, int rsiPeriod, double performance) {
+            this.trendPeriod = trendPeriod;
+            this.shortMaPeriod = shortMaPeriod;
+            this.longMaPeriod = longMaPeriod;
+            this.breakoutThreshold = breakoutThreshold;
+            this.useRsiFilter = useRsiFilter;
+            this.rsiPeriod = rsiPeriod;
+            this.performance = performance;
+        }
     }
 }
 

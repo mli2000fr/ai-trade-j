@@ -24,14 +24,23 @@ FROM (
 SELECT symbol
 FROM trade_ai.daily_value
 GROUP BY symbol
-HAVING COUNT(*) < 500
+HAVING COUNT(*) > 500
 ) AS sous_requete;
 
-
+UPDATE trade_ai.alpaca_asset
+SET eligible = TRUE
+WHERE symbol IN (
 SELECT symbol
-FROM trade_ai.alpaca_asset
-WHERE symbol NOT IN (
-SELECT symbol FROM trade_ai.daily_value
+FROM trade_ai.daily_value
+GROUP BY symbol
+HAVING COUNT(*) > 500
 );
+
+
+  SELECT symbol
+  FROM trade_ai.alpaca_asset
+  WHERE symbol NOT IN (
+  SELECT symbol FROM trade_ai.daily_value
+  );
 
 2172 + 9510 = 11682

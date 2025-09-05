@@ -4,5 +4,6 @@ CREATE TABLE alpaca_asset (
     exchange VARCHAR(16),
     status VARCHAR(16),
     name VARCHAR(128),
-    created_at TIMESTAMP
+    created_at TIMESTAMP,
+    eligible BOOLEAN DEFAULT FALSE,
 );

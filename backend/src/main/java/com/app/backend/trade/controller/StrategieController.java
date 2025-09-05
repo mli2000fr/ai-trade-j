@@ -78,4 +78,19 @@ public class StrategieController {
         strategieHelper.updateDBDailyValuAllSymbols();
         return ResponseEntity.ok(true);
     }
+
+
+    @GetMapping("/strategies/db/update-daily-valu-complement")
+    public ResponseEntity<Boolean> updateDBDailyValueComplement() {
+        strategieHelper.updateDBDailyValuAllSymbolsComplement();
+        return ResponseEntity.ok(true);
+    }
+
+
+
+    @GetMapping("/strategies/test_analyse")
+    public ResponseEntity<Boolean> testAnalyse() {
+        strategieHelper.testAnalyse();
+        return ResponseEntity.ok(true);
+    }
 }

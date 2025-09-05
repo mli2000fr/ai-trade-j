@@ -49,12 +49,10 @@ public class AlpacaService {
             .registerTypeAdapter(OffsetDateTime.class, new OffsetDateTimeAdapter())
             .create();
 
-    private final JdbcTemplate jdbcTemplate;
 
     @Autowired
-    public AlpacaService(OrderRepository orderRepository, JdbcTemplate jdbcTemplate, CompteService compteService) {
+    public AlpacaService(OrderRepository orderRepository, CompteService compteService) {
         this.orderRepository = orderRepository;
-        this.jdbcTemplate = jdbcTemplate;
         this.compteService = compteService;
     }
 
@@ -747,28 +745,6 @@ public class AlpacaService {
         return result;
     }
 
-    public  List<DailyValue> updateDailyValue(String symbol) {
-
-        // 1. Chercher la date la plus récente pour ce symbol dans la table daily_value
-        String sql = "SELECT MAX(date) FROM daily_value WHERE symbol = ?";
-        java.sql.Date lastDate = null;
-        try {
-            lastDate = jdbcTemplate.queryForObject(sql, new Object[]{symbol}, java.sql.Date.class);
-        } catch (Exception e) {
-            logger.warn("Aucune date trouvée pour le symbole {} dans daily_value ou erreur SQL: {}", symbol, e.getMessage());
-        }
-        String dateStart;
-        if (lastDate == null) {
-            // Si aucune ligne trouvée, on prend la date de start par défaut
-            dateStart = TradeUtils.getStartDate(800);
-        } else {
-            // Sinon, on ajoute un jour à la date la plus récente
-            java.time.LocalDate nextDay = lastDate.toLocalDate().plusDays(1);
-            dateStart = nextDay.toString(); // format YYYY-MM-DD
-        }
-        // 2. Appeler getHistoricalBars avec la date de start calculée
-        return getHistoricalBars(symbol, dateStart);
-    }
 
 
 
@@ -805,60 +781,6 @@ public class AlpacaService {
         return Collections.emptyList();
     }
 
-    public void saveSymbolsToDatabase(List<AlpacaAsset> assets) {
-        String sql = "INSERT IGNORE INTO alpaca_asset (id, symbol, exchange, status, name, created_at) VALUES (?, ?, ?, ?, ?, ?)";
-        for (AlpacaAsset asset : assets) {
-            jdbcTemplate.update(sql,
-                asset.getId(),
-                asset.getSymbol(),
-                asset.getExchange(),
-                asset.getStatus(),
-                asset.getName(),
-                new java.sql.Timestamp(System.currentTimeMillis())
-            );
-        }
-    }
 
 
-
-    /**
-     * Insère une ligne dans la table daily_value avec symbol et une instance de DailyValue.
-     * La colonne date est stockée en type DATE (MySQL), donc conversion si nécessaire.
-     */
-    public void insertDailyValue(String symbol, DailyValue dailyValue) {
-        // Conversion de la date (ex: "2025-03-18T04:00:00Z" ou "2025-03-18") en java.sql.Date
-        java.sql.Date sqlDate = null;
-        if (dailyValue.getDate() != null && !dailyValue.getDate().isEmpty()) {
-            String dateStr = dailyValue.getDate();
-            // Extraction de la partie date (YYYY-MM-DD)
-            if (dateStr.length() >= 10) {
-                dateStr = dateStr.substring(0, 10);
-            }
-            try {
-                sqlDate = java.sql.Date.valueOf(dateStr);
-            } catch (Exception e) {
-                logger.warn("Format de date inattendu pour DailyValue: {}", dailyValue.getDate());
-            }
-        }
-        String sql = "INSERT INTO daily_value (symbol, date, open, high, low, close, volume, number_of_trades, volume_weighted_average_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        jdbcTemplate.update(sql,
-                symbol,
-                sqlDate,
-                dailyValue.getOpen(),
-                dailyValue.getHigh(),
-                dailyValue.getLow(),
-                dailyValue.getClose(),
-                dailyValue.getVolume(),
-                dailyValue.getNumberOfTrades(),
-                dailyValue.getVolumeWeightedAveragePrice()
-        );
-    }
-
-    /**
-     * Récupère tous les symboles depuis la table alpaca_asset
-     */
-    public List<String> getAllAssetSymbolsFromDb() {
-        String sql = "SELECT symbol FROM alpaca_asset WHERE status = 'active'";
-        return jdbcTemplate.queryForList(sql, String.class);
-    }
 }
