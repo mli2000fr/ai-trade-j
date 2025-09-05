@@ -683,36 +683,6 @@ public class StrategieBackTest {
         return runWalkForwardBacktest(series, windowOptSize, windowTestSize, optimizer, backtestFunc);
     }
 
-    // Rolling Window et Walk-Forward pour TrendFollowing
-    public java.util.List<RollingWindowResult> runRollingWindowBacktestTrendFollowing(
-            BarSeries series,
-            int windowOptSize,
-            int windowTestSize,
-            int stepSize,
-            int trendMin, int trendMax
-    ) {
-        Optimizer optimizer = (BarSeries optSeries) -> optimiseTrendFollowingParameters(optSeries, trendMin, trendMax);
-        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
-            TrendFollowingParams p = (TrendFollowingParams) params;
-            return backtestTrendFollowingStrategy(testSeries, p.trendPeriod);
-        };
-        return runRollingWindowBacktest(series, windowOptSize, windowTestSize, stepSize, optimizer, backtestFunc);
-    }
-
-    public java.util.List<WalkForwardResult> runWalkForwardBacktestTrendFollowing(
-            BarSeries series,
-            int windowOptSize,
-            int windowTestSize,
-            int trendMin, int trendMax
-    ) {
-        Optimizer optimizer = (BarSeries optSeries) -> optimiseTrendFollowingParameters(optSeries, trendMin, trendMax);
-        ParamBacktest backtestFunc = (BarSeries testSeries, Object params) -> {
-            TrendFollowingParams p = (TrendFollowingParams) params;
-            return backtestTrendFollowingStrategy(testSeries, p.trendPeriod);
-        };
-        return runWalkForwardBacktest(series, windowOptSize, windowTestSize, optimizer, backtestFunc);
-    }
-
     /**
      * Affiche les résultats d'une liste de WalkForwardResult (TrendFollowing) dans la console
      */
@@ -874,7 +844,6 @@ public class StrategieBackTest {
      * Classe pour stocker tous les meilleurs paramètres de toutes les stratégies
      */
     public static class AllBestParams {
-        public final TrendFollowingParams trendFollowing;
         public final ImprovedTrendFollowingParams improvedTrendFollowing;
         public final SmaCrossoverParams smaCrossover;
         public final RsiParams rsi;
@@ -886,8 +855,7 @@ public class StrategieBackTest {
         public final java.util.Map<String, Double> performanceRanking;
         public final java.util.Map<String, RiskResult> detailedResults;
 
-        public AllBestParams(TrendFollowingParams trendFollowing,
-                            ImprovedTrendFollowingParams improvedTrendFollowing,
+        public AllBestParams(ImprovedTrendFollowingParams improvedTrendFollowing,
                             SmaCrossoverParams smaCrossover,
                             RsiParams rsi,
                             BreakoutParams breakout,
@@ -895,7 +863,6 @@ public class StrategieBackTest {
                             MeanReversionParams meanReversion,
                             java.util.Map<String, Double> performanceRanking,
                             java.util.Map<String, RiskResult> detailedResults) {
-            this.trendFollowing = trendFollowing;
             this.improvedTrendFollowing = improvedTrendFollowing;
             this.smaCrossover = smaCrossover;
             this.rsi = rsi;
@@ -916,7 +883,6 @@ public class StrategieBackTest {
                 .orElse("Mean Reversion");
 
             switch (bestStrategy) {
-                case "Trend Following": return trendFollowing;
                 case "Improved Trend": return improvedTrendFollowing;
                 case "SMA Crossover": return smaCrossover;
                 case "RSI": return rsi;
@@ -952,12 +918,6 @@ public class StrategieBackTest {
          */
         public String toJson() {
             com.google.gson.JsonObject obj = new com.google.gson.JsonObject();
-
-            // Trend Following
-            com.google.gson.JsonObject tfObj = new com.google.gson.JsonObject();
-            tfObj.addProperty("trendPeriod", trendFollowing.trendPeriod);
-            tfObj.addProperty("performance", trendFollowing.performance);
-            obj.add("trendFollowing", tfObj);
 
             // Improved Trend Following
             com.google.gson.JsonObject itfObj = new com.google.gson.JsonObject();
@@ -1103,40 +1063,4 @@ public class StrategieBackTest {
         }
     }
 }
-
-/*
-exemple utilisation:
-List<StrategieBackTest.RollingWindowResult> rollingResults = backTest.runRollingWindowBacktestRsi(
-    series, 300, 100, 100, 10, 20, 30, 40, 1, 70, 90, 1
-);
-
-for (StrategieBackTest.RollingWindowResult res : rollingResults) {
-    StrategieBackTest.RsiParams params = (StrategieBackTest.RsiParams) res.params;
-    StrategieBackTest.RiskResult metrics = res.result;
-    System.out.println(
-        \"Fenêtre optimisation: \" + res.startOptIdx + \"-\" + res.endOptIdx +
-        \", fenêtre test: \" + res.startTestIdx + \"-\" + res.endTestIdx +
-        \", RSI params: period=\" + params.rsiPeriod + \", oversold=\" + params.oversold + \", overbought=\" + params.overbought +
-        \", rendement test: \" + metrics.rendement +
-        \", drawdown: \" + metrics.maxDrawdown +
-        \", win rate: \" + metrics.winRate +
-        \", nb trades: \" + metrics.tradeCount +
-        \", profit factor: \" + metrics.profitFactor
-    );
-}
-Pour les autres stratégies, il suffit d’adapter le cast du paramètre:
-Pour Breakout: (BreakoutParams) res.params
-Pour MeanReversion: (MeanReversionParams) res.params
-Pour RSI: (RsiParams) res.params
-Pour SMA Crossover: (SmaCrossoverParams) res.params
-Pour TrendFollowing: (TrendFollowingParams) res.params
-
-List<StrategieBackTest.WalkForwardResult> walkResults = backTest.runWalkForwardBacktestTrendFollowing(...);
-StrategieBackTest.printWalkForwardResults(walkResults);
-String json = StrategieBackTest.exportWalkForwardResultsToJson(walkResults);
-System.out.println(json);
-
-List<StrategieBackTest.WalkForwardResult> walkResults = backTest.runWalkForwardBacktestMacd(
-        series, 300, 100, 8, 16, 20, 30, 6, 12
-);*/
 

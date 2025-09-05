@@ -281,6 +281,10 @@ public class StrategieHelper {
 
     }
 
+    public void test_analyse(){
+        optimseParam("NVDA");
+    }
+
     public StrategieBackTest.AllBestParams optimseParam(String symbol) {
         BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol));
 
@@ -291,9 +295,6 @@ public class StrategieHelper {
         System.out.println("Prix min: " + series.getBar(series.getBeginIndex()).getLowPrice());
         System.out.println("Prix max: " + series.getBar(series.getBeginIndex()).getHighPrice());
 
-        System.out.println("\n=== TEST TREND FOLLOWING (original) ===");
-        List<StrategieBackTest.WalkForwardResult> walkResults = strategieBackTest.runWalkForwardBacktestTrendFollowing(series, 300, 200, 5, 50);
-        StrategieBackTest.printWalkForwardResults(walkResults);
 
         System.out.println("\n=== TEST IMPROVED TREND FOLLOWING (nouvelle version améliorée) ===");
         List<StrategieBackTest.WalkForwardResult> improvedTrendResults = strategieBackTest.runWalkForwardBacktestImprovedTrendFollowing(
@@ -326,7 +327,6 @@ public class StrategieHelper {
         StrategieBackTest.printWalkForwardResultsGeneric(meanRevResults);
 
         System.out.println("\n=== COMPARAISON DES PERFORMANCES ===");
-        System.out.println("Trend Following original: " + (walkResults.isEmpty() ? "Aucun résultat" : walkResults.get(0).result.tradeCount + " trades"));
         System.out.println("Improved Trend Following: " + (improvedTrendResults.isEmpty() ? "Aucun résultat" : improvedTrendResults.get(0).result.tradeCount + " trades"));
         System.out.println("SMA Crossover: " + (smaCrossResults.isEmpty() ? "Aucun résultat" : smaCrossResults.get(0).result.tradeCount + " trades"));
         System.out.println("RSI: " + (rsiResults.isEmpty() ? "Aucun résultat" : rsiResults.get(0).result.tradeCount + " trades"));
@@ -338,10 +338,6 @@ public class StrategieHelper {
         java.util.Map<String, Double> performances = new java.util.HashMap<>();
         java.util.Map<String, StrategieBackTest.RiskResult> detailedResults = new java.util.HashMap<>();
 
-        if (!walkResults.isEmpty()) {
-            performances.put("Trend Following", walkResults.get(0).result.rendement);
-            detailedResults.put("Trend Following", walkResults.get(0).result);
-        }
         if (!improvedTrendResults.isEmpty()) {
             performances.put("Improved Trend", improvedTrendResults.get(0).result.rendement);
             detailedResults.put("Improved Trend", improvedTrendResults.get(0).result);
@@ -372,8 +368,6 @@ public class StrategieHelper {
             .forEach(entry -> System.out.println(entry.getKey() + ": " + String.format("%.4f", entry.getValue() * 100) + "%"));
 
         // Extraction des meilleurs paramètres
-        StrategieBackTest.TrendFollowingParams bestTrendFollowing = !walkResults.isEmpty() ?
-            (StrategieBackTest.TrendFollowingParams) walkResults.get(0).params : null;
         StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = !improvedTrendResults.isEmpty() ?
             (StrategieBackTest.ImprovedTrendFollowingParams) improvedTrendResults.get(0).params : null;
         StrategieBackTest.SmaCrossoverParams bestSmaCrossover = !smaCrossResults.isEmpty() ?
@@ -389,7 +383,6 @@ public class StrategieHelper {
 
         // Création de l'objet de retour avec tous les meilleurs paramètres
         StrategieBackTest.AllBestParams allBestParams = new StrategieBackTest.AllBestParams(
-            bestTrendFollowing,
             bestImprovedTrend,
             bestSmaCrossover,
             bestRsi,
@@ -404,9 +397,6 @@ public class StrategieHelper {
         System.out.println("Meilleure stratégie: " + allBestParams.getBestStrategyName() +
                           " (Performance: " + String.format("%.4f", allBestParams.getBestPerformance() * 100) + "%)");
 
-        if (bestTrendFollowing != null) {
-            System.out.println("Trend Following - Period: " + bestTrendFollowing.trendPeriod);
-        }
         if (bestImprovedTrend != null) {
             System.out.println("Improved Trend - Period: " + bestImprovedTrend.trendPeriod +
                               ", Short MA: " + bestImprovedTrend.shortMaPeriod +
@@ -440,7 +430,7 @@ public class StrategieHelper {
         String jsonAllParams = allBestParams.toJson();
         System.out.println("JSON complet exporté: " + jsonAllParams.length() + " caractères");
 
-        this.saveBestParams("AAPL", allBestParams);
+        this.saveBestParams(symbol, allBestParams);
 
         return allBestParams;
     }
@@ -505,7 +495,6 @@ public class StrategieHelper {
         String sql = """
             INSERT INTO best_param (
                 symbol, created_date, performance_ranking,
-                tf_trend_period, tf_performance,
                 itf_trend_period, itf_short_ma_period, itf_long_ma_period, itf_breakout_threshold, 
                 itf_use_rsi_filter, itf_rsi_period, itf_performance,
                 sma_short_period, sma_long_period, sma_performance,
@@ -514,16 +503,13 @@ public class StrategieHelper {
                 macd_short_period, macd_long_period, macd_signal_period, macd_performance,
                 mr_sma_period, mr_threshold, mr_performance,
                 best_strategy_name, best_strategy_performance, detailed_results
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
 
         jdbcTemplate.update(sql,
             symbol,
             java.sql.Date.valueOf(java.time.LocalDate.now()),
             convertMapToJson(bestParams.performanceRanking),
-            // Trend Following
-            bestParams.trendFollowing != null ? bestParams.trendFollowing.trendPeriod : null,
-            bestParams.trendFollowing != null ? bestParams.trendFollowing.performance : null,
             // Improved Trend Following
             bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.trendPeriod : null,
             bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.shortMaPeriod : null,
@@ -569,7 +555,6 @@ public class StrategieHelper {
         String sql = """
             UPDATE best_param SET
                 updated_date = CURRENT_TIMESTAMP, performance_ranking = ?,
-                tf_trend_period = ?, tf_performance = ?,
                 itf_trend_period = ?, itf_short_ma_period = ?, itf_long_ma_period = ?, itf_breakout_threshold = ?, 
                 itf_use_rsi_filter = ?, itf_rsi_period = ?, itf_performance = ?,
                 sma_short_period = ?, sma_long_period = ?, sma_performance = ?,
@@ -583,9 +568,6 @@ public class StrategieHelper {
 
         jdbcTemplate.update(sql,
             convertMapToJson(bestParams.performanceRanking),
-            // Trend Following
-            bestParams.trendFollowing != null ? bestParams.trendFollowing.trendPeriod : null,
-            bestParams.trendFollowing != null ? bestParams.trendFollowing.performance : null,
             // Improved Trend Following
             bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.trendPeriod : null,
             bestParams.improvedTrendFollowing != null ? bestParams.improvedTrendFollowing.shortMaPeriod : null,
@@ -637,14 +619,8 @@ public class StrategieHelper {
 
         try {
             return jdbcTemplate.queryForObject(sql, (rs, rowNum) -> {
-                // Reconstruction des objets de paramètres
+                // Plus de reconstruction de TrendFollowingParams car les colonnes n'existent plus
                 StrategieBackTest.TrendFollowingParams tfParams = null;
-                if (rs.getObject("tf_trend_period") != null) {
-                    tfParams = new StrategieBackTest.TrendFollowingParams(
-                        rs.getInt("tf_trend_period"),
-                        rs.getDouble("tf_performance")
-                    );
-                }
 
                 StrategieBackTest.ImprovedTrendFollowingParams itfParams = null;
                 if (rs.getObject("itf_trend_period") != null) {
@@ -710,7 +686,7 @@ public class StrategieHelper {
                 java.util.Map<String, StrategieBackTest.RiskResult> detailedResults = convertJsonToDetailedResults(rs.getString("detailed_results"));
 
                 return new StrategieBackTest.AllBestParams(
-                    tfParams, itfParams, smaParams, rsiParams, breakoutParams, macdParams, mrParams,
+                    itfParams, smaParams, rsiParams, breakoutParams, macdParams, mrParams,
                     performanceRanking, detailedResults
                 );
             }, symbol);

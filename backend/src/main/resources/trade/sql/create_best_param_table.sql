@@ -6,10 +6,8 @@ CREATE TABLE IF NOT EXISTS best_param (
 
     -- Performance ranking JSON
     performance_ranking JSON,
+    best_strategy_name VARCHAR(30),
 
-    -- Trend Following params
-    tf_trend_period INT,
-    tf_performance DOUBLE,
 
     -- Improved Trend Following params
     itf_trend_period INT,
