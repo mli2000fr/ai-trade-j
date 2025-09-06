@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
@@ -23,6 +23,27 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
   const equity = portfolio && portfolio.account?.equity !== undefined ? Number(portfolio.account.equity) : undefined;
   const plTotal = initialDeposit !== undefined && initialDeposit !== 0 && !isNaN(initialDeposit) && equity !== undefined && !isNaN(equity) ? equity - initialDeposit : undefined;
   const plPercent = initialDeposit !== undefined && initialDeposit !== 0 && !isNaN(initialDeposit) && equity !== undefined && !isNaN(equity) ? ((equity - initialDeposit) / initialDeposit) * 100 : undefined;
+
+  // Ajout d'un cache local pour les indices
+  const [indices, setIndices] = useState<{ [symbol: string]: string }>({});
+
+  useEffect(() => {
+    if (!portfolio || !portfolio.positions) return;
+    const symbolsToFetch = portfolio.positions
+      .map((pos: any) => pos.symbol)
+      .filter((symbol: string) => symbol && !(symbol in indices));
+    if (symbolsToFetch.length === 0) return;
+    symbolsToFetch.forEach((symbol: string) => {
+      fetch(`/api/stra/strategies/get_indice?symbol=${encodeURIComponent(symbol)}`)
+        .then(res => res.json())
+        .then(data => {
+          setIndices(prev => ({ ...prev, [symbol]: data.indice ?? '-' }));
+        })
+        .catch(() => {
+          setIndices(prev => ({ ...prev, [symbol]: '-' }));
+        });
+    });
+  }, [portfolio, indices]);
 
   return (
     <Card sx={{ mb: 3, backgroundColor: '#f5f5f5' }}>
@@ -117,6 +138,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                   <TableHead>
                     <TableRow>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Indice</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Prix d'achat</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Prix actuel</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Quantité</TableCell>
@@ -141,6 +163,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                           }
                         >
                           <TableCell sx={cellStyle}>{pos.symbol}</TableCell>
+                          <TableCell sx={cellStyle}>{indices[pos.symbol] ?? '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.avg_entry_price !== undefined && pos.avg_entry_price !== null ? Number(pos.avg_entry_price).toFixed(2) + ' $' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.current_price !== undefined && pos.current_price !== null ? Number(pos.current_price).toFixed(2) + ' $' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.qty}</TableCell>
