@@ -103,6 +103,8 @@ const DashboardPage: React.FC = () => {
   const handleTradeAuto = async () => {
     setMessageAuto('');
     setIsExecutingAuto(true);
+    setAiJsonResult(null);
+    setAiTextResult(null);
     try {
       const symboles = autoSymbols.split(',').map(s => s.trim()).filter(Boolean);
       const res = await fetch('/api/trade/trade-ai-auto', {
