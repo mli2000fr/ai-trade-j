@@ -25,8 +25,12 @@ interface TradeAutoBlockProps {
 const TradeAutoBlock: React.FC<TradeAutoBlockProps> = ({ autoSymbols, isExecuting, disabled, onChange, onTrade, analyseGptText, onAnalyseGptChange, message, aiJsonResult, aiTextResult, compteId, onOrdersUpdate, idGpt }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   return (
+       <>
+       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+       <Typography variant="h6" >Trade Auto</Typography>
+        </Box>
     <Box sx={{ mb: 3, p: 2, border: '1px solid #eee', borderRadius: 2, backgroundColor: '#f5f5f5' }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>Trade Auto</Typography>
+
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
         <TextField
           label="Symboles"
@@ -89,6 +93,7 @@ const TradeAutoBlock: React.FC<TradeAutoBlockProps> = ({ autoSymbols, isExecutin
         idGpt={idGpt}
       />
     </Box>
+    </>
   );
 };
 

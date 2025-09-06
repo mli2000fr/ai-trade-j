@@ -220,7 +220,7 @@ const DashboardPage: React.FC = () => {
         </Paper>
         <Paper elevation={3} sx={{ mb: 3, p: 2, borderRadius: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-            <Typography variant="h5" gutterBottom>Mon portefeuille</Typography>
+            <Typography variant="h6">Mon portefeuille</Typography>
             <Button variant="outlined" size="small" onClick={loadPortfolio}>
               Rafraîchir
             </Button>

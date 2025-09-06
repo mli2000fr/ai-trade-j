@@ -86,8 +86,12 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
   const disableTakeProfit = action === 'sell' && stopLoss !== '' && stopLoss !== undefined && stopLoss !== null && !isNaN(Number(stopLoss));
 
   return (
+      <>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+      <Typography variant="h6">Trade Manuel</Typography>
+       </Box>
     <Box sx={{ mb: 3, p: 2, border: '1px solid #eee', borderRadius: 2, backgroundColor: '#f5f5f5' }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>Trade Manuel</Typography>
+
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap', mb: 2 }}>
         <FormControl size="small" sx={{ minWidth: 120 }}>
           <InputLabel id="action-select-label">Action</InputLabel>
@@ -211,6 +215,7 @@ const TradeManualBlock: React.FC<TradeManualBlockProps> = ({
         </Typography>
       )}
     </Box>
+          </>
   );
 };
 

@@ -87,7 +87,6 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
   return (
     <Card sx={{ mb: 3, backgroundColor: '#f5f5f5' }}>
       <CardContent>
-        <Typography variant="h5" gutterBottom>Mon portefeuille</Typography>
         {lastUpdate && (
           <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
             Actualisé à {lastUpdate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
