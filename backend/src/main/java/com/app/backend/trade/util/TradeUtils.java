@@ -1,7 +1,10 @@
 package com.app.backend.trade.util;
 
+import com.app.backend.trade.model.DailyValue;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
  * Classe utilitaire pour fonctions diverses liées au trading (logs, dates, nettoyage HTML, etc.).
@@ -79,5 +82,136 @@ public class TradeUtils {
                 .trim();  // Supprimer les espaces en début et fin
 
         return cleaned;
+    }
+
+    /**
+     * Conversion Map<String, Double> en JSON
+     */
+    public static String convertMapToJson(java.util.Map<String, Double> map) {
+        if (map == null) return null;
+        com.google.gson.JsonObject jsonObj = new com.google.gson.JsonObject();
+        map.forEach(jsonObj::addProperty);
+        return new com.google.gson.Gson().toJson(jsonObj);
+    }
+
+    /**
+     * Conversion Map<String, RiskResult> en JSON
+     */
+    public static String convertDetailedResultsToJson(java.util.Map<String, com.app.backend.trade.strategy.StrategieBackTest.RiskResult> detailedResults) {
+        if (detailedResults == null) return null;
+        com.google.gson.JsonObject jsonObj = new com.google.gson.JsonObject();
+        detailedResults.forEach((key, result) -> {
+            com.google.gson.JsonObject resultObj = new com.google.gson.JsonObject();
+            resultObj.addProperty("rendement", result.rendement);
+            resultObj.addProperty("maxDrawdown", result.maxDrawdown);
+            resultObj.addProperty("tradeCount", result.tradeCount);
+            resultObj.addProperty("winRate", result.winRate);
+            resultObj.addProperty("avgPnL", result.avgPnL);
+            resultObj.addProperty("profitFactor", result.profitFactor);
+            resultObj.addProperty("avgTradeBars", result.avgTradeBars);
+            resultObj.addProperty("maxTradeGain", result.maxTradeGain);
+            resultObj.addProperty("maxTradeLoss", result.maxTradeLoss);
+            jsonObj.add(key, resultObj);
+        });
+        return new com.google.gson.Gson().toJson(jsonObj);
+    }
+
+    /**
+     * Conversion JSON en Map<String, Double>
+     */
+    public static java.util.Map<String, Double> convertJsonToPerformanceMap(String json) {
+        if (json == null) return new java.util.HashMap<>();
+        try {
+            com.google.gson.JsonObject jsonObj = new com.google.gson.JsonParser().parse(json).getAsJsonObject();
+            java.util.Map<String, Double> map = new java.util.HashMap<>();
+            jsonObj.entrySet().forEach(entry ->
+                map.put(entry.getKey(), entry.getValue().getAsDouble()));
+            return map;
+        } catch (Exception e) {
+            log("Erreur conversion JSON vers Map<String, Double>: " + e.getMessage());
+            return new java.util.HashMap<>();
+        }
+    }
+
+    /**
+     * Conversion JSON en Map<String, RiskResult>
+     */
+    public static java.util.Map<String, com.app.backend.trade.strategy.StrategieBackTest.RiskResult> convertJsonToDetailedResults(String json) {
+        if (json == null) return new java.util.HashMap<>();
+        try {
+            com.google.gson.JsonObject jsonObj = new com.google.gson.JsonParser().parse(json).getAsJsonObject();
+            java.util.Map<String, com.app.backend.trade.strategy.StrategieBackTest.RiskResult> map = new java.util.HashMap<>();
+            jsonObj.entrySet().forEach(entry -> {
+                com.google.gson.JsonObject resultObj = entry.getValue().getAsJsonObject();
+                com.app.backend.trade.strategy.StrategieBackTest.RiskResult riskResult = new com.app.backend.trade.strategy.StrategieBackTest.RiskResult(
+                    resultObj.get("rendement").getAsDouble(),
+                    resultObj.get("maxDrawdown").getAsDouble(),
+                    resultObj.get("tradeCount").getAsInt(),
+                    resultObj.get("winRate").getAsDouble(),
+                    resultObj.get("avgPnL").getAsDouble(),
+                    resultObj.get("profitFactor").getAsDouble(),
+                    resultObj.get("avgTradeBars").getAsDouble(),
+                    resultObj.get("maxTradeGain").getAsDouble(),
+                    resultObj.get("maxTradeLoss").getAsDouble()
+                );
+                map.put(entry.getKey(), riskResult);
+            });
+            return map;
+        } catch (Exception e) {
+            log("Erreur conversion JSON vers Map<String, RiskResult>: " + e.getMessage());
+            return new java.util.HashMap<>();
+        }
+    }
+
+    /**
+     * Mapping List<DailyValue> vers BarSeries
+     */
+    public static org.ta4j.core.BarSeries mapping(List<DailyValue> listeValues) {
+        org.ta4j.core.BarSeries series = new org.ta4j.core.BaseBarSeries();
+        for (com.app.backend.trade.model.DailyValue dailyValue : listeValues) {
+            try {
+                java.time.ZonedDateTime dateTime;
+                if (dailyValue.getDate().length() == 10) {
+                    dateTime = java.time.LocalDate.parse(dailyValue.getDate())
+                            .atStartOfDay(java.time.ZoneId.systemDefault());
+                } else {
+                    dateTime = java.time.ZonedDateTime.parse(dailyValue.getDate());
+                }
+                series.addBar(
+                        dateTime,
+                        Double.parseDouble(dailyValue.getOpen()),
+                        Double.parseDouble(dailyValue.getHigh()),
+                        Double.parseDouble(dailyValue.getLow()),
+                        Double.parseDouble(dailyValue.getClose()),
+                        Double.parseDouble(dailyValue.getVolume())
+                );
+            } catch (Exception e) {
+                log("Erreur conversion DailyValue en BarSeries pour la date " + dailyValue.getDate() + ": " + e.getMessage());
+            }
+        }
+        return series;
+    }
+
+    /**
+     * Parse les paramètres JSON selon le type de stratégie
+     */
+    public static Object parseStrategyParams(String name, String json) {
+        com.google.gson.Gson gson = new com.google.gson.Gson();
+        switch (name) {
+            case "Improved Trend":
+                return gson.fromJson(json, com.app.backend.trade.strategy.StrategieBackTest.ImprovedTrendFollowingParams.class);
+            case "SMA Crossover":
+                return gson.fromJson(json, com.app.backend.trade.strategy.StrategieBackTest.SmaCrossoverParams.class);
+            case "RSI":
+                return gson.fromJson(json, com.app.backend.trade.strategy.StrategieBackTest.RsiParams.class);
+            case "Breakout":
+                return gson.fromJson(json, com.app.backend.trade.strategy.StrategieBackTest.BreakoutParams.class);
+            case "MACD":
+                return gson.fromJson(json, com.app.backend.trade.strategy.StrategieBackTest.MacdParams.class);
+            case "Mean Reversion":
+                return gson.fromJson(json, com.app.backend.trade.strategy.StrategieBackTest.MeanReversionParams.class);
+            default:
+                return null;
+        }
     }
 }

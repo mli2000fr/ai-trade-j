@@ -17,7 +17,7 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
+import com.app.backend.trade.strategy.BestInOutStrategy;
 
 @Controller
 public class StrategieHelper {
@@ -993,7 +993,7 @@ public class StrategieHelper {
 
                 // Reconstruction des maps depuis JSON
                 java.util.Map<String, Double> performanceRanking = convertJsonToPerformanceMap(rs.getString("performance_ranking"));
-                java.util.Map<String, StrategieBackTest.RiskResult> detailedResults = convertJsonToDetailedResults(rs.getString("detailed_results"));
+                java.util.Map<String, StrategieBackTest.RiskResult> detailedResults = TradeUtils.convertJsonToDetailedResults(rs.getString("detailed_results"));
 
                 return new StrategieBackTest.AllBestParams(
                     itfParams, smaParams, rsiParams, breakoutParams, macdParams, mrParams,
@@ -1049,33 +1049,6 @@ public class StrategieHelper {
         }
     }
 
-    private java.util.Map<String, StrategieBackTest.RiskResult> convertJsonToDetailedResults(String json) {
-        if (json == null) return new java.util.HashMap<>();
-        try {
-            com.google.gson.JsonObject jsonObj = new com.google.gson.JsonParser().parse(json).getAsJsonObject();
-            java.util.Map<String, StrategieBackTest.RiskResult> map = new java.util.HashMap<>();
-
-            jsonObj.entrySet().forEach(entry -> {
-                com.google.gson.JsonObject resultObj = entry.getValue().getAsJsonObject();
-                StrategieBackTest.RiskResult riskResult = new StrategieBackTest.RiskResult(
-                    resultObj.get("rendement").getAsDouble(),
-                    resultObj.get("maxDrawdown").getAsDouble(),
-                    resultObj.get("tradeCount").getAsInt(),
-                    resultObj.get("winRate").getAsDouble(),
-                    resultObj.get("avgPnL").getAsDouble(),
-                    resultObj.get("profitFactor").getAsDouble(),
-                    resultObj.get("avgTradeBars").getAsDouble(),
-                    resultObj.get("maxTradeGain").getAsDouble(),
-                    resultObj.get("maxTradeLoss").getAsDouble()
-                );
-                map.put(entry.getKey(), riskResult);
-            });
-            return map;
-        } catch (Exception e) {
-            logger.warn("Erreur conversion JSON vers Map<String, RiskResult>: {}", e.getMessage());
-            return new java.util.HashMap<>();
-        }
-    }
 
     /**
      * Récupère tous les symboles ayant des meilleurs paramètres sauvegardés
