@@ -49,6 +49,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [selected, setSelected] = useState<BestInOutStrategy | null>(null);
   const [checkedRows, setCheckedRows] = useState<{[key: number]: boolean}>({});
   const [limit, setLimit] = useState<number>(20);
+  const [indices, setIndices] = useState<{ [symbol: string]: string }>({});
 
   useEffect(() => {
     setLoading(true);
@@ -62,6 +63,25 @@ const BestPerformanceSymbolBlock: React.FC = () => {
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, [limit]);
+
+  useEffect(() => {
+    if (!data || data.length === 0) return;
+    const symbolsToFetch = data
+      .map((row: BestInOutStrategy) => row.symbol)
+      .filter((symbol: string) => symbol && !(symbol in indices));
+    if (symbolsToFetch.length === 0) return;
+    symbolsToFetch.forEach((symbol: string) => {
+      setIndices(prev => ({ ...prev, [symbol]: 'pending' }));
+      fetch(`/api/stra/strategies/get_indice?symbol=${encodeURIComponent(symbol)}`)
+        .then(res => res.json())
+        .then(data => {
+          setIndices(prev => ({ ...prev, [symbol]: data ?? '-' }));
+        })
+        .catch(() => {
+          setIndices(prev => ({ ...prev, [symbol]: '-' }));
+        });
+    });
+  }, [data]);
 
   const handleCopy = () => {
     const selectedSymbols = data
@@ -112,47 +132,33 @@ const BestPerformanceSymbolBlock: React.FC = () => {
           ) : error ? (
             <Alert severity="error">{error}</Alert>
           ) : (
-            <TableContainer component={Paper}>
+            <TableContainer component={Paper} sx={{ mb: 2 }}>
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell></TableCell> {/* Case à cocher */}
-                    <TableCell>Symbole</TableCell>
-                    <TableCell>Entrée</TableCell>
-                    <TableCell>Sortie</TableCell>
-                    <TableCell>Rendement</TableCell>
-                    <TableCell>Trades</TableCell>
-                    <TableCell>WinRate</TableCell>
-                    <TableCell>Drawdown</TableCell>
-                    <TableCell>Profit Factor</TableCell>
-                    <TableCell>Détails</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Indice</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie IN</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie OUT</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Trades</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>WinRate</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Drawdown</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {data.map((row, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell>
-                        <input
-                          type="checkbox"
-                          checked={!!checkedRows[idx]}
-                          onChange={e => setCheckedRows({...checkedRows, [idx]: e.target.checked})}
-                        />
-                      </TableCell>
+                  {data.map((row, i) => (
+                    <TableRow key={i}>
                       <TableCell>{row.symbol}</TableCell>
+                      <TableCell>{indices[row.symbol] === 'pending' ? <CircularProgress size={16} /> : (indices[row.symbol] ?? '-')}</TableCell>
                       <TableCell>{row.entryName}</TableCell>
                       <TableCell>{row.exitName}</TableCell>
-                      <TableCell>{(row.result.rendement * 100).toFixed(2)}%</TableCell>
+                      <TableCell>{(row.result.rendement * 100).toFixed(2)} %</TableCell>
                       <TableCell>{row.result.tradeCount}</TableCell>
-                      <TableCell>{(row.result.winRate * 100).toFixed(1)}%</TableCell>
-                      <TableCell>{(row.result.maxDrawdown * 100).toFixed(2)}%</TableCell>
-                      <TableCell>{row.result.profitFactor.toFixed(2)}</TableCell>
-                      <TableCell>
-                        <Button size="small" variant="outlined" onClick={() => { setSelected(row); setOpen(true); }}>
-                          Détails
-                        </Button>
-                      </TableCell>
+                      <TableCell>{(row.result.winRate * 100).toFixed(2)} %</TableCell>
+                      <TableCell>{(row.result.maxDrawdown * 100).toFixed(2)} %</TableCell>
                     </TableRow>
-                    ))}
+                  ))}
                 </TableBody>
               </Table>
             </TableContainer>
