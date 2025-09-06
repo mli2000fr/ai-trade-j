@@ -20,6 +20,10 @@ interface TradeAIJsonResultProps {
   idGpt?: string;
 }
 
+  const FailedStatuses = [
+    'canceled', 'rejected', 'expired', 'failed'
+  ];
+
 const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult, compteId, onOrdersUpdate, idGpt }) => {
   const [orders, setOrders] = useState<any[]>(Array.isArray(aiJsonResult) ? aiJsonResult.map((o: any) => ({ ...o })) : []);
   const [loading, setLoading] = useState(false);
@@ -66,15 +70,16 @@ const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult, com
   const hasSkippedDayTrade = orders.some((order: any) => order.statut === 'SKIPPED_DAYTRADE');
 
   // Calcul des totaux dynamiques (somme des montants = quantité × prix limite)
+  // On exclut les lignes échouées (isFailed)
   const totalBuy = - orders
-    .filter(order => order.executeNow && order.side === 'buy')
+    .filter(order => order.executeNow && order.side === 'buy' && !(order.statut && FailedStatuses.includes(order.statut.toLowerCase())))
     .reduce((sum, order) => {
       const qty = Number(order.quantity ?? order.qty ?? 0);
       const price = Number(order.price_limit ?? order.priceLimit ?? 0);
       return sum + (qty * price);
     }, 0);
   const totalSell = orders
-    .filter(order => order.executeNow && order.side === 'sell')
+    .filter(order => order.executeNow && order.side === 'sell' && !(order.statut && FailedStatuses.includes(order.statut.toLowerCase())))
     .reduce((sum, order) => {
       const qty = Number(order.quantity ?? order.qty ?? 0);
       const price = Number(order.price_limit ?? order.priceLimit ?? 0);
@@ -109,7 +114,7 @@ const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult, com
             {orders.map((item: any, idx: number) => {
               const isOppositionFilled = item.oppositionOrder?.oppositionFilled === true;
               const isOppositionActived = item.oppositionOrder?.oppositionActived === true;
-              const isRed = isOppositionFilled || isOppositionActived;
+              const isRed = isOppositionFilled || isOppositionActived || item.statut === 'FAILED_DAYTRADE' || item.statut === 'FAILED';
               return (
                 <TableRow key={idx} style={isRed ? { background: '#ffcccc' } : (item.statut ? { background: '#e6ffe6' } : {})}>
                   <TableCell>{item.symbol}</TableCell>
@@ -122,7 +127,7 @@ const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult, com
                   <TableCell>{item.take_profit ?? item.takeProfit ? (item.take_profit ?? item.takeProfit) + ' $' : '-'}</TableCell>
                   <TableCell>
                     <Checkbox
-                      checked={item.executeNow !== false}
+                      checked={item.executeNow !== false && !(item.statut && FailedStatuses.includes(item.statut.toLowerCase()))}
                       onChange={handleCheckboxChange(idx)}
                       color="primary"
                       disabled={executed || Number(item.quantity ?? item.qty ?? 0) === 0 || isOppositionFilled}
