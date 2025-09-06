@@ -34,16 +34,17 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
       .filter((symbol: string) => symbol && !(symbol in indices));
     if (symbolsToFetch.length === 0) return;
     symbolsToFetch.forEach((symbol: string) => {
+      setIndices(prev => ({ ...prev, [symbol]: 'pending' }));
       fetch(`/api/stra/strategies/get_indice?symbol=${encodeURIComponent(symbol)}`)
         .then(res => res.json())
         .then(data => {
-          setIndices(prev => ({ ...prev, [symbol]: data.indice ?? '-' }));
+          setIndices(prev => ({ ...prev, [symbol]: data ?? '-' }));
         })
         .catch(() => {
           setIndices(prev => ({ ...prev, [symbol]: '-' }));
         });
     });
-  }, [portfolio, indices]);
+  }, [portfolio]);
 
   return (
     <Card sx={{ mb: 3, backgroundColor: '#f5f5f5' }}>
@@ -163,7 +164,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                           }
                         >
                           <TableCell sx={cellStyle}>{pos.symbol}</TableCell>
-                          <TableCell sx={cellStyle}>{indices[pos.symbol] ?? '-'}</TableCell>
+                          <TableCell sx={cellStyle}>{indices[pos.symbol] === 'pending' ? <CircularProgress size={16} /> : (indices[pos.symbol] ?? '-')}</TableCell>
                           <TableCell sx={cellStyle}>{pos.avg_entry_price !== undefined && pos.avg_entry_price !== null ? Number(pos.avg_entry_price).toFixed(2) + ' $' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.current_price !== undefined && pos.current_price !== null ? Number(pos.current_price).toFixed(2) + ' $' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.qty}</TableCell>

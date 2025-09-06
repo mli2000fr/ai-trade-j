@@ -125,4 +125,9 @@ public class StrategieController {
         return ResponseEntity.ok(lsiteStr);
     }
 
+    @GetMapping("/strategies/get_indice")
+    public ResponseEntity<StrategieHelper.SignalType> getIndice(@RequestParam(value = "symbol", required = false) String symbol) {
+        StrategieHelper.SignalType st = strategieHelper.getBestInOutSignal(symbol);
+        return ResponseEntity.ok(st);
+    }
 }
