@@ -145,6 +145,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Trades</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>WinRate</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Drawdown</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Profit Factor</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Détails</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -169,6 +171,12 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         <TableCell>{row.result.tradeCount}</TableCell>
                         <TableCell>{(row.result.winRate * 100).toFixed(2)} %</TableCell>
                         <TableCell>{(row.result.maxDrawdown * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{row.result.profitFactor.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <Button size="small" variant="outlined" onClick={() => { setSelected(row); setOpen(true); }}>
+                             Détails
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
