@@ -86,6 +86,39 @@ public class StrategieHelper {
         TradeUtils.log("updateDBDailyValuAllSymbols: total "+listeDbSymbols.size()+", error" + error);
     }
 
+    public BarSeries getAndUpdateDBDailyValu(String symbol){
+        // 1. Chercher la date la plus récente pour ce symbol dans la table daily_value
+        String sql = "SELECT MAX(date) FROM daily_value WHERE symbol = ?";
+        java.sql.Date lastDate = null;
+        try {
+            lastDate = jdbcTemplate.queryForObject(sql, new Object[]{symbol}, java.sql.Date.class);
+        } catch (Exception e) {
+            logger.warn("Aucune date trouvée pour le symbole {} dans daily_value ou erreur SQL: {}", symbol, e.getMessage());
+        }
+        String dateStart;
+        boolean isAlreadyComplet = false;
+        if (lastDate == null) {
+            // Si aucune ligne trouvée, on prend la date de start par défaut
+            dateStart = TradeUtils.getStartDate(800);
+        } else {
+            // Sinon, on ajoute un jour à la date la plus récente
+            java.time.LocalDate nextDay = lastDate.toLocalDate().plusDays(1);
+            //si le lendemain est aujourd'hui, on reste à aujourd'hui (évite les erreurs le week-end ou jours fériés)
+            if(nextDay.isEqual(java.time.LocalDate.now())) {
+                isAlreadyComplet = true;
+            }
+            dateStart = nextDay.toString(); // format YYYY-MM-DD
+        }
+        if(!isAlreadyComplet){
+            List<DailyValue> listeValues = this.alpacaService.getHistoricalBars(symbol, dateStart);
+            for(DailyValue dv : listeValues){
+                this.insertDailyValue(symbol, dv);
+            }
+            Thread.sleep(200);
+        }
+        return this.mapping(getDailyValuesFromDb(symbol, 500));
+    }
+
 
     public void updateDBDailyValuAllSymbolsComplement(){
         List<String> listeDbSymbols = this.getAllAssetSymbolsComplementFromDb();
@@ -116,7 +149,7 @@ public class StrategieHelper {
      * @return Liste des DailyValue triées par date croissante
      */
     public List<DailyValue> getDailyValuesFromDatabase(String symbol) {
-        return this.getDailyValuesFromDb(symbol);
+        return this.getDailyValuesFromDb(symbol, 500);
     }
 
 
@@ -206,10 +239,12 @@ public class StrategieHelper {
      * @param symbol le symbole de l'action
      * @return Liste des DailyValue triées par date croissante
      */
-    public List<DailyValue> getDailyValuesFromDb(String symbol) {
+    public List<DailyValue> getDailyValuesFromDb(String symbol, int limit) {
         String sql = "SELECT date, open, high, low, close, volume, number_of_trades, volume_weighted_average_price " +
-                "FROM daily_value WHERE symbol = ? ORDER BY date DESC LIMIT 500";
-
+                "FROM daily_value WHERE symbol = ? ORDER BY date DESC";
+        if (limit != null && limit > 0) {
+            sql += " LIMIT " + limit;
+        }
         List<DailyValue> results = jdbcTemplate.query(sql, new Object[]{symbol}, (rs, rowNum) -> {
             return DailyValue.builder()
                     .date(rs.getDate("date").toString())
@@ -288,7 +323,7 @@ public class StrategieHelper {
     }
 
     public StrategieBackTest.AllBestParams optimseParamByWalkForward(String symbol) {
-        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol));
+        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol, 500));
 
         System.out.println("=== DIAGNOSTIC DE LA SÉRIE ===");
         System.out.println("Nombre de bougies: " + series.getBarCount());
@@ -442,7 +477,7 @@ public class StrategieHelper {
     }
 
     public StrategieBackTest.AllBestParams optimseParamByRollingWindow(String symbol) {
-        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol));
+        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol, 500));
 
         System.out.println("=== DIAGNOSTIC DE LA SÉRIE (ROLLING WINDOW) ===");
         System.out.println("Nombre de bougies: " + series.getBarCount());
@@ -1088,7 +1123,7 @@ public class StrategieHelper {
      * Affiche les résultats pour chaque couple et retourne le meilleur couple.
      */
     public BestInOutStrategy optimseBestInOutByWalkForward(String symbol) {
-        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol));
+        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol, 500));
         // Optimisation des paramètres pour chaque stratégie
         StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(series, 10, 30, 5, 15, 15, 25, 0.001, 0.01, 0.002);
         StrategieBackTest.SmaCrossoverParams bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(series, 5, 20, 10, 50);
@@ -1349,4 +1384,26 @@ public class StrategieHelper {
         return results;
     }
 
+    public enum SignalType { BUY, SELL, NONE; }
+
+    /**
+     * Retourne le signal d'achat/vente pour un symbole selon la meilleure stratégie IN/OUT.
+     * @param symbol le symbole à analyser
+     * @return SignalType (BUY, SELL, NONE)
+     */
+    public SignalType getBestInOutSignal(String symbol) {
+        BestInOutStrategy best = getBestInOutStrategy(symbol);
+        if (best == null) return SignalType.NONE;
+        List<DailyValue> values = getDailyValuesFromDb(symbol, 500);
+        BarSeries series = mapping(values);
+        int lastIndex = series.getEndIndex();
+        // Instancie les stratégies IN/OUT
+        com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(best.entryName, best.entryParams);
+        com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(best.exitName, best.exitParams);
+        boolean entrySignal = entryStrategy.getEntryRule(series).isSatisfied(lastIndex);
+        boolean exitSignal = exitStrategy.getExitRule(series).isSatisfied(lastIndex);
+        if (entrySignal) return SignalType.BUY;
+        if (exitSignal) return SignalType.SELL;
+        return SignalType.NONE;
+    }
 }
