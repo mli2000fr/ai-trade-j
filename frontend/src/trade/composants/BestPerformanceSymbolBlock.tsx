@@ -136,6 +136,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Indice</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie IN</TableCell>
@@ -147,18 +148,30 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {data.map((row, i) => (
-                    <TableRow key={i}>
-                      <TableCell>{row.symbol}</TableCell>
-                      <TableCell>{indices[row.symbol] === 'pending' ? <CircularProgress size={16} /> : (indices[row.symbol] ?? '-')}</TableCell>
-                      <TableCell>{row.entryName}</TableCell>
-                      <TableCell>{row.exitName}</TableCell>
-                      <TableCell>{(row.result.rendement * 100).toFixed(2)} %</TableCell>
-                      <TableCell>{row.result.tradeCount}</TableCell>
-                      <TableCell>{(row.result.winRate * 100).toFixed(2)} %</TableCell>
-                      <TableCell>{(row.result.maxDrawdown * 100).toFixed(2)} %</TableCell>
-                    </TableRow>
-                  ))}
+                  {data.map((row, i) => {
+                    let bgColor = undefined;
+                    if (indices[row.symbol] === 'BUY') bgColor = 'rgba(76, 175, 80, 0.5)';
+                    if (indices[row.symbol] === 'SELL') bgColor = 'rgba(244, 67, 54, 0.05)';
+                    return (
+                      <TableRow key={i} sx={bgColor ? { backgroundColor: bgColor } : {}}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              checked={!!checkedRows[i]}
+                              onChange={e => setCheckedRows({...checkedRows, [i]: e.target.checked})}
+                            />
+                        </TableCell>
+                        <TableCell>{row.symbol}</TableCell>
+                        <TableCell>{indices[row.symbol] === 'pending' ? <CircularProgress size={16} /> : (indices[row.symbol] ?? '-')}</TableCell>
+                        <TableCell>{row.entryName}</TableCell>
+                        <TableCell>{row.exitName}</TableCell>
+                        <TableCell>{(row.result.rendement * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{row.result.tradeCount}</TableCell>
+                        <TableCell>{(row.result.winRate * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.result.maxDrawdown * 100).toFixed(2)} %</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
