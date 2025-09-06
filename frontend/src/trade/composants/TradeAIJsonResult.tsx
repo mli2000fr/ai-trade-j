@@ -45,9 +45,17 @@ const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult, com
     setOrders(newOrders);
   };
 
+  // Handler pour modifier quantité, stoploss, takeprofit
+  const handleOrderFieldChange = (idx: number, field: string) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setOrders(orders => orders.map((order, i) => i === idx ? { ...order, [field]: value } : order));
+  };
+
   const handleExecute = async () => {
     if (!compteId) return;
     setLoading(true);
+    setOrders([]);
+    setExecuted(false);
     try {
       const res = await fetch('/api/trade/execute-orders', {
         method: 'POST',
@@ -114,20 +122,48 @@ const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult, com
             {orders.map((item: any, idx: number) => {
               const isOppositionFilled = item.oppositionOrder?.oppositionFilled === true;
               const isOppositionActived = item.oppositionOrder?.oppositionActived === true;
+              const isFailed = item.statut && !FailedStatuses.includes(item.statut.toLowerCase());
               const isRed = isOppositionFilled || isOppositionActived || item.statut === 'FAILED_DAYTRADE' || item.statut === 'FAILED';
               return (
                 <TableRow key={idx} style={isRed ? { background: '#ffcccc' } : (item.statut ? { background: '#e6ffe6' } : {})}>
                   <TableCell>{item.symbol}</TableCell>
                   <TableCell>{item.side}</TableCell>
-                  <TableCell>{item.quantity ?? item.qty ?? ''}</TableCell>
+                  <TableCell>
+                    <input
+                      type="number"
+                      value={item.quantity ?? item.qty ?? ''}
+                      min={0}
+                      style={{ width: 70 }}
+                      disabled={executed || isOppositionFilled}
+                      onChange={handleOrderFieldChange(idx, item.quantity !== undefined ? 'quantity' : 'qty')}
+                    />
+                  </TableCell>
                   {hasPriceLimit && (
                     <TableCell>{item.price_limit ?? item.priceLimit ? (item.price_limit ?? item.priceLimit) + ' $' : '-'}</TableCell>
                   )}
-                  <TableCell>{item.stop_loss ?? item.stopLoss ? (item.stop_loss ?? item.stopLoss) + ' $' : '-'}</TableCell>
-                  <TableCell>{item.take_profit ?? item.takeProfit ? (item.take_profit ?? item.takeProfit) + ' $' : '-'}</TableCell>
+                  <TableCell>
+                    <input
+                      type="number"
+                      value={item.stop_loss ?? item.stopLoss ?? ''}
+                      min={0}
+                      style={{ width: 90 }}
+                      disabled={executed || isOppositionFilled}
+                      onChange={handleOrderFieldChange(idx, item.stop_loss !== undefined ? 'stop_loss' : 'stopLoss')}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <input
+                      type="number"
+                      value={item.take_profit ?? item.takeProfit ?? ''}
+                      min={0}
+                      style={{ width: 90 }}
+                      disabled={executed || isOppositionFilled}
+                      onChange={handleOrderFieldChange(idx, item.take_profit !== undefined ? 'take_profit' : 'takeProfit')}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Checkbox
-                      checked={item.executeNow !== false && !(item.statut && FailedStatuses.includes(item.statut.toLowerCase()))}
+                      checked={item.executeNow !== false}
                       onChange={handleCheckboxChange(idx)}
                       color="primary"
                       disabled={executed || Number(item.quantity ?? item.qty ?? 0) === 0 || isOppositionFilled}

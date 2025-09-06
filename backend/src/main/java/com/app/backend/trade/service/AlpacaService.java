@@ -129,16 +129,16 @@ public class AlpacaService {
                 // Ordre limit simple
                 body.put("type", "limit");
                 body.put("limit_price", priceLimit);
-            } else if ((stopLoss != null || takeProfit != null) && qty == Math.floor(qty)) {
+            } else if (((stopLoss != null && stopLoss != 0) || (takeProfit != null && takeProfit != 0)) && qty == Math.floor(qty)) {
                 // Bracket order (seulement si qty entier)
                 body.put("type", "market"); // Alpaca exige type=market pour bracket
                 body.put("order_class", "bracket");
-                if (takeProfit != null) {
+                if (takeProfit != null && takeProfit != 0) {
                     Map<String, Object> tp = new HashMap<>();
                     tp.put("limit_price", takeProfit);
                     body.put("take_profit", tp);
                 }
-                if (stopLoss != null) {
+                if (stopLoss != null && stopLoss != 0) {
                     Map<String, Object> sl = new HashMap<>();
                     sl.put("stop_price", stopLoss);
                     body.put("stop_loss", sl);
