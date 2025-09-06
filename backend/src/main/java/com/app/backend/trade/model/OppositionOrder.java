@@ -14,6 +14,7 @@ import lombok.ToString;
 public class OppositionOrder {
     private boolean oppositionFilled;
     private boolean oppositionActived;
+    private boolean sideActived;
 
     public boolean isDayTrading() {
         return oppositionFilled || oppositionActived;

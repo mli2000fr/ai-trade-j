@@ -217,7 +217,7 @@ const DashboardPage: React.FC = () => {
             portfolio={portfolio}
             lastUpdate={lastUpdate}
             loading={portfolioLoading}
-          />
+            compteId={selectedCompteId ? String(selectedCompteId) : null} />
         </Paper>
         <Paper elevation={3} sx={{ mb: 3, p: 2, borderRadius: 3 }}>
           <OrdersTable

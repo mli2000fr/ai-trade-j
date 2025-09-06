@@ -160,7 +160,7 @@ public class TradeHelper {
             for(OrderRequest order : listOrders){
                 if (order.getQuantity() != null && order.getQuantity() != 0) {
                     // on ne fait pas de trade journalier si on a déjà une position ouverte, si on veut le forcer, passer par trade manuel
-                    OppositionOrder oppositionOrder = alpacaService.hasOppositeOpenOrder(compte, order.symbol, order.side);
+                    OppositionOrder oppositionOrder = alpacaService.hasOppositeOrOpenOrder(compte, order.symbol, order.side);
                     order.setOppositionOrder(oppositionOrder);
                     if((order.getPrice_limit() == null || order.getPrice_limit() == 0)
                             && order.getQuantity() != null && order.getQuantity() > 0){

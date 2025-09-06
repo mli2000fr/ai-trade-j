@@ -69,7 +69,7 @@ public class AlpacaService {
      */
     public Order placeOrder(CompteEntity compte, String symbol, double qty, String side, Double priceLimit, Double stopLoss, Double takeProfit, String idGpt, boolean forceCancelOpposite, boolean forceDayTrade) {
         // Vérification anti-day trade centralisée
-        OppositionOrder oppositionOrder = hasOppositeOpenOrder(compte, symbol, side);
+        OppositionOrder oppositionOrder = hasOppositeOrOpenOrder(compte, symbol, side);
         if (oppositionOrder.isOppositionFilled() && !forceDayTrade) {
             throw new DayTradingException("Erreur : Un ordre de vente existe déjà pour ce symbole. Veuillez attendre lendemain.");
         }else if (oppositionOrder.isOppositionActived()) {
@@ -85,6 +85,13 @@ public class AlpacaService {
                     throw new DayTradingException("Erreur : Un ordre opposé (achat/vente) est déjà ouvert pour ce symbole. Veuillez annuler l'ordre existant ou activer l'option forceCancelOpposite.");
                 }
 
+            }
+        }else if(oppositionOrder.isSideActived()){
+            List<Order> annulables = this.getOrders(compte, symbol, true);
+            for(Order ord : annulables) {
+                if(side.equals(ord.getSide())){
+                    this.cancelOrder(compte, ord.getId());
+                }
             }
         }
 
@@ -287,12 +294,13 @@ public class AlpacaService {
     );
 
     // Vérifie s'il existe un ordre exécuté OU ouvert du côté opposé (buy/sell) pour ce symbole aujourd'hui (anti-day trade)
-    public OppositionOrder hasOppositeOpenOrder(CompteEntity compte, String symbol, String side) {
+    public OppositionOrder hasOppositeOrOpenOrder(CompteEntity compte, String symbol, String side) {
         List<Order> orders = this.getOrders(compte, symbol, false);
         String oppositeSide = side.equalsIgnoreCase("buy") ? "sell" : "buy";
         java.time.LocalDate today = java.time.LocalDate.now();
         boolean oppositionFilled = false;
         boolean oppositionActived = false;
+        boolean sideActived = false;
         for (Order o : orders) {
             if (o.getSide() != null && o.getSide().equalsIgnoreCase(oppositeSide)) {
                 // Cas 1 : déjà exécuté aujourd'hui
@@ -304,9 +312,11 @@ public class AlpacaService {
                 if (o.getStatus() != null && ACTIVE_ORDER_STATUSES.contains(o.getStatus())) {
                     oppositionActived = true;
                 }
+            }else if(o.getSide().equalsIgnoreCase(side) && ACTIVE_ORDER_STATUSES.contains(o.getStatus())){
+                sideActived = true;
             }
         }
-        return OppositionOrder.builder().oppositionActived(oppositionActived).oppositionFilled(oppositionFilled).build();
+        return OppositionOrder.builder().sideActived(sideActived).oppositionActived(oppositionActived).oppositionFilled(oppositionFilled).build();
     }
 
     /**

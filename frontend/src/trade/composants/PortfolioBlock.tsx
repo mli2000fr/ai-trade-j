@@ -11,14 +11,17 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Paper from '@mui/material/Paper';
+import Button from '@mui/material/Button';
+import Alert from '@mui/material/Alert';
 
 interface PortfolioBlockProps {
   portfolio: any;
   lastUpdate: Date | null;
   loading: boolean;
+  compteId?: string | null;
 }
 
-const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, loading }) => {
+const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, loading, compteId }) => {
   const initialDeposit = portfolio && portfolio.initialDeposit !== undefined ? Number(portfolio.initialDeposit) : undefined;
   const equity = portfolio && portfolio.account?.equity !== undefined ? Number(portfolio.account.equity) : undefined;
   const plTotal = initialDeposit !== undefined && initialDeposit !== 0 && !isNaN(initialDeposit) && equity !== undefined && !isNaN(equity) ? equity - initialDeposit : undefined;
@@ -26,6 +29,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
 
   // Ajout d'un cache local pour les indices
   const [indices, setIndices] = useState<{ [symbol: string]: string }>({});
+  const [sellError, setSellError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!portfolio || !portfolio.positions) return;
@@ -45,6 +49,34 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
         });
     });
   }, [portfolio]);
+
+  const handleSell = async (pos: any) => {
+    setSellError(null);
+    try {
+      const response = await fetch(`/api/trade/trade`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sell',
+          cancelOpposite: true,
+          forceDayTrade: false,
+          id: compteId,
+          quantity: pos.qty,
+          stopLoss: null,
+          symbol: pos.symbol,
+          takeProfit: null
+        })
+      });
+      if (!response.ok) {
+        const errorMsg = await response.text();
+        setSellError(errorMsg);
+      } else {
+        setSellError(null);
+      }
+    } catch (e: any) {
+      setSellError(e.message || 'Erreur lors de la vente.');
+    }
+  };
 
   return (
     <Card sx={{ mb: 3, backgroundColor: '#f5f5f5' }}>
@@ -164,7 +196,17 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                           }
                         >
                           <TableCell sx={cellStyle}>{pos.symbol}</TableCell>
-                          <TableCell sx={cellStyle}>{indices[pos.symbol] === 'pending' ? <CircularProgress size={16} /> : (indices[pos.symbol] ?? '-')}</TableCell>
+                          <TableCell sx={
+                            indices[pos.symbol] === 'SELL'
+                              ? { color: 'error.main', fontWeight: 'bold' }
+                              : cellStyle
+                          }>
+                            {indices[pos.symbol] === 'pending' ? <CircularProgress size={16} /> : (
+                              indices[pos.symbol] === 'SELL'
+                                ? <Button variant="contained" color="error" size="small" onClick={() => handleSell(pos)} disabled={pos.qty <= 0}>SELL</Button>
+                                : (indices[pos.symbol] ?? '-')
+                            )}
+                          </TableCell>
                           <TableCell sx={cellStyle}>{pos.avg_entry_price !== undefined && pos.avg_entry_price !== null ? Number(pos.avg_entry_price).toFixed(2) + ' $' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.current_price !== undefined && pos.current_price !== null ? Number(pos.current_price).toFixed(2) + ' $' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.qty}</TableCell>
@@ -178,6 +220,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                 </Table>
               </TableContainer>
             )}
+            {sellError && <Alert severity="error" sx={{ mb: 2 }}>{sellError}</Alert>}
           </>
         )}
       </CardContent>
