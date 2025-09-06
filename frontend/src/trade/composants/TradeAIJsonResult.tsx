@@ -184,15 +184,16 @@ const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult, com
               </Alert>
             )}
       {!executed && hasOrderToExecute && (
-        <Button
-          variant="contained"
-          color="primary"
-          sx={{ mt: 2 }}
-          onClick={handleExecute}
-          disabled={loading}
-        >
-          Exécuter
-        </Button>
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleExecute}
+            disabled={loading}
+          >
+            Exécuter
+          </Button>
+        </Box>
       )}
     </Paper>
   );
