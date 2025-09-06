@@ -14,6 +14,7 @@ import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseBarSeries;
 import org.ta4j.core.Rule;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -328,16 +329,25 @@ public class StrategieHelper {
             logger.warn("Aucune date trouvée pour le symbole {} dans daily_value ou erreur SQL: {}", symbol, e.getMessage());
         }
         String dateStart;
+        boolean isUpToDate = false;
+        java.time.LocalDate today = java.time.LocalDate.now();
         if (lastDate == null) {
             // Si aucune ligne trouvée, on prend la date de start par défaut
             dateStart = TradeUtils.getStartDate(800);
         } else {
+            java.time.LocalDate lastTradingDay = getLastTradingDayBefore(today);
+            java.time.LocalDate lastKnown = lastDate.toLocalDate();
+            // Si la dernière date connue est le dernier jour de cotation, la base est à jour
+            if (lastKnown.isEqual(lastTradingDay) || lastKnown.isAfter(lastTradingDay)) {
+                isUpToDate = true;
+            }
             // Sinon, on ajoute un jour à la date la plus récente
-            java.time.LocalDate nextDay = lastDate.toLocalDate().plusDays(1);
-            dateStart = nextDay.toString(); // format YYYY-MM-DD
+            dateStart = lastKnown.plusDays(1).toString(); // format YYYY-MM-DD
         }
-        // 2. Appeler getHistoricalBars avec la date de start calculée
-        return this.alpacaService.getHistoricalBars(symbol, dateStart);
+        if (!isUpToDate) {
+            return this.alpacaService.getHistoricalBars(symbol, dateStart);
+        }
+        return  new ArrayList<>();
     }
 
     public void optimseParamForAllSymbol(){
