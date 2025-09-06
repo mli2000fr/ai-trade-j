@@ -28,6 +28,7 @@ const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult, com
   const [orders, setOrders] = useState<any[]>(Array.isArray(aiJsonResult) ? aiJsonResult.map((o: any) => ({ ...o })) : []);
   const [loading, setLoading] = useState(false);
   const [executed, setExecuted] = useState(false);
+  const [alertMsg, setAlertMsg] = useState<string | null>(null);
 
   // Met à jour l'état local si aiJsonResult change
   React.useEffect(() => {
@@ -35,6 +36,23 @@ const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult, com
       setOrders(aiJsonResult.map((o: any) => ({ ...o })));
     }
   }, [aiJsonResult]);
+
+  // Validation à chaque modification d'un input stoploss/takeprofit
+  React.useEffect(() => {
+    if (!orders || orders.length === 0) {
+      setAlertMsg(null);
+      return;
+    }
+    for (const order of orders) {
+      const stop = Number(order.stop_loss ?? order.stopLoss ?? 0);
+      const take = Number(order.take_profit ?? order.takeProfit ?? 0);
+      if ((stop > 0 && take === 0) || (take > 0 && stop === 0)) {
+        setAlertMsg("Erreur : Si stoploss ou takeprofit est renseigné (>0), l'autre doit aussi être renseigné (>0) sur la même ligne.");
+        return;
+      }
+    }
+    setAlertMsg(null);
+  }, [orders]);
 
   if (!Array.isArray(orders) || orders.length === 0) return null;
   const hasPriceLimit = orders.some((item: any) => item.price_limit !== undefined && item.price_limit !== null && item.price_limit !== '' || item.priceLimit !== undefined && item.priceLimit !== null && item.priceLimit !== '');
@@ -53,9 +71,9 @@ const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult, com
 
   const handleExecute = async () => {
     if (!compteId) return;
+    // Blocage si la règle n'est pas respectée
+    if (alertMsg) return;
     setLoading(true);
-    setOrders([]);
-    setExecuted(false);
     try {
       const res = await fetch('/api/trade/execute-orders', {
         method: 'POST',
@@ -183,13 +201,16 @@ const TradeAIJsonResult: React.FC<TradeAIJsonResultProps> = ({ aiJsonResult, com
                 <div>- si l'ordre opposé en statut 'actived', l'exécution est possible (les ordres opposés en statut 'actived' seront annulés)</div>
               </Alert>
             )}
+      {alertMsg && (
+        <Alert severity="error" sx={{ mt: 2 }}>{alertMsg}</Alert>
+      )}
       {!executed && hasOrderToExecute && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
           <Button
             variant="contained"
             color="primary"
             onClick={handleExecute}
-            disabled={loading}
+            disabled={loading || !!alertMsg}
           >
             Exécuter
           </Button>
