@@ -119,13 +119,14 @@ const DashboardPage: React.FC = () => {
       setAiTextResult(data.analyseGpt || null);
       setIdGpt(data.idGpt || data.id || null);
       setMessageAuto('Trade auto exécuté avec succès');
+      /*
       // Rafraîchir portefeuille
       if (selectedCompteId) {
         const res = await fetch(`/api/trade/portfolio?id=${encodeURIComponent(selectedCompteId)}`);
-      setAiTextResult(data.analyseGpt || null);
-      setIdGpt(data.idGpt || data.id || null);
+        setAiTextResult(data.analyseGpt || null);
+        setIdGpt(data.idGpt || data.id || null);
         setLastUpdate(new Date());
-      }
+      }*/
     } catch (e: any) {
       setMessageAuto(e?.message || 'Erreur lors de la transaction auto');
       setAiJsonResult(null);
