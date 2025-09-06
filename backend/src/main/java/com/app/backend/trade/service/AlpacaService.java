@@ -170,6 +170,10 @@ public class AlpacaService {
         if (order == null && errorJson != null) {
             // Tentative de parsing d'une erreur JSON Alpaca (ex: insufficient qty)
             if (errorJson != null && errorJson.trim().startsWith("{")) {
+                // Vérification du code d'erreur Alpaca pour Pattern Day Trading
+                if (errorJson.contains("40310100") && errorJson.contains("pattern day trading protection")) {
+                    throw new DayTradingException("Trade refusé : protection Pattern Day Trading activée (trop de day trades, solde < 25 000 $)." );
+                }
                 OrderEntity orderEntity3 = new OrderEntity(String.valueOf(compte.getId()), null, side, requestJson, responseJson, errorJson, "FAILED", idGpt);
                 orderRepository.save(orderEntity3);
             }
