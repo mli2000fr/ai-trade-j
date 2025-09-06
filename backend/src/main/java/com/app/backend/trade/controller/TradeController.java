@@ -17,17 +17,14 @@ public class TradeController {
     private final TradeHelper tradeHelper;
     private final AlpacaService alpacaService;
     private final CompteService compteService;
-    private final StrategyService strategyService;
 
     @Autowired
     public TradeController(AlpacaService alpacaService,
                            TradeHelper tradeHelper,
-                           CompteService compteService,
-                           StrategyService strategyService) {
+                           CompteService compteService) {
         this.alpacaService = alpacaService;
         this.tradeHelper = tradeHelper;
         this.compteService = compteService;
-        this.strategyService = strategyService;
     }
 
     /**

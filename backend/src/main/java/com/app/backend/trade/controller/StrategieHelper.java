@@ -86,8 +86,35 @@ public class StrategieHelper {
         TradeUtils.log("updateDBDailyValuAllSymbols: total "+listeDbSymbols.size()+", error" + error);
     }
 
-    public BarSeries getAndUpdateDBDailyValu(String symbol){
-        // 1. Chercher la date la plus récente pour ce symbol dans la table daily_value
+    /**
+     * Liste des jours fériés boursiers (à adapter selon le marché, ici exemple NYSE 2025)
+     */
+    private static final java.util.Set<java.time.LocalDate> MARKET_HOLIDAYS = java.util.Set.of(
+        java.time.LocalDate.of(2025, 1, 1),   // New Year's Day
+        java.time.LocalDate.of(2025, 1, 20),  // Martin Luther King Jr. Day
+        java.time.LocalDate.of(2025, 2, 17),  // Presidents' Day
+        java.time.LocalDate.of(2025, 4, 18),  // Good Friday
+        java.time.LocalDate.of(2025, 5, 26),  // Memorial Day
+        java.time.LocalDate.of(2025, 7, 4),   // Independence Day
+        java.time.LocalDate.of(2025, 9, 1),   // Labor Day
+        java.time.LocalDate.of(2025, 11, 27), // Thanksgiving Day
+        java.time.LocalDate.of(2025, 12, 25)  // Christmas Day
+    );
+
+    /**
+     * Retourne le dernier jour de cotation avant la date passée (week-end et jours fériés inclus).
+     */
+    private java.time.LocalDate getLastTradingDayBefore(java.time.LocalDate date) {
+        java.time.LocalDate d = date.minusDays(1);
+        while (d.getDayOfWeek() == java.time.DayOfWeek.SATURDAY ||
+               d.getDayOfWeek() == java.time.DayOfWeek.SUNDAY ||
+               MARKET_HOLIDAYS.contains(d)) {
+            d = d.minusDays(1);
+        }
+        return d;
+    }
+
+    public BarSeries getAndUpdateDBDailyValu(String symbol, int limit){
         String sql = "SELECT MAX(date) FROM daily_value WHERE symbol = ?";
         java.sql.Date lastDate = null;
         try {
@@ -96,27 +123,39 @@ public class StrategieHelper {
             logger.warn("Aucune date trouvée pour le symbole {} dans daily_value ou erreur SQL: {}", symbol, e.getMessage());
         }
         String dateStart;
-        boolean isAlreadyComplet = false;
+        boolean isUpToDate = false;
+        java.time.LocalDate today = java.time.LocalDate.now();
         if (lastDate == null) {
             // Si aucune ligne trouvée, on prend la date de start par défaut
             dateStart = TradeUtils.getStartDate(800);
         } else {
+            java.time.LocalDate lastTradingDay = getLastTradingDayBefore(today);
+            java.time.LocalDate lastKnown = lastDate.toLocalDate();
+            // Si la dernière date connue est le dernier jour de cotation, la base est à jour
+            if (lastKnown.isEqual(lastTradingDay) || lastKnown.isAfter(lastTradingDay)) {
+                isUpToDate = true;
+            }
             // Sinon, on ajoute un jour à la date la plus récente
-            java.time.LocalDate nextDay = lastDate.toLocalDate().plusDays(1);
-            //si le lendemain est aujourd'hui, on reste à aujourd'hui (évite les erreurs le week-end ou jours fériés)
-            if(nextDay.isEqual(java.time.LocalDate.now())) {
-                isAlreadyComplet = true;
-            }
-            dateStart = nextDay.toString(); // format YYYY-MM-DD
+            dateStart = lastKnown.plusDays(1).toString(); // format YYYY-MM-DD
         }
-        if(!isAlreadyComplet){
+        if (!isUpToDate) {
             List<DailyValue> listeValues = this.alpacaService.getHistoricalBars(symbol, dateStart);
-            for(DailyValue dv : listeValues){
-                this.insertDailyValue(symbol, dv);
+            if (listeValues == null || listeValues.isEmpty()) {
+                logger.info("Aucune donnée historique récupérée d'Alpaca pour {} depuis {}", symbol, dateStart);
+            } else {
+                for (DailyValue dv : listeValues) {
+                    try {
+                        this.insertDailyValue(symbol, dv);
+                    } catch (Exception e) {
+                        logger.warn("Erreur lors de l'insertion de DailyValue pour {} à la date {}: {}", symbol, dv.getDate(), e.getMessage());
+                    }
+                }
+                try{
+                    Thread.sleep(200);
+                }catch(Exception e){}
             }
-            Thread.sleep(200);
         }
-        return this.mapping(getDailyValuesFromDb(symbol, 500));
+        return this.mapping(getDailyValuesFromDb(symbol, limit));
     }
 
 
@@ -239,7 +278,7 @@ public class StrategieHelper {
      * @param symbol le symbole de l'action
      * @return Liste des DailyValue triées par date croissante
      */
-    public List<DailyValue> getDailyValuesFromDb(String symbol, int limit) {
+    public List<DailyValue> getDailyValuesFromDb(String symbol, Integer limit) {
         String sql = "SELECT date, open, high, low, close, volume, number_of_trades, volume_weighted_average_price " +
                 "FROM daily_value WHERE symbol = ? ORDER BY date DESC";
         if (limit != null && limit > 0) {
@@ -1394,8 +1433,7 @@ public class StrategieHelper {
     public SignalType getBestInOutSignal(String symbol) {
         BestInOutStrategy best = getBestInOutStrategy(symbol);
         if (best == null) return SignalType.NONE;
-        List<DailyValue> values = getDailyValuesFromDb(symbol, 500);
-        BarSeries series = mapping(values);
+        BarSeries series = getAndUpdateDBDailyValu(symbol, 500);
         int lastIndex = series.getEndIndex();
         // Instancie les stratégies IN/OUT
         com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(best.entryName, best.entryParams);
