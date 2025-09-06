@@ -44,6 +44,7 @@ const DashboardPage: React.FC = () => {
   const [ordersSize, setOrdersSize] = useState<number>(10);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const [cancelMessage, setCancelMessage] = useState<string>('');
+  const [resetSellErrorKey, setResetSellErrorKey] = useState<number>(0);
 
   // --- Utilitaires pour trade manuel/auto ---
   const ownedSymbols = portfolio?.positions?.map((pos: any) => pos.symbol) || [];
@@ -191,6 +192,15 @@ const DashboardPage: React.FC = () => {
     // eslint-disable-next-line
   }, [selectedCompteId, comptesLoading]);
 
+  useEffect(() => {
+    setAiJsonResult(null);
+    setAiTextResult(null);
+    setMessageManual('');
+    setMessageAuto('');
+    setCancelMessage('');
+    setResetSellErrorKey(prev => prev + 1); // incrémente la clé à chaque changement de compte
+  }, [selectedCompteId]);
+
   return (
     <Box sx={{
       bgcolor: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
@@ -219,7 +229,9 @@ const DashboardPage: React.FC = () => {
             portfolio={portfolio}
             lastUpdate={lastUpdate}
             loading={portfolioLoading}
-            compteId={selectedCompteId ? String(selectedCompteId) : null} />
+            compteId={selectedCompteId ? String(selectedCompteId) : null}
+            resetSellErrorKey={resetSellErrorKey}
+          />
         </Paper>
         <Paper elevation={3} sx={{ mb: 3, p: 2, borderRadius: 3 }}>
           <OrdersTable

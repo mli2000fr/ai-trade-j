@@ -1,4 +1,4 @@
-You are a financial expert specialized in swing trading. Analyze these stocks: LXEH,SOPH,GAME,GALT,CVNA,VITL,OM,GHRS.
+You are a financial expert specialized in swing trading. Analyze these stocks: LXEH,SOPH,GAME,GALT,CVNA,VITL
 
 For each stock, provide in a structured way:
 

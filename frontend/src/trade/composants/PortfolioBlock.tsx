@@ -19,9 +19,10 @@ interface PortfolioBlockProps {
   lastUpdate: Date | null;
   loading: boolean;
   compteId?: string | null;
+  resetSellErrorKey?: string | number;
 }
 
-const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, loading, compteId }) => {
+const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, loading, compteId, resetSellErrorKey }) => {
   const initialDeposit = portfolio && portfolio.initialDeposit !== undefined ? Number(portfolio.initialDeposit) : undefined;
   const equity = portfolio && portfolio.account?.equity !== undefined ? Number(portfolio.account.equity) : undefined;
   const plTotal = initialDeposit !== undefined && initialDeposit !== 0 && !isNaN(initialDeposit) && equity !== undefined && !isNaN(equity) ? equity - initialDeposit : undefined;
@@ -30,6 +31,11 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
   // Ajout d'un cache local pour les indices
   const [indices, setIndices] = useState<{ [symbol: string]: string }>({});
   const [sellError, setSellError] = useState<string | null>(null);
+
+  // Réinitialisation de sellError quand resetSellErrorKey change
+  useEffect(() => {
+    setSellError(null);
+  }, [resetSellErrorKey]);
 
   useEffect(() => {
     if (!portfolio || !portfolio.positions) return;
