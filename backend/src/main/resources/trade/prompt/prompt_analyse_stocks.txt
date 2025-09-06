@@ -1,4 +1,4 @@
-You are a financial expert specialized in swing trading. Analyze these stocks: {{stocks}}.
+You are a financial expert specialized in swing trading. Analyze these stocks: ANTE,CRVS,CGTX,ELWS.
 
 For each stock, provide in a structured way:
 
