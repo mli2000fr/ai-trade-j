@@ -12,12 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
-import org.ta4j.core.BaseBarSeries;
-import org.ta4j.core.BarSeries;
-import org.ta4j.core.Rule;
-
 import java.lang.reflect.Type;
-import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
