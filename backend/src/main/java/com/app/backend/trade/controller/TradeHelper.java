@@ -10,6 +10,7 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BaseBarSeries;
 import org.ta4j.core.BarSeries;
@@ -37,6 +38,7 @@ public class TradeHelper {
     private final EodhdService eodhdService;
     private final StrategyService strategyService;
     private final CompteService compteService;
+    private final JdbcTemplate jdbcTemplate;
 
     @Autowired
     public TradeHelper(AlpacaService alpacaService,
@@ -45,7 +47,8 @@ public class TradeHelper {
                        TwelveDataService twelveDataService,
                        EodhdService eodhdService,
                        StrategyService strategyService,
-                       CompteService compteService) {
+                       CompteService compteService,
+                       JdbcTemplate jdbcTemplate) {
         this.alpacaService = alpacaService;
         this.chatGptService = chatGptService;
         this.twelveDataService = twelveDataService;
@@ -53,6 +56,7 @@ public class TradeHelper {
         this.eodhdService = eodhdService;
         this.strategyService = strategyService;
         this.compteService = compteService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
@@ -67,7 +71,13 @@ public class TradeHelper {
      * @param symbols liste des symboles séparés par des virgules
      * @return true si tous les symboles sont valides, exception sinon
      */
-    public boolean isSymbolsValid(String idCompte, String symbols)  {
+    public void isSymbolsValid(String symbols)  {
+        for(String symbol : symbols.split(",")){
+            symbol = symbol.trim();
+            if(symbol.isEmpty()) continue;
+            this.isAssetSymbolEligible(symbol);
+        }
+        /*
         String prompt = TradeUtils.readResourceFile("trade/prompt/prompt_check_symbol.txt")
                 .replace("{{symbols}}", symbols);
         ChatGptResponse response = chatGptService.askChatGpt(idCompte, prompt);
@@ -82,6 +92,16 @@ public class TradeHelper {
             return true;
         } catch (Exception e) {
             throw new RuntimeException("check symboles : " + response.getMessage());
+        }*/
+    }
+    /**
+     * Vérifie si un symbole existe dans la table alpaca_asset avec eligible=true.
+     */
+    public void isAssetSymbolEligible(String symbol) {
+        String sql = "SELECT COUNT(*) FROM alpaca_asset WHERE symbol = ? AND eligible = true";
+        Integer count = jdbcTemplate.queryForObject(sql, new Object[]{symbol}, Integer.class);
+        if(count == null || count == 0){
+            throw new RuntimeException("Le symbole n'est pas valide ou inactif : " + symbol);
         }
     }
 
@@ -104,7 +124,7 @@ public class TradeHelper {
             throw new RuntimeException("Aucun symbole fourni pour tradeAIAuto.");
         }
         String joinedSymbols = String.join(",", symbols);
-        this.isSymbolsValid(String.valueOf(compte.getId()), joinedSymbols);
+        this.isSymbolsValid(joinedSymbols);
         String promptEntete = TradeUtils.readResourceFile("trade/prompt/prompt_" + tradeType + "_trade_auto_entete.txt");
         String promptPied = TradeUtils.readResourceFile("trade/prompt/prompt_" + tradeType + "_trade_auto_pied.txt")
                 .replace("{{data_analyse_ia}}", (analyseGpt != null && !analyseGpt.isBlank()) ? analyseGpt : "not available");

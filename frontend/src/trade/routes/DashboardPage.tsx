@@ -110,7 +110,7 @@ const DashboardPage: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symboles, id: selectedCompteId, analyseGpt: analyseGptText }),
       });
-      if (!res.ok) throw new Error('Erreur lors de la transaction auto');
+      if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setAiJsonResult(data.orders || null);
       setAiTextResult(data.analyseGpt || null);
@@ -119,12 +119,12 @@ const DashboardPage: React.FC = () => {
       // Rafraîchir portefeuille
       if (selectedCompteId) {
         const res = await fetch(`/api/trade/portfolio?id=${encodeURIComponent(selectedCompteId)}`);
-        const data = await res.json();
-        setPortfolio(data);
+      setAiTextResult(data.analyseGpt || null);
+      setIdGpt(data.idGpt || data.id || null);
         setLastUpdate(new Date());
       }
-    } catch {
-      setMessageAuto('Erreur lors de la transaction auto');
+    } catch (e: any) {
+      setMessageAuto(e?.message || 'Erreur lors de la transaction auto');
       setAiJsonResult(null);
       setAiTextResult(null);
       setIdGpt(null);
