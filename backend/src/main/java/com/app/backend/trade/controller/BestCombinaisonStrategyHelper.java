@@ -1,12 +1,17 @@
 package com.app.backend.trade.controller;
 
+import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.strategy.*;
 import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
+
 import java.util.*;
 
 @Controller
@@ -18,6 +23,10 @@ public class BestCombinaisonStrategyHelper {
     // Constantes pour la gestion des bougies et des pourcentages
     private static final int NB_IN = 2;
     private static final double NB_OUT = 2;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+    private final Gson gson = new Gson();
 
     @Autowired
     public BestCombinaisonStrategyHelper(StrategieHelper strategieHelper) {
@@ -288,6 +297,11 @@ public class BestCombinaisonStrategyHelper {
         public Map<String, Object> inParams = new HashMap<>();
         public Map<String, Object> outParams = new HashMap<>();
         public StrategieBackTest.RiskResult backtestResult;
+
+        public double initialCapital;
+        public double riskPerTrade;
+        public double stopLossPct;
+        public double takeProfitPct;
     }
 
     /**
@@ -301,5 +315,132 @@ public class BestCombinaisonStrategyHelper {
             result.put("out", best.getExitName());
         }
         return result;
+    }
+
+    /**
+     * Sauvegarde un BestCombinationResult dans la table best_in_out_mix_strategy
+     * Si le symbol existe déjà, fait un UPDATE, sinon fait un INSERT
+     * Prend en compte initialCapital, riskPerTrade, stopLossPct, takeProfitPct
+     */
+    public void saveBestCombinationResult(String symbol, BestCombinationResult result) {
+        String inStrategyNamesJson = gson.toJson(result.inStrategyNames);
+        String outStrategyNamesJson = gson.toJson(result.outStrategyNames);
+        String inParamsJson = gson.toJson(result.inParams);
+        String outParamsJson = gson.toJson(result.outParams);
+        String backtestResultJson = gson.toJson(result.backtestResult);
+        double initialCapital = result.initialCapital;
+        double riskPerTrade = result.riskPerTrade;
+        double stopLossPct = result.stopLossPct;
+        double takeProfitPct = result.takeProfitPct;
+        // Vérifier si le symbol existe déjà
+        String checkSql = "SELECT COUNT(*) FROM best_in_out_mix_strategy WHERE symbol = ?";
+        int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
+        if (count > 0) {
+            // UPDATE
+            String updateSql = "UPDATE best_in_out_mix_strategy SET in_strategy_names = ?, out_strategy_names = ?, score = ?, in_params = ?, out_params = ?, backtest_result = ?, initial_capital = ?, risk_per_trade = ?, stop_loss_pct = ?, take_profit_pct = ?, update_date = CURRENT_TIMESTAMP WHERE symbol = ?";
+            jdbcTemplate.update(updateSql, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, initialCapital, riskPerTrade, stopLossPct, takeProfitPct, symbol);
+        } else {
+            // INSERT
+            String insertSql = "INSERT INTO best_in_out_mix_strategy (symbol, in_strategy_names, out_strategy_names, score, in_params, out_params, backtest_result, initial_capital, risk_per_trade, stop_loss_pct, take_profit_pct, update_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+            jdbcTemplate.update(insertSql, symbol, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, initialCapital, riskPerTrade, stopLossPct, takeProfitPct);
+        }
+    }
+
+    /**
+     * Récupère le BestCombinationResult le plus récent pour un symbole
+     * Prend en compte initialCapital, riskPerTrade, stopLossPct, takeProfitPct
+     */
+    public BestCombinationResult getBestCombinationResult(String symbol) {
+        String sql = "SELECT * FROM best_in_out_mix_strategy WHERE symbol = ? ORDER BY update_date DESC LIMIT 1";
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, symbol);
+        if (rows.isEmpty()) return null;
+        Map<String, Object> row = rows.get(0);
+        BestCombinationResult result = new BestCombinationResult();
+        result.inStrategyNames = gson.fromJson((String) row.get("in_strategy_names"), new TypeToken<List<String>>(){}.getType());
+        result.outStrategyNames = gson.fromJson((String) row.get("out_strategy_names"), new TypeToken<List<String>>(){}.getType());
+        result.score = ((Number) row.get("score")).doubleValue();
+        result.inParams = gson.fromJson((String) row.get("in_params"), new TypeToken<Map<String, Object>>(){}.getType());
+        result.outParams = gson.fromJson((String) row.get("out_params"), new TypeToken<Map<String, Object>>(){}.getType());
+        result.backtestResult = gson.fromJson((String) row.get("backtest_result"), StrategieBackTest.RiskResult.class);
+        result.initialCapital = row.get("initial_capital") != null ? ((Number) row.get("initial_capital")).doubleValue() : 0.0;
+        result.riskPerTrade = row.get("risk_per_trade") != null ? ((Number) row.get("risk_per_trade")).doubleValue() : 0.0;
+        result.stopLossPct = row.get("stop_loss_pct") != null ? ((Number) row.get("stop_loss_pct")).doubleValue() : 0.0;
+        result.takeProfitPct = row.get("take_profit_pct") != null ? ((Number) row.get("take_profit_pct")).doubleValue() : 0.0;
+        return result;
+    }
+
+    public SignalType getSignal(String symbol) {
+        BestCombinationResult bestCombinationResult = getBestCombinationResult(symbol);
+        BarSeries barSeries = strategieHelper.getAndUpdateDBDailyValu(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES);
+        if (bestCombinationResult == null || barSeries == null || barSeries.getBarCount() == 0) {
+            return SignalType.NONE;
+        }
+        // Recréer les stratégies d'entrée
+        List<TradeStrategy> inStrategies = new ArrayList<>();
+        for (String name : bestCombinationResult.inStrategyNames) {
+            Object params = bestCombinationResult.inParams.get(name.replace("Strategy", ""));
+            if (name.equals("ImprovedTrendFollowingStrategy") && params instanceof StrategieBackTest.ImprovedTrendFollowingParams) {
+                StrategieBackTest.ImprovedTrendFollowingParams p = (StrategieBackTest.ImprovedTrendFollowingParams) params;
+                inStrategies.add(new ImprovedTrendFollowingStrategy(p.trendPeriod, p.shortMaPeriod, p.longMaPeriod, p.breakoutThreshold, p.useRsiFilter, p.rsiPeriod));
+            } else if (name.equals("SmaCrossoverStrategy") && params instanceof StrategieBackTest.SmaCrossoverParams) {
+                StrategieBackTest.SmaCrossoverParams p = (StrategieBackTest.SmaCrossoverParams) params;
+                inStrategies.add(new SmaCrossoverStrategy(p.shortPeriod, p.longPeriod));
+            } else if (name.equals("RsiStrategy") && params instanceof StrategieBackTest.RsiParams) {
+                StrategieBackTest.RsiParams p = (StrategieBackTest.RsiParams) params;
+                inStrategies.add(new RsiStrategy(p.rsiPeriod, p.oversold, p.overbought));
+            } else if (name.equals("BreakoutStrategy") && params instanceof StrategieBackTest.BreakoutParams) {
+                StrategieBackTest.BreakoutParams p = (StrategieBackTest.BreakoutParams) params;
+                inStrategies.add(new BreakoutStrategy(p.lookbackPeriod));
+            } else if (name.equals("MacdStrategy") && params instanceof StrategieBackTest.MacdParams) {
+                StrategieBackTest.MacdParams p = (StrategieBackTest.MacdParams) params;
+                inStrategies.add(new MacdStrategy(p.shortPeriod, p.longPeriod, p.signalPeriod));
+            } else if (name.equals("MeanReversionStrategy") && params instanceof StrategieBackTest.MeanReversionParams) {
+                StrategieBackTest.MeanReversionParams p = (StrategieBackTest.MeanReversionParams) params;
+                inStrategies.add(new MeanReversionStrategy(p.smaPeriod, p.threshold));
+            }
+        }
+        // Recréer les stratégies de sortie
+        List<TradeStrategy> outStrategies = new ArrayList<>();
+        for (String name : bestCombinationResult.outStrategyNames) {
+            Object params = bestCombinationResult.outParams.get(name.replace("Strategy", ""));
+            if (name.equals("ImprovedTrendFollowingStrategy") && params instanceof StrategieBackTest.ImprovedTrendFollowingParams) {
+                StrategieBackTest.ImprovedTrendFollowingParams p = (StrategieBackTest.ImprovedTrendFollowingParams) params;
+                outStrategies.add(new ImprovedTrendFollowingStrategy(p.trendPeriod, p.shortMaPeriod, p.longMaPeriod, p.breakoutThreshold, p.useRsiFilter, p.rsiPeriod));
+            } else if (name.equals("SmaCrossoverStrategy") && params instanceof StrategieBackTest.SmaCrossoverParams) {
+                StrategieBackTest.SmaCrossoverParams p = (StrategieBackTest.SmaCrossoverParams) params;
+                outStrategies.add(new SmaCrossoverStrategy(p.shortPeriod, p.longPeriod));
+            } else if (name.equals("RsiStrategy") && params instanceof StrategieBackTest.RsiParams) {
+                StrategieBackTest.RsiParams p = (StrategieBackTest.RsiParams) params;
+                outStrategies.add(new RsiStrategy(p.rsiPeriod, p.oversold, p.overbought));
+            } else if (name.equals("BreakoutStrategy") && params instanceof StrategieBackTest.BreakoutParams) {
+                StrategieBackTest.BreakoutParams p = (StrategieBackTest.BreakoutParams) params;
+                outStrategies.add(new BreakoutStrategy(p.lookbackPeriod));
+            } else if (name.equals("MacdStrategy") && params instanceof StrategieBackTest.MacdParams) {
+                StrategieBackTest.MacdParams p = (StrategieBackTest.MacdParams) params;
+                outStrategies.add(new MacdStrategy(p.shortPeriod, p.longPeriod, p.signalPeriod));
+            } else if (name.equals("MeanReversionStrategy") && params instanceof StrategieBackTest.MeanReversionParams) {
+                StrategieBackTest.MeanReversionParams p = (StrategieBackTest.MeanReversionParams) params;
+                outStrategies.add(new MeanReversionStrategy(p.smaPeriod, p.threshold));
+            }
+        }
+        // Combiner les règles d'entrée et de sortie
+        Rule entryRule = null;
+        Rule exitRule = null;
+        for (TradeStrategy strat : inStrategies) {
+            if (entryRule == null) entryRule = strat.getEntryRule(barSeries);
+            else entryRule = entryRule.or(strat.getEntryRule(barSeries));
+        }
+        for (TradeStrategy strat : outStrategies) {
+            if (exitRule == null) exitRule = strat.getExitRule(barSeries);
+            else exitRule = exitRule.or(strat.getExitRule(barSeries));
+        }
+        int lastIndex = barSeries.getEndIndex();
+        if (entryRule != null && entryRule.isSatisfied(lastIndex)) {
+            return SignalType.BUY;
+        } else if (exitRule != null && exitRule.isSatisfied(lastIndex)) {
+            return SignalType.SELL;
+        } else {
+            return SignalType.NONE;
+        }
     }
 }

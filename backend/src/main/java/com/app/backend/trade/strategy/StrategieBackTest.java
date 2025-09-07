@@ -12,7 +12,7 @@ public class StrategieBackTest {
     // Paramètres de backtest plus réalistes
     public final static double INITIAL_CAPITAL = 10000;  // Capital initial de 10 000$ (plus réaliste)
     public final static double RISK_PER_TRADE = 0.15;    // Risque par trade de 1% (plus conservateur)
-    public final static double STOP_LOSS_PCT_STOP = 0.05; // Stop loss à 2% (plus serré)
+    public final static double STOP_LOSS_PCT = 0.05; // Stop loss à 2% (plus serré)
     public final static double TAKE_PROFIL_PCT = 0.1;    // Take profit à 6% (ratio risque/récompense 1:3)
 
     // Backtest générique pour une stratégie TradeStrategy
@@ -45,7 +45,7 @@ public class StrategieBackTest {
      * Retourne un objet RiskResult avec rendement et drawdown maximal
      */
     public RiskResult backtestStrategyRisk(TradeStrategy strategy, BarSeries series) {
-        return backtestStrategyRisk(strategy, series, INITIAL_CAPITAL, RISK_PER_TRADE, STOP_LOSS_PCT_STOP, TAKE_PROFIL_PCT);
+        return backtestStrategyRisk(strategy, series, INITIAL_CAPITAL, RISK_PER_TRADE, STOP_LOSS_PCT, TAKE_PROFIL_PCT);
     }
 
     public RiskResult backtestStrategyRisk(TradeStrategy strategy, BarSeries series, double initialCapital, double riskPerTrade, double stopLossPct, double takeProfitPct) {

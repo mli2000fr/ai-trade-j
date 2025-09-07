@@ -558,7 +558,7 @@ public class StrategieHelper {
                                    + " | Drawdown: " + String.format("%.2f", result.maxDrawdown * 100) + "%");
                 if (result.rendement > bestPerf) {
                     bestPerf = result.rendement;
-                    bestCombo = new BestInOutStrategy(symbol, entryName, entryParams, exitName, exitParams, result, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT_STOP, StrategieBackTest.TAKE_PROFIL_PCT);
+                    bestCombo = new BestInOutStrategy(symbol, entryName, entryParams, exitName, exitParams, result, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT);
                 }
             }
         }
