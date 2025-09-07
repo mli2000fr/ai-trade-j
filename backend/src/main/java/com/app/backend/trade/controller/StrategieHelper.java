@@ -450,6 +450,29 @@ public class StrategieHelper {
         }
     }
 
+    public void calculScoreST(){
+        String selectSql = "SELECT symbol, rendement, max_drawdown, trade_count, win_rate, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss FROM best_in_out_single_strategy";
+        List<java.util.Map<String, Object>> rows = jdbcTemplate.queryForList(selectSql);
+        for (java.util.Map<String, Object> row : rows) {
+            RiskResult result = new RiskResult(
+                (Double) row.get("rendement"),
+                (Double) row.get("max_drawdown"),
+                (Integer) row.get("trade_count"),
+                (Double) row.get("win_rate"),
+                (Double) row.get("avg_pnl"),
+                (Double) row.get("profit_factor"),
+                (Double) row.get("avg_trade_bars"),
+                (Double) row.get("max_trade_gain"),
+                (Double) row.get("max_trade_loss"),
+                0.0 // scoreSwingTrade temporaire
+            );
+            double scoreST = TradeUtils.calculerScoreSwingTrade(result);
+            String symbol = (String) row.get("symbol");
+            String updateSql = "UPDATE best_in_out_single_strategy SET score_swing_trade = ? WHERE symbol = ?";
+            jdbcTemplate.update(updateSql, scoreST, symbol);
+        }
+    }
+
     public void calculCroisedStrategies(){
         List<String> listeDbSymbols = this.getAllAssetSymbolsEligibleFromDb();
         int nbThreads = Math.max(2, Runtime.getRuntime().availableProcessors());
@@ -753,7 +776,7 @@ public class StrategieHelper {
 
 
     public List<BestInOutStrategy> getBestPerfActions(Integer limit){
-        String sql = "SELECT * FROM best_in_out_single_strategy ORDER BY rendement DESC";
+        String sql = "SELECT * FROM best_in_out_single_strategy ORDER BY score_swing_trade DESC";
         if (limit != null && limit > 0) {
             sql += " LIMIT " + limit;
         }

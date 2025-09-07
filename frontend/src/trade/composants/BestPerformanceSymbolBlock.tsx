@@ -34,6 +34,7 @@ interface BestInOutStrategy {
     avgTradeBars: number;
     maxTradeGain: number;
     maxTradeLoss: number;
+    scoreSwingTrade?: number;
   };
   initialCapital: number;
   riskPerTrade: number;
@@ -138,6 +139,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <TableRow>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Score Swing Trade</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Indice</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie IN</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie OUT</TableCell>
@@ -156,14 +158,15 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     if (indices[row.symbol] === 'SELL') bgColor = 'rgba(244, 67, 54, 0.05)';
                     return (
                       <TableRow key={i} sx={bgColor ? { backgroundColor: bgColor } : {}}>
-                          <TableCell>
-                            <input
-                              type="checkbox"
-                              checked={!!checkedRows[i]}
-                              onChange={e => setCheckedRows({...checkedRows, [i]: e.target.checked})}
-                            />
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={!!checkedRows[i]}
+                            onChange={e => setCheckedRows({...checkedRows, [i]: e.target.checked})}
+                          />
                         </TableCell>
                         <TableCell>{row.symbol}</TableCell>
+                        <TableCell>{row.result.scoreSwingTrade !== undefined ? (row.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
                         <TableCell>{indices[row.symbol] === 'pending' ? <CircularProgress size={16} /> : (indices[row.symbol] ?? '-')}</TableCell>
                         <TableCell>{row.entryName}</TableCell>
                         <TableCell>{row.exitName}</TableCell>
@@ -174,7 +177,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         <TableCell>{row.result.profitFactor.toFixed(2)}</TableCell>
                         <TableCell>
                           <Button size="small" variant="outlined" onClick={() => { setSelected(row); setOpen(true); }}>
-                             Détails
+                            Détails
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -192,11 +195,12 @@ const BestPerformanceSymbolBlock: React.FC = () => {
           {selected && (
             <div>
               <Typography variant="subtitle1"><b>Symbole :</b> {selected.symbol}</Typography>
+              <Typography variant="subtitle1"><b>Score Swing Trade :</b> {selected.result.scoreSwingTrade !== undefined ? (selected.result.scoreSwingTrade * 100).toFixed(2) + ' %' : '-'}</Typography>
               <Typography variant="subtitle1"><b>Stratégie Entrée :</b> {selected.entryName}</Typography>
               <Typography variant="body2">Paramètres entrée : <pre>{JSON.stringify(selected.entryParams, null, 2)}</pre></Typography>
               <Typography variant="subtitle1"><b>Stratégie Sortie :</b> {selected.exitName}</Typography>
               <Typography variant="body2">Paramètres sortie : <pre>{JSON.stringify(selected.exitParams, null, 2)}</pre></Typography>
-                <ul>
+              <ul>
                 <li>Drawdown : {(selected.result.maxDrawdown * 100).toFixed(2)}%</li>
                 <li>Profit Factor : {selected.result.profitFactor.toFixed(2)}</li>
                 <li>Profit moyen : {selected.result.avgPnL.toFixed(2)}</li>

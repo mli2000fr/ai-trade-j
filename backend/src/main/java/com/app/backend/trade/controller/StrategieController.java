@@ -116,4 +116,10 @@ public class StrategieController {
         SignalType st = strategieHelper.getBestInOutSignal(symbol);
         return ResponseEntity.ok(st);
     }
+
+    @GetMapping("/strategies/calculScoreST")
+    public ResponseEntity<Boolean> calculScoreST(@RequestParam(value = "symbol", required = false) String symbol) {
+        strategieHelper.calculScoreST();
+        return ResponseEntity.ok(true);
+    }
 }
