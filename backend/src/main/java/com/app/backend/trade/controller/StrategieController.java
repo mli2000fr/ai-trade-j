@@ -90,8 +90,8 @@ public class StrategieController {
 
 
     @GetMapping("/strategies/test_croised_strategies")
-    public ResponseEntity<Boolean> testAllCrossedStrategies() {
-        strategieHelper.testAllCrossedStrategies("NVDA");
+    public ResponseEntity<Boolean> testAllCrossedStrategies(@RequestParam(value = "symbol", required = false) String symbol) {
+        strategieHelper.testAllCrossedStrategies(symbol);
         return ResponseEntity.ok(true);
     }
 

@@ -30,7 +30,6 @@ public class StrategieHelper {
     // --- Définition des constantes pour découpage walk-forward ---
     public static final int NOMBRE_TOTAL_BOUGIES = 500; // Peut être changé à 1000, etc.
     public static final double PC_OPTIM = 0.7; // 70% pour optimisation (exemple)
-    public static final double PC_TEST = 0.3; // 30% pour test (exemple)
 
     private static final boolean INSERT_ONLY = true;
 
@@ -466,11 +465,11 @@ public class StrategieHelper {
     }
 
     public void testAllCrossedStrategies(String symbol){
-        BestInOutStrategy result = optimseBestInOutByWalkForward(symbol);
-        this.saveBestInOutStrategy(symbol, result);
+        BestInOutStrategy bestCombo = optimseBestInOutByWalkForward(symbol);
+        //this.saveBestInOutStrategy(symbol, result);
 
-        BestInOutStrategy bestCombo = this.getBestInOutStrategy(symbol);
-        System.out.println("=== RESTITUTION CROISÉS IN/OUT ===");
+        //BestInOutStrategy bestCombo = this.getBestInOutStrategy(symbol);
+        System.out.println("=== RESTITUTION CROISÉS IN/OUT ===" + symbol);
         if (bestCombo != null) {
             System.out.println("IN: " + bestCombo.entryName + " | OUT: " + bestCombo.exitName + " | Rendement: " + String.format("%.4f", bestCombo.result.rendement * 100) + "% | Trades: " + bestCombo.result.tradeCount);
             com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
