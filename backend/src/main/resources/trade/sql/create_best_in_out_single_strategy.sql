@@ -21,6 +21,8 @@ CREATE TABLE best_in_out_single_strategy (
         risk_per_trade DOUBLE,
         stop_loss_pct DOUBLE,
         take_profit_pct DOUBLE
+
+        score_swing_trade DOUBLE,
 );
 
 Voici l’explication de chaque colonne de la table best_in_out_strategy :
@@ -46,3 +48,9 @@ initial_capital : capital initial utilisé pour le backtest (ex : 10 000 $).
 risk_per_trade : part du capital risquée sur chaque trade (ex : 0.02 pour 2 %).
 stop_loss_pct : pourcentage de stop loss appliqué (ex : 0.04 pour 4 %).
 take_profit_pct : pourcentage de take profit appliqué (ex : 0.08 pour 8 %).
+
+rendement: favorise les symboles rentables
+winRate: favorise la régularité des gains
+profitFactor: favorise la qualité des trades
+maxDrawdown: pénalise les symboles trop risqués
+avgPnL: favorise les trades avec bon gain moyen

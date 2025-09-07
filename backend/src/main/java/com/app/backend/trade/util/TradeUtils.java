@@ -135,36 +135,6 @@ public class TradeUtils {
     }
 
     /**
-     * Conversion JSON en Map<String, RiskResult>
-     */
-    public static java.util.Map<String, RiskResult> convertJsonToDetailedResults(String json) {
-        if (json == null) return new java.util.HashMap<>();
-        try {
-            com.google.gson.JsonObject jsonObj = new com.google.gson.JsonParser().parse(json).getAsJsonObject();
-            java.util.Map<String, RiskResult> map = new java.util.HashMap<>();
-            jsonObj.entrySet().forEach(entry -> {
-                com.google.gson.JsonObject resultObj = entry.getValue().getAsJsonObject();
-                RiskResult riskResult = new RiskResult(
-                    resultObj.get("rendement").getAsDouble(),
-                    resultObj.get("maxDrawdown").getAsDouble(),
-                    resultObj.get("tradeCount").getAsInt(),
-                    resultObj.get("winRate").getAsDouble(),
-                    resultObj.get("avgPnL").getAsDouble(),
-                    resultObj.get("profitFactor").getAsDouble(),
-                    resultObj.get("avgTradeBars").getAsDouble(),
-                    resultObj.get("maxTradeGain").getAsDouble(),
-                    resultObj.get("maxTradeLoss").getAsDouble()
-                );
-                map.put(entry.getKey(), riskResult);
-            });
-            return map;
-        } catch (Exception e) {
-            log("Erreur conversion JSON vers Map<String, RiskResult>: " + e.getMessage());
-            return new java.util.HashMap<>();
-        }
-    }
-
-    /**
      * Mapping List<DailyValue> vers BarSeries
      */
     public static org.ta4j.core.BarSeries mapping(List<DailyValue> listeValues) {
@@ -233,5 +203,18 @@ public class TradeUtils {
             default:
                 return null;
         }
+    }
+
+    public static double calculerScoreSwingTrade(RiskResult r) {
+        double poidsRendement = 2.0;
+        double poidsWinRate = 1.5;
+        double poidsProfitFactor = 1.0;
+        double poidsDrawdown = 2.0;
+        double poidsAvgPnL = 1.0;
+        return (r.rendement * poidsRendement)
+                + (r.winRate * poidsWinRate)
+                + (r.profitFactor * poidsProfitFactor)
+                - (r.maxDrawdown * poidsDrawdown)
+                + (r.avgPnL * poidsAvgPnL);
     }
 }

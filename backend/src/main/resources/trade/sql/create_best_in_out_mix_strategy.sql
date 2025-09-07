@@ -14,5 +14,7 @@ CREATE TABLE best_in_out_mix_strategy (
             initial_capital DOUBLE,
             risk_per_trade DOUBLE,
             stop_loss_pct DOUBLE,
-            take_profit_pct DOUBLE
+            take_profit_pct DOUBLE,
+
+        score_swing_trade DOUBLE,
 );

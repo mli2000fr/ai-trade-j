@@ -470,9 +470,9 @@ public class StrategieHelper {
                         }
                     }
                     if(isCalcul){
-                        nbInsert.incrementAndGet();
                         BestInOutStrategy result = optimseBestInOutByWalkForward(symbol);
                         this.saveBestInOutStrategy(symbol, result);
+                        nbInsert.incrementAndGet();
                         try { Thread.sleep(200); } catch(Exception ignored) {}
                     }
                 }catch(Exception e){
@@ -551,12 +551,15 @@ public class StrategieHelper {
                 com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
                 // Backtest sur la partie test uniquement
                 RiskResult result = strategieBackTest.backtestStrategyRisk(combined, testSeries);
+                double scoreST =  TradeUtils.calculerScoreSwingTrade(result);
+                result.setScoreSwingTrade(scoreST);
                 System.out.println("IN: " + entryName + " " + gson.toJson(entryParams) +
                                    " | OUT: " + exitName + " " + gson.toJson(exitParams) +
                                    " | Rendement: " + String.format("%.4f", result.rendement * 100) + "%"
                                    + " | Trades: " + result.tradeCount
                                    + " | WinRate: " + String.format("%.2f", result.winRate * 100) + "%"
-                                   + " | Drawdown: " + String.format("%.2f", result.maxDrawdown * 100) + "%");
+                        + " | Drawdown: " + String.format("%.2f", result.maxDrawdown * 100) + "%"
+                        + " | Score ST: " + String.format("%.2f", scoreST * 100) + "%");
                 if (result.rendement > bestPerf) {
                     bestPerf = result.rendement;
                     bestCombo = new BestInOutStrategy(symbol, entryName, entryParams, exitName, exitParams, result, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT);
@@ -622,6 +625,7 @@ public class StrategieHelper {
                     avg_trade_bars = ?,
                     max_trade_gain = ?,
                     max_trade_loss = ?,
+                    take_profit_pct = ?,
                     initial_capital = ?,
                     risk_per_trade = ?,
                     stop_loss_pct = ?,
@@ -643,6 +647,7 @@ public class StrategieHelper {
                 best.result.avgTradeBars,
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
+                best.result.scoreSwingTrade,
                 best.initialCapital,
                 best.riskPerTrade,
                 best.stopLossPct,
@@ -656,9 +661,9 @@ public class StrategieHelper {
                     symbol, entry_strategy_name, entry_strategy_params,
                     exit_strategy_name, exit_strategy_params,
                     rendement, trade_count, win_rate, max_drawdown, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss,
-                    initial_capital, risk_per_trade, stop_loss_pct, take_profit_pct,
+                    score_swing_trade, initial_capital, risk_per_trade, stop_loss_pct, take_profit_pct,
                     created_date, updated_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """;
             jdbcTemplate.update(insertSql,
                 symbol,
@@ -675,6 +680,7 @@ public class StrategieHelper {
                 best.result.avgTradeBars,
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
+                best.result.scoreSwingTrade,
                 best.initialCapital,
                 best.riskPerTrade,
                 best.stopLossPct,
@@ -704,7 +710,8 @@ public class StrategieHelper {
                     rs.getDouble("profit_factor"),
                     rs.getDouble("avg_trade_bars"),
                     rs.getDouble("max_trade_gain"),
-                    rs.getDouble("max_trade_loss")
+                    rs.getDouble("max_trade_loss"),
+                    rs.getDouble("score_swing_trade")
                 );
                 Object entryParams = parseStrategyParams(entryName, entryParamsJson);
                 Object exitParams = parseStrategyParams(exitName, exitParamsJson);
@@ -765,7 +772,8 @@ public class StrategieHelper {
                 rs.getDouble("profit_factor"),
                 rs.getDouble("avg_trade_bars"),
                 rs.getDouble("max_trade_gain"),
-                rs.getDouble("max_trade_loss")
+                rs.getDouble("max_trade_loss"),
+                rs.getDouble("score_swing_trade")
             );
             Object entryParams = parseStrategyParams(entryName, entryParamsJson);
             Object exitParams = parseStrategyParams(exitName, exitParamsJson);

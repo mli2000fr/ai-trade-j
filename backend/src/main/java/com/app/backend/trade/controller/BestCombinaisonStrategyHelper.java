@@ -323,12 +323,12 @@ public class BestCombinaisonStrategyHelper {
         int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
         if (count > 0) {
             // UPDATE
-            String updateSql = "UPDATE best_in_out_mix_strategy SET in_strategy_names = ?, out_strategy_names = ?, score = ?, in_params = ?, out_params = ?, backtest_result = ?, initial_capital = ?, risk_per_trade = ?, stop_loss_pct = ?, take_profit_pct = ?, update_date = CURRENT_TIMESTAMP WHERE symbol = ?";
-            jdbcTemplate.update(updateSql, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT, symbol);
+            String updateSql = "UPDATE best_in_out_mix_strategy SET in_strategy_names = ?, out_strategy_names = ?, score = ?, in_params = ?, out_params = ?, backtest_result = ?, score_swing_trade = ?, initial_capital = ?, risk_per_trade = ?, stop_loss_pct = ?, take_profit_pct = ?, update_date = CURRENT_TIMESTAMP WHERE symbol = ?";
+            jdbcTemplate.update(updateSql, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, result.backtestResult.scoreSwingTrade, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT, symbol);
         } else {
             // INSERT
-            String insertSql = "INSERT INTO best_in_out_mix_strategy (symbol, in_strategy_names, out_strategy_names, score, in_params, out_params, backtest_result, initial_capital, risk_per_trade, stop_loss_pct, take_profit_pct, update_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
-            jdbcTemplate.update(insertSql, symbol, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT);
+            String insertSql = "INSERT INTO best_in_out_mix_strategy (symbol, in_strategy_names, out_strategy_names, score, in_params, out_params, backtest_result, score_swing_trade = ?, initial_capital, risk_per_trade, stop_loss_pct, score_swing_trade, take_profit_pct, update_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+            jdbcTemplate.update(insertSql, symbol, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, result.backtestResult.scoreSwingTrade, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT);
         }
     }
 
@@ -459,9 +459,11 @@ public class BestCombinaisonStrategyHelper {
                         }
                     }
                     if(isCalcul){
-                        nbInsert.incrementAndGet();
                         BestCombinationResult result = findBestCombinationGlobal(symbol);
+                        double scoreST =  TradeUtils.calculerScoreSwingTrade(result.getBacktestResult());
+                        result.backtestResult.setScoreSwingTrade(scoreST);
                         this.saveBestCombinationResult(symbol, result);
+                        nbInsert.incrementAndGet();
                         try { Thread.sleep(200); } catch(Exception ignored) {}
                     }
                 }catch(Exception e){

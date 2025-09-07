@@ -1,8 +1,10 @@
 package com.app.backend.model;
 
 import lombok.Getter;
+import lombok.Setter;
 
 @Getter
+@Setter
 public class RiskResult {
     /** Rendement total du backtest (capital final / capital initial - 1) */
     public final double rendement;
@@ -23,6 +25,8 @@ public class RiskResult {
     /** Maximum perte réalisée sur un trade */
     public final double maxTradeLoss;
 
+    public double scoreSwingTrade = 0;
+
     public RiskResult(double rendement, double maxDrawdown, int tradeCount, double winRate, double avgPnL, double profitFactor, double avgTradeBars, double maxTradeGain, double maxTradeLoss) {
         this.rendement = rendement;
         this.maxDrawdown = maxDrawdown;
@@ -33,6 +37,23 @@ public class RiskResult {
         this.avgTradeBars = avgTradeBars;
         this.maxTradeGain = maxTradeGain;
         this.maxTradeLoss = maxTradeLoss;
+    }
+
+    public RiskResult(double rendement, double maxDrawdown, int tradeCount, double winRate, double avgPnL, double profitFactor, double avgTradeBars, double maxTradeGain, double maxTradeLoss, double scoreSwingTrade) {
+        this.rendement = rendement;
+        this.maxDrawdown = maxDrawdown;
+        this.tradeCount = tradeCount;
+        this.winRate = winRate;
+        this.avgPnL = avgPnL;
+        this.profitFactor = profitFactor;
+        this.avgTradeBars = avgTradeBars;
+        this.maxTradeGain = maxTradeGain;
+        this.maxTradeLoss = maxTradeLoss;
+        this.scoreSwingTrade = scoreSwingTrade;
+    }
+
+    public void setScoreSwingTrade(double scoreSwingTrade) {
+        this.scoreSwingTrade = scoreSwingTrade;
     }
 }
 

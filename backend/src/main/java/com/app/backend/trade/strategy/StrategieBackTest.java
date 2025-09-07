@@ -1,6 +1,7 @@
 package com.app.backend.trade.strategy;
 
 import com.app.backend.model.RiskResult;
+import com.app.backend.trade.util.TradeUtils;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
@@ -131,7 +132,10 @@ public class StrategieBackTest {
         double avgTradeBars = tradeCount > 0 ? (double) totalTradeBars / tradeCount : 0.0;
         double maxTradeGain = (maxGain == Double.NEGATIVE_INFINITY) ? 0.0 : maxGain;
         double maxTradeLoss = (maxLoss == Double.POSITIVE_INFINITY) ? 0.0 : maxLoss;
-        return new RiskResult(rendement, maxDrawdown, tradeCount, winRate, avgPnL, profitFactor, avgTradeBars, maxTradeGain, maxTradeLoss);
+        RiskResult riskResult = new RiskResult(rendement, maxDrawdown, tradeCount, winRate, avgPnL, profitFactor, avgTradeBars, maxTradeGain, maxTradeLoss);
+        double scoreSwingTrade = TradeUtils.calculerScoreSwingTrade(riskResult);
+        riskResult.setScoreSwingTrade(scoreSwingTrade);
+        return riskResult;
     }
 
 
