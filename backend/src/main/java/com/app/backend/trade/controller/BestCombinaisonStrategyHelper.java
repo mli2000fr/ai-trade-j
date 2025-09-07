@@ -16,7 +16,6 @@ public class BestCombinaisonStrategyHelper {
     private StrategieHelper strategieHelper;
 
     // Constantes pour la gestion des bougies et des pourcentages
-    private static final double PC_OPTIM = 0.8; // pourcentage pour optimisation
     private static final int NB_IN = 2;
     private static final double NB_OUT = 2;
 
@@ -158,7 +157,7 @@ public class BestCombinaisonStrategyHelper {
         }
         BarSeries fullSeries = seriesList.get(0);
         int totalCount = fullSeries.getBarCount();
-        int optimCount = (int) Math.round(totalCount * PC_OPTIM);
+        int optimCount = (int) Math.round(totalCount * TradeConstant.PC_OPTIM);
         int testCount = totalCount - optimCount;
         // Séparer les bougies pour optimisation et test
         BarSeries optimSeries = fullSeries.getBarCount() > 0 ? fullSeries.getSubSeries(0, optimCount) : fullSeries;

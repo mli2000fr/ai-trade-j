@@ -29,9 +29,6 @@ public class StrategieHelper {
     private final JdbcTemplate jdbcTemplate;
     private final StrategieBackTest strategieBackTest;
 
-    // --- Définition des constantes pour découpage walk-forward ---
-    public static final double PC_OPTIM = 0.8; // 80% pour optimisation (exemple)
-
     private static final boolean INSERT_ONLY = true;
 
     @Autowired
@@ -488,7 +485,7 @@ public class StrategieHelper {
      */
     public BarSeries[] splitSeriesForWalkForward(BarSeries series) {
         int total = series.getBarCount();
-        int nOptim = (int) Math.round(total * PC_OPTIM);
+        int nOptim = (int) Math.round(total * TradeConstant.PC_OPTIM);
         int nTest = total - nOptim;
         if (nOptim < 1 || nTest < 1) throw new IllegalArgumentException("Découpage walk-forward impossible : pas assez de données");
         BarSeries optimSeries = new BaseBarSeries();
