@@ -775,8 +775,12 @@ public class StrategieHelper {
 
 
 
-    public List<BestInOutStrategy> getBestPerfActions(Integer limit){
-        String sql = "SELECT * FROM best_in_out_single_strategy ORDER BY score_swing_trade DESC";
+    public List<BestInOutStrategy> getBestPerfActions(Integer limit, String sort){
+        String orderBy = "rendement";
+        if ("score_swing_trade".equalsIgnoreCase(sort)) {
+            orderBy = "score_swing_trade";
+        }
+        String sql = "SELECT * FROM best_in_out_single_strategy WHERE profit_factor <> 0 AND max_drawdown <> 0 AND win_rate < 1 ORDER BY " + orderBy + " DESC";
         if (limit != null && limit > 0) {
             sql += " LIMIT " + limit;
         }

@@ -211,9 +211,10 @@ public class TradeUtils {
         double poidsProfitFactor = 1.0;
         double poidsDrawdown = 2.0;
         double poidsAvgPnL = 1.0;
+        double scorePF = r.profitFactor > 10 ? 10 : r.profitFactor; // Limiter le score du profit factor à 10 max
         return (r.rendement * poidsRendement)
                 + (r.winRate * poidsWinRate)
-                + (r.profitFactor * poidsProfitFactor)
+                + (scorePF * poidsProfitFactor)
                 - (r.maxDrawdown * poidsDrawdown)
                 + (r.avgPnL * poidsAvgPnL);
     }

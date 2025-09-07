@@ -106,8 +106,11 @@ public class StrategieController {
 
 
     @GetMapping("/strategies/best_performance_actions")
-    public ResponseEntity<List<BestInOutStrategy>> getBestPerfActions(@RequestParam(value = "limit", required = false) Integer limit) {
-        List<BestInOutStrategy> lsiteStr = strategieHelper.getBestPerfActions(limit);
+    public ResponseEntity<List<BestInOutStrategy>> getBestPerfActions(
+            @RequestParam(value = "limit", required = false) Integer limit,
+            @RequestParam(value = "sort", required = false, defaultValue = "rendement") String sort
+    ) {
+        List<BestInOutStrategy> lsiteStr = strategieHelper.getBestPerfActions(limit, sort);
         return ResponseEntity.ok(lsiteStr);
     }
 

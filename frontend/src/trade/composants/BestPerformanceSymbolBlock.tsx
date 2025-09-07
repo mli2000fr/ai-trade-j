@@ -51,11 +51,12 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [checkedRows, setCheckedRows] = useState<{[key: number]: boolean}>({});
   const [limit, setLimit] = useState<number>(20);
   const [indices, setIndices] = useState<{ [symbol: string]: string }>({});
+  const [sort, setSort] = useState<string>('rendement');
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`/api/stra/strategies/best_performance_actions?limit=${limit}`)
+    fetch(`/api/stra/strategies/best_performance_actions?limit=${limit}&sort=${sort}`)
       .then(res => {
         if (!res.ok) throw new Error('Erreur API');
         return res.json();
@@ -63,7 +64,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [limit]);
+  }, [limit, sort]);
 
   useEffect(() => {
     if (!data || data.length === 0) return;
@@ -108,12 +109,22 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               id="limit-select"
               value={limit}
               onChange={e => setLimit(Number(e.target.value))}
-              style={{ padding: '4px 8px' }}
+              style={{ padding: '4px 8px', marginRight: 16 }}
             >
               <option value={20}>20</option>
               <option value={30}>30</option>
               <option value={50}>50</option>
               <option value={100}>100</option>
+            </select>
+            <label htmlFor="sort-select" style={{ marginRight: 8 }}>Trié par :</label>
+            <select
+              id="sort-select"
+              value={sort}
+              onChange={e => setSort(e.target.value)}
+              style={{ padding: '4px 8px', marginRight: 16 }}
+            >
+              <option value="rendement">Rendement</option>
+              <option value="score_swing_trade">Score Swing Trade</option>
             </select>
             {/* Bouton copier */}
             <Button
@@ -195,7 +206,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
           {selected && (
             <div>
               <Typography variant="subtitle1"><b>Symbole :</b> {selected.symbol}</Typography>
-              <Typography variant="subtitle1"><b>Score Swing Trade :</b> {selected.result.scoreSwingTrade !== undefined ? (selected.result.scoreSwingTrade * 100).toFixed(2) + ' %' : '-'}</Typography>
+              <Typography variant="subtitle1"><b>Score Swing Trade :</b> {selected.result.scoreSwingTrade !== undefined ? (selected.result.scoreSwingTrade).toFixed(2) : '-'}</Typography>
               <Typography variant="subtitle1"><b>Stratégie Entrée :</b> {selected.entryName}</Typography>
               <Typography variant="body2">Paramètres entrée : <pre>{JSON.stringify(selected.entryParams, null, 2)}</pre></Typography>
               <Typography variant="subtitle1"><b>Stratégie Sortie :</b> {selected.exitName}</Typography>
