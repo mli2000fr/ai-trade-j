@@ -88,17 +88,6 @@ public class StrategieController {
     }
 
 
-    @GetMapping("/strategies/test_analyse_rw")
-    public ResponseEntity<Boolean> test_analyse_rw() {
-        strategieHelper.test_analyse_RollingWindow();
-        return ResponseEntity.ok(true);
-    }
-
-    @GetMapping("/strategies/optimise-param")
-    public ResponseEntity<Boolean> optimseParamForAllSymbol() {
-        strategieHelper.optimseParamForAllSymbol();
-        return ResponseEntity.ok(true);
-    }
 
     @GetMapping("/strategies/test_croised_strategies")
     public ResponseEntity<Boolean> testAllCrossedStrategies() {
@@ -113,11 +102,6 @@ public class StrategieController {
         return ResponseEntity.ok(true);
     }
 
-    @GetMapping("/strategies/test_analyse_sf")
-    public ResponseEntity<Boolean> test_analyse_wf() {
-        strategieHelper.test_analyse_ByWalkForward("NVDA");
-        return ResponseEntity.ok(true);
-    }
 
     @GetMapping("/strategies/best_performance_actions")
     public ResponseEntity<List<StrategieHelper.BestInOutStrategy>> getBestPerfActions(@RequestParam(value = "limit", required = false) Integer limit) {
