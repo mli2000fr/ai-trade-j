@@ -26,5 +26,18 @@ public class BestCombinaisonStrategyRestController {
     ) {
         return bestCombinaisonStrategyHelper.findBestCombination(symbol, in, out);
     }
+
+
+    /**
+     * Endpoint REST pour obtenir la meilleure combinaison globale de stratégies.
+     * Exemple d'appel : GET /api/best-combination-global?symbol=BTCUSDT
+     */
+    @GetMapping("/global")
+    @ResponseBody
+    public BestCombinaisonStrategyHelper.BestCombinationResult getBestCombinationGlobal(@RequestParam("symbol") String symbol) {
+        return bestCombinaisonStrategyHelper.findBestCombinationGlobal(symbol);
+        //http://localhost:8080/api/best-combination/global?symbol=AAPL
+    }
+
 }
 

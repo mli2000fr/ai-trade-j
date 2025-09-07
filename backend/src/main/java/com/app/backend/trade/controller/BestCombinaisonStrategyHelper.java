@@ -4,6 +4,9 @@ import com.app.backend.trade.strategy.*;
 import com.app.backend.trade.util.TradeUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
 import java.util.*;
@@ -62,6 +65,27 @@ public class BestCombinaisonStrategyHelper {
             }
         }
         return bestResult;
+    }
+
+    /**
+     * Boucle sur toutes les valeurs possibles de in et out (de 1 à 6),
+     * compare les scores et retourne le meilleur résultat global.
+     */
+    public BestCombinationResult findBestCombinationGlobal(String symbol) {
+        BestCombinationResult bestGlobal = null;
+        double bestScore = Double.NEGATIVE_INFINITY;
+        for (int in = 1; in <= 6; in++) {
+            for (int out = 1; out <= 6; out++) {
+                BestCombinationResult result = findBestCombination(symbol, in, out);
+                TradeUtils.log("Global search: in=" + in + ", out=" + out + " => score=" + result.score);
+                if (result != null && result.score > bestScore) {
+                    bestScore = result.score;
+                    bestGlobal = result;
+                }
+            }
+        }
+        TradeUtils.log("Best global combination for symbol=" + symbol + " : " + resultObjToString(bestGlobal));
+        return bestGlobal;
     }
 
     // Génère toutes les combinaisons de n éléments parmi la liste
@@ -181,7 +205,32 @@ public class BestCombinaisonStrategyHelper {
         resultObj.inStrategyNames = inStrategyNames;
         resultObj.outStrategyNames = outStrategyNames;
         // Optionnel : supprimer ou ignorer les champs inStrategies/outStrategies pour la sérialisation
+        TradeUtils.log("BestCombinationResult : " + resultObjToString(resultObj));
         return resultObj;
+    }
+
+    // Méthode utilitaire pour afficher les détails du résultat
+    private String resultObjToString(BestCombinationResult result) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("inStrategyNames=").append(result.inStrategyNames).append(", ");
+        sb.append("outStrategyNames=").append(result.outStrategyNames).append(", ");
+        sb.append("score=").append(result.score).append(", ");
+        sb.append("inParams=").append(result.inParams).append(", ");
+        sb.append("outParams=").append(result.outParams).append(", ");
+        if (result.backtestResult != null) {
+            sb.append("backtestResult={");
+            sb.append("rendement=").append(result.backtestResult.rendement).append(", ");
+            sb.append("maxDrawdown=").append(result.backtestResult.maxDrawdown).append(", ");
+            sb.append("tradeCount=").append(result.backtestResult.tradeCount).append(", ");
+            sb.append("winRate=").append(result.backtestResult.winRate).append(", ");
+            sb.append("avgPnL=").append(result.backtestResult.avgPnL).append(", ");
+            sb.append("profitFactor=").append(result.backtestResult.profitFactor).append(", ");
+            sb.append("avgTradeBars=").append(result.backtestResult.avgTradeBars).append(", ");
+            sb.append("maxTradeGain=").append(result.backtestResult.maxTradeGain).append(", ");
+            sb.append("maxTradeLoss=").append(result.backtestResult.maxTradeLoss);
+            sb.append("}");
+        }
+        return sb.toString();
     }
 
     // Classe interne pour le résultat enrichi
