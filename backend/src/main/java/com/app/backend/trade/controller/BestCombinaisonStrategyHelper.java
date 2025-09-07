@@ -1,5 +1,6 @@
 package com.app.backend.trade.controller;
 
+import com.app.backend.trade.model.BestCombinationResult;
 import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.strategy.*;
 import com.app.backend.trade.util.TradeConstant;
@@ -23,6 +24,7 @@ public class BestCombinaisonStrategyHelper {
     // Constantes pour la gestion des bougies et des pourcentages
     private static final int NB_IN = 2;
     private static final double NB_OUT = 2;
+    private static final boolean INSERT_ONLY = true;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -289,20 +291,6 @@ public class BestCombinaisonStrategyHelper {
         return sb.toString();
     }
 
-    // Classe interne pour le résultat enrichi
-    public static class BestCombinationResult {
-        public List<String> inStrategyNames;
-        public List<String> outStrategyNames;
-        public double score;
-        public Map<String, Object> inParams = new HashMap<>();
-        public Map<String, Object> outParams = new HashMap<>();
-        public StrategieBackTest.RiskResult backtestResult;
-
-        public double initialCapital;
-        public double riskPerTrade;
-        public double stopLossPct;
-        public double takeProfitPct;
-    }
 
     /**
      * Retourne les noms des stratégies in et out pour un symbole donné
@@ -328,21 +316,17 @@ public class BestCombinaisonStrategyHelper {
         String inParamsJson = gson.toJson(result.inParams);
         String outParamsJson = gson.toJson(result.outParams);
         String backtestResultJson = gson.toJson(result.backtestResult);
-        double initialCapital = result.initialCapital;
-        double riskPerTrade = result.riskPerTrade;
-        double stopLossPct = result.stopLossPct;
-        double takeProfitPct = result.takeProfitPct;
         // Vérifier si le symbol existe déjà
         String checkSql = "SELECT COUNT(*) FROM best_in_out_mix_strategy WHERE symbol = ?";
         int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
         if (count > 0) {
             // UPDATE
             String updateSql = "UPDATE best_in_out_mix_strategy SET in_strategy_names = ?, out_strategy_names = ?, score = ?, in_params = ?, out_params = ?, backtest_result = ?, initial_capital = ?, risk_per_trade = ?, stop_loss_pct = ?, take_profit_pct = ?, update_date = CURRENT_TIMESTAMP WHERE symbol = ?";
-            jdbcTemplate.update(updateSql, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, initialCapital, riskPerTrade, stopLossPct, takeProfitPct, symbol);
+            jdbcTemplate.update(updateSql, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT, symbol);
         } else {
             // INSERT
             String insertSql = "INSERT INTO best_in_out_mix_strategy (symbol, in_strategy_names, out_strategy_names, score, in_params, out_params, backtest_result, initial_capital, risk_per_trade, stop_loss_pct, take_profit_pct, update_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
-            jdbcTemplate.update(insertSql, symbol, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, initialCapital, riskPerTrade, stopLossPct, takeProfitPct);
+            jdbcTemplate.update(insertSql, symbol, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT);
         }
     }
 
@@ -442,5 +426,53 @@ public class BestCombinaisonStrategyHelper {
         } else {
             return SignalType.NONE;
         }
+    }
+
+    /**
+     * Récupère tous les symboles depuis la table alpaca_asset
+     */
+    public List<String> getAllAssetSymbolsEligibleFromDb() {
+        String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true;";
+        return jdbcTemplate.queryForList(sql, String.class);
+    }
+
+
+    public void calculMixStrategies(){
+        List<String> listeDbSymbols = this.getAllAssetSymbolsEligibleFromDb();
+        int nbThreads = Math.max(2, Runtime.getRuntime().availableProcessors());
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(nbThreads);
+        java.util.concurrent.atomic.AtomicInteger error = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger nbInsert = new java.util.concurrent.atomic.AtomicInteger(0);
+        List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+        for(String symbol : listeDbSymbols){
+            futures.add(executor.submit(() -> {
+                boolean isCalcul = true;
+                try{
+                    if(INSERT_ONLY){
+                        String checkSql = "SELECT COUNT(*) FROM best_in_out_mix_strategy WHERE symbol = ?";
+                        int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
+                        if(count > 0){
+                            isCalcul = false;
+                            TradeUtils.log("calculMixStrategies: symbole "+symbol+" déjà en base, on passe");
+                        }
+                    }
+                    if(isCalcul){
+                        nbInsert.incrementAndGet();
+                        BestCombinationResult result = findBestCombinationGlobal(symbol);
+                        this.saveBestCombinationResult(symbol, result);
+                        try { Thread.sleep(200); } catch(Exception ignored) {}
+                    }
+                }catch(Exception e){
+                    error.incrementAndGet();
+                    TradeUtils.log("Erreur calcul("+symbol+") : " + e.getMessage());
+                }
+            }));
+        }
+        // Attendre la fin de tous les threads
+        for (java.util.concurrent.Future<?> f : futures) {
+            try { f.get(); } catch(Exception ignored) {}
+        }
+        executor.shutdown();
+        TradeUtils.log("calculMixStrategies: total: "+listeDbSymbols.size()+", nbInsert: "+nbInsert.get()+", error: " + error.get());
     }
 }

@@ -777,8 +777,6 @@ public class StrategieHelper {
         return results;
     }
 
-    public enum SignalType { BUY, SELL, NONE; }
-
     /**
      * Retourne le signal d'achat/vente pour un symbole selon la meilleure stratégie IN/OUT.
      * @param symbol le symbole à analyser

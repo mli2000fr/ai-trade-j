@@ -1,5 +1,7 @@
 package com.app.backend.trade.controller;
 
+import com.app.backend.trade.model.BestCombinationResult;
+import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.strategy.*;
 import org.springframework.web.bind.annotation.*;
 import org.ta4j.core.BarSeries;
@@ -19,7 +21,7 @@ public class BestCombinaisonStrategyRestController {
      * GET /api/best-combination/test?symbol=BTCUSDT&in=2&out=2
      */
     @GetMapping("/test")
-    public BestCombinaisonStrategyHelper.BestCombinationResult testBestCombination(
+    public BestCombinationResult testBestCombination(
             @RequestParam String symbol,
             @RequestParam int in,
             @RequestParam int out
@@ -34,10 +36,24 @@ public class BestCombinaisonStrategyRestController {
      */
     @GetMapping("/global")
     @ResponseBody
-    public BestCombinaisonStrategyHelper.BestCombinationResult getBestCombinationGlobal(@RequestParam("symbol") String symbol) {
+    public BestCombinationResult getBestCombinationGlobal(@RequestParam("symbol") String symbol) {
         return bestCombinaisonStrategyHelper.findBestCombinationGlobal(symbol);
         //http://localhost:8080/api/best-combination/global?symbol=AAPL
     }
 
-}
+    /**
+     * Endpoint REST pour obtenir le signal (BUY, SELL, NONE) pour un symbole donné.
+     * Exemple d'appel : GET /api/best-combination/signal?symbol=BTCUSDT
+     */
+    @GetMapping("/signal")
+    public SignalType getSignal(@RequestParam String symbol) {
+        return bestCombinaisonStrategyHelper.getSignal(symbol);
+    }
 
+    @PostMapping("/calcul")
+    public Boolean calculMixStrategies(@RequestParam String symbol) {
+        bestCombinaisonStrategyHelper.calculMixStrategies();
+        return true;
+    }
+
+}

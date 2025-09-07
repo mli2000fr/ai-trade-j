@@ -2,6 +2,7 @@ package com.app.backend.trade.controller;
 
 import com.app.backend.trade.model.SetActiveStrategiesRequest;
 import com.app.backend.trade.model.SetCombinationModeRequest;
+import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.model.StrategyListDto;
 import com.app.backend.trade.service.StrategyService;
 import com.app.backend.trade.strategy.BestInOutStrategy;
@@ -111,8 +112,8 @@ public class StrategieController {
     }
 
     @GetMapping("/strategies/get_indice")
-    public ResponseEntity<StrategieHelper.SignalType> getIndice(@RequestParam(value = "symbol", required = false) String symbol) {
-        StrategieHelper.SignalType st = strategieHelper.getBestInOutSignal(symbol);
+    public ResponseEntity<SignalType> getIndice(@RequestParam(value = "symbol", required = false) String symbol) {
+        SignalType st = strategieHelper.getBestInOutSignal(symbol);
         return ResponseEntity.ok(st);
     }
 }
