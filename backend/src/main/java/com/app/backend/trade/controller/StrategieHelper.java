@@ -3,6 +3,7 @@ package com.app.backend.trade.controller;
 import com.app.backend.trade.model.*;
 import com.app.backend.trade.model.alpaca.AlpacaAsset;
 import com.app.backend.trade.service.*;
+import com.app.backend.trade.strategy.BestInOutStrategy;
 import com.app.backend.trade.strategy.StrategieBackTest;
 import com.app.backend.trade.util.TradeUtils;
 import org.slf4j.Logger;
@@ -29,7 +30,7 @@ public class StrategieHelper {
 
     // --- Définition des constantes pour découpage walk-forward ---
     public static final int NOMBRE_TOTAL_BOUGIES = 500; // Peut être changé à 1000, etc.
-    public static final double PC_OPTIM = 0.8; // 70% pour optimisation (exemple)
+    public static final double PC_OPTIM = 0.8; // 80% pour optimisation (exemple)
 
     private static final boolean INSERT_ONLY = true;
 
@@ -434,33 +435,6 @@ public class StrategieHelper {
         } catch (Exception e) {
             logger.warn("Erreur conversion JSON vers Map<String, Double>: {}", e.getMessage());
             return new java.util.HashMap<>();
-        }
-    }
-
-
-    public static class BestInOutStrategy {
-        public final String symbol;
-        public final String entryName;
-        public final Object entryParams;
-        public final String exitName;
-        public final Object exitParams;
-        public final StrategieBackTest.RiskResult result;
-        public final double initialCapital;
-        public final double riskPerTrade;
-        public final double stopLossPct;
-        public final double takeProfitPct;
-        public BestInOutStrategy(String symbol, String entryName, Object entryParams, String exitName, Object exitParams, StrategieBackTest.RiskResult result,
-                                double initialCapital, double riskPerTrade, double stopLossPct, double takeProfitPct) {
-            this.symbol = symbol;
-            this.entryName = entryName;
-            this.entryParams = entryParams;
-            this.exitName = exitName;
-            this.exitParams = exitParams;
-            this.result = result;
-            this.initialCapital = initialCapital;
-            this.riskPerTrade = riskPerTrade;
-            this.stopLossPct = stopLossPct;
-            this.takeProfitPct = takeProfitPct;
         }
     }
 

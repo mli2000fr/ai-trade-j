@@ -1,10 +1,12 @@
 package com.app.backend.trade.strategy;
 
 import com.app.backend.trade.strategy.StrategieBackTest;
+import lombok.Getter;
 
 /**
  * Structure pour stocker la meilleure combinaison IN/OUT et ses résultats.
  */
+@Getter
 public class BestInOutStrategy {
     public final String symbol;
     public final String entryName;

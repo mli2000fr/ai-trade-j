@@ -4,6 +4,7 @@ import com.app.backend.trade.model.SetActiveStrategiesRequest;
 import com.app.backend.trade.model.SetCombinationModeRequest;
 import com.app.backend.trade.model.StrategyListDto;
 import com.app.backend.trade.service.StrategyService;
+import com.app.backend.trade.strategy.BestInOutStrategy;
 import com.app.backend.trade.strategy.StrategyManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -104,8 +105,8 @@ public class StrategieController {
 
 
     @GetMapping("/strategies/best_performance_actions")
-    public ResponseEntity<List<StrategieHelper.BestInOutStrategy>> getBestPerfActions(@RequestParam(value = "limit", required = false) Integer limit) {
-        List<StrategieHelper.BestInOutStrategy> lsiteStr = strategieHelper.getBestPerfActions(limit);
+    public ResponseEntity<List<BestInOutStrategy>> getBestPerfActions(@RequestParam(value = "limit", required = false) Integer limit) {
+        List<BestInOutStrategy> lsiteStr = strategieHelper.getBestPerfActions(limit);
         return ResponseEntity.ok(lsiteStr);
     }
 
