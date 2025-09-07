@@ -1,5 +1,6 @@
 package com.app.backend.trade.strategy;
 
+import lombok.Getter;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
@@ -146,6 +147,7 @@ public class StrategieBackTest {
      * maxTradeGain : maximum gain réalisé sur un trade
      * maxTradeLoss : maximum perte réalisée sur un trade
      */
+    @Getter
     public static class RiskResult {
         /** Rendement total du backtest (capital final / capital initial - 1) */
         public final double rendement;

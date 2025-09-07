@@ -50,8 +50,13 @@ public class BestCombinaisonStrategyRestController {
         return bestCombinaisonStrategyHelper.getSignal(symbol);
     }
 
-    @PostMapping("/calcul")
-    public Boolean calculMixStrategies(@RequestParam String symbol) {
+    @GetMapping("/best-signal")
+    public SignalType getBestSignal(@RequestParam String symbol) {
+        return bestCombinaisonStrategyHelper.getBestSignal(symbol);
+    }
+
+    @GetMapping("/calcul")
+    public Boolean calculMixStrategies() {
         bestCombinaisonStrategyHelper.calculMixStrategies();
         return true;
     }

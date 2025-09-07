@@ -1,1 +1,17 @@
 je peux moderniser l'utilisation de JDBC, Gson, le style des switch, et autres points signalés. Sinon, votre parallélisation est opérationnelle.
+
+
+
+SELECT
+b.symbol,
+ROUND(b.score * 100, 2) AS rendement_new_pct,
+ROUND(o.rendement * 100, 2) AS rendement_old_pct,
+ROUND((b.score - o.rendement) * 100, 2) AS diff_rendement_pct
+FROM
+trade_ai.best_in_out_mix_strategy b
+INNER JOIN
+trade_ai.best_in_out_single_strategy o
+ON
+b.symbol = o.symbol
+ORDER BY
+diff_rendement_pct DESC;

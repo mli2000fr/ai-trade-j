@@ -13,6 +13,7 @@ import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
 
+import java.sql.PreparedStatement;
 import java.util.*;
 
 @Controller
@@ -474,5 +475,25 @@ public class BestCombinaisonStrategyHelper {
         }
         executor.shutdown();
         TradeUtils.log("calculMixStrategies: total: "+listeDbSymbols.size()+", nbInsert: "+nbInsert.get()+", error: " + error.get());
+    }
+
+
+
+    public SignalType getBestSignal(String symbol){
+        BestCombinationResult bestCombinationResult = getBestCombinationResult(symbol);
+        BestInOutStrategy best = strategieHelper.getBestInOutStrategy(symbol);
+        if(bestCombinationResult == null && best == null){
+            return SignalType.NONE;
+        }else if(bestCombinationResult == null) {
+            return strategieHelper.getBestInOutSignal(symbol);
+        }else if(best == null) {
+            return this.getSignal(symbol);
+        }else{
+            if(bestCombinationResult.score > best.getResult().getRendement()){
+                return this.getSignal(symbol);
+            }else {
+                return strategieHelper.getBestInOutSignal(symbol);
+            }
+        }
     }
 }
