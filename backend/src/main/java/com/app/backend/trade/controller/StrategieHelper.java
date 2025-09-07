@@ -29,7 +29,7 @@ public class StrategieHelper {
 
     // --- Définition des constantes pour découpage walk-forward ---
     public static final int NOMBRE_TOTAL_BOUGIES = 500; // Peut être changé à 1000, etc.
-    public static final double PC_OPTIM = 0.7; // 70% pour optimisation (exemple)
+    public static final double PC_OPTIM = 0.8; // 70% pour optimisation (exemple)
 
     private static final boolean INSERT_ONLY = true;
 
