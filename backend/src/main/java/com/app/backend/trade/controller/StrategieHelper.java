@@ -27,6 +27,11 @@ public class StrategieHelper {
     private final JdbcTemplate jdbcTemplate;
     private final StrategieBackTest strategieBackTest;
 
+    // --- Définition des constantes pour découpage walk-forward ---
+    public static final int NOMBRE_TOTAL_BOUGIES = 500; // Peut être changé à 1000, etc.
+    public static final double PC_OPTIM = 0.7; // 70% pour optimisation (exemple)
+    public static final double PC_TEST = 0.3; // 30% pour test (exemple)
+
     private static final boolean INSERT_ONLY = true;
 
     @Autowired
@@ -188,7 +193,7 @@ public class StrategieHelper {
      * @return Liste des DailyValue triées par date croissante
      */
     public List<DailyValue> getDailyValuesFromDatabase(String symbol) {
-        return this.getDailyValuesFromDb(symbol, 500);
+        return this.getDailyValuesFromDb(symbol, NOMBRE_TOTAL_BOUGIES);
     }
 
 
@@ -504,19 +509,42 @@ public class StrategieHelper {
     }
 
     /**
+     * Retourne la série de prix découpée en deux parties selon les pourcentages définis.
+     * @param series la série complète
+     * @return tableau [BarSeries optimisation, BarSeries test]
+     */
+    public BarSeries[] splitSeriesForWalkForward(BarSeries series) {
+        int total = series.getBarCount();
+        int nOptim = (int) Math.round(total * PC_OPTIM);
+        int nTest = total - nOptim;
+        if (nOptim < 1 || nTest < 1) throw new IllegalArgumentException("Découpage walk-forward impossible : pas assez de données");
+        BarSeries optimSeries = new BaseBarSeries();
+        BarSeries testSeries = new BaseBarSeries();
+        for (int i = 0; i < nOptim; i++) {
+            optimSeries.addBar(series.getBar(i));
+        }
+        for (int i = nOptim; i < total; i++) {
+            testSeries.addBar(series.getBar(i));
+        }
+        return new BarSeries[] {optimSeries, testSeries};
+    }
+
+    /**
      * Teste automatiquement toutes les combinaisons croisées de stratégies pour in (entrée) et out (sortie).
-     * Affiche les résultats pour chaque couple et retourne le meilleur couple.
+     * Utilise le découpage walk-forward défini par les constantes.
      */
     public BestInOutStrategy optimseBestInOutByWalkForward(String symbol) {
-        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol, 500));
-        // Optimisation des paramètres pour chaque stratégie
-        StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(series, 10, 30, 5, 15, 15, 25, 0.001, 0.01, 0.002);
-        StrategieBackTest.SmaCrossoverParams bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(series, 5, 20, 10, 50);
-        StrategieBackTest.RsiParams bestRsi = strategieBackTest.optimiseRsiParameters(series, 10, 20, 20, 40, 5, 60, 80, 5);
-        StrategieBackTest.BreakoutParams bestBreakout = strategieBackTest.optimiseBreakoutParameters(series, 5, 50);
-        StrategieBackTest.MacdParams bestMacd = strategieBackTest.optimiseMacdParameters(series, 8, 16, 20, 30, 6, 12);
-        StrategieBackTest.MeanReversionParams bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(series, 10, 30, 1.0, 5.0, 0.5);
-
+        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol, NOMBRE_TOTAL_BOUGIES));
+        BarSeries[] split = splitSeriesForWalkForward(series);
+        BarSeries optimSeries = split[0];
+        BarSeries testSeries = split[1];
+        // Optimisation des paramètres sur la partie optimisation
+        StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(optimSeries, 10, 30, 5, 15, 15, 25, 0.001, 0.01, 0.002);
+        StrategieBackTest.SmaCrossoverParams bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(optimSeries, 5, 20, 10, 50);
+        StrategieBackTest.RsiParams bestRsi = strategieBackTest.optimiseRsiParameters(optimSeries, 10, 20, 20, 40, 5, 60, 80, 5);
+        StrategieBackTest.BreakoutParams bestBreakout = strategieBackTest.optimiseBreakoutParameters(optimSeries, 5, 50);
+        StrategieBackTest.MacdParams bestMacd = strategieBackTest.optimiseMacdParameters(optimSeries, 8, 16, 20, 30, 6, 12);
+        StrategieBackTest.MeanReversionParams bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(optimSeries, 10, 30, 1.0, 5.0, 0.5);
         // Liste des stratégies et paramètres
         java.util.List<Object[]> strategies = java.util.Arrays.asList(
             new Object[]{"Improved Trend", bestImprovedTrend},
@@ -526,7 +554,6 @@ public class StrategieHelper {
             new Object[]{"MACD", bestMacd},
             new Object[]{"Mean Reversion", bestMeanReversion}
         );
-
         double bestPerf = Double.NEGATIVE_INFINITY;
         BestInOutStrategy bestCombo = null;
         System.out.println("=== TESTS CROISÉS IN/OUT ===");
@@ -541,7 +568,8 @@ public class StrategieHelper {
                 com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(entryName, entryParams);
                 com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
                 com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
-                StrategieBackTest.RiskResult result = strategieBackTest.backtestStrategyRisk(combined, series);
+                // Backtest sur la partie test uniquement
+                StrategieBackTest.RiskResult result = strategieBackTest.backtestStrategyRisk(combined, testSeries);
                 System.out.println("IN: " + entryName + " " + gson.toJson(entryParams) +
                                    " | OUT: " + exitName + " " + gson.toJson(exitParams) +
                                    " | Rendement: " + String.format("%.4f", result.rendement * 100) + "%"
@@ -779,7 +807,7 @@ public class StrategieHelper {
     public SignalType getBestInOutSignal(String symbol) {
         BestInOutStrategy best = getBestInOutStrategy(symbol);
         if (best == null) return SignalType.NONE;
-        BarSeries series = getAndUpdateDBDailyValu(symbol, 500);
+        BarSeries series = getAndUpdateDBDailyValu(symbol, NOMBRE_TOTAL_BOUGIES);
         int lastIndex = series.getEndIndex();
         // Instancie les stratégies IN/OUT
         com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(best.entryName, best.entryParams);
