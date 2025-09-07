@@ -17,7 +17,6 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import com.app.backend.trade.strategy.BestInOutStrategy;
 
 @Controller
 public class StrategieHelper {
@@ -401,7 +400,7 @@ public class StrategieHelper {
         return new com.google.gson.Gson().toJson(jsonObj);
     }
 
-    private String convertDetailedResultsToJson(java.util.Map<String, StrategieBackTest.RiskResult> detailedResults) {
+    private String convertDetailedResults (java.util.Map<String, StrategieBackTest.RiskResult> detailedResults) {
         if (detailedResults == null) return null;
         com.google.gson.JsonObject jsonObj = new com.google.gson.JsonObject();
         detailedResults.forEach((key, result) -> {
