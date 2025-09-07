@@ -5,6 +5,7 @@ import com.app.backend.trade.model.alpaca.AlpacaAsset;
 import com.app.backend.trade.service.*;
 import com.app.backend.trade.strategy.BestInOutStrategy;
 import com.app.backend.trade.strategy.StrategieBackTest;
+import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,7 +30,6 @@ public class StrategieHelper {
     private final StrategieBackTest strategieBackTest;
 
     // --- Définition des constantes pour découpage walk-forward ---
-    public static final int NOMBRE_TOTAL_BOUGIES = 500; // Peut être changé à 1000, etc.
     public static final double PC_OPTIM = 0.8; // 80% pour optimisation (exemple)
 
     private static final boolean INSERT_ONLY = true;
@@ -193,7 +193,7 @@ public class StrategieHelper {
      * @return Liste des DailyValue triées par date croissante
      */
     public List<DailyValue> getDailyValuesFromDatabase(String symbol) {
-        return this.getDailyValuesFromDb(symbol, NOMBRE_TOTAL_BOUGIES);
+        return this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES);
     }
 
 
@@ -507,7 +507,7 @@ public class StrategieHelper {
      * Utilise le découpage walk-forward défini par les constantes.
      */
     public BestInOutStrategy optimseBestInOutByWalkForward(String symbol) {
-        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol, NOMBRE_TOTAL_BOUGIES));
+        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES));
         BarSeries[] split = splitSeriesForWalkForward(series);
         BarSeries optimSeries = split[0];
         BarSeries testSeries = split[1];
@@ -780,7 +780,7 @@ public class StrategieHelper {
     public SignalType getBestInOutSignal(String symbol) {
         BestInOutStrategy best = getBestInOutStrategy(symbol);
         if (best == null) return SignalType.NONE;
-        BarSeries series = getAndUpdateDBDailyValu(symbol, NOMBRE_TOTAL_BOUGIES);
+        BarSeries series = getAndUpdateDBDailyValu(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES);
         int lastIndex = series.getEndIndex();
         // Instancie les stratégies IN/OUT
         com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(best.entryName, best.entryParams);

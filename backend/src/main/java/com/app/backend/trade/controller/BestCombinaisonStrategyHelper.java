@@ -1,6 +1,7 @@
 package com.app.backend.trade.controller;
 
 import com.app.backend.trade.strategy.*;
+import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -15,7 +16,6 @@ public class BestCombinaisonStrategyHelper {
     private StrategieHelper strategieHelper;
 
     // Constantes pour la gestion des bougies et des pourcentages
-    private static final int NOMBRE_TOTAL_BOUGIES = 500; // exemple, peut être modifié
     private static final double PC_OPTIM = 0.8; // pourcentage pour optimisation
     private static final int NB_IN = 2;
     private static final double NB_OUT = 2;
@@ -27,7 +27,7 @@ public class BestCombinaisonStrategyHelper {
 
     public BestCombinationResult findBestCombination(String symbol, int in, int out) {
         // Récupérer les BarSeries depuis la base via StrategieHelper
-        BarSeries series = strategieHelper.getAndUpdateDBDailyValu(symbol, NOMBRE_TOTAL_BOUGIES);
+        BarSeries series = strategieHelper.getAndUpdateDBDailyValu(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES);
         List<BarSeries> seriesList = new ArrayList<>();
         if (series != null) {
             seriesList.add(series);
@@ -97,7 +97,7 @@ public class BestCombinaisonStrategyHelper {
                 }
             }
         }
-        BarSeries barSeries = strategieHelper.getAndUpdateDBDailyValu(symbol, NOMBRE_TOTAL_BOUGIES);
+        BarSeries barSeries = strategieHelper.getAndUpdateDBDailyValu(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES);
         for (int in = 1; in <= NB_IN; in++) {
             for (int out = 1; out <= NB_OUT; out++) {
                 // Générer les combinaisons qui incluent obligatoirement la best in/out
