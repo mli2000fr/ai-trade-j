@@ -4,9 +4,6 @@ import com.app.backend.trade.strategy.*;
 import com.app.backend.trade.util.TradeUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseBody;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
 import java.util.*;
@@ -17,7 +14,6 @@ public class BestCombinaisonStrategyHelper {
 
     private StrategieHelper strategieHelper;
 
-    private com.google.gson.JsonObject jsonObj = new com.google.gson.JsonObject();
 
     @Autowired
     public BestCombinaisonStrategyHelper(StrategieHelper strategieHelper) {
@@ -74,8 +70,8 @@ public class BestCombinaisonStrategyHelper {
     public BestCombinationResult findBestCombinationGlobal(String symbol) {
         BestCombinationResult bestGlobal = null;
         double bestScore = Double.NEGATIVE_INFINITY;
-        for (int in = 1; in <= 6; in++) {
-            for (int out = 1; out <= 6; out++) {
+        for (int in = 1; in <= 2; in++) {
+            for (int out = 1; out <= 2; out++) {
                 BestCombinationResult result = findBestCombination(symbol, in, out);
                 TradeUtils.log("Global search: in=" + in + ", out=" + out + " => score=" + result.score);
                 if (result != null && result.score > bestScore) {
