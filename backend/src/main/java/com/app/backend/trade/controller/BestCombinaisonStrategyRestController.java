@@ -3,6 +3,7 @@ package com.app.backend.trade.controller;
 import com.app.backend.trade.model.BestCombinationResult;
 import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.strategy.*;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.ta4j.core.BarSeries;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,6 +60,12 @@ public class BestCombinaisonStrategyRestController {
     public Boolean calculMixStrategies() {
         bestCombinaisonStrategyHelper.calculMixStrategies();
         return true;
+    }
+
+    @GetMapping("/calculScoreST")
+    public ResponseEntity<Boolean> calculScoreST(@RequestParam(value = "symbol", required = false) String symbol) {
+        bestCombinaisonStrategyHelper.calculScoreST();
+        return ResponseEntity.ok(true);
     }
 
 }

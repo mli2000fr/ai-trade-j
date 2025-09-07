@@ -118,7 +118,7 @@ public class BestCombinaisonStrategyHelper {
                 for (List<Class<? extends TradeStrategy>> inCombo : inCombinations) {
                     for (List<Class<? extends TradeStrategy>> outCombo : outCombinations) {
                         BestCombinationResult result = evaluateCombination(symbol, Arrays.asList(barSeries), inCombo, outCombo);
-                        TradeUtils.log("Global search: inCombo=" + inCombo + ", outCombo=" + outCombo + " => score=" + result.score);
+                        // TradeUtils.log("Global search: inCombo=" + inCombo + ", outCombo=" + outCombo + " => score=" + result.score);
                         if (result != null && result.score > bestScore) {
                             bestScore = result.score;
                             bestGlobal = result;
@@ -327,7 +327,7 @@ public class BestCombinaisonStrategyHelper {
             jdbcTemplate.update(updateSql, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, result.backtestResult.scoreSwingTrade, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT, symbol);
         } else {
             // INSERT
-            String insertSql = "INSERT INTO best_in_out_mix_strategy (symbol, in_strategy_names, out_strategy_names, score, in_params, out_params, backtest_result, score_swing_trade = ?, initial_capital, risk_per_trade, stop_loss_pct, score_swing_trade, take_profit_pct, update_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+            String insertSql = "INSERT INTO best_in_out_mix_strategy (symbol, in_strategy_names, out_strategy_names, score, in_params, out_params, backtest_result, score_swing_trade, initial_capital, risk_per_trade, stop_loss_pct, take_profit_pct, update_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
             jdbcTemplate.update(insertSql, symbol, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, result.backtestResult.scoreSwingTrade, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT);
         }
     }
@@ -499,4 +499,26 @@ public class BestCombinaisonStrategyHelper {
             }
         }
     }
+
+
+    public void calculScoreST(){
+        String selectSql = "SELECT symbol, backtest_result FROM best_in_out_mix_strategy";
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(selectSql);
+        for (Map<String, Object> row : rows) {
+            String symbol = (String) row.get("symbol");
+            String backtestResultJson = (String) row.get("backtest_result");
+            if (backtestResultJson == null || backtestResultJson.isEmpty()) continue;
+            RiskResult result = null;
+            try {
+                result = gson.fromJson(backtestResultJson, RiskResult.class);
+            } catch (Exception e) {
+                continue;
+            }
+            if (result == null) continue;
+            double scoreST = TradeUtils.calculerScoreSwingTrade(result);
+            String updateSql = "UPDATE best_in_out_mix_strategy SET score_swing_trade = ? WHERE symbol = ?";
+            jdbcTemplate.update(updateSql, scoreST, symbol);
+        }
+    }
+
 }
