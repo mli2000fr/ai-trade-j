@@ -451,31 +451,41 @@ public class StrategieHelper {
 
     public void calculCroisedStrategies(){
         List<String> listeDbSymbols = this.getAllAssetSymbolsEligibleFromDb();
-        int error = 0;
-        int nbInsert = 0;
+        int nbThreads = Math.max(2, Runtime.getRuntime().availableProcessors());
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(nbThreads);
+        java.util.concurrent.atomic.AtomicInteger error = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger nbInsert = new java.util.concurrent.atomic.AtomicInteger(0);
+        List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
         for(String symbol : listeDbSymbols){
-            boolean isCalcul = true;
-            try{
-                if(INSERT_ONLY){
-                    String checkSql = "SELECT COUNT(*) FROM best_in_out_single_strategy WHERE symbol = ?";
-                    int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
-                    if(count > 0){
-                        isCalcul = false;
-                        TradeUtils.log("calculCroisedStrategies: symbole "+symbol+" déjà en base, on passe");
+            futures.add(executor.submit(() -> {
+                boolean isCalcul = true;
+                try{
+                    if(INSERT_ONLY){
+                        String checkSql = "SELECT COUNT(*) FROM best_in_out_single_strategy WHERE symbol = ?";
+                        int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
+                        if(count > 0){
+                            isCalcul = false;
+                            TradeUtils.log("calculCroisedStrategies: symbole "+symbol+" déjà en base, on passe");
+                        }
                     }
+                    if(isCalcul){
+                        nbInsert.incrementAndGet();
+                        BestInOutStrategy result = optimseBestInOutByWalkForward(symbol);
+                        this.saveBestInOutStrategy(symbol, result);
+                        try { Thread.sleep(200); } catch(Exception ignored) {}
+                    }
+                }catch(Exception e){
+                    error.incrementAndGet();
+                    TradeUtils.log("Erreur calcul("+symbol+") : " + e.getMessage());
                 }
-                if(isCalcul){
-                    nbInsert++;
-                    BestInOutStrategy result = optimseBestInOutByWalkForward(symbol);
-                    this.saveBestInOutStrategy(symbol, result);
-                    Thread.sleep(200);
-                }
-            }catch(Exception e){
-                error++;
-                TradeUtils.log("Erreur calcul("+symbol+") : " + e.getMessage());
-            }
+            }));
         }
-        TradeUtils.log("calculCroisedStrategies: total: "+listeDbSymbols.size()+", nbInsert: "+nbInsert+", error: " + error);
+        // Attendre la fin de tous les threads
+        for (java.util.concurrent.Future<?> f : futures) {
+            try { f.get(); } catch(Exception ignored) {}
+        }
+        executor.shutdown();
+        TradeUtils.log("calculCroisedStrategies: total: "+listeDbSymbols.size()+", nbInsert: "+nbInsert.get()+", error: " + error.get());
     }
 
     /**
