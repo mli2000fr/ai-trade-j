@@ -1,4 +1,4 @@
-CREATE TABLE best_in_out_strategy (
+CREATE TABLE best_in_out_single_strategy (
     symbol VARCHAR(20) PRIMARY KEY,
     entry_strategy_name VARCHAR(50),
     entry_strategy_params TEXT,

@@ -460,7 +460,7 @@ public class StrategieHelper {
             boolean isCalcul = true;
             try{
                 if(INSERT_ONLY){
-                    String checkSql = "SELECT COUNT(*) FROM best_in_out_strategy WHERE symbol = ?";
+                    String checkSql = "SELECT COUNT(*) FROM best_in_out_single_strategy WHERE symbol = ?";
                     int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
                     if(count > 0){
                         isCalcul = false;
@@ -593,14 +593,14 @@ public class StrategieHelper {
      * Sauvegarde la meilleure combinaison in/out pour un symbole
      */
     public void saveBestInOutStrategy(String symbol, BestInOutStrategy best) {
-        String checkSql = "SELECT COUNT(*) FROM best_in_out_strategy WHERE symbol = ?";
+        String checkSql = "SELECT COUNT(*) FROM best_in_out_single_strategy WHERE symbol = ?";
         int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
         String entryParamsJson = new com.google.gson.Gson().toJson(best.entryParams);
         String exitParamsJson = new com.google.gson.Gson().toJson(best.exitParams);
         if (count > 0) {
             // Mise à jour
             String updateSql = """
-                UPDATE best_in_out_strategy SET
+                UPDATE best_in_out_single_strategy SET
                     entry_strategy_name = ?,
                     entry_strategy_params = ?,
                     exit_strategy_name = ?,
@@ -644,7 +644,7 @@ public class StrategieHelper {
         } else {
             // Insertion
             String insertSql = """
-                INSERT INTO best_in_out_strategy (
+                INSERT INTO best_in_out_single_strategy (
                     symbol, entry_strategy_name, entry_strategy_params,
                     exit_strategy_name, exit_strategy_params,
                     rendement, trade_count, win_rate, max_drawdown, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss,
@@ -680,7 +680,7 @@ public class StrategieHelper {
      * Récupère la meilleure combinaison in/out pour un symbole
      */
     public BestInOutStrategy getBestInOutStrategy(String symbol) {
-        String sql = "SELECT * FROM best_in_out_strategy WHERE symbol = ?";
+        String sql = "SELECT * FROM best_in_out_single_strategy WHERE symbol = ?";
         try {
             return jdbcTemplate.queryForObject(sql, (rs, rowNum) -> {
                 String entryName = rs.getString("entry_strategy_name");
@@ -738,7 +738,7 @@ public class StrategieHelper {
 
 
     public List<BestInOutStrategy> getBestPerfActions(Integer limit){
-        String sql = "SELECT * FROM best_in_out_strategy ORDER BY rendement DESC";
+        String sql = "SELECT * FROM best_in_out_single_strategy ORDER BY rendement DESC";
         if (limit != null && limit > 0) {
             sql += " LIMIT " + limit;
         }

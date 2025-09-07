@@ -73,16 +73,45 @@ public class BestCombinaisonStrategyHelper {
      * compare les scores et retourne le meilleur résultat global.
      */
     public BestCombinationResult findBestCombinationGlobal(String symbol) {
-
+        Map<String, String> bestInOutStrategy = this.getInOutStrategiesForSymbol(symbol);
         BestCombinationResult bestGlobal = null;
         double bestScore = Double.NEGATIVE_INFINITY;
+        List<Class<? extends TradeStrategy>> strategies = Arrays.asList(
+            ImprovedTrendFollowingStrategy.class,
+            SmaCrossoverStrategy.class,
+            RsiStrategy.class,
+            BreakoutStrategy.class,
+            MacdStrategy.class,
+            MeanReversionStrategy.class
+        );
+        // Conversion nom -> classe
+        Class<? extends TradeStrategy> inClass = null;
+        Class<? extends TradeStrategy> outClass = null;
+        if (bestInOutStrategy != null) {
+            for (Class<? extends TradeStrategy> clazz : strategies) {
+                if (clazz.getSimpleName().equals(TradeUtils.parseStrategyName(bestInOutStrategy.get("in")))) {
+                    inClass = clazz;
+                }
+                if (clazz.getSimpleName().equals(TradeUtils.parseStrategyName(bestInOutStrategy.get("out")))) {
+                    outClass = clazz;
+                }
+            }
+        }
+        BarSeries barSeries = strategieHelper.getAndUpdateDBDailyValu(symbol, NOMBRE_TOTAL_BOUGIES);
         for (int in = 1; in <= NB_IN; in++) {
             for (int out = 1; out <= NB_OUT; out++) {
-                BestCombinationResult result = findBestCombination(symbol, in, out);
-                TradeUtils.log("Global search: in=" + in + ", out=" + out + " => score=" + result.score);
-                if (result != null && result.score > bestScore) {
-                    bestScore = result.score;
-                    bestGlobal = result;
+                // Générer les combinaisons qui incluent obligatoirement la best in/out
+                List<List<Class<? extends TradeStrategy>>> inCombinations = (inClass != null) ? generateCombinationsWithMandatory(strategies, in, inClass) : generateCombinations(strategies, in);
+                List<List<Class<? extends TradeStrategy>>> outCombinations = (outClass != null) ? generateCombinationsWithMandatory(strategies, out, outClass) : generateCombinations(strategies, out);
+                for (List<Class<? extends TradeStrategy>> inCombo : inCombinations) {
+                    for (List<Class<? extends TradeStrategy>> outCombo : outCombinations) {
+                        BestCombinationResult result = evaluateCombination(symbol, Arrays.asList(barSeries), inCombo, outCombo);
+                        TradeUtils.log("Global search: inCombo=" + inCombo + ", outCombo=" + outCombo + " => score=" + result.score);
+                        if (result != null && result.score > bestScore) {
+                            bestScore = result.score;
+                            bestGlobal = result;
+                        }
+                    }
                 }
             }
         }
@@ -106,6 +135,18 @@ public class BestCombinaisonStrategyHelper {
             generateCombinationsHelper(strategies, n, i + 1, current, result);
             current.remove(current.size() - 1);
         }
+    }
+
+    // Génère toutes les combinaisons de n éléments parmi la liste, incluant obligatoirement une stratégie spécifique
+    private List<List<Class<? extends TradeStrategy>>> generateCombinationsWithMandatory(List<Class<? extends TradeStrategy>> strategies, int n, Class<? extends TradeStrategy> mandatory) {
+        List<List<Class<? extends TradeStrategy>>> all = generateCombinations(strategies, n);
+        List<List<Class<? extends TradeStrategy>>> filtered = new ArrayList<>();
+        for (List<Class<? extends TradeStrategy>> combo : all) {
+            if (combo.contains(mandatory)) {
+                filtered.add(combo);
+            }
+        }
+        return filtered;
     }
 
     // Évalue la combinaison selon la logique métier de StrategieHelper
