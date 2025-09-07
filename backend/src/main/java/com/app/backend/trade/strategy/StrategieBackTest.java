@@ -1,6 +1,6 @@
 package com.app.backend.trade.strategy;
 
-import lombok.Getter;
+import com.app.backend.model.RiskResult;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
@@ -134,52 +134,6 @@ public class StrategieBackTest {
         return new RiskResult(rendement, maxDrawdown, tradeCount, winRate, avgPnL, profitFactor, avgTradeBars, maxTradeGain, maxTradeLoss);
     }
 
-    /**
-     * Classe de retour pour le backtest avec gestion du risque et métriques avancées
-     *
-     * rendement : rendement total du backtest (capital final / capital initial - 1)
-     * maxDrawdown : drawdown maximal observ�� (plus forte baisse du capital)
-     * tradeCount : nombre total de trades réalisés
-     * winRate : pourcentage de trades gagnants (win rate)
-     * avgPnL : gain ou perte moyen par trade
-     * profitFactor : profit factor (somme des gains / somme des pertes)
-     * avgTradeBars : nombre moyen de bougies par trade (durée moyenne d’un trade)
-     * maxTradeGain : maximum gain réalisé sur un trade
-     * maxTradeLoss : maximum perte réalisée sur un trade
-     */
-    @Getter
-    public static class RiskResult {
-        /** Rendement total du backtest (capital final / capital initial - 1) */
-        public final double rendement;
-        /** Drawdown maximal observé (plus forte baisse du capital) */
-        public final double maxDrawdown;
-        /** Nombre total de trades réalisés */
-        public final int tradeCount;
-        /** Pourcentage de trades gagnants (win rate) */
-        public final double winRate;
-        /** Gain ou perte moyen par trade */
-        public final double avgPnL;
-        /** Profit factor (somme des gains / somme des pertes) */
-        public final double profitFactor;
-        /** Nombre moyen de bougies par trade (durée moyenne d'un trade) */
-        public final double avgTradeBars;
-        /** Maximum gain réalisé sur un trade */
-        public final double maxTradeGain;
-        /** Maximum perte réalisée sur un trade */
-        public final double maxTradeLoss;
-
-        public RiskResult(double rendement, double maxDrawdown, int tradeCount, double winRate, double avgPnL, double profitFactor, double avgTradeBars, double maxTradeGain, double maxTradeLoss) {
-            this.rendement = rendement;
-            this.maxDrawdown = maxDrawdown;
-            this.tradeCount = tradeCount;
-            this.winRate = winRate;
-            this.avgPnL = avgPnL;
-            this.profitFactor = profitFactor;
-            this.avgTradeBars = avgTradeBars;
-            this.maxTradeGain = maxTradeGain;
-            this.maxTradeLoss = maxTradeLoss;
-        }
-    }
 
     // Backtest pour BreakoutStrategy
     public RiskResult backtestBreakoutStrategy(BarSeries series, int lookbackPeriod) {

@@ -1,5 +1,6 @@
 package com.app.backend.trade.model;
 
+import com.app.backend.model.RiskResult;
 import com.app.backend.trade.strategy.StrategieBackTest;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -19,7 +20,7 @@ public class BestCombinationResult {
     public double score;
     public Map<String, Object> inParams = new HashMap<>();
     public Map<String, Object> outParams = new HashMap<>();
-    public StrategieBackTest.RiskResult backtestResult;
+    public RiskResult backtestResult;
 
     public double initialCapital;
     public double riskPerTrade;

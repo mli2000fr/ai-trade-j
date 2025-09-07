@@ -1,5 +1,6 @@
 package com.app.backend.trade.controller;
 
+import com.app.backend.model.RiskResult;
 import com.app.backend.trade.model.*;
 import com.app.backend.trade.model.alpaca.AlpacaAsset;
 import com.app.backend.trade.service.*;
@@ -402,7 +403,7 @@ public class StrategieHelper {
         return new com.google.gson.Gson().toJson(jsonObj);
     }
 
-    private String convertDetailedResults (java.util.Map<String, StrategieBackTest.RiskResult> detailedResults) {
+    private String convertDetailedResults (java.util.Map<String, RiskResult> detailedResults) {
         if (detailedResults == null) return null;
         com.google.gson.JsonObject jsonObj = new com.google.gson.JsonObject();
         detailedResults.forEach((key, result) -> {
@@ -549,7 +550,7 @@ public class StrategieHelper {
                 com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
                 com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
                 // Backtest sur la partie test uniquement
-                StrategieBackTest.RiskResult result = strategieBackTest.backtestStrategyRisk(combined, testSeries);
+                RiskResult result = strategieBackTest.backtestStrategyRisk(combined, testSeries);
                 System.out.println("IN: " + entryName + " " + gson.toJson(entryParams) +
                                    " | OUT: " + exitName + " " + gson.toJson(exitParams) +
                                    " | Rendement: " + String.format("%.4f", result.rendement * 100) + "%"
@@ -694,7 +695,7 @@ public class StrategieHelper {
                 String entryParamsJson = rs.getString("entry_strategy_params");
                 String exitName = rs.getString("exit_strategy_name");
                 String exitParamsJson = rs.getString("exit_strategy_params");
-                StrategieBackTest.RiskResult result = new StrategieBackTest.RiskResult(
+                RiskResult result = new RiskResult(
                     rs.getDouble("rendement"),
                     rs.getDouble("max_drawdown"),
                     rs.getInt("trade_count"),
@@ -755,7 +756,7 @@ public class StrategieHelper {
             String entryParamsJson = rs.getString("entry_strategy_params");
             String exitName = rs.getString("exit_strategy_name");
             String exitParamsJson = rs.getString("exit_strategy_params");
-            StrategieBackTest.RiskResult result = new StrategieBackTest.RiskResult(
+            RiskResult result = new RiskResult(
                 rs.getDouble("rendement"),
                 rs.getDouble("max_drawdown"),
                 rs.getInt("trade_count"),

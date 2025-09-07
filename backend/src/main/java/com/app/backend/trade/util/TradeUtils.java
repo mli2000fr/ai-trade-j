@@ -1,5 +1,6 @@
 package com.app.backend.trade.util;
 
+import com.app.backend.model.RiskResult;
 import com.app.backend.trade.model.DailyValue;
 
 import java.time.LocalDate;
@@ -97,7 +98,7 @@ public class TradeUtils {
     /**
      * Conversion Map<String, RiskResult> en JSON
      */
-    public static String convertDetailedResultsToJson(java.util.Map<String, com.app.backend.trade.strategy.StrategieBackTest.RiskResult> detailedResults) {
+    public static String convertDetailedResultsToJson(java.util.Map<String, RiskResult> detailedResults) {
         if (detailedResults == null) return null;
         com.google.gson.JsonObject jsonObj = new com.google.gson.JsonObject();
         detailedResults.forEach((key, result) -> {
@@ -136,14 +137,14 @@ public class TradeUtils {
     /**
      * Conversion JSON en Map<String, RiskResult>
      */
-    public static java.util.Map<String, com.app.backend.trade.strategy.StrategieBackTest.RiskResult> convertJsonToDetailedResults(String json) {
+    public static java.util.Map<String, RiskResult> convertJsonToDetailedResults(String json) {
         if (json == null) return new java.util.HashMap<>();
         try {
             com.google.gson.JsonObject jsonObj = new com.google.gson.JsonParser().parse(json).getAsJsonObject();
-            java.util.Map<String, com.app.backend.trade.strategy.StrategieBackTest.RiskResult> map = new java.util.HashMap<>();
+            java.util.Map<String, RiskResult> map = new java.util.HashMap<>();
             jsonObj.entrySet().forEach(entry -> {
                 com.google.gson.JsonObject resultObj = entry.getValue().getAsJsonObject();
-                com.app.backend.trade.strategy.StrategieBackTest.RiskResult riskResult = new com.app.backend.trade.strategy.StrategieBackTest.RiskResult(
+                RiskResult riskResult = new RiskResult(
                     resultObj.get("rendement").getAsDouble(),
                     resultObj.get("maxDrawdown").getAsDouble(),
                     resultObj.get("tradeCount").getAsInt(),

@@ -1,5 +1,6 @@
 package com.app.backend.trade.controller;
 
+import com.app.backend.model.RiskResult;
 import com.app.backend.trade.model.BestCombinationResult;
 import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.strategy.*;
@@ -259,7 +260,7 @@ public class BestCombinaisonStrategyHelper {
             @Override
             public String getName() { return "CombinedStrategy"; }
         };
-        StrategieBackTest.RiskResult backtestResult = backTest.backtestStrategyRisk(combinedStrategy, testSeries);
+        RiskResult backtestResult = backTest.backtestStrategyRisk(combinedStrategy, testSeries);
         resultObj.score = backtestResult.rendement;
         resultObj.backtestResult = backtestResult;
         resultObj.inStrategyNames = inStrategyNames;
@@ -346,7 +347,7 @@ public class BestCombinaisonStrategyHelper {
         result.score = ((Number) row.get("score")).doubleValue();
         result.inParams = gson.fromJson((String) row.get("in_params"), new TypeToken<Map<String, Object>>(){}.getType());
         result.outParams = gson.fromJson((String) row.get("out_params"), new TypeToken<Map<String, Object>>(){}.getType());
-        result.backtestResult = gson.fromJson((String) row.get("backtest_result"), StrategieBackTest.RiskResult.class);
+        result.backtestResult = gson.fromJson((String) row.get("backtest_result"), RiskResult.class);
         result.initialCapital = row.get("initial_capital") != null ? ((Number) row.get("initial_capital")).doubleValue() : 0.0;
         result.riskPerTrade = row.get("risk_per_trade") != null ? ((Number) row.get("risk_per_trade")).doubleValue() : 0.0;
         result.stopLossPct = row.get("stop_loss_pct") != null ? ((Number) row.get("stop_loss_pct")).doubleValue() : 0.0;

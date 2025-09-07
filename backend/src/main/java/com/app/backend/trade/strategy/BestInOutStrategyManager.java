@@ -1,5 +1,6 @@
 package com.app.backend.trade.strategy;
 
+import com.app.backend.model.RiskResult;
 import com.app.backend.trade.util.TradeUtils;
 import com.app.backend.trade.model.DailyValue;
 import org.ta4j.core.BarSeries;
@@ -51,7 +52,7 @@ public class BestInOutStrategyManager {
                 com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(entryName, entryParams);
                 com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
                 StrategieBackTest.CombinedTradeStrategy combined = new StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
-                StrategieBackTest.RiskResult result = strategieBackTest.backtestStrategyRisk(combined, series);
+                RiskResult result = strategieBackTest.backtestStrategyRisk(combined, series);
                 if (result.rendement > bestPerf) {
                     bestPerf = result.rendement;
                     bestCombo = new BestInOutStrategy(symbol, entryName, entryParams, exitName, exitParams, result, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT);
