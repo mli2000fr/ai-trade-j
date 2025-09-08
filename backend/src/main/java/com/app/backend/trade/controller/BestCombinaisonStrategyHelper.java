@@ -13,8 +13,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
-
-import java.sql.PreparedStatement;
 import java.util.*;
 
 @Controller
@@ -317,18 +315,97 @@ public class BestCombinaisonStrategyHelper {
         String outStrategyNamesJson = gson.toJson(result.outStrategyNames);
         String inParamsJson = gson.toJson(result.inParams);
         String outParamsJson = gson.toJson(result.outParams);
-        String backtestResultJson = gson.toJson(result.backtestResult);
         // Vérifier si le symbol existe déjà
         String checkSql = "SELECT COUNT(*) FROM best_in_out_mix_strategy WHERE symbol = ?";
         int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
         if (count > 0) {
             // UPDATE
-            String updateSql = "UPDATE best_in_out_mix_strategy SET in_strategy_names = ?, out_strategy_names = ?, score = ?, in_params = ?, out_params = ?, backtest_result = ?, score_swing_trade = ?, initial_capital = ?, risk_per_trade = ?, stop_loss_pct = ?, take_profit_pct = ?, update_date = CURRENT_TIMESTAMP WHERE symbol = ?";
-            jdbcTemplate.update(updateSql, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, result.backtestResult.scoreSwingTrade, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT, symbol);
+            String updateSql = """
+                    UPDATE best_in_out_mix_strategy SET 
+                    in_strategy_names = ?, 
+                    out_strategy_names = ?, 
+                    in_params = ?, 
+                    out_params = ?, 
+                    rendement = ?, 
+                    trade_count = ?, 
+                    win_rate = ?, 
+                    max_drawdown = ?, 
+                    avg_pnl = ?, 
+                    profit_factor = ?, 
+                    avg_trade_bars = ?, 
+                    max_trade_gain = ?, 
+                    max_trade_loss = ?, 
+                    score_swing_trade = ?, 
+                    initial_capital = ?, 
+                    risk_per_trade = ?, 
+                    stop_loss_pct = ?, 
+                    take_profit_pct = ?, 
+                    update_date = CURRENT_TIMESTAMP WHERE symbol = ?""";
+            jdbcTemplate.update(updateSql,
+                    inStrategyNamesJson,
+                    outStrategyNamesJson,
+                    inParamsJson,
+                    outParamsJson,
+                    result.backtestResult.rendement,
+                    result.backtestResult.tradeCount,
+                    result.backtestResult.winRate,
+                    result.backtestResult.maxDrawdown,
+                    result.backtestResult.avgPnL,
+                    result.backtestResult.profitFactor,
+                    result.backtestResult.avgTradeBars,
+                    result.backtestResult.maxTradeGain,
+                    result.backtestResult.maxTradeLoss,
+                    result.backtestResult.scoreSwingTrade,
+                    StrategieBackTest.INITIAL_CAPITAL,
+                    StrategieBackTest.RISK_PER_TRADE,
+                    StrategieBackTest.STOP_LOSS_PCT,
+                    StrategieBackTest.TAKE_PROFIL_PCT,
+                    symbol);
         } else {
             // INSERT
-            String insertSql = "INSERT INTO best_in_out_mix_strategy (symbol, in_strategy_names, out_strategy_names, score, in_params, out_params, backtest_result, score_swing_trade, initial_capital, risk_per_trade, stop_loss_pct, take_profit_pct, update_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
-            jdbcTemplate.update(insertSql, symbol, inStrategyNamesJson, outStrategyNamesJson, result.score, inParamsJson, outParamsJson, backtestResultJson, result.backtestResult.scoreSwingTrade, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT);
+            String insertSql = """
+                    INSERT INTO best_in_out_mix_strategy (
+                    symbol, 
+                    in_strategy_names, 
+                    out_strategy_names,
+                    in_params, 
+                    out_params, 
+                    rendement,
+                    trade_count,
+                    win_rate,
+                    max_drawdown,
+                    avg_pnl,
+                    profit_factor,
+                    avg_trade_bars,
+                    max_trade_gain,
+                    max_trade_loss,
+                    score_swing_trade, 
+                    initial_capital, 
+                    risk_per_trade, 
+                    stop_loss_pct, 
+                    take_profit_pct, 
+                    update_date
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""";
+            jdbcTemplate.update(insertSql,
+                    symbol,
+                    inStrategyNamesJson,
+                    outStrategyNamesJson,
+                    inParamsJson,
+                    outParamsJson,
+                    result.backtestResult.rendement,
+                    result.backtestResult.tradeCount,
+                    result.backtestResult.winRate,
+                    result.backtestResult.maxDrawdown,
+                    result.backtestResult.avgPnL,
+                    result.backtestResult.profitFactor,
+                    result.backtestResult.avgTradeBars,
+                    result.backtestResult.maxTradeGain,
+                    result.backtestResult.maxTradeLoss,
+                    result.backtestResult.scoreSwingTrade,
+                    StrategieBackTest.INITIAL_CAPITAL,
+                    StrategieBackTest.RISK_PER_TRADE,
+                    StrategieBackTest.STOP_LOSS_PCT,
+                    StrategieBackTest.TAKE_PROFIL_PCT);
         }
     }
 
@@ -344,14 +421,25 @@ public class BestCombinaisonStrategyHelper {
         BestCombinationResult result = new BestCombinationResult();
         result.inStrategyNames = gson.fromJson((String) row.get("in_strategy_names"), new TypeToken<List<String>>(){}.getType());
         result.outStrategyNames = gson.fromJson((String) row.get("out_strategy_names"), new TypeToken<List<String>>(){}.getType());
-        result.score = ((Number) row.get("score")).doubleValue();
         result.inParams = gson.fromJson((String) row.get("in_params"), new TypeToken<Map<String, Object>>(){}.getType());
         result.outParams = gson.fromJson((String) row.get("out_params"), new TypeToken<Map<String, Object>>(){}.getType());
-        result.backtestResult = gson.fromJson((String) row.get("backtest_result"), RiskResult.class);
         result.initialCapital = row.get("initial_capital") != null ? ((Number) row.get("initial_capital")).doubleValue() : 0.0;
         result.riskPerTrade = row.get("risk_per_trade") != null ? ((Number) row.get("risk_per_trade")).doubleValue() : 0.0;
         result.stopLossPct = row.get("stop_loss_pct") != null ? ((Number) row.get("stop_loss_pct")).doubleValue() : 0.0;
         result.takeProfitPct = row.get("take_profit_pct") != null ? ((Number) row.get("take_profit_pct")).doubleValue() : 0.0;
+        result.backtestResult = new RiskResult(
+                row.get("rendement") != null ? ((Number) row.get("rendement")).doubleValue() : 0.0,
+                row.get("max_drawdown") != null ? ((Number) row.get("max_drawdown")).doubleValue() : 0.0,
+                row.get("trade_count") != null ? ((Number) row.get("trade_count")).intValue() : 0,
+                row.get("win_rate") != null ? ((Number) row.get("win_rate")).doubleValue() : 0.0,
+                row.get("avg_pnl") != null ? ((Number) row.get("avg_pnl")).doubleValue() : 0.0,
+                row.get("profit_factor") != null ? ((Number) row.get("profit_factor")).doubleValue() : 0.0,
+                row.get("avg_trade_bars") != null ? ((Number) row.get("avg_trade_bars")).doubleValue() : 0.0,
+                row.get("max_trade_gain") != null ? ((Number) row.get("max_trade_gain")).doubleValue() : 0.0,
+                row.get("max_trade_loss") != null ? ((Number) row.get("max_trade_loss")).doubleValue() : 0.0,
+                row.get("score_swing_trade") != null ? ((Number) row.get("score_swing_trade")).doubleValue() : 0.0
+        );
+        result.score = result.backtestResult.rendement;
         return result;
     }
 
