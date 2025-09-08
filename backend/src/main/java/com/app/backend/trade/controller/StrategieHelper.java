@@ -520,8 +520,7 @@ public class StrategieHelper {
     public BarSeries[] splitSeriesForWalkForward(BarSeries series) {
         int total = series.getBarCount();
         int nOptim = (int) Math.round(total * TradeConstant.PC_OPTIM);
-        int nTest = total - nOptim;
-        if (nOptim < 1 || nTest < 1) throw new IllegalArgumentException("Découpage walk-forward impossible : pas assez de données");
+        if (nOptim < 1) throw new IllegalArgumentException("Découpage walk-forward impossible : pas assez de données");
         BarSeries optimSeries = new BaseBarSeries();
         BarSeries testSeries = new BaseBarSeries();
         for (int i = 0; i < nOptim; i++) {
