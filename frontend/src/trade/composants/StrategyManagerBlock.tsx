@@ -17,7 +17,7 @@ const StrategyManagerBlock: React.FC = () => {
     setSuccess(null);
     setError(null);
     try {
-      const res = await fetch(`/api/stra${endpoint}`);
+      const res = await fetch(`${endpoint}`);
       if (!res.ok) throw new Error('Erreur serveur');
       setSuccess(`${label} : succès !`);
     } catch (e) {
@@ -37,7 +37,7 @@ const StrategyManagerBlock: React.FC = () => {
           <Button
             variant="contained"
             color="primary"
-            onClick={() => callApi('/strategies/db/update-assets', 'Update Assets')}
+            onClick={() => callApi('/api/stra/strategies/db/update-assets', 'Update Assets')}
             disabled={loading !== null}
           >
             {loading === 'Update Assets' ? <CircularProgress size={24} /> : 'Update Assets'}
@@ -45,7 +45,7 @@ const StrategyManagerBlock: React.FC = () => {
           <Button
             variant="contained"
             color="secondary"
-            onClick={() => callApi('/strategies/db/update-daily-valu', 'Update Daily Value')}
+            onClick={() => callApi('/api/stra/strategies/db/update-daily-valu', 'Update Daily Value')}
             disabled={loading !== null}
           >
             {loading === 'Update Daily Value' ? <CircularProgress size={24} /> : 'Update Daily Value'}
@@ -53,10 +53,18 @@ const StrategyManagerBlock: React.FC = () => {
           <Button
             variant="contained"
             color="success"
-            onClick={() => callApi('/strategies/calcul_croised_strategies', 'Calcule croised strategies')}
+            onClick={() => callApi('/api/stra/strategies/calcul_croised_strategies', 'Calcule croised strategies')}
             disabled={loading !== null}
           >
             {loading === 'Calcule croised strategies' ? <CircularProgress size={24} /> : 'Calcule croised strategies'}
+          </Button>
+          <Button
+            variant="contained"
+            color="info"
+            onClick={() => callApi('/api/best-combination/calcul', 'Calcule mix strategies')}
+            disabled={loading !== null}
+          >
+            {loading === 'Calcule mix strategies' ? <CircularProgress size={24} /> : 'Calcule mix strategies'}
           </Button>
         </Stack>
         {success && <Alert severity="success" sx={{ mt: 2 }}>{success}</Alert>}
