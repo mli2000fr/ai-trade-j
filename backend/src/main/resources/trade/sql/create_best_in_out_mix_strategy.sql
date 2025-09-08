@@ -1,8 +1,10 @@
-CREATE TABLE best_in_out_mix_strategy (
+CREATE TABLE trade_ai.best_in_out_mix_strategy (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     symbol VARCHAR(32) NOT NULL,
     in_strategy_names TEXT NOT NULL,
     out_strategy_names TEXT NOT NULL,
+    in_params TEXT,
+    out_params TEXT,
     rendement DOUBLE,
     trade_count INT,
     win_rate DOUBLE,
@@ -12,8 +14,7 @@ CREATE TABLE best_in_out_mix_strategy (
     avg_trade_bars DOUBLE,
     max_trade_gain DOUBLE,
     max_trade_loss DOUBLE,
-    in_params TEXT,
-    out_params TEXT,
+    score_swing_trade DOUBLE,
     create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -21,7 +22,5 @@ CREATE TABLE best_in_out_mix_strategy (
             initial_capital DOUBLE,
             risk_per_trade DOUBLE,
             stop_loss_pct DOUBLE,
-            take_profit_pct DOUBLE,
-
-        score_swing_trade DOUBLE,
+            take_profit_pct DOUBLE
 );

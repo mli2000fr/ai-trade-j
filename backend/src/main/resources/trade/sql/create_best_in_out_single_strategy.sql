@@ -1,4 +1,4 @@
-CREATE TABLE best_in_out_single_strategy (
+CREATE TABLE trade_ai.best_in_out_single_strategy (
     symbol VARCHAR(20) PRIMARY KEY,
     entry_strategy_name VARCHAR(50),
     entry_strategy_params TEXT,
@@ -13,6 +13,7 @@ CREATE TABLE best_in_out_single_strategy (
     avg_trade_bars DOUBLE,
     max_trade_gain DOUBLE,
     max_trade_loss DOUBLE,
+    score_swing_trade DOUBLE,
     created_date DATE,
     updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -21,8 +22,6 @@ CREATE TABLE best_in_out_single_strategy (
         risk_per_trade DOUBLE,
         stop_loss_pct DOUBLE,
         take_profit_pct DOUBLE
-
-        score_swing_trade DOUBLE,
 );
 
 Voici l’explication de chaque colonne de la table best_in_out_strategy :
