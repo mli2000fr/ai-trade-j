@@ -732,8 +732,8 @@ public class AlpacaService {
     public String getHistoricalBarsJson(String symbol, int limit) {
         return getHistoricalBars(symbol, TradeUtils.getStartDate(limit), TradeUtils.getDateToDay(), "1Day");
     }
-    public List<DailyValue> getHistoricalBars(String symbol, String startDate) {
-        String json = getHistoricalBars(symbol, startDate, TradeUtils.getDateToDay(), "1Day");
+    public List<DailyValue> getHistoricalBars(String symbol, String startDate, String endDate) {
+        String json = getHistoricalBars(symbol, startDate, endDate == null ? TradeUtils.getDateToDay() : endDate, "1Day");
         List<DailyValue> result = new ArrayList<>();
         if (json == null || json.isEmpty()) return result;
         try {

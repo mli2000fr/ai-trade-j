@@ -89,6 +89,11 @@ public class StrategieController {
         return ResponseEntity.ok(true);
     }
 
+    @GetMapping("/strategies/db/update-daily-valu-pre-complement")
+    public ResponseEntity<Boolean> updateDBDailyValuePreComplement(@RequestParam(value = "symbol", required = false) String symbol) {
+        strategieHelper.addDailyValuePrecedent(symbol);
+        return ResponseEntity.ok(true);
+    }
 
 
     @GetMapping("/strategies/test_croised_strategies")

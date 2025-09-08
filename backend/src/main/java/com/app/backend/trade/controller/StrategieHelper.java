@@ -65,7 +65,7 @@ public class StrategieHelper {
 
     public boolean testCombinedSignalOnClosePrices(String symbol, boolean isEntry) {
 
-        List<DailyValue> listeValues = alpacaService.getHistoricalBars(symbol, TradeUtils.getStartDate(700));
+        List<DailyValue> listeValues = alpacaService.getHistoricalBars(symbol, TradeUtils.getStartDate(700), null);
         BarSeries series = toBarSeries(listeValues);
         int lastIndex = series.getEndIndex();
         return getCombinedSignal(series, lastIndex, isEntry);
@@ -142,7 +142,7 @@ public class StrategieHelper {
             dateStart = lastKnown.plusDays(1).toString(); // format YYYY-MM-DD
         }
         if (!isUpToDate) {
-            List<DailyValue> listeValues = this.alpacaService.getHistoricalBars(symbol, dateStart);
+            List<DailyValue> listeValues = this.alpacaService.getHistoricalBars(symbol, dateStart, null);
             if (listeValues == null || listeValues.isEmpty()) {
                 logger.info("Aucune donnée historique récupérée d'Alpaca pour {} depuis {}", symbol, dateStart);
             } else {
@@ -319,6 +319,30 @@ public class StrategieHelper {
         }
     }
 
+    public  List<DailyValue> addDailyValuePrecedent(String symbol) {
+
+        // 1. Chercher la date la plus ancien pour ce symbol dans la table daily_value
+        String sql = "SELECT MIN(date) FROM daily_value WHERE symbol = ?";
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.LocalDate startDay = today.minusDays(2000);
+        java.sql.Date firstHistoDate;
+        try {
+            firstHistoDate = jdbcTemplate.queryForObject(sql, new Object[]{symbol}, java.sql.Date.class);
+        } catch (Exception e) {
+            logger.warn("Aucune date trouvée pour le symbole {} dans daily_value ou erreur SQL: {}", symbol, e.getMessage());
+            firstHistoDate = java.sql.Date.valueOf(java.time.LocalDate.now());
+        }
+        java.time.LocalDate firstKnown = firstHistoDate.toLocalDate();
+        java.time.LocalDate firstTradingDay = getLastTradingDayBefore(startDay);
+        if(firstKnown.isAfter(firstTradingDay)){
+            List<DailyValue> listeValues =  this.alpacaService.getHistoricalBars(symbol, firstTradingDay.toString(), firstKnown.minusDays(1).toString());
+            for(DailyValue dv : listeValues){
+                this.insertDailyValue(symbol, dv);
+            }
+        }
+        return  new ArrayList<>();
+    }
+
 
     public  List<DailyValue> updateDailyValue(String symbol) {
 
@@ -335,7 +359,7 @@ public class StrategieHelper {
         java.time.LocalDate today = java.time.LocalDate.now();
         if (lastDate == null) {
             // Si aucune ligne trouvée, on prend la date de start par défaut
-            dateStart = TradeUtils.getStartDate(800);
+            dateStart = TradeUtils.getStartDate(TradeConstant.HISTORIQUE_DAILY_VALUE);
         } else {
             java.time.LocalDate lastTradingDay = getLastTradingDayBefore(today);
             java.time.LocalDate lastKnown = lastDate.toLocalDate();
@@ -347,7 +371,7 @@ public class StrategieHelper {
             dateStart = lastKnown.plusDays(1).toString(); // format YYYY-MM-DD
         }
         if (!isUpToDate) {
-            return this.alpacaService.getHistoricalBars(symbol, dateStart);
+            return this.alpacaService.getHistoricalBars(symbol, dateStart, null);
         }
         return  new ArrayList<>();
     }
