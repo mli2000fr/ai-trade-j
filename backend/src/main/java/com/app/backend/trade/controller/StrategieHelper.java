@@ -66,18 +66,6 @@ public class StrategieHelper {
         return result;
     }
 
-    /**
-     * Teste le signal combiné sur les prix de clôture pour un symbole donné.
-     * @param symbol symbole à tester
-     * @param isEntry true pour entrée, false pour sortie
-     * @return true si le signal est satisfait
-     */
-    public boolean testCombinedSignalOnClosePrices(String symbol, boolean isEntry) {
-        List<DailyValue> listeValues = alpacaService.getHistoricalBars(symbol, TradeUtils.getStartDate(700), null);
-        BarSeries series = TradeUtils.toBarSeries(listeValues);
-        int lastIndex = series.getEndIndex();
-        return getCombinedSignal(series, lastIndex, isEntry);
-    }
 
     /**
      * Met à jour les valeurs journalières pour tous les symboles actifs en base.
@@ -150,26 +138,6 @@ public class StrategieHelper {
         return TradeUtils.mapping(getDailyValuesFromDb(symbol, limit));
     }
 
-    /**
-     * Met à jour les valeurs journalières pour les symboles manquants en base.
-     */
-    public void updateDBDailyValuAllSymbolsComplement(){
-        List<String> listeDbSymbols = this.getAllAssetSymbolsComplementFromDb();
-        int error = 0;
-        for(String symbol : listeDbSymbols){
-            try{
-                List<DailyValue> listeValues = this.updateDailyValue(symbol);
-                for(DailyValue dv : listeValues){
-                    this.insertDailyValue(symbol, dv);
-                }
-                Thread.sleep(200);
-            }catch(Exception e){
-                error++;
-                TradeUtils.log("Erreur updateDailyValue("+symbol+") : " + e.getMessage());
-            }
-        }
-        TradeUtils.log("updateDBDailyValuAllSymbols: total "+listeDbSymbols.size()+", error" + error);
-    }
 
     /**
      * Met à jour la base d'actifs depuis Alpaca.
@@ -179,14 +147,6 @@ public class StrategieHelper {
         this.saveSymbolsToDatabase(listeSymbols);
     }
 
-    /**
-     * Récupère les valeurs journalières d'un symbole depuis la base.
-     * @param symbol symbole
-     * @return liste de DailyValue
-     */
-    public List<DailyValue> getDailyValuesFromDatabase(String symbol) {
-        return this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES);
-    }
 
     /**
      * Insère une valeur journalière en base pour un symbole.
@@ -297,34 +257,6 @@ public class StrategieHelper {
         }
     }
 
-    /**
-     * Ajoute les valeurs journalières précédentes pour un symbole.
-     * @param symbol symbole
-     * @return liste de DailyValue ajoutées
-     */
-    public  List<DailyValue> addDailyValuePrecedent(String symbol) {
-
-        // 1. Chercher la date la plus ancien pour ce symbol dans la table daily_value
-        String sql = "SELECT MIN(date) FROM daily_value WHERE symbol = ?";
-        java.time.LocalDate today = java.time.LocalDate.now();
-        java.time.LocalDate startDay = today.minusDays(2000);
-        java.sql.Date firstHistoDate;
-        try {
-            firstHistoDate = jdbcTemplate.queryForObject(sql, new Object[]{symbol}, java.sql.Date.class);
-        } catch (Exception e) {
-            logger.warn("Aucune date trouvée pour le symbole {} dans daily_value ou erreur SQL: {}", symbol, e.getMessage());
-            firstHistoDate = java.sql.Date.valueOf(java.time.LocalDate.now());
-        }
-        java.time.LocalDate firstKnown = firstHistoDate.toLocalDate();
-        java.time.LocalDate firstTradingDay = TradeUtils.getLastTradingDayBefore(startDay);
-        if(firstKnown.isAfter(firstTradingDay)){
-            List<DailyValue> listeValues =  this.alpacaService.getHistoricalBars(symbol, firstTradingDay.toString(), firstKnown.minusDays(1).toString());
-            for(DailyValue dv : listeValues){
-                this.insertDailyValue(symbol, dv);
-            }
-        }
-        return  new ArrayList<>();
-    }
 
     /**
      * Met à jour les valeurs journalières pour un symbole.
@@ -363,50 +295,6 @@ public class StrategieHelper {
         return  new ArrayList<>();
     }
 
-
-    /**
-     * Teste toutes les combinaisons croisées de stratégies pour un symbole.
-     * @param symbol symbole
-     */
-    public void testAllCrossedStrategies(String symbol){
-        BestInOutStrategy bestCombo = optimseBestInOutByWalkForward(symbol);
-        //this.saveBestInOutStrategy(symbol, result);
-
-        //BestInOutStrategy bestCombo = this.getBestInOutStrategy(symbol);
-        System.out.println("=== RESTITUTION CROISÉS IN/OUT ===" + symbol);
-        if (bestCombo != null) {
-            System.out.println("IN: " + bestCombo.entryName + " | OUT: " + bestCombo.exitName + " | Rendement: " + String.format("%.4f", bestCombo.result.rendement * 100) + "% | Trades: " + bestCombo.result.tradeCount);
-            com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
-            System.out.println("Paramètres IN: " + gson.toJson(bestCombo.entryParams));
-            System.out.println("Paramètres OUT: " + gson.toJson(bestCombo.exitParams));
-        }
-    }
-
-    /**
-     * Calcule le score swing trade pour chaque stratégie en base.
-     */
-    public void calculScoreST(){
-        String selectSql = "SELECT symbol, rendement, max_drawdown, trade_count, win_rate, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss FROM best_in_out_single_strategy";
-        List<java.util.Map<String, Object>> rows = jdbcTemplate.queryForList(selectSql);
-        for (java.util.Map<String, Object> row : rows) {
-            RiskResult result = new RiskResult(
-                (Double) row.get("rendement"),
-                (Double) row.get("max_drawdown"),
-                (Integer) row.get("trade_count"),
-                (Double) row.get("win_rate"),
-                (Double) row.get("avg_pnl"),
-                (Double) row.get("profit_factor"),
-                (Double) row.get("avg_trade_bars"),
-                (Double) row.get("max_trade_gain"),
-                (Double) row.get("max_trade_loss"),
-                0.0 // scoreSwingTrade temporaire
-            );
-            double scoreST = TradeUtils.calculerScoreSwingTrade(result);
-            String symbol = (String) row.get("symbol");
-            String updateSql = "UPDATE best_in_out_single_strategy SET score_swing_trade = ? WHERE symbol = ?";
-            jdbcTemplate.update(updateSql, scoreST, symbol);
-        }
-    }
 
     /**
      * Calcule les stratégies croisées pour tous les symboles éligibles.
