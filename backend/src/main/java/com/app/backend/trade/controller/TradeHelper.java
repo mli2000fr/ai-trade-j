@@ -2,7 +2,6 @@ package com.app.backend.trade.controller;
 
 import com.app.backend.trade.exception.DayTradingException;
 import com.app.backend.trade.model.*;
-import com.app.backend.trade.model.alpaca.AlpacaAsset;
 import com.app.backend.trade.model.alpaca.Order;
 import com.app.backend.trade.service.*;
 import com.app.backend.trade.util.TradeUtils;
@@ -13,7 +12,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 import java.lang.reflect.Type;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -51,11 +49,19 @@ public class TradeHelper {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /**
+     * Récupère le portefeuille du compte donné.
+     * @param compte CompteEntity
+     * @return Portfolio
+     */
     public Portfolio getPortfolio(CompteEntity compte) {
         return alpacaService.getPortfolio(compte);
     }
 
-
+    /**
+     * Vérifie la validité d'une liste de symboles (séparés par virgule).
+     * @param symbols Liste de symboles sous forme de chaîne
+     */
     public void isSymbolsValid(String symbols) {
         for (String symbol : symbols.split(",")) {
             symbol = symbol.trim();
@@ -64,6 +70,10 @@ public class TradeHelper {
         }
     }
 
+    /**
+     * Vérifie si un symbole est éligible (présent et actif en base).
+     * @param symbol Symbole à vérifier
+     */
     public void isAssetSymbolEligible(String symbol) {
         String sql = "SELECT COUNT(*) FROM alpaca_asset WHERE symbol = ? AND eligible = true";
         Integer count = jdbcTemplate.queryForObject(sql, new Object[]{symbol}, Integer.class);
@@ -72,7 +82,13 @@ public class TradeHelper {
         }
     }
 
-
+    /**
+     * Exécute le trading automatique IA pour une liste de symboles.
+     * @param compte CompteEntity
+     * @param symbols Liste de symboles
+     * @param analyseGpt Analyse IA optionnelle
+     * @return ReponseAuto
+     */
     public ReponseAuto tradeAIAuto(CompteEntity compte, List<String> symbols, String analyseGpt) {
 
         if (symbols == null || symbols.isEmpty()) {
@@ -102,7 +118,7 @@ public class TradeHelper {
             symbol = symbol.trim();
             if (symbol.isEmpty()) continue;
             InfosAction infosAction = this.getInfosAction(compte, symbol, true);
-            Map<String, Object> variables = TradeUtils.getStringObjectMap(infosAction);
+            Map<String, Object> variables = TradeUtils.getStringObjectMap(infosAction); // Utilitaire déplacé
             promptFinal.append(getPromptWithValues(promptSymbol, variables));
             sleepForRateLimit();
         }
@@ -116,6 +132,12 @@ public class TradeHelper {
 
     }
 
+    /**
+     * Traite la réponse IA et prépare la structure ReponseAuto.
+     * @param compte CompteEntity
+     * @param response Réponse IA
+     * @return ReponseAuto
+     */
     private ReponseAuto processAIAuto(CompteEntity compte, ChatGptResponse response) {
         String[] parts = response.getMessage() != null ? response.getMessage().split("===") : new String[0];
         String orders = parts.length > 0 ? parts[0].trim() : "";
@@ -146,6 +168,13 @@ public class TradeHelper {
         }
     }
 
+    /**
+     * Exécute une liste d'ordres pour le compte sélectionné.
+     * @param compte CompteEntity
+     * @param idGpt identifiant GPT
+     * @param orders liste d'ordres
+     * @return liste d'ordres mise à jour
+     */
     public List<OrderRequest> processOrders(CompteEntity compte, String idGpt, List<OrderRequest> orders) {
         if (orders == null) return null;
         for (OrderRequest order : orders) {
@@ -165,10 +194,18 @@ public class TradeHelper {
         return orders;
     }
 
+    /**
+     * Vérifie la validité d'un ordre.
+     * @param order OrderRequest
+     * @return true si valide
+     */
     private boolean isOrderValid(OrderRequest order) {
         return order != null && order.symbol != null && order.qty != null && order.qty > 0 && order.side != null;
     }
 
+    /**
+     * Temporisation pour respecter le rate limit API.
+     */
     private void sleepForRateLimit() {
         try {
             Thread.sleep(61000);
@@ -178,6 +215,12 @@ public class TradeHelper {
         }
     }
 
+    /**
+     * Remplace les variables dans le template de prompt.
+     * @param promptTemplate template
+     * @param variables map clé/valeur
+     * @return prompt final
+     */
     private String getPromptWithValues(String promptTemplate, Map<String, Object> variables) {
         String prompt = promptTemplate;
         for (Map.Entry<String, Object> entry : variables.entrySet()) {
@@ -191,6 +234,13 @@ public class TradeHelper {
         return prompt;
     }
 
+    /**
+     * Récupère les informations d'une action (symbol).
+     * @param compte CompteEntity
+     * @param symbol symbole
+     * @param withPortfolio inclure le portefeuille
+     * @return InfosAction
+     */
     private InfosAction getInfosAction(CompteEntity compte, String symbol, boolean withPortfolio) {
         String portfolioJson = null;
         if (withPortfolio) {
@@ -198,7 +248,6 @@ public class TradeHelper {
             portfolioJson = new Gson().toJson(portfolio);
         }
         Double lastPrice = alpacaService.getLastPrice(compte, symbol);
-        //String data = twelveDataService.getDataAction(symbol);
         String historical = alpacaService.getHistoricalBarsJson(symbol, 200);
         String ema20 = twelveDataService.getEMA20(symbol);
         String ema50 = twelveDataService.getEMA50(symbol);
