@@ -1,59 +1,33 @@
 package com.app.backend.model;
 
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
+@Builder
 @Getter
 @Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class RiskResult {
     /** Rendement total du backtest (capital final / capital initial - 1) */
-    public final double rendement;
+    public double rendement;
     /** Drawdown maximal observé (plus forte baisse du capital) */
-    public final double maxDrawdown;
+    public double maxDrawdown;
     /** Nombre total de trades réalisés */
-    public final int tradeCount;
+    public int tradeCount;
     /** Pourcentage de trades gagnants (win rate) */
-    public final double winRate;
+    public double winRate;
     /** Gain ou perte moyen par trade */
-    public final double avgPnL;
+    public double avgPnL;
     /** Profit factor (somme des gains / somme des pertes) */
-    public final double profitFactor;
+    public double profitFactor;
     /** Nombre moyen de bougies par trade (durée moyenne d'un trade) */
-    public final double avgTradeBars;
+    public double avgTradeBars;
     /** Maximum gain réalisé sur un trade */
-    public final double maxTradeGain;
+    public double maxTradeGain;
     /** Maximum perte réalisée sur un trade */
-    public final double maxTradeLoss;
+    public double maxTradeLoss;
 
     public double scoreSwingTrade = 0;
 
-    public RiskResult(double rendement, double maxDrawdown, int tradeCount, double winRate, double avgPnL, double profitFactor, double avgTradeBars, double maxTradeGain, double maxTradeLoss) {
-        this.rendement = rendement;
-        this.maxDrawdown = maxDrawdown;
-        this.tradeCount = tradeCount;
-        this.winRate = winRate;
-        this.avgPnL = avgPnL;
-        this.profitFactor = profitFactor;
-        this.avgTradeBars = avgTradeBars;
-        this.maxTradeGain = maxTradeGain;
-        this.maxTradeLoss = maxTradeLoss;
-    }
-
-    public RiskResult(double rendement, double maxDrawdown, int tradeCount, double winRate, double avgPnL, double profitFactor, double avgTradeBars, double maxTradeGain, double maxTradeLoss, double scoreSwingTrade) {
-        this.rendement = rendement;
-        this.maxDrawdown = maxDrawdown;
-        this.tradeCount = tradeCount;
-        this.winRate = winRate;
-        this.avgPnL = avgPnL;
-        this.profitFactor = profitFactor;
-        this.avgTradeBars = avgTradeBars;
-        this.maxTradeGain = maxTradeGain;
-        this.maxTradeLoss = maxTradeLoss;
-        this.scoreSwingTrade = scoreSwingTrade;
-    }
-
-    public void setScoreSwingTrade(double scoreSwingTrade) {
-        this.scoreSwingTrade = scoreSwingTrade;
-    }
 }
 

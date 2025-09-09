@@ -14,9 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
-import org.ta4j.core.BaseBarSeries;
 import org.ta4j.core.Rule;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -383,7 +381,8 @@ public class StrategieHelper {
                 RiskResult result = strategieBackTest.backtestStrategyRisk(combined, testSeries);
                 double scoreST =  TradeUtils.calculerScoreSwingTrade(result);
                 result.setScoreSwingTrade(scoreST);
-                System.out.println("IN: " + entryName + " " + gson.toJson(entryParams) +
+                System.out.println("Symbol: " + symbol +
+                                   " | IN: " + entryName + " " + gson.toJson(entryParams) +
                                    " | OUT: " + exitName + " " + gson.toJson(exitParams) +
                                    " | Rendement: " + String.format("%.4f", result.rendement * 100) + "%"
                                    + " | Trades: " + result.tradeCount
@@ -392,7 +391,21 @@ public class StrategieHelper {
                         + " | Score ST: " + String.format("%.2f", scoreST * 100) + "%");
                 if (result.rendement > bestPerf) {
                     bestPerf = result.rendement;
-                    bestCombo = new BestInOutStrategy(symbol, entryName, entryParams, exitName, exitParams, result, StrategieBackTest.INITIAL_CAPITAL, StrategieBackTest.RISK_PER_TRADE, StrategieBackTest.STOP_LOSS_PCT, StrategieBackTest.TAKE_PROFIL_PCT, listeValus.size());
+                    bestCombo = BestInOutStrategy.builder()
+                            .symbol(symbol)
+                            .entryName(entryName)
+                            .exitName(exitName)
+                            .entryParams(entryParams)
+                            .exitParams(exitParams)
+                            .contextOptim(ContextOptim.builder()
+                                    .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
+                                    .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
+                                    .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
+                                    .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
+                                    .nbSimples(listeValus.size())
+                                    .build())
+                            .result(result)
+                            .build();
                 }
             }
         }
@@ -487,11 +500,11 @@ public class StrategieHelper {
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
                 best.result.scoreSwingTrade,
-                best.initialCapital,
-                best.riskPerTrade,
-                best.stopLossPct,
-                best.takeProfitPct,
-                best.nbSimples,
+                best.contextOptim.initialCapital,
+                best.contextOptim.riskPerTrade,
+                best.contextOptim.stopLossPct,
+                best.contextOptim.takeProfitPct,
+                best.contextOptim.nbSimples,
                 symbol
             );
         } else {
@@ -521,11 +534,11 @@ public class StrategieHelper {
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
                 best.result.scoreSwingTrade,
-                best.initialCapital,
-                best.riskPerTrade,
-                best.stopLossPct,
-                best.takeProfitPct,
-                best.nbSimples,
+                best.contextOptim.initialCapital,
+                best.contextOptim.riskPerTrade,
+                best.contextOptim.stopLossPct,
+                best.contextOptim.takeProfitPct,
+                best.contextOptim.nbSimples,
                 java.sql.Date.valueOf(java.time.LocalDate.now())
             );
         }
@@ -544,26 +557,34 @@ public class StrategieHelper {
                 String entryParamsJson = rs.getString("entry_strategy_params");
                 String exitName = rs.getString("exit_strategy_name");
                 String exitParamsJson = rs.getString("exit_strategy_params");
-                int nbSimples = rs.getInt("nb_simples");
-                RiskResult result = new RiskResult(
-                    rs.getDouble("rendement"),
-                    rs.getDouble("max_drawdown"),
-                    rs.getInt("trade_count"),
-                    rs.getDouble("win_rate"),
-                    rs.getDouble("avg_pnl"),
-                    rs.getDouble("profit_factor"),
-                    rs.getDouble("avg_trade_bars"),
-                    rs.getDouble("max_trade_gain"),
-                    rs.getDouble("max_trade_loss"),
-                    rs.getDouble("score_swing_trade")
-                );
                 Object entryParams = TradeUtils.parseStrategyParams(entryName, entryParamsJson);
                 Object exitParams = TradeUtils.parseStrategyParams(exitName, exitParamsJson);
-                double initialCapital = rs.getDouble("initial_capital");
-                double riskPerTrade = rs.getDouble("risk_per_trade");
-                double stopLossPct = rs.getDouble("stop_loss_pct");
-                double takeProfitPct = rs.getDouble("take_profit_pct");
-                return new BestInOutStrategy(symbol, entryName, entryParams, exitName, exitParams, result, initialCapital, riskPerTrade, stopLossPct, takeProfitPct, nbSimples);
+                BestInOutStrategy bestIO =  BestInOutStrategy.builder()
+                        .symbol(symbol)
+                        .entryName(entryName)
+                        .exitName(exitName)
+                        .entryParams(entryParams)
+                        .exitParams(exitParams)
+                        .contextOptim(ContextOptim.builder()
+                                .initialCapital(rs.getDouble("initial_capital"))
+                                .riskPerTrade(rs.getDouble("risk_per_trade"))
+                                .stopLossPct(rs.getDouble("stop_loss_pct"))
+                                .takeProfitPct(rs.getDouble("take_profit_pct"))
+                                .nbSimples(rs.getInt("nb_simples"))
+                                .build())
+                        .result(RiskResult.builder()
+                                .rendement(rs.getDouble("rendement"))
+                                .tradeCount(rs.getInt("trade_count"))
+                                .winRate(rs.getDouble("win_rate"))
+                                .maxDrawdown(rs.getDouble("max_drawdown"))
+                                .avgPnL(rs.getDouble("avg_pnl"))
+                                .profitFactor(rs.getDouble("profit_factor"))
+                                .avgTradeBars(rs.getDouble("avg_trade_bars"))
+                                .maxTradeGain(rs.getDouble("max_trade_gain"))
+                                .maxTradeLoss(rs.getDouble("max_trade_loss"))
+                                .scoreSwingTrade(rs.getDouble("score_swing_trade"))
+                        .build());
+                return bestIO;
             }, symbol);
         } catch (org.springframework.dao.EmptyResultDataAccessException e) {
             logger.warn("Aucun BestInOutStrategy trouvé pour le symbole: {}", symbol);
@@ -587,31 +608,38 @@ public class StrategieHelper {
             sql += " LIMIT " + limit;
         }
         List<BestInOutStrategy> results = jdbcTemplate.query(sql, (rs, rowNum) -> {
-            String symbol = rs.getString("symbol");
             String entryName = rs.getString("entry_strategy_name");
             String entryParamsJson = rs.getString("entry_strategy_params");
             String exitName = rs.getString("exit_strategy_name");
             String exitParamsJson = rs.getString("exit_strategy_params");
-            int nbSimples = rs.getInt("nb_simples");
-            RiskResult result = new RiskResult(
-                rs.getDouble("rendement"),
-                rs.getDouble("max_drawdown"),
-                rs.getInt("trade_count"),
-                rs.getDouble("win_rate"),
-                rs.getDouble("avg_pnl"),
-                rs.getDouble("profit_factor"),
-                rs.getDouble("avg_trade_bars"),
-                rs.getDouble("max_trade_gain"),
-                rs.getDouble("max_trade_loss"),
-                rs.getDouble("score_swing_trade")
-            );
             Object entryParams = TradeUtils.parseStrategyParams(entryName, entryParamsJson);
             Object exitParams = TradeUtils.parseStrategyParams(exitName, exitParamsJson);
-            double initialCapital = rs.getDouble("initial_capital");
-            double riskPerTrade = rs.getDouble("risk_per_trade");
-            double stopLossPct = rs.getDouble("stop_loss_pct");
-            double takeProfitPct = rs.getDouble("take_profit_pct");
-            return new BestInOutStrategy(symbol, entryName, entryParams, exitName, exitParams, result, initialCapital, riskPerTrade, stopLossPct, takeProfitPct, nbSimples);
+            BestInOutStrategy bestIO =  BestInOutStrategy.builder()
+                    .symbol(rs.getString("symbol"))
+                    .entryName(entryName)
+                    .exitName(exitName)
+                    .entryParams(entryParams)
+                    .exitParams(exitParams)
+                    .contextOptim(ContextOptim.builder()
+                            .initialCapital(rs.getDouble("initial_capital"))
+                            .riskPerTrade(rs.getDouble("risk_per_trade"))
+                            .stopLossPct(rs.getDouble("stop_loss_pct"))
+                            .takeProfitPct(rs.getDouble("take_profit_pct"))
+                            .nbSimples(rs.getInt("nb_simples"))
+                            .build())
+                    .result(RiskResult.builder()
+                            .rendement(rs.getDouble("rendement"))
+                            .tradeCount(rs.getInt("trade_count"))
+                            .winRate(rs.getDouble("win_rate"))
+                            .maxDrawdown(rs.getDouble("max_drawdown"))
+                            .avgPnL(rs.getDouble("avg_pnl"))
+                            .profitFactor(rs.getDouble("profit_factor"))
+                            .avgTradeBars(rs.getDouble("avg_trade_bars"))
+                            .maxTradeGain(rs.getDouble("max_trade_gain"))
+                            .maxTradeLoss(rs.getDouble("max_trade_loss"))
+                            .scoreSwingTrade(rs.getDouble("score_swing_trade"))
+                            .build());
+            return bestIO;
         });
         return results;
     }
