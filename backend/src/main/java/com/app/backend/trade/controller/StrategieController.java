@@ -1,115 +1,58 @@
 package com.app.backend.trade.controller;
 
-import com.app.backend.trade.model.SetActiveStrategiesRequest;
-import com.app.backend.trade.model.SetCombinationModeRequest;
 import com.app.backend.trade.model.SignalType;
-import com.app.backend.trade.model.StrategyListDto;
-import com.app.backend.trade.service.StrategyService;
 import com.app.backend.trade.strategy.BestInOutStrategy;
-import com.app.backend.trade.strategy.StrategyManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/stra")
 public class StrategieController {
-    private final StrategyService strategyService;
     private final StrategieHelper strategieHelper;
 
     @Autowired
-    public StrategieController(StrategieHelper strategieHelper,
-                           StrategyService strategyService) {
+    public StrategieController(StrategieHelper strategieHelper) {
         this.strategieHelper = strategieHelper;
-        this.strategyService = strategyService;
-    }
-    /**
-     * Liste les stratégies disponibles, actives et le mode de combinaison.
-     */
-    @GetMapping("/strategies")
-    public ResponseEntity<StrategyListDto> getStrategies() {
-        return ResponseEntity.ok(new StrategyListDto(
-                strategyService.getAllStrategyNames(),
-                strategyService.getActiveStrategyNames(),
-                strategyService.getStrategyManager().getCombinationMode().name(),
-                strategyService.getLogs()
-        ));
     }
 
     /**
-     * Modifie dynamiquement les stratégies actives.
+     * Met à jour la base d'actifs en base de données.
+     * @return true si la mise à jour s'est déroulée correctement
      */
-    @PostMapping("/strategies/active")
-    public ResponseEntity<Void> setActiveStrategies(@RequestBody SetActiveStrategiesRequest req) {
-        strategyService.setActiveStrategiesByNames(req.getStrategyNames());
-        return ResponseEntity.ok().build();
-    }
-
-    /**
-     * Modifie dynamiquement le mode de combinaison.
-     */
-    @PostMapping("/strategies/mode")
-    public ResponseEntity<Void> setCombinationMode(@RequestBody SetCombinationModeRequest req) {
-        strategyService.setCombinationMode(StrategyManager.CombinationMode.valueOf(req.getCombinationMode()));
-        return ResponseEntity.ok().build();
-    }
-
-    /**
-     * Teste le signal combiné sur une série de prix de clôture fournie.
-     * Body: { "closePrices": [123.4, 124.1, ...], "isEntry": true }
-     * Retourne true si le signal est validé sur la dernière barre.
-     */
-    @GetMapping("/strategies/test-signal")
-    public ResponseEntity<Map<String, Object>> testCombinedSignal(@RequestParam(value = "symbol", required = false) String symbol,
-                                                                  @RequestParam(value = "isEntry", required = false) Boolean isEntry) {
-        boolean result = strategieHelper.testCombinedSignalOnClosePrices(symbol, isEntry);
-        return ResponseEntity.ok(Collections.singletonMap("signal", result));
-    }
-
     @GetMapping("/strategies/db/update-assets")
     public ResponseEntity<Boolean> updateDBAssets() {
         strategieHelper.updateDBAssets();
         return ResponseEntity.ok(true);
     }
 
+    /**
+     * Met à jour les valeurs journalières pour tous les symboles en base de données.
+     * @return true si la mise à jour s'est déroulée correctement
+     */
     @GetMapping("/strategies/db/update-daily-valu")
     public ResponseEntity<Boolean> updateDBDailyValue() {
         strategieHelper.updateDBDailyValuAllSymbols();
         return ResponseEntity.ok(true);
     }
 
-
-    @GetMapping("/strategies/db/update-daily-valu-complement")
-    public ResponseEntity<Boolean> updateDBDailyValueComplement() {
-        strategieHelper.updateDBDailyValuAllSymbolsComplement();
-        return ResponseEntity.ok(true);
-    }
-
-    @GetMapping("/strategies/db/update-daily-valu-pre-complement")
-    public ResponseEntity<Boolean> updateDBDailyValuePreComplement(@RequestParam(value = "symbol", required = false) String symbol) {
-        strategieHelper.addDailyValuePrecedent(symbol);
-        return ResponseEntity.ok(true);
-    }
-
-
-    @GetMapping("/strategies/test_croised_strategies")
-    public ResponseEntity<Boolean> testAllCrossedStrategies(@RequestParam(value = "symbol", required = false) String symbol) {
-        strategieHelper.testAllCrossedStrategies(symbol);
-        return ResponseEntity.ok(true);
-    }
-
-
+    /**
+     * Calcule les stratégies croisées sur l'ensemble des symboles.
+     * @return true si le calcul s'est déroulé correctement
+     */
     @GetMapping("/strategies/calcul_croised_strategies")
     public ResponseEntity<Boolean> calculCroisedStrategies() {
         strategieHelper.calculCroisedStrategies();
         return ResponseEntity.ok(true);
     }
 
-
+    /**
+     * Récupère la liste des meilleures performances d'actions selon le tri et la limite.
+     * @param limit nombre maximum d'actions à retourner (optionnel)
+     * @param sort critère de tri (par défaut rendement)
+     * @return liste des meilleures stratégies BestInOutStrategy
+     */
     @GetMapping("/strategies/best_performance_actions")
     public ResponseEntity<List<BestInOutStrategy>> getBestPerfActions(
             @RequestParam(value = "limit", required = false) Integer limit,
@@ -119,15 +62,15 @@ public class StrategieController {
         return ResponseEntity.ok(lsiteStr);
     }
 
+    /**
+     * Récupère le signal d'indice pour un symbole donné.
+     * @param symbol symbole à analyser (optionnel)
+     * @return type de signal (SignalType)
+     */
     @GetMapping("/strategies/get_indice")
     public ResponseEntity<SignalType> getIndice(@RequestParam(value = "symbol", required = false) String symbol) {
         SignalType st = strategieHelper.getBestInOutSignal(symbol);
         return ResponseEntity.ok(st);
     }
 
-    @GetMapping("/strategies/calculScoreST")
-    public ResponseEntity<Boolean> calculScoreST(@RequestParam(value = "symbol", required = false) String symbol) {
-        strategieHelper.calculScoreST();
-        return ResponseEntity.ok(true);
-    }
 }

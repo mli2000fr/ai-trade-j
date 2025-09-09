@@ -21,15 +21,18 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Classe helper pour la gestion des stratégies, optimisation et accès base de données.
+ * Toutes les méthodes utilitaires ont été déplacées dans TradeUtils.
+ * Cette classe se concentre sur la logique métier et l'accès aux services.
+ */
 @Controller
 public class StrategieHelper {
-
     private static final Logger logger = LoggerFactory.getLogger(StrategieHelper.class);
     private final AlpacaService alpacaService;
     private final StrategyService strategyService;
     private final JdbcTemplate jdbcTemplate;
     private final StrategieBackTest strategieBackTest;
-
     private static final boolean INSERT_ONLY = true;
 
     @Autowired
@@ -44,10 +47,11 @@ public class StrategieHelper {
     }
 
     /**
-     * Retourne un signal d'achat/vente combiné selon les stratégies actives et le mode choisi.
-     * @param series série de prix (BarSeries)
-     * @param isEntry true pour entrée (achat), false pour sortie (vente)
-     * @return true si le signal est validé
+     * Calcule le signal combiné d'entrée ou de sortie pour une série de prix.
+     * @param series série de prix
+     * @param index index à tester
+     * @param isEntry true pour entrée, false pour sortie
+     * @return true si le signal est satisfait
      */
     public boolean getCombinedSignal(BarSeries series, int index, boolean isEntry) {
         Rule rule = isEntry ? strategyService.getEntryRule(series) : strategyService.getExitRule(series);
@@ -62,15 +66,22 @@ public class StrategieHelper {
         return result;
     }
 
-
+    /**
+     * Teste le signal combiné sur les prix de clôture pour un symbole donné.
+     * @param symbol symbole à tester
+     * @param isEntry true pour entrée, false pour sortie
+     * @return true si le signal est satisfait
+     */
     public boolean testCombinedSignalOnClosePrices(String symbol, boolean isEntry) {
-
         List<DailyValue> listeValues = alpacaService.getHistoricalBars(symbol, TradeUtils.getStartDate(700), null);
-        BarSeries series = toBarSeries(listeValues);
+        BarSeries series = TradeUtils.toBarSeries(listeValues);
         int lastIndex = series.getEndIndex();
         return getCombinedSignal(series, lastIndex, isEntry);
     }
 
+    /**
+     * Met à jour les valeurs journalières pour tous les symboles actifs en base.
+     */
     public void updateDBDailyValuAllSymbols(){
         List<String> listeDbSymbols = this.getAllAssetSymbolsFromDb();
         int error = 0;
@@ -90,33 +101,11 @@ public class StrategieHelper {
     }
 
     /**
-     * Liste des jours fériés boursiers (à adapter selon le marché, ici exemple NYSE 2025)
+     * Récupère et met à jour les valeurs journalières en base, puis retourne la série correspondante.
+     * @param symbol symbole à traiter
+     * @param limit nombre de valeurs à retourner
+     * @return BarSeries
      */
-    private static final java.util.Set<java.time.LocalDate> MARKET_HOLIDAYS = java.util.Set.of(
-        java.time.LocalDate.of(2025, 1, 1),   // New Year's Day
-        java.time.LocalDate.of(2025, 1, 20),  // Martin Luther King Jr. Day
-        java.time.LocalDate.of(2025, 2, 17),  // Presidents' Day
-        java.time.LocalDate.of(2025, 4, 18),  // Good Friday
-        java.time.LocalDate.of(2025, 5, 26),  // Memorial Day
-        java.time.LocalDate.of(2025, 7, 4),   // Independence Day
-        java.time.LocalDate.of(2025, 9, 1),   // Labor Day
-        java.time.LocalDate.of(2025, 11, 27), // Thanksgiving Day
-        java.time.LocalDate.of(2025, 12, 25)  // Christmas Day
-    );
-
-    /**
-     * Retourne le dernier jour de cotation avant la date passée (week-end et jours fériés inclus).
-     */
-    private java.time.LocalDate getLastTradingDayBefore(java.time.LocalDate date) {
-        java.time.LocalDate d = date.minusDays(1);
-        while (d.getDayOfWeek() == java.time.DayOfWeek.SATURDAY ||
-               d.getDayOfWeek() == java.time.DayOfWeek.SUNDAY ||
-               MARKET_HOLIDAYS.contains(d)) {
-            d = d.minusDays(1);
-        }
-        return d;
-    }
-
     public BarSeries getAndUpdateDBDailyValu(String symbol, int limit){
         String sql = "SELECT MAX(date) FROM daily_value WHERE symbol = ?";
         java.sql.Date lastDate = null;
@@ -132,7 +121,7 @@ public class StrategieHelper {
             // Si aucune ligne trouvée, on prend la date de start par défaut
             dateStart = TradeUtils.getStartDate(800);
         } else {
-            java.time.LocalDate lastTradingDay = getLastTradingDayBefore(today);
+            java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(today);
             java.time.LocalDate lastKnown = lastDate.toLocalDate();
             // Si la dernière date connue est le dernier jour de cotation, la base est à jour
             if (lastKnown.isEqual(lastTradingDay) || lastKnown.isAfter(lastTradingDay)) {
@@ -158,10 +147,12 @@ public class StrategieHelper {
                 }catch(Exception e){}
             }
         }
-        return this.mapping(getDailyValuesFromDb(symbol, limit));
+        return TradeUtils.mapping(getDailyValuesFromDb(symbol, limit));
     }
 
-
+    /**
+     * Met à jour les valeurs journalières pour les symboles manquants en base.
+     */
     public void updateDBDailyValuAllSymbolsComplement(){
         List<String> listeDbSymbols = this.getAllAssetSymbolsComplementFromDb();
         int error = 0;
@@ -180,47 +171,27 @@ public class StrategieHelper {
         TradeUtils.log("updateDBDailyValuAllSymbols: total "+listeDbSymbols.size()+", error" + error);
     }
 
+    /**
+     * Met à jour la base d'actifs depuis Alpaca.
+     */
     public void updateDBAssets(){
         List<AlpacaAsset> listeSymbols = this.alpacaService.getIexSymbolsFromAlpaca();
         this.saveSymbolsToDatabase(listeSymbols);
     }
 
     /**
-     * Récupère la liste des DailyValue pour un symbole donné depuis la table daily_value
-     * @param symbol le symbole de l'action
-     * @return Liste des DailyValue triées par date croissante
+     * Récupère les valeurs journalières d'un symbole depuis la base.
+     * @param symbol symbole
+     * @return liste de DailyValue
      */
     public List<DailyValue> getDailyValuesFromDatabase(String symbol) {
         return this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES);
     }
 
-
     /**
-     * Convertit une liste de DailyValue en BarSeries (ta4j).
-     */
-    private BarSeries toBarSeries(List<DailyValue> values) {
-        BarSeries series = new BaseBarSeries();
-        for (DailyValue v : values) {
-            try {
-                series.addBar(
-                        ZonedDateTime.parse(v.getDate()),
-                        Double.parseDouble(v.getOpen()),
-                        Double.parseDouble(v.getHigh()),
-                        Double.parseDouble(v.getLow()),
-                        Double.parseDouble(v.getClose()),
-                        Double.parseDouble(v.getVolume())
-                );
-            } catch (Exception e) {
-                TradeUtils.log("Erreur conversion DailyValue en BarSeries: " + e.getMessage());
-            }
-        }
-        return series;
-    }
-
-
-    /**
-     * Insère une ligne dans la table daily_value avec symbol et une instance de DailyValue.
-     * La colonne date est stockée en type DATE (MySQL), donc conversion si nécessaire.
+     * Insère une valeur journalière en base pour un symbole.
+     * @param symbol symbole
+     * @param dailyValue valeur à insérer
      */
     public void insertDailyValue(String symbol, DailyValue dailyValue) {
         // Conversion de la date (ex: "2025-03-18T04:00:00Z" ou "2025-03-18") en java.sql.Date
@@ -252,16 +223,17 @@ public class StrategieHelper {
     }
 
     /**
-     * Récupère tous les symboles depuis la table alpaca_asset
+     * Récupère tous les symboles actifs en base.
+     * @return liste de symboles
      */
     public List<String> getAllAssetSymbolsFromDb() {
         String sql = "SELECT symbol FROM alpaca_asset WHERE status = 'active'";
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
-
     /**
-     * Récupère tous les symboles depuis la table alpaca_asset
+     * Récupère tous les symboles éligibles en base.
+     * @return liste de symboles
      */
     public List<String> getAllAssetSymbolsEligibleFromDb() {
         String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true;";
@@ -269,7 +241,8 @@ public class StrategieHelper {
     }
 
     /**
-     * Récupère tous les symboles depuis la table alpaca_asset
+     * Récupère les symboles manquants dans la table daily_value.
+     * @return liste de symboles
      */
     public List<String> getAllAssetSymbolsComplementFromDb() {
         String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE symbol NOT IN (SELECT symbol FROM trade_ai.daily_value);";
@@ -277,9 +250,10 @@ public class StrategieHelper {
     }
 
     /**
-     * Récupère la liste des DailyValue pour un symbole donné depuis la table daily_value
-     * @param symbol le symbole de l'action
-     * @return Liste des DailyValue triées par date croissante
+     * Récupère les valeurs journalières d'un symbole depuis la base, avec limite.
+     * @param symbol symbole
+     * @param limit nombre de valeurs
+     * @return liste de DailyValue
      */
     public List<DailyValue> getDailyValuesFromDb(String symbol, Integer limit) {
         String sql = "SELECT date, open, high, low, close, volume, number_of_trades, volume_weighted_average_price " +
@@ -305,6 +279,10 @@ public class StrategieHelper {
         return results;
     }
 
+    /**
+     * Sauvegarde une liste d'actifs Alpaca en base.
+     * @param assets liste d'actifs
+     */
     public void saveSymbolsToDatabase(List<AlpacaAsset> assets) {
         String sql = "INSERT IGNORE INTO alpaca_asset (id, symbol, exchange, status, name, created_at) VALUES (?, ?, ?, ?, ?, ?)";
         for (AlpacaAsset asset : assets) {
@@ -319,6 +297,11 @@ public class StrategieHelper {
         }
     }
 
+    /**
+     * Ajoute les valeurs journalières précédentes pour un symbole.
+     * @param symbol symbole
+     * @return liste de DailyValue ajoutées
+     */
     public  List<DailyValue> addDailyValuePrecedent(String symbol) {
 
         // 1. Chercher la date la plus ancien pour ce symbol dans la table daily_value
@@ -333,7 +316,7 @@ public class StrategieHelper {
             firstHistoDate = java.sql.Date.valueOf(java.time.LocalDate.now());
         }
         java.time.LocalDate firstKnown = firstHistoDate.toLocalDate();
-        java.time.LocalDate firstTradingDay = getLastTradingDayBefore(startDay);
+        java.time.LocalDate firstTradingDay = TradeUtils.getLastTradingDayBefore(startDay);
         if(firstKnown.isAfter(firstTradingDay)){
             List<DailyValue> listeValues =  this.alpacaService.getHistoricalBars(symbol, firstTradingDay.toString(), firstKnown.minusDays(1).toString());
             for(DailyValue dv : listeValues){
@@ -343,7 +326,11 @@ public class StrategieHelper {
         return  new ArrayList<>();
     }
 
-
+    /**
+     * Met à jour les valeurs journalières pour un symbole.
+     * @param symbol symbole
+     * @return liste de DailyValue ajoutées
+     */
     public  List<DailyValue> updateDailyValue(String symbol) {
 
         // 1. Chercher la date la plus récente pour ce symbol dans la table daily_value
@@ -361,7 +348,7 @@ public class StrategieHelper {
             // Si aucune ligne trouvée, on prend la date de start par défaut
             dateStart = TradeUtils.getStartDate(TradeConstant.HISTORIQUE_DAILY_VALUE);
         } else {
-            java.time.LocalDate lastTradingDay = getLastTradingDayBefore(today);
+            java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(today);
             java.time.LocalDate lastKnown = lastDate.toLocalDate();
             // Si la dernière date connue est le dernier jour de cotation, la base est à jour
             if (lastKnown.isEqual(lastTradingDay) || lastKnown.isAfter(lastTradingDay)) {
@@ -376,90 +363,11 @@ public class StrategieHelper {
         return  new ArrayList<>();
     }
 
-    /**
-     * Convertit une liste de DailyValue en BarSeries (ta4j).
-     */
-
-    public BarSeries mapping(List<DailyValue> listeValues) {
-
-        BarSeries series = new BaseBarSeries();
-
-        for (DailyValue dailyValue : listeValues) {
-            try {
-                // Convertir la date du format "2025-09-03" vers ZonedDateTime
-                ZonedDateTime dateTime;
-                if (dailyValue.getDate().length() == 10) {
-                    // Format "YYYY-MM-DD" -> ajouter l'heure par défaut
-                    dateTime = java.time.LocalDate.parse(dailyValue.getDate())
-                            .atStartOfDay(java.time.ZoneId.systemDefault());
-                } else {
-                    // Format ISO complet
-                    dateTime = ZonedDateTime.parse(dailyValue.getDate());
-                }
-
-                series.addBar(
-                        dateTime,
-                        Double.parseDouble(dailyValue.getOpen()),
-                        Double.parseDouble(dailyValue.getHigh()),
-                        Double.parseDouble(dailyValue.getLow()),
-                        Double.parseDouble(dailyValue.getClose()),
-                        Double.parseDouble(dailyValue.getVolume())
-                );
-            } catch (Exception e) {
-                logger.warn("Erreur conversion DailyValue en BarSeries pour la date {}: {}",
-                        dailyValue.getDate(), e.getMessage());
-            }
-        }
-
-        return series;
-    }
-
-
-
 
     /**
-     * Méthodes utilitaires pour la conversion JSON
+     * Teste toutes les combinaisons croisées de stratégies pour un symbole.
+     * @param symbol symbole
      */
-    private String convertMapToJson(java.util.Map<String, Double> map) {
-        if (map == null) return null;
-        com.google.gson.JsonObject jsonObj = new com.google.gson.JsonObject();
-        map.forEach(jsonObj::addProperty);
-        return new com.google.gson.Gson().toJson(jsonObj);
-    }
-
-    private String convertDetailedResults (java.util.Map<String, RiskResult> detailedResults) {
-        if (detailedResults == null) return null;
-        com.google.gson.JsonObject jsonObj = new com.google.gson.JsonObject();
-        detailedResults.forEach((key, result) -> {
-            com.google.gson.JsonObject resultObj = new com.google.gson.JsonObject();
-            resultObj.addProperty("rendement", result.rendement);
-            resultObj.addProperty("maxDrawdown", result.maxDrawdown);
-            resultObj.addProperty("tradeCount", result.tradeCount);
-            resultObj.addProperty("winRate", result.winRate);
-            resultObj.addProperty("avgPnL", result.avgPnL);
-            resultObj.addProperty("profitFactor", result.profitFactor);
-            resultObj.addProperty("avgTradeBars", result.avgTradeBars);
-            resultObj.addProperty("maxTradeGain", result.maxTradeGain);
-            resultObj.addProperty("maxTradeLoss", result.maxTradeLoss);
-            jsonObj.add(key, resultObj);
-        });
-        return new com.google.gson.Gson().toJson(jsonObj);
-    }
-
-    private java.util.Map<String, Double> convertJsonToPerformanceMap(String json) {
-        if (json == null) return new java.util.HashMap<>();
-        try {
-            com.google.gson.JsonObject jsonObj = new com.google.gson.JsonParser().parse(json).getAsJsonObject();
-            java.util.Map<String, Double> map = new java.util.HashMap<>();
-            jsonObj.entrySet().forEach(entry ->
-                map.put(entry.getKey(), entry.getValue().getAsDouble()));
-            return map;
-        } catch (Exception e) {
-            logger.warn("Erreur conversion JSON vers Map<String, Double>: {}", e.getMessage());
-            return new java.util.HashMap<>();
-        }
-    }
-
     public void testAllCrossedStrategies(String symbol){
         BestInOutStrategy bestCombo = optimseBestInOutByWalkForward(symbol);
         //this.saveBestInOutStrategy(symbol, result);
@@ -474,6 +382,9 @@ public class StrategieHelper {
         }
     }
 
+    /**
+     * Calcule le score swing trade pour chaque stratégie en base.
+     */
     public void calculScoreST(){
         String selectSql = "SELECT symbol, rendement, max_drawdown, trade_count, win_rate, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss FROM best_in_out_single_strategy";
         List<java.util.Map<String, Object>> rows = jdbcTemplate.queryForList(selectSql);
@@ -497,6 +408,9 @@ public class StrategieHelper {
         }
     }
 
+    /**
+     * Calcule les stratégies croisées pour tous les symboles éligibles.
+     */
     public void calculCroisedStrategies(){
         List<String> listeDbSymbols = this.getAllAssetSymbolsEligibleFromDb();
         int nbThreads = Math.max(2, Runtime.getRuntime().availableProcessors());
@@ -536,13 +450,13 @@ public class StrategieHelper {
         TradeUtils.log("calculCroisedStrategies: total: "+listeDbSymbols.size()+", nbInsert: "+nbInsert.get()+", error: " + error.get());
     }
 
-
     /**
-     * Teste automatiquement toutes les combinaisons croisées de stratégies pour in (entrée) et out (sortie).
-     * Utilise le découpage walk-forward défini par les constantes.
+     * Optimise la meilleure combinaison IN/OUT par walk-forward pour un symbole.
+     * @param symbol symbole
+     * @return BestInOutStrategy
      */
     public BestInOutStrategy optimseBestInOutByWalkForward(String symbol) {
-        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_OPTIM));
+        BarSeries series = TradeUtils.mapping(this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_OPTIM));
         BarSeries[] split = TradeUtils.splitSeriesForWalkForward(series);
         BarSeries optimSeries = split[0];
         BarSeries testSeries = split[1];
@@ -602,6 +516,12 @@ public class StrategieHelper {
         return bestCombo;
     }
 
+    /**
+     * Instancie une stratégie selon son nom et ses paramètres.
+     * @param name nom de la stratégie
+     * @param params paramètres
+     * @return TradeStrategy
+     */
     private com.app.backend.trade.strategy.TradeStrategy createStrategy(String name, Object params) {
         switch (name) {
             case "Improved Trend":
@@ -628,7 +548,9 @@ public class StrategieHelper {
     }
 
     /**
-     * Sauvegarde la meilleure combinaison in/out pour un symbole
+     * Sauvegarde la meilleure stratégie IN/OUT en base.
+     * @param symbol symbole
+     * @param best stratégie à sauvegarder
      */
     public void saveBestInOutStrategy(String symbol, BestInOutStrategy best) {
         String checkSql = "SELECT COUNT(*) FROM best_in_out_single_strategy WHERE symbol = ?";
@@ -718,7 +640,9 @@ public class StrategieHelper {
     }
 
     /**
-     * Récupère la meilleure combinaison in/out pour un symbole
+     * Récupère la meilleure stratégie IN/OUT pour un symbole.
+     * @param symbol symbole
+     * @return BestInOutStrategy
      */
     public BestInOutStrategy getBestInOutStrategy(String symbol) {
         String sql = "SELECT * FROM best_in_out_single_strategy WHERE symbol = ?";
@@ -740,8 +664,8 @@ public class StrategieHelper {
                     rs.getDouble("max_trade_loss"),
                     rs.getDouble("score_swing_trade")
                 );
-                Object entryParams = parseStrategyParams(entryName, entryParamsJson);
-                Object exitParams = parseStrategyParams(exitName, exitParamsJson);
+                Object entryParams = TradeUtils.parseStrategyParams(entryName, entryParamsJson);
+                Object exitParams = TradeUtils.parseStrategyParams(exitName, exitParamsJson);
                 double initialCapital = rs.getDouble("initial_capital");
                 double riskPerTrade = rs.getDouble("risk_per_trade");
                 double stopLossPct = rs.getDouble("stop_loss_pct");
@@ -755,30 +679,11 @@ public class StrategieHelper {
     }
 
     /**
-     * Utilitaire pour parser les paramètres JSON selon le type de stratégie
+     * Récupère la liste des meilleures performances d'actions selon le tri et la limite.
+     * @param limit nombre maximum d'actions à retourner (optionnel)
+     * @param sort critère de tri (par défaut rendement)
+     * @return liste des meilleures stratégies BestInOutStrategy
      */
-    private Object parseStrategyParams(String name, String json) {
-        com.google.gson.Gson gson = new com.google.gson.Gson();
-        switch (name) {
-            case "Improved Trend":
-                return gson.fromJson(json, StrategieBackTest.ImprovedTrendFollowingParams.class);
-            case "SMA Crossover":
-                return gson.fromJson(json, StrategieBackTest.SmaCrossoverParams.class);
-            case "RSI":
-                return gson.fromJson(json, StrategieBackTest.RsiParams.class);
-            case "Breakout":
-                return gson.fromJson(json, StrategieBackTest.BreakoutParams.class);
-            case "MACD":
-                return gson.fromJson(json, StrategieBackTest.MacdParams.class);
-            case "Mean Reversion":
-                return gson.fromJson(json, StrategieBackTest.MeanReversionParams.class);
-            default:
-                return null;
-        }
-    }
-
-
-
     public List<BestInOutStrategy> getBestPerfActions(Integer limit, String sort){
         String orderBy = "rendement";
         if ("score_swing_trade".equalsIgnoreCase(sort)) {
@@ -806,8 +711,8 @@ public class StrategieHelper {
                 rs.getDouble("max_trade_loss"),
                 rs.getDouble("score_swing_trade")
             );
-            Object entryParams = parseStrategyParams(entryName, entryParamsJson);
-            Object exitParams = parseStrategyParams(exitName, exitParamsJson);
+            Object entryParams = TradeUtils.parseStrategyParams(entryName, entryParamsJson);
+            Object exitParams = TradeUtils.parseStrategyParams(exitName, exitParamsJson);
             double initialCapital = rs.getDouble("initial_capital");
             double riskPerTrade = rs.getDouble("risk_per_trade");
             double stopLossPct = rs.getDouble("stop_loss_pct");
@@ -818,9 +723,9 @@ public class StrategieHelper {
     }
 
     /**
-     * Retourne le signal d'achat/vente pour un symbole selon la meilleure stratégie IN/OUT.
-     * @param symbol le symbole à analyser
-     * @return SignalType (BUY, SELL, NONE)
+     * Récupère le signal d'indice pour un symbole donné.
+     * @param symbol symbole à analyser (optionnel)
+     * @return type de signal (SignalType)
      */
     public SignalType getBestInOutSignal(String symbol) {
         BestInOutStrategy best = getBestInOutStrategy(symbol);

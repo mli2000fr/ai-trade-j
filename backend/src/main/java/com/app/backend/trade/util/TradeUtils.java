@@ -109,7 +109,7 @@ public class TradeUtils {
     }
 
     /**
-     * Conversion Map<String, Double> en JSON
+     * Convertit une Map<String, Double> en JSON.
      */
     public static String convertMapToJson(java.util.Map<String, Double> map) {
         if (map == null) return null;
@@ -119,9 +119,9 @@ public class TradeUtils {
     }
 
     /**
-     * Conversion Map<String, RiskResult> en JSON
+     * Convertit une Map<String, RiskResult> détaillée en JSON.
      */
-    public static String convertDetailedResultsToJson(java.util.Map<String, RiskResult> detailedResults) {
+    public static String convertDetailedResults(java.util.Map<String, com.app.backend.model.RiskResult> detailedResults) {
         if (detailedResults == null) return null;
         com.google.gson.JsonObject jsonObj = new com.google.gson.JsonObject();
         detailedResults.forEach((key, result) -> {
@@ -141,7 +141,7 @@ public class TradeUtils {
     }
 
     /**
-     * Conversion JSON en Map<String, Double>
+     * Convertit un JSON en Map<String, Double>.
      */
     public static java.util.Map<String, Double> convertJsonToPerformanceMap(String json) {
         if (json == null) return new java.util.HashMap<>();
@@ -158,9 +158,9 @@ public class TradeUtils {
     }
 
     /**
-     * Mapping List<DailyValue> vers BarSeries
+     * Convertit une liste de DailyValue en BarSeries.
      */
-    public static org.ta4j.core.BarSeries mapping(List<DailyValue> listeValues) {
+    public static org.ta4j.core.BarSeries mapping(java.util.List<com.app.backend.trade.model.DailyValue> listeValues) {
         org.ta4j.core.BarSeries series = new org.ta4j.core.BaseBarSeries();
         for (com.app.backend.trade.model.DailyValue dailyValue : listeValues) {
             try {
@@ -187,7 +187,29 @@ public class TradeUtils {
     }
 
     /**
-     * Parse les paramètres JSON selon le type de stratégie
+     * Convertit une liste de DailyValue en BarSeries (version alternative).
+     */
+    public static org.ta4j.core.BarSeries toBarSeries(java.util.List<com.app.backend.trade.model.DailyValue> values) {
+        org.ta4j.core.BarSeries series = new org.ta4j.core.BaseBarSeries();
+        for (com.app.backend.trade.model.DailyValue v : values) {
+            try {
+                series.addBar(
+                        java.time.ZonedDateTime.parse(v.getDate()),
+                        Double.parseDouble(v.getOpen()),
+                        Double.parseDouble(v.getHigh()),
+                        Double.parseDouble(v.getLow()),
+                        Double.parseDouble(v.getClose()),
+                        Double.parseDouble(v.getVolume())
+                );
+            } catch (Exception e) {
+                log("Erreur conversion DailyValue en BarSeries: " + e.getMessage());
+            }
+        }
+        return series;
+    }
+
+    /**
+     * Parse les paramètres JSON selon le type de stratégie.
      */
     public static Object parseStrategyParams(String name, String json) {
         com.google.gson.Gson gson = new com.google.gson.Gson();
@@ -209,23 +231,28 @@ public class TradeUtils {
         }
     }
 
-    public static Object parseStrategyName(String name) {
-        switch (name) {
-            case "Improved Trend":
-                return "ImprovedTrendFollowingStrategy";
-            case "SMA Crossover":
-                return "SmaCrossoverStrategy";
-            case "RSI":
-                return "RsiStrategy";
-            case "Breakout":
-                return "BreakoutStrategy";
-            case "MACD":
-                return "MacdStrategy";
-            case "Mean Reversion":
-                return "MeanReversionStrategy";
-            default:
-                return null;
+    /**
+     * Retourne le dernier jour de cotation avant la date passée (week-end et jours fériés inclus).
+     */
+    public static java.time.LocalDate getLastTradingDayBefore(java.time.LocalDate date) {
+        java.util.Set<java.time.LocalDate> MARKET_HOLIDAYS = java.util.Set.of(
+            java.time.LocalDate.of(2025, 1, 1),
+            java.time.LocalDate.of(2025, 1, 20),
+            java.time.LocalDate.of(2025, 2, 17),
+            java.time.LocalDate.of(2025, 4, 18),
+            java.time.LocalDate.of(2025, 5, 26),
+            java.time.LocalDate.of(2025, 7, 4),
+            java.time.LocalDate.of(2025, 9, 1),
+            java.time.LocalDate.of(2025, 11, 27),
+            java.time.LocalDate.of(2025, 12, 25)
+        );
+        java.time.LocalDate d = date.minusDays(1);
+        while (d.getDayOfWeek() == java.time.DayOfWeek.SATURDAY ||
+               d.getDayOfWeek() == java.time.DayOfWeek.SUNDAY ||
+               MARKET_HOLIDAYS.contains(d)) {
+            d = d.minusDays(1);
         }
+        return d;
     }
 
     public static double calculerScoreSwingTrade(RiskResult r) {
