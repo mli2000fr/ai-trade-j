@@ -241,4 +241,30 @@ public class TradeUtils {
                 - (r.maxDrawdown * poidsDrawdown)
                 + (r.avgPnL * poidsAvgPnL);
     }
+
+    /**
+     * Transforme un objet InfosAction en map clé/valeur pour utilisation dans les prompts.
+     */
+    public static java.util.Map<String, Object> getStringObjectMap(com.app.backend.trade.model.InfosAction infosAction) {
+        java.util.Map<String, Object> variables = new java.util.HashMap<>();
+        variables.put("symbol", infosAction.getSymbol());
+        if(infosAction.getLastPrice() != null && infosAction.getLastPrice() != 0){
+            variables.put("data_price", "- last_price: " + infosAction.getLastPrice());
+        }else{
+            variables.put("data_price", "");
+        }
+        variables.put("data_historical_daily", infosAction.getHistorical());
+        variables.put("data_ema20", infosAction.getEma20());
+        variables.put("data_ema50", infosAction.getEma50());
+        variables.put("data_sma200", infosAction.getSma200());
+        variables.put("data_rsi", infosAction.getRsi());
+        variables.put("data_macd", infosAction.getMacd());
+        variables.put("data_atr", infosAction.getAtr());
+        variables.put("data_financial", infosAction.getFinancial());
+        variables.put("data_statistics", infosAction.getStatistics());
+        variables.put("data_earnings", infosAction.getEarnings());
+        variables.put("data_news", infosAction.getNews());
+        variables.put("data_portfolio", infosAction.getPortfolio());
+        return variables;
+    }
 }

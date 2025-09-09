@@ -17,10 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Helper métier pour la gestion des trades automatiques et IA.
- * Fournit des méthodes pour orchestrer les prompts, valider les symboles, et exécuter des ordres via Alpaca.
- */
+
 @Controller
 public class TradeHelper {
     @Value("${trade.type}")
@@ -54,66 +51,29 @@ public class TradeHelper {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    /**
-     * Récupère le portefeuille d'un compte.
-     */
     public Portfolio getPortfolio(CompteEntity compte) {
         return alpacaService.getPortfolio(compte);
     }
 
-    /**
-     * Vérifie la validité d'une liste de symboles via ChatGPT.
-     * @param symbols liste des symboles séparés par des virgules
-     * @return true si tous les symboles sont valides, exception sinon
-     */
-    public void isSymbolsValid(String symbols)  {
-        for(String symbol : symbols.split(",")){
+
+    public void isSymbolsValid(String symbols) {
+        for (String symbol : symbols.split(",")) {
             symbol = symbol.trim();
-            if(symbol.isEmpty()) continue;
+            if (symbol.isEmpty()) continue;
             this.isAssetSymbolEligible(symbol);
         }
-        /*
-        String prompt = TradeUtils.readResourceFile("trade/prompt/prompt_check_symbol.txt")
-                .replace("{{symbols}}", symbols);
-        ChatGptResponse response = chatGptService.askChatGpt(idCompte, prompt);
-        if (response.getError() != null) {
-            throw new RuntimeException("Erreur lors de l'analyse : " + response.getError());
-        }
-        try {
-            boolean valid = Boolean.parseBoolean(response.getMessage());
-            if (!valid) {
-                throw new RuntimeException("Les symboles ne sont pas valides : " + response.getMessage());
-            }
-            return true;
-        } catch (Exception e) {
-            throw new RuntimeException("check symboles : " + response.getMessage());
-        }*/
     }
-    /**
-     * Vérifie si un symbole existe dans la table alpaca_asset avec eligible=true.
-     */
+
     public void isAssetSymbolEligible(String symbol) {
         String sql = "SELECT COUNT(*) FROM alpaca_asset WHERE symbol = ? AND eligible = true";
         Integer count = jdbcTemplate.queryForObject(sql, new Object[]{symbol}, Integer.class);
-        if(count == null || count == 0){
+        if (count == null || count == 0) {
             throw new RuntimeException("Le symbole n'est pas valide ou inactif : " + symbol);
         }
     }
 
-    /**
-     * Exécute un trade automatique via l'IA sur une liste de symboles, avec analyse GPT optionnelle.
-     * @param compte compte utilisateur
-     * @param symbols liste des symboles
-     * @param analyseGpt texte d'analyse GPT (optionnel)
-     * @return message de retour de l'IA ou erreur
-     */
+
     public ReponseAuto tradeAIAuto(CompteEntity compte, List<String> symbols, String analyseGpt) {
-        /*
-        if(true){
-            String test = TradeUtils.readResourceFile("test/test_gpt.txt");
-            ChatGptResponse res = new ChatGptResponse(Long.valueOf(15), test, null);
-            return processAIAuto(compte, res);
-        }*/
 
         if (symbols == null || symbols.isEmpty()) {
             throw new RuntimeException("Aucun symbole fourni pour tradeAIAuto.");
@@ -126,7 +86,7 @@ public class TradeHelper {
         String promptSymbol = TradeUtils.readResourceFile("trade/prompt/prompt_trade_auto_symbol.txt");
         String portfolioJson = new Gson().toJson(this.getPortfolio(compte));
         String newsGenerals = "No information found";
-        try{
+        try {
             Map<String, Object> newsMap = alpacaService.getRecentNews(compte, 50);
             if (newsMap != null && newsMap.containsKey("news")) {
                 newsGenerals = new Gson().toJson(newsMap.get("news"));
@@ -142,17 +102,11 @@ public class TradeHelper {
             symbol = symbol.trim();
             if (symbol.isEmpty()) continue;
             InfosAction infosAction = this.getInfosAction(compte, symbol, true);
-            Map<String, Object> variables = getStringObjectMap(infosAction);
+            Map<String, Object> variables = TradeUtils.getStringObjectMap(infosAction);
             promptFinal.append(getPromptWithValues(promptSymbol, variables));
             sleepForRateLimit();
         }
         promptFinal.append(promptPied);
-
-        /*
-        if(true){
-            String test = promptFinal.toString();
-            return ReponseAuto.builder().build();
-        }*/
 
         ChatGptResponse response = chatGptService.askChatGpt(String.valueOf(compte.getId()), promptFinal.toString());
         if (response.getError() != null) {
@@ -162,26 +116,24 @@ public class TradeHelper {
 
     }
 
-    /**
-     * Parse les ordres retournés par l'IA (mode auto).
-     */
     private ReponseAuto processAIAuto(CompteEntity compte, ChatGptResponse response) {
         String[] parts = response.getMessage() != null ? response.getMessage().split("===") : new String[0];
         String orders = parts.length > 0 ? parts[0].trim() : "";
         String analyseGpt = parts.length > 1 ? parts[1].trim() : "";
         try {
-            Type listType = new TypeToken<List<OrderRequest>>(){}.getType();
+            Type listType = new TypeToken<List<OrderRequest>>() {
+            }.getType();
             List<OrderRequest> listOrders = new Gson().fromJson(orders, listType);
-            for(OrderRequest order : listOrders){
+            for (OrderRequest order : listOrders) {
                 if (order.getQuantity() != null && order.getQuantity() != 0) {
                     // on ne fait pas de trade journalier si on a déjà une position ouverte, si on veut le forcer, passer par trade manuel
                     OppositionOrder oppositionOrder = alpacaService.hasOppositeOrOpenOrder(compte, order.symbol, order.side);
                     order.setOppositionOrder(oppositionOrder);
-                    if((order.getPrice_limit() == null || order.getPrice_limit() == 0)
-                            && order.getQuantity() != null && order.getQuantity() > 0){
+                    if ((order.getPrice_limit() == null || order.getPrice_limit() == 0)
+                            && order.getQuantity() != null && order.getQuantity() > 0) {
                         order.setPrice_limit(alpacaService.getLastPrice(compte, order.symbol));
                     }
-                    if(oppositionOrder.isDayTrading()){
+                    if (oppositionOrder.isDayTrading()) {
                         order.setStatut("SKIPPED_DAYTRADE");
                         order.setExecuteNow(false);
                     }
@@ -200,12 +152,12 @@ public class TradeHelper {
             order.normalize();
             if (isOrderValid(order) && order.isExecuteNow()) {
                 boolean isSell = "sell".equals(order.side);
-                try{
+                try {
                     Order orderR = alpacaService.placeOrder(compte, order.symbol, order.qty, order.side, isSell ? null : order.priceLimit, isSell ? null : order.stopLoss, isSell ? null : order.takeProfit, idGpt, true, false);
                     order.setStatut(orderR.getStatus());
-                }catch(DayTradingException e){
+                } catch (DayTradingException e) {
                     order.setStatut("FAILED_DAYTRADE");
-                }catch(Exception e){
+                } catch (Exception e) {
                     order.setStatut("FAILED");
                 }
             }
@@ -213,16 +165,10 @@ public class TradeHelper {
         return orders;
     }
 
-    /**
-     * Vérifie la validité d'un objet OrderRequest.
-     */
     private boolean isOrderValid(OrderRequest order) {
         return order != null && order.symbol != null && order.qty != null && order.qty > 0 && order.side != null;
     }
 
-    /**
-     * Temporisation pour respecter le rate limit de l'API OpenAI.
-     */
     private void sleepForRateLimit() {
         try {
             Thread.sleep(61000);
@@ -232,28 +178,22 @@ public class TradeHelper {
         }
     }
 
-    /**
-     * Remplace les variables dans un template de prompt par leurs valeurs.
-     */
-    private String getPromptWithValues(String promptTemplate,  Map<String, Object> variables)  {
+    private String getPromptWithValues(String promptTemplate, Map<String, Object> variables) {
         String prompt = promptTemplate;
         for (Map.Entry<String, Object> entry : variables.entrySet()) {
             String key = entry.getKey();
             Object value = entry.getValue();
             prompt = prompt.replace("{{" + key + "}}", value != null ? value.toString() : "");
         }
-        if(prompt.contains("{{")){
+        if (prompt.contains("{{")) {
             throw new RuntimeException("Attention, certaines variables n'ont pas été remplacées dans le prompt.");
         }
         return prompt;
     }
 
-    /**
-     * Récupère toutes les infos nécessaires pour un symbole (prix, indicateurs, news, etc.).
-     */
-    private InfosAction getInfosAction(CompteEntity compte, String symbol, boolean withPortfolio)  {
+    private InfosAction getInfosAction(CompteEntity compte, String symbol, boolean withPortfolio) {
         String portfolioJson = null;
-        if(withPortfolio){
+        if (withPortfolio) {
             Portfolio portfolio = this.getPortfolio(compte);
             portfolioJson = new Gson().toJson(portfolio);
         }
@@ -270,13 +210,13 @@ public class TradeHelper {
         String statistics = finnhubService.getDefaultKeyStatistics(symbol);
         String earnings = finnhubService.getEarnings(symbol);
         String news = "No information found";
-        try{
+        try {
             Map<String, Object> newsMap = alpacaService.getDetailedNewsForSymbol(compte, symbol, null);
             if (newsMap != null && newsMap.containsKey("news")) {
                 news = new Gson().toJson(newsMap.get("news"));
             }
         } catch (Exception e) {
-            TradeUtils.log("Error getNews("+symbol+"): " + e.getMessage());
+            TradeUtils.log("Error getNews(" + symbol + "): " + e.getMessage());
         }
         return new InfosAction(
                 lastPrice,
@@ -295,32 +235,4 @@ public class TradeHelper {
                 portfolioJson
         );
     }
-
-    /**
-     * Construit la map de variables pour le prompt à partir d'un InfosAction.
-     */
-    private static Map<String, Object> getStringObjectMap(InfosAction infosAction) {
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("symbol", infosAction.getSymbol());
-        if(infosAction.getLastPrice() != null && infosAction.getLastPrice() != 0){
-            variables.put("data_price", "- last_price: " + infosAction.getLastPrice());
-        }else{
-            variables.put("data_price", "");
-        }
-
-        variables.put("data_historical_daily", infosAction.getHistorical());
-        variables.put("data_ema20", infosAction.getEma20());
-        variables.put("data_ema50", infosAction.getEma50());
-        variables.put("data_sma200", infosAction.getSma200());
-        variables.put("data_rsi", infosAction.getRsi());
-        variables.put("data_macd", infosAction.getMacd());
-        variables.put("data_atr", infosAction.getAtr());
-        variables.put("data_financial", infosAction.getFinancial());
-        variables.put("data_statistics", infosAction.getStatistics());
-        variables.put("data_earnings", infosAction.getEarnings());
-        variables.put("data_news", infosAction.getNews());
-        variables.put("data_portfolio", infosAction.getPortfolio());
-        return variables;
-    }
-
 }
