@@ -2,6 +2,7 @@ package com.app.backend.trade.controller;
 
 import com.app.backend.model.RiskResult;
 import com.app.backend.trade.model.BestCombinationResult;
+import com.app.backend.trade.model.ContextOptim;
 import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.strategy.*;
 import com.app.backend.trade.util.TradeConstant;
@@ -68,8 +69,8 @@ public class BestCombinationStrategyHelper {
                     for (List<Class<? extends TradeStrategy>> outCombo : outCombinations) {
                         BestCombinationResult result = evaluateCombination(Arrays.asList(barSeries), inCombo, outCombo);
                         // TradeUtils.log("Global search: inCombo=" + inCombo + ", outCombo=" + outCombo + " => score=" + result.score);
-                        if (result != null && result.score > bestScore) {
-                            bestScore = result.score;
+                        if (result != null && result.backtestResult.rendement > bestScore) {
+                            bestScore = result.backtestResult.rendement;
                             bestGlobal = result;
                         }
                     }
@@ -113,7 +114,7 @@ public class BestCombinationStrategyHelper {
     private BestCombinationResult evaluateCombination(List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo) {
         BestCombinationResult resultObj = new BestCombinationResult();
         if (seriesList == null || seriesList.isEmpty()) {
-            resultObj.score = Double.NEGATIVE_INFINITY;
+            resultObj.backtestResult.rendement = Double.NEGATIVE_INFINITY;
             return resultObj;
         }
         BarSeries fullSeries = seriesList.get(0);
@@ -210,11 +211,16 @@ public class BestCombinationStrategyHelper {
             public String getName() { return "CombinedStrategy"; }
         };
         RiskResult backtestResult = backTest.backtestStrategyRisk(combinedStrategy, testSeries);
-        resultObj.score = backtestResult.rendement;
         resultObj.backtestResult = backtestResult;
         resultObj.inStrategyNames = inStrategyNames;
         resultObj.outStrategyNames = outStrategyNames;
-        resultObj.nbSimples = totalCount;
+        resultObj.contextOptim = ContextOptim.builder()
+                .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
+                .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
+                .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
+                .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
+                .nbSimples(totalCount)
+                .build();
         TradeUtils.log("BestCombinationResult : " + resultObjToString(resultObj));
         return resultObj;
     }
@@ -224,8 +230,8 @@ public class BestCombinationStrategyHelper {
         StringBuilder sb = new StringBuilder();
         sb.append("inStrategyNames=").append(result.inStrategyNames).append(", ");
         sb.append("outStrategyNames=").append(result.outStrategyNames).append(", ");
-        sb.append("score=").append(result.score).append(", ");
-        sb.append("nbSimples=").append(result.nbSimples).append(", ");
+        sb.append("score=").append(result.backtestResult.rendement).append(", ");
+        sb.append("nbSimples=").append(result.contextOptim.nbSimples).append(", ");
         sb.append("inParams=").append(result.inParams).append(", ");
         sb.append("outParams=").append(result.outParams).append(", ");
         if (result.backtestResult != null) {
@@ -303,11 +309,11 @@ public class BestCombinationStrategyHelper {
                     result.backtestResult.maxTradeGain,
                     result.backtestResult.maxTradeLoss,
                     result.backtestResult.scoreSwingTrade,
-                    result.nbSimples,
-                    StrategieBackTest.INITIAL_CAPITAL,
-                    StrategieBackTest.RISK_PER_TRADE,
-                    StrategieBackTest.STOP_LOSS_PCT,
-                    StrategieBackTest.TAKE_PROFIL_PCT,
+                    result.contextOptim.nbSimples,
+                    result.contextOptim.initialCapital,
+                    result.contextOptim.riskPerTrade,
+                    result.contextOptim.stopLossPct,
+                    result.contextOptim.takeProfitPct,
                     symbol);
         } else {
             // INSERT
@@ -351,11 +357,11 @@ public class BestCombinationStrategyHelper {
                     result.backtestResult.maxTradeGain,
                     result.backtestResult.maxTradeLoss,
                     result.backtestResult.scoreSwingTrade,
-                    StrategieBackTest.INITIAL_CAPITAL,
-                    StrategieBackTest.RISK_PER_TRADE,
-                    StrategieBackTest.STOP_LOSS_PCT,
-                    StrategieBackTest.TAKE_PROFIL_PCT,
-                    result.nbSimples);
+                    result.contextOptim.initialCapital,
+                    result.contextOptim.riskPerTrade,
+                    result.contextOptim.stopLossPct,
+                    result.contextOptim.takeProfitPct,
+                    result.contextOptim.nbSimples);
         }
     }
 
@@ -370,11 +376,6 @@ public class BestCombinationStrategyHelper {
         result.outStrategyNames = gson.fromJson((String) row.get("out_strategy_names"), new TypeToken<List<String>>(){}.getType());
         result.inParams = gson.fromJson((String) row.get("in_params"), new TypeToken<Map<String, Object>>(){}.getType());
         result.outParams = gson.fromJson((String) row.get("out_params"), new TypeToken<Map<String, Object>>(){}.getType());
-        result.initialCapital = row.get("initial_capital") != null ? ((Number) row.get("initial_capital")).doubleValue() : 0.0;
-        result.riskPerTrade = row.get("risk_per_trade") != null ? ((Number) row.get("risk_per_trade")).doubleValue() : 0.0;
-        result.stopLossPct = row.get("stop_loss_pct") != null ? ((Number) row.get("stop_loss_pct")).doubleValue() : 0.0;
-        result.takeProfitPct = row.get("take_profit_pct") != null ? ((Number) row.get("take_profit_pct")).doubleValue() : 0.0;
-        result.nbSimples = row.get("nb_simples") != null ? ((Integer) row.get("nb_simples")).intValue() : 0;
         result.backtestResult = new RiskResult(
                 row.get("rendement") != null ? ((Number) row.get("rendement")).doubleValue() : 0.0,
                 row.get("max_drawdown") != null ? ((Number) row.get("max_drawdown")).doubleValue() : 0.0,
@@ -387,7 +388,13 @@ public class BestCombinationStrategyHelper {
                 row.get("max_trade_loss") != null ? ((Number) row.get("max_trade_loss")).doubleValue() : 0.0,
                 row.get("score_swing_trade") != null ? ((Number) row.get("score_swing_trade")).doubleValue() : 0.0
         );
-        result.score = result.backtestResult.rendement;
+        result.contextOptim = ContextOptim.builder()
+                .initialCapital(row.get("initial_capital") != null ? ((Number) row.get("initial_capital")).doubleValue() : 0.0)
+                .riskPerTrade(row.get("risk_per_trade") != null ? ((Number) row.get("risk_per_trade")).doubleValue() : 0.0)
+                .stopLossPct(row.get("stop_loss_pct") != null ? ((Number) row.get("stop_loss_pct")).doubleValue() : 0.0)
+                .takeProfitPct(row.get("take_profit_pct") != null ? ((Number) row.get("take_profit_pct")).doubleValue() : 0.0)
+                .nbSimples(row.get("nb_simples") != null ? ((Integer) row.get("nb_simples")).intValue() : 0)
+                .build();
         return result;
     }
 
@@ -526,7 +533,7 @@ public class BestCombinationStrategyHelper {
         }else if(best == null) {
             return this.getSignal(symbol);
         }else{
-            if(bestCombinationResult.score > best.getResult().getRendement()){
+            if(bestCombinationResult.backtestResult.rendement > best.getResult().getRendement()){
                 return this.getSignal(symbol);
             }else {
                 return strategieHelper.getBestInOutSignal(symbol);

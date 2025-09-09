@@ -559,7 +559,7 @@ public class StrategieHelper {
                 String exitParamsJson = rs.getString("exit_strategy_params");
                 Object entryParams = TradeUtils.parseStrategyParams(entryName, entryParamsJson);
                 Object exitParams = TradeUtils.parseStrategyParams(exitName, exitParamsJson);
-                BestInOutStrategy bestIO =  BestInOutStrategy.builder()
+                return BestInOutStrategy.builder()
                         .symbol(symbol)
                         .entryName(entryName)
                         .exitName(exitName)
@@ -583,8 +583,7 @@ public class StrategieHelper {
                                 .maxTradeGain(rs.getDouble("max_trade_gain"))
                                 .maxTradeLoss(rs.getDouble("max_trade_loss"))
                                 .scoreSwingTrade(rs.getDouble("score_swing_trade"))
-                        .build());
-                return bestIO;
+                        .build()).build();
             }, symbol);
         } catch (org.springframework.dao.EmptyResultDataAccessException e) {
             logger.warn("Aucun BestInOutStrategy trouvé pour le symbole: {}", symbol);
@@ -614,7 +613,7 @@ public class StrategieHelper {
             String exitParamsJson = rs.getString("exit_strategy_params");
             Object entryParams = TradeUtils.parseStrategyParams(entryName, entryParamsJson);
             Object exitParams = TradeUtils.parseStrategyParams(exitName, exitParamsJson);
-            BestInOutStrategy bestIO =  BestInOutStrategy.builder()
+            return BestInOutStrategy.builder()
                     .symbol(rs.getString("symbol"))
                     .entryName(entryName)
                     .exitName(exitName)
@@ -638,8 +637,7 @@ public class StrategieHelper {
                             .maxTradeGain(rs.getDouble("max_trade_gain"))
                             .maxTradeLoss(rs.getDouble("max_trade_loss"))
                             .scoreSwingTrade(rs.getDouble("score_swing_trade"))
-                            .build());
-            return bestIO;
+                            .build()).build();
         });
         return results;
     }
