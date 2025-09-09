@@ -12,23 +12,23 @@ import java.util.*;
 public class BestCombinaisonStrategyRestController {
 
     @Autowired
-    private BestCombinaisonStrategyHelper bestCombinaisonStrategyHelper;
+    private BestCombinationStrategyHelper bestCombinationStrategyHelper;
 
 
     @GetMapping("/best-signal")
     public SignalType getBestSignal(@RequestParam String symbol) {
-        return bestCombinaisonStrategyHelper.getBestSignal(symbol);
+        return bestCombinationStrategyHelper.getBestSignal(symbol);
     }
 
     @GetMapping("/calcul")
     public Boolean calculMixStrategies() {
-        bestCombinaisonStrategyHelper.calculMixStrategies();
+        bestCombinationStrategyHelper.calculMixStrategies();
         return true;
     }
 
     @GetMapping("/calculScoreST")
     public ResponseEntity<Boolean> calculScoreSwingTrade() {
-        bestCombinaisonStrategyHelper.calculScoreST();
+        bestCombinationStrategyHelper.calculScoreST();
         return ResponseEntity.ok(true);
     }
 

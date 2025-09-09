@@ -10,28 +10,26 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Controller;
+import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
 import java.util.*;
 
-@Controller
-public class BestCombinaisonStrategyHelper {
+@Service
+public class BestCombinationStrategyHelper {
 
-
-    private StrategieHelper strategieHelper;
+    private final StrategieHelper strategieHelper;
+    private final JdbcTemplate jdbcTemplate;
+    private final Gson gson = new Gson();
 
     private static final int NB_IN = 2;
-    private static final double NB_OUT = 2;
+    private static final int NB_OUT = 2;
     private static final boolean INSERT_ONLY = true;
 
     @Autowired
-    private JdbcTemplate jdbcTemplate;
-    private final Gson gson = new Gson();
-
-    @Autowired
-    public BestCombinaisonStrategyHelper(StrategieHelper strategieHelper) {
+    public BestCombinationStrategyHelper(StrategieHelper strategieHelper, JdbcTemplate jdbcTemplate) {
         this.strategieHelper = strategieHelper;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
 
