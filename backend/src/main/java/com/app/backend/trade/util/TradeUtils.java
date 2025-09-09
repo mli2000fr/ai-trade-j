@@ -294,4 +294,23 @@ public class TradeUtils {
         variables.put("data_portfolio", infosAction.getPortfolio());
         return variables;
     }
+
+    public static Object parseStrategyName(String name) {
+        switch (name) {
+            case "Improved Trend":
+                return "ImprovedTrendFollowingStrategy";
+            case "SMA Crossover":
+                return "SmaCrossoverStrategy";
+            case "RSI":
+                return "RsiStrategy";
+            case "Breakout":
+                return "BreakoutStrategy";
+            case "MACD":
+                return "MacdStrategy";
+            case "Mean Reversion":
+                return "MeanReversionStrategy";
+            default:
+                return null;
+        }
+    }
 }

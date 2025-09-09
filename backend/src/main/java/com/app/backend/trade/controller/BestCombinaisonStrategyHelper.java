@@ -21,7 +21,6 @@ public class BestCombinaisonStrategyHelper {
 
     private StrategieHelper strategieHelper;
 
-    // Constantes pour la gestion des bougies et des pourcentages
     private static final int NB_IN = 2;
     private static final double NB_OUT = 2;
     private static final boolean INSERT_ONLY = true;
@@ -35,53 +34,7 @@ public class BestCombinaisonStrategyHelper {
         this.strategieHelper = strategieHelper;
     }
 
-    public BestCombinationResult findBestCombination(String symbol, int in, int out) {
-        // Récupérer les BarSeries depuis la base via StrategieHelper
-        BarSeries series = strategieHelper.getAndUpdateDBDailyValu(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES);
-        List<BarSeries> seriesList = new ArrayList<>();
-        if (series != null) {
-            seriesList.add(series);
-        }
-        return findBestCombination(symbol, seriesList, in, out);
-    }
 
-    /**
-     * Cherche la meilleure combinaison de stratégies pour in et out.
-     * @param symbol le symbole à trader
-     * @param seriesList la liste des BarSeries
-     * @param in le nombre de stratégies pour in
-     * @param out le nombre de stratégies pour out
-     * @return un objet contenant la meilleure combinaison et ses paramètres
-     */
-    public BestCombinationResult findBestCombination(String symbol, List<BarSeries> seriesList, int in, int out) {
-        List<Class<? extends TradeStrategy>> strategies = Arrays.asList(
-            ImprovedTrendFollowingStrategy.class,
-            SmaCrossoverStrategy.class,
-            RsiStrategy.class,
-            BreakoutStrategy.class,
-            MacdStrategy.class,
-            MeanReversionStrategy.class
-        );
-        List<List<Class<? extends TradeStrategy>>> inCombinations = generateCombinations(strategies, in);
-        List<List<Class<? extends TradeStrategy>>> outCombinations = generateCombinations(strategies, out);
-        BestCombinationResult bestResult = null;
-        double bestScore = Double.NEGATIVE_INFINITY;
-        for (List<Class<? extends TradeStrategy>> inCombo : inCombinations) {
-            for (List<Class<? extends TradeStrategy>> outCombo : outCombinations) {
-                BestCombinationResult result = evaluateCombination(symbol, seriesList, inCombo, outCombo);
-                if (result.score > bestScore) {
-                    bestScore = result.score;
-                    bestResult = result;
-                }
-            }
-        }
-        return bestResult;
-    }
-
-    /**
-     * Boucle sur toutes les valeurs possibles de in et out (de 1 à 6),
-     * compare les scores et retourne le meilleur résultat global.
-     */
     public BestCombinationResult findBestCombinationGlobal(String symbol) {
         Map<String, String> bestInOutStrategy = this.getInOutStrategiesForSymbol(symbol);
         BestCombinationResult bestGlobal = null;
@@ -115,7 +68,7 @@ public class BestCombinaisonStrategyHelper {
                 List<List<Class<? extends TradeStrategy>>> outCombinations = (outClass != null) ? generateCombinationsWithMandatory(strategies, out, outClass) : generateCombinations(strategies, out);
                 for (List<Class<? extends TradeStrategy>> inCombo : inCombinations) {
                     for (List<Class<? extends TradeStrategy>> outCombo : outCombinations) {
-                        BestCombinationResult result = evaluateCombination(symbol, Arrays.asList(barSeries), inCombo, outCombo);
+                        BestCombinationResult result = evaluateCombination(Arrays.asList(barSeries), inCombo, outCombo);
                         // TradeUtils.log("Global search: inCombo=" + inCombo + ", outCombo=" + outCombo + " => score=" + result.score);
                         if (result != null && result.score > bestScore) {
                             bestScore = result.score;
@@ -129,7 +82,7 @@ public class BestCombinaisonStrategyHelper {
         return bestGlobal;
     }
 
-    // Génère toutes les combinaisons de n éléments parmi la liste
+
     private List<List<Class<? extends TradeStrategy>>> generateCombinations(List<Class<? extends TradeStrategy>> strategies, int n) {
         List<List<Class<? extends TradeStrategy>>> result = new ArrayList<>();
         generateCombinationsHelper(strategies, n, 0, new ArrayList<>(), result);
@@ -147,7 +100,6 @@ public class BestCombinaisonStrategyHelper {
         }
     }
 
-    // Génère toutes les combinaisons de n éléments parmi la liste, incluant obligatoirement une stratégie spécifique
     private List<List<Class<? extends TradeStrategy>>> generateCombinationsWithMandatory(List<Class<? extends TradeStrategy>> strategies, int n, Class<? extends TradeStrategy> mandatory) {
         List<List<Class<? extends TradeStrategy>>> all = generateCombinations(strategies, n);
         List<List<Class<? extends TradeStrategy>>> filtered = new ArrayList<>();
@@ -159,8 +111,8 @@ public class BestCombinaisonStrategyHelper {
         return filtered;
     }
 
-    // Évalue la combinaison selon la logique métier de StrategieHelper
-    private BestCombinationResult evaluateCombination(String symbol, List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo) {
+
+    private BestCombinationResult evaluateCombination(List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo) {
         BestCombinationResult resultObj = new BestCombinationResult();
         if (seriesList == null || seriesList.isEmpty()) {
             resultObj.score = Double.NEGATIVE_INFINITY;
@@ -264,16 +216,18 @@ public class BestCombinaisonStrategyHelper {
         resultObj.backtestResult = backtestResult;
         resultObj.inStrategyNames = inStrategyNames;
         resultObj.outStrategyNames = outStrategyNames;
+        resultObj.nbSimples = totalCount;
         TradeUtils.log("BestCombinationResult : " + resultObjToString(resultObj));
         return resultObj;
     }
 
-    // Méthode utilitaire pour afficher les détails du résultat
+
     private String resultObjToString(BestCombinationResult result) {
         StringBuilder sb = new StringBuilder();
         sb.append("inStrategyNames=").append(result.inStrategyNames).append(", ");
         sb.append("outStrategyNames=").append(result.outStrategyNames).append(", ");
         sb.append("score=").append(result.score).append(", ");
+        sb.append("nbSimples=").append(result.nbSimples).append(", ");
         sb.append("inParams=").append(result.inParams).append(", ");
         sb.append("outParams=").append(result.outParams).append(", ");
         if (result.backtestResult != null) {
@@ -293,9 +247,6 @@ public class BestCombinaisonStrategyHelper {
     }
 
 
-    /**
-     * Retourne les noms des stratégies in et out pour un symbole donné
-     */
     public Map<String, String> getInOutStrategiesForSymbol(String symbol) {
         BestInOutStrategy best = strategieHelper.getBestInOutStrategy(symbol);
         Map<String, String> result = new HashMap<>();
@@ -306,11 +257,7 @@ public class BestCombinaisonStrategyHelper {
         return result;
     }
 
-    /**
-     * Sauvegarde un BestCombinationResult dans la table best_in_out_mix_strategy
-     * Si le symbol existe déjà, fait un UPDATE, sinon fait un INSERT
-     * Prend en compte initialCapital, riskPerTrade, stopLossPct, takeProfitPct
-     */
+
     public void saveBestCombinationResult(String symbol, BestCombinationResult result) {
         String inStrategyNamesJson = gson.toJson(result.inStrategyNames);
         String outStrategyNamesJson = gson.toJson(result.outStrategyNames);
@@ -337,6 +284,7 @@ public class BestCombinaisonStrategyHelper {
                     max_trade_gain = ?, 
                     max_trade_loss = ?, 
                     score_swing_trade = ?, 
+                    nb_simples = ?,
                     initial_capital = ?, 
                     risk_per_trade = ?, 
                     stop_loss_pct = ?, 
@@ -357,6 +305,7 @@ public class BestCombinaisonStrategyHelper {
                     result.backtestResult.maxTradeGain,
                     result.backtestResult.maxTradeLoss,
                     result.backtestResult.scoreSwingTrade,
+                    result.nbSimples,
                     StrategieBackTest.INITIAL_CAPITAL,
                     StrategieBackTest.RISK_PER_TRADE,
                     StrategieBackTest.STOP_LOSS_PCT,
@@ -385,6 +334,7 @@ public class BestCombinaisonStrategyHelper {
                     risk_per_trade, 
                     stop_loss_pct, 
                     take_profit_pct, 
+                    nb_simples,
                     update_date
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""";
             jdbcTemplate.update(insertSql,
@@ -406,14 +356,12 @@ public class BestCombinaisonStrategyHelper {
                     StrategieBackTest.INITIAL_CAPITAL,
                     StrategieBackTest.RISK_PER_TRADE,
                     StrategieBackTest.STOP_LOSS_PCT,
-                    StrategieBackTest.TAKE_PROFIL_PCT);
+                    StrategieBackTest.TAKE_PROFIL_PCT,
+                    result.nbSimples);
         }
     }
 
-    /**
-     * Récupère le BestCombinationResult le plus récent pour un symbole
-     * Prend en compte initialCapital, riskPerTrade, stopLossPct, takeProfitPct
-     */
+
     public BestCombinationResult getBestCombinationResult(String symbol) {
         String sql = "SELECT * FROM best_in_out_mix_strategy WHERE symbol = ? ORDER BY update_date DESC LIMIT 1";
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, symbol);
@@ -428,6 +376,7 @@ public class BestCombinaisonStrategyHelper {
         result.riskPerTrade = row.get("risk_per_trade") != null ? ((Number) row.get("risk_per_trade")).doubleValue() : 0.0;
         result.stopLossPct = row.get("stop_loss_pct") != null ? ((Number) row.get("stop_loss_pct")).doubleValue() : 0.0;
         result.takeProfitPct = row.get("take_profit_pct") != null ? ((Number) row.get("take_profit_pct")).doubleValue() : 0.0;
+        result.nbSimples = row.get("nb_simples") != null ? ((Integer) row.get("nb_simples")).intValue() : 0;
         result.backtestResult = new RiskResult(
                 row.get("rendement") != null ? ((Number) row.get("rendement")).doubleValue() : 0.0,
                 row.get("max_drawdown") != null ? ((Number) row.get("max_drawdown")).doubleValue() : 0.0,
@@ -519,9 +468,7 @@ public class BestCombinaisonStrategyHelper {
         }
     }
 
-    /**
-     * Récupère tous les symboles depuis la table alpaca_asset
-     */
+
     public List<String> getAllAssetSymbolsEligibleFromDb() {
         String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true;";
         return jdbcTemplate.queryForList(sql, String.class);

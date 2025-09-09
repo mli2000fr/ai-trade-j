@@ -19,9 +19,11 @@ public class BestInOutStrategy {
     public final double riskPerTrade;
     public final double stopLossPct;
     public final double takeProfitPct;
+    public final int nbSimples;
+
 
     public BestInOutStrategy(String symbol, String entryName, Object entryParams, String exitName, Object exitParams, RiskResult result,
-                             double initialCapital, double riskPerTrade, double stopLossPct, double takeProfitPct) {
+                             double initialCapital, double riskPerTrade, double stopLossPct, double takeProfitPct, int nbSimples) {
         this.symbol = symbol;
         this.entryName = entryName;
         this.entryParams = entryParams;
@@ -32,6 +34,7 @@ public class BestInOutStrategy {
         this.riskPerTrade = riskPerTrade;
         this.stopLossPct = stopLossPct;
         this.takeProfitPct = takeProfitPct;
+        this.nbSimples = nbSimples;
     }
 }
 

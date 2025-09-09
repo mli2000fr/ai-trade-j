@@ -28,5 +28,6 @@ public class BestCombinationResult {
     public double riskPerTrade;
     public double stopLossPct;
     public double takeProfitPct;
+    public int nbSimples;
 }
 

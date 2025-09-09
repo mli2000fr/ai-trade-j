@@ -16,12 +16,12 @@ CREATE TABLE trade_ai.best_in_out_single_strategy (
     score_swing_trade DOUBLE,
     created_date DATE,
     updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
         -- param de test
         initial_capital DOUBLE,
         risk_per_trade DOUBLE,
         stop_loss_pct DOUBLE,
-        take_profit_pct DOUBLE
+        take_profit_pct DOUBLE,
+    nb_simples INT
 );
 
 Voici l’explication de chaque colonne de la table best_in_out_strategy :

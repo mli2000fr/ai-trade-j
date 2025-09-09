@@ -17,10 +17,10 @@ CREATE TABLE trade_ai.best_in_out_mix_strategy (
     score_swing_trade DOUBLE,
     create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
             -- param de test
             initial_capital DOUBLE,
             risk_per_trade DOUBLE,
             stop_loss_pct DOUBLE,
-            take_profit_pct DOUBLE
+            take_profit_pct DOUBLE,
+    nb_simples INT
 );
