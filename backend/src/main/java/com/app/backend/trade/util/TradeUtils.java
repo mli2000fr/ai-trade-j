@@ -2,6 +2,8 @@ package com.app.backend.trade.util;
 
 import com.app.backend.model.RiskResult;
 import com.app.backend.trade.model.DailyValue;
+import org.ta4j.core.BarSeries;
+import org.ta4j.core.BaseBarSeries;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -49,6 +51,27 @@ public class TradeUtils {
         } catch (Exception e) {
             throw new RuntimeException("Erreur lors de la lecture du fichier de ressource : " + path, e);
         }
+    }
+
+
+    /**
+     * Retourne la série de prix découpée en deux parties selon les pourcentages définis.
+     * @param series la série complète
+     * @return tableau [BarSeries optimisation, BarSeries test]
+     */
+    public static BarSeries[] splitSeriesForWalkForward(BarSeries series) {
+        int total = series.getBarCount();
+        int nOptim = (int) Math.round(total * TradeConstant.PC_OPTIM);
+        if (nOptim < 1) throw new IllegalArgumentException("Découpage walk-forward impossible : pas assez de données");
+        BarSeries optimSeries = new BaseBarSeries();
+        BarSeries testSeries = new BaseBarSeries();
+        for (int i = 0; i < nOptim; i++) {
+            optimSeries.addBar(series.getBar(i));
+        }
+        for (int i = nOptim; i < total; i++) {
+            testSeries.addBar(series.getBar(i));
+        }
+        return new BarSeries[] {optimSeries, testSeries};
     }
 
     /**

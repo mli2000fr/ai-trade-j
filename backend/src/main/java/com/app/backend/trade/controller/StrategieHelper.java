@@ -536,33 +536,14 @@ public class StrategieHelper {
         TradeUtils.log("calculCroisedStrategies: total: "+listeDbSymbols.size()+", nbInsert: "+nbInsert.get()+", error: " + error.get());
     }
 
-    /**
-     * Retourne la série de prix découpée en deux parties selon les pourcentages définis.
-     * @param series la série complète
-     * @return tableau [BarSeries optimisation, BarSeries test]
-     */
-    public BarSeries[] splitSeriesForWalkForward(BarSeries series) {
-        int total = series.getBarCount();
-        int nOptim = (int) Math.round(total * TradeConstant.PC_OPTIM);
-        if (nOptim < 1) throw new IllegalArgumentException("Découpage walk-forward impossible : pas assez de données");
-        BarSeries optimSeries = new BaseBarSeries();
-        BarSeries testSeries = new BaseBarSeries();
-        for (int i = 0; i < nOptim; i++) {
-            optimSeries.addBar(series.getBar(i));
-        }
-        for (int i = nOptim; i < total; i++) {
-            testSeries.addBar(series.getBar(i));
-        }
-        return new BarSeries[] {optimSeries, testSeries};
-    }
 
     /**
      * Teste automatiquement toutes les combinaisons croisées de stratégies pour in (entrée) et out (sortie).
      * Utilise le découpage walk-forward défini par les constantes.
      */
     public BestInOutStrategy optimseBestInOutByWalkForward(String symbol) {
-        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES));
-        BarSeries[] split = splitSeriesForWalkForward(series);
+        BarSeries series = this.mapping(this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_OPTIM));
+        BarSeries[] split = TradeUtils.splitSeriesForWalkForward(series);
         BarSeries optimSeries = split[0];
         BarSeries testSeries = split[1];
         // Optimisation des paramètres sur la partie optimisation

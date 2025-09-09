@@ -107,7 +107,7 @@ public class BestCombinaisonStrategyHelper {
                 }
             }
         }
-        BarSeries barSeries = strategieHelper.getAndUpdateDBDailyValu(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES);
+        BarSeries barSeries = strategieHelper.getAndUpdateDBDailyValu(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_OPTIM);
         for (int in = 1; in <= NB_IN; in++) {
             for (int out = 1; out <= NB_OUT; out++) {
                 // Générer les combinaisons qui incluent obligatoirement la best in/out
@@ -171,8 +171,9 @@ public class BestCombinaisonStrategyHelper {
         int optimCount = (int) Math.round(totalCount * TradeConstant.PC_OPTIM);
         int testCount = totalCount - optimCount;
         // Séparer les bougies pour optimisation et test
-        BarSeries optimSeries = fullSeries.getBarCount() > 0 ? fullSeries.getSubSeries(0, optimCount) : fullSeries;
-        BarSeries testSeries = fullSeries.getBarCount() > optimCount ? fullSeries.getSubSeries(optimCount, optimCount + testCount) : fullSeries;
+        BarSeries[] split = TradeUtils.splitSeriesForWalkForward(fullSeries);
+        BarSeries optimSeries = split[0];
+        BarSeries testSeries = split[1];
         StrategieBackTest backTest = new StrategieBackTest();
         List<TradeStrategy> inStrategies = new ArrayList<>();
         List<String> inStrategyNames = new ArrayList<>();
