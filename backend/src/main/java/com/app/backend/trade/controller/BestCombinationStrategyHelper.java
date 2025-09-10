@@ -480,7 +480,7 @@ public class BestCombinationStrategyHelper {
 
 
     public List<String> getAllAssetSymbolsEligibleFromDb() {
-        String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true;";
+        String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true ORDER BY symbol ASC;";
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
