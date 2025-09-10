@@ -208,7 +208,7 @@ public class TradeHelper {
      */
     private void sleepForRateLimit() {
         try {
-            Thread.sleep(61000);
+            Thread.sleep(1000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Thread interrompu pendant la temporisation de 61s", e);

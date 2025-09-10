@@ -36,10 +36,13 @@ interface BestInOutStrategy {
     maxTradeLoss: number;
     scoreSwingTrade?: number;
   };
-  initialCapital: number;
-  riskPerTrade: number;
-  stopLossPct: number;
-  takeProfitPct: number;
+  contextOptim: {
+    initialCapital: number;
+    riskPerTrade: number;
+    stopLossPct: number;
+    takeProfitPct: number;
+    nbSimples: number;
+  };
 }
 
 const BestPerformanceSymbolBlock: React.FC = () => {
@@ -221,10 +224,11 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               </ul>
               <Typography variant="subtitle1"><b>Gestion du risque :</b></Typography>
               <ul>
-                <li>Capital initial : {selected.initialCapital}</li>
-                <li>Risk/trade : {selected.riskPerTrade}</li>
-                <li>Stop loss (%) : {selected.stopLossPct}</li>
-                <li>Take profit (%) : {selected.takeProfitPct}</li>
+                <li>Capital initial : {selected.contextOptim.initialCapital}</li>
+                <li>Risk/trade : {selected.contextOptim.riskPerTrade}</li>
+                <li>Stop loss (%) : {selected.contextOptim.stopLossPct}</li>
+                <li>Take profit (%) : {selected.contextOptim.takeProfitPct}</li>
+                <li>Nb Simples : {selected.contextOptim.nbSimples}</li>
               </ul>
             </div>
           )}

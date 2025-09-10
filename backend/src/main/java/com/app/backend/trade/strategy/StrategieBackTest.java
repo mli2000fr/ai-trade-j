@@ -132,7 +132,17 @@ public class StrategieBackTest {
         double avgTradeBars = tradeCount > 0 ? (double) totalTradeBars / tradeCount : 0.0;
         double maxTradeGain = (maxGain == Double.NEGATIVE_INFINITY) ? 0.0 : maxGain;
         double maxTradeLoss = (maxLoss == Double.POSITIVE_INFINITY) ? 0.0 : maxLoss;
-        RiskResult riskResult = new RiskResult(rendement, maxDrawdown, tradeCount, winRate, avgPnL, profitFactor, avgTradeBars, maxTradeGain, maxTradeLoss);
+        RiskResult riskResult = RiskResult.builder()
+                .rendement(rendement)
+                .tradeCount(tradeCount)
+                .winRate(winRate)
+                .maxDrawdown(maxDrawdown)
+                .avgPnL(avgPnL)
+                .profitFactor(profitFactor)
+                .avgTradeBars(avgTradeBars)
+                .maxTradeGain(maxTradeGain)
+                .maxTradeLoss(maxTradeLoss)
+                .build();
         double scoreSwingTrade = TradeUtils.calculerScoreSwingTrade(riskResult);
         riskResult.setScoreSwingTrade(scoreSwingTrade);
         return riskResult;
