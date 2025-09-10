@@ -379,8 +379,6 @@ public class StrategieHelper {
                 com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
                 // Backtest sur la partie test uniquement
                 RiskResult result = strategieBackTest.backtestStrategyRisk(combined, testSeries);
-                double scoreST =  TradeUtils.calculerScoreSwingTrade(result);
-                result.setScoreSwingTrade(scoreST);
                 System.out.println("Symbol: " + symbol +
                                    " | IN: " + entryName + " " + gson.toJson(entryParams) +
                                    " | OUT: " + exitName + " " + gson.toJson(exitParams) +
@@ -388,7 +386,7 @@ public class StrategieHelper {
                                    + " | Trades: " + result.tradeCount
                                    + " | WinRate: " + String.format("%.2f", result.winRate * 100) + "%"
                         + " | Drawdown: " + String.format("%.2f", result.maxDrawdown * 100) + "%"
-                        + " | Score ST: " + String.format("%.2f", scoreST * 100) + "%");
+                        + " | Score ST: " + String.format("%.2f", result.scoreSwingTrade));
                 if (result.rendement > bestPerf) {
                     bestPerf = result.rendement;
                     bestCombo = BestInOutStrategy.builder()
