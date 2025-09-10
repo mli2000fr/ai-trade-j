@@ -71,6 +71,7 @@ public class StrategieHelper {
     public void updateDBDailyValuAllSymbols(){
         List<String> listeDbSymbols = this.getAllAssetSymbolsFromDb();
         int error = 0;
+        int compteur = 0;
         for(String symbol : listeDbSymbols){
             try{
                 List<DailyValue> listeValues = this.updateDailyValue(symbol);
@@ -82,6 +83,8 @@ public class StrategieHelper {
                 error++;
                 TradeUtils.log("Erreur updateDailyValue("+symbol+") : " + e.getMessage());
             }
+            compteur++;
+            TradeUtils.log("updateDBDailyValuAllSymbols: compteur "+compteur);
         }
         TradeUtils.log("updateDBDailyValuAllSymbols: total "+listeDbSymbols.size()+", error" + error);
     }
