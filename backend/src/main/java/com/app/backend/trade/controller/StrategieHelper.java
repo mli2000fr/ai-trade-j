@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static com.app.backend.trade.util.TradeConstant.NOMBRE_TOTAL_BOUGIES_FOR_SIGNAL;
+
 /**
  * Classe helper pour la gestion des stratégies, optimisation et accès base de données.
  * Toutes les méthodes utilitaires ont été déplacées dans TradeUtils.
@@ -92,10 +94,9 @@ public class StrategieHelper {
     /**
      * Récupère et met à jour les valeurs journalières en base, puis retourne la série correspondante.
      * @param symbol symbole à traiter
-     * @param limit nombre de valeurs à retourner
      * @return BarSeries
      */
-    public BarSeries getAndUpdateDBDailyValu(String symbol, int limit){
+    public void updateDBDailyValu(String symbol){
         String sql = "SELECT MAX(date) FROM daily_value WHERE symbol = ?";
         java.sql.Date lastDate = null;
         try {
@@ -136,7 +137,6 @@ public class StrategieHelper {
                 }catch(Exception e){}
             }
         }
-        return TradeUtils.mapping(getDailyValuesFromDb(symbol, limit));
     }
 
 
@@ -217,10 +217,12 @@ public class StrategieHelper {
      * @return liste de DailyValue
      */
     public List<DailyValue> getDailyValuesFromDb(String symbol, Integer limit) {
+
         String sql = "SELECT date, open, high, low, close, volume, number_of_trades, volume_weighted_average_price " +
-                "FROM daily_value WHERE symbol = ? ORDER BY date DESC";
+                "FROM daily_value WHERE symbol = ? ORDER BY date ASC";
         if (limit != null && limit > 0) {
-            sql += " LIMIT " + limit;
+            sql = "SELECT date, open, high, low, close, volume, number_of_trades, volume_weighted_average_price " +
+                    "FROM daily_value WHERE symbol = ? ORDER BY date DESC LIMIT " + limit;
         }
         List<DailyValue> results = jdbcTemplate.query(sql, new Object[]{symbol}, (rs, rowNum) -> {
             return DailyValue.builder()
@@ -236,7 +238,9 @@ public class StrategieHelper {
         });
 
         // Inverser la liste pour avoir les dates en ordre croissant
-        Collections.reverse(results);
+        if (limit != null && limit > 0) {
+            Collections.reverse(results);
+        }
         return results;
     }
 
@@ -651,7 +655,9 @@ public class StrategieHelper {
     public SignalType getBestInOutSignal(String symbol) {
         BestInOutStrategy best = getBestInOutStrategy(symbol);
         if (best == null) return SignalType.NONE;
-        BarSeries series = getAndUpdateDBDailyValu(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES);
+        updateDBDailyValu(symbol);
+        List<DailyValue> listeValus = this.getDailyValuesFromDb(symbol, NOMBRE_TOTAL_BOUGIES_FOR_SIGNAL);
+        BarSeries series = TradeUtils.mapping(listeValus);
         int lastIndex = series.getEndIndex();
         // Instancie les stratégies IN/OUT
         com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(best.entryName, best.entryParams);

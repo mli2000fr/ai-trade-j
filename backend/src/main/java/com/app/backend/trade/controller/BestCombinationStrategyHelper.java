@@ -3,6 +3,7 @@ package com.app.backend.trade.controller;
 import com.app.backend.model.RiskResult;
 import com.app.backend.trade.model.BestCombinationResult;
 import com.app.backend.trade.model.ContextOptim;
+import com.app.backend.trade.model.DailyValue;
 import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.strategy.*;
 import com.app.backend.trade.util.TradeConstant;
@@ -59,7 +60,9 @@ public class BestCombinationStrategyHelper {
                 }
             }
         }
-        BarSeries barSeries = strategieHelper.getAndUpdateDBDailyValu(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_OPTIM);
+        strategieHelper.updateDBDailyValu(symbol);
+        List<DailyValue> listeValus = strategieHelper.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_OPTIM);
+        BarSeries barSeries = TradeUtils.mapping(listeValus);
         for (int in = 1; in <= NB_IN; in++) {
             for (int out = 1; out <= NB_OUT; out++) {
                 // Générer les combinaisons qui incluent obligatoirement la best in/out
@@ -400,8 +403,10 @@ public class BestCombinationStrategyHelper {
 
     public SignalType getSignal(String symbol) {
         BestCombinationResult bestCombinationResult = getBestCombinationResult(symbol);
-        BarSeries barSeries = strategieHelper.getAndUpdateDBDailyValu(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES);
-        if (bestCombinationResult == null || barSeries == null || barSeries.getBarCount() == 0) {
+        this.strategieHelper.updateDBDailyValu(symbol);
+        List<DailyValue> listeValus = strategieHelper.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_FOR_SIGNAL);
+        BarSeries barSeries = TradeUtils.mapping(listeValus);
+        if (bestCombinationResult == null || barSeries.getBarCount() == 0) {
             return SignalType.NONE;
         }
         // Recréer les stratégies d'entrée
