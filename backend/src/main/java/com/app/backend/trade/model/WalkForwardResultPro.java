@@ -16,8 +16,11 @@ public class WalkForwardResultPro {
     private double avgTestRendement;
     private double overfitRatio;
     private boolean isOverfit;
+    private double sharpeRatio;
+    private double rendementStdDev;
+    private double sortinoRatio;
 
-    public WalkForwardResultPro(List<ComboResult> segmentResults, double avgRendement, double avgDrawdown, double avgWinRate, double avgProfitFactor, double avgTradeDuration, double avgGainLossRatio, double scoreSwingTrade, int totalTrades, double avgTrainRendement, double avgTestRendement, double overfitRatio, boolean isOverfit) {
+    public WalkForwardResultPro(List<ComboResult> segmentResults, double avgRendement, double avgDrawdown, double avgWinRate, double avgProfitFactor, double avgTradeDuration, double avgGainLossRatio, double scoreSwingTrade, int totalTrades, double avgTrainRendement, double avgTestRendement, double overfitRatio, boolean isOverfit, double sharpeRatio, double rendementStdDev, double sortinoRatio) {
         this.segmentResults = segmentResults;
         this.avgRendement = avgRendement;
         this.avgDrawdown = avgDrawdown;
@@ -31,6 +34,9 @@ public class WalkForwardResultPro {
         this.avgTestRendement = avgTestRendement;
         this.overfitRatio = overfitRatio;
         this.isOverfit = isOverfit;
+        this.sharpeRatio = sharpeRatio;
+        this.rendementStdDev = rendementStdDev;
+        this.sortinoRatio = sortinoRatio;
     }
 
     public List<ComboResult> getSegmentResults() { return segmentResults; }
@@ -46,4 +52,7 @@ public class WalkForwardResultPro {
     public double getAvgTestRendement() { return avgTestRendement; }
     public double getOverfitRatio() { return overfitRatio; }
     public boolean isOverfit() { return isOverfit; }
+    public double getSharpeRatio() { return sharpeRatio; }
+    public double getRendementStdDev() { return rendementStdDev; }
+    public double getSortinoRatio() { return sortinoRatio; }
 }

@@ -19,4 +19,4 @@ Si un segment ne trouve aucune stratégie profitable, loggez-le et analysez pour
 
 
 
-j'ai fais us swing trade professionel, j'utilise la méthode  optimseStrategy de la calsse StrategieHelper, je veux Filtrer des stratégies trop complexes ou instables
+j'ai fais us swing trade professionel, j'utilise la méthode  optimseStrategy de la calsse StrategieHelper, je veux Ajout d’indicateurs de robustesse dans le résultat, après la modification, bien vérifier si tous est bon dans la classe

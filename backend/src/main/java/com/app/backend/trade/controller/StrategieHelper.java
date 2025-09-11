@@ -804,7 +804,28 @@ public class StrategieHelper {
         double avgTestRendement = testRendements.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
         double overfitRatio = (avgTrainRendement != 0.0) ? (avgTestRendement / avgTrainRendement) : 0.0;
         boolean isOverfit = overfitRatio < 0.7;
-        return new WalkForwardResultPro(segmentResults, avgRendement, avgDrawdown, avgWinRate, avgProfitFactor, avgTradeDuration, avgGainLossRatio, scoreSwingTrade, totalTrades, avgTrainRendement, avgTestRendement, overfitRatio, isOverfit);
+        // Calcul indicateurs de robustesse
+        double rendementStdDev = 0.0;
+        double sharpeRatio = 0.0;
+        double sortinoRatio = 0.0;
+        if (testRendements.size() > 1) {
+            double mean = avgTestRendement;
+            double sumSq = 0.0;
+            double sumNegSq = 0.0;
+            int negCount = 0;
+            for (double r : testRendements) {
+                double diff = r - mean;
+                sumSq += diff * diff;
+                if (diff < 0) {
+                    sumNegSq += diff * diff;
+                    negCount++;
+                }
+            }
+            rendementStdDev = Math.sqrt(sumSq / (testRendements.size() - 1));
+            sharpeRatio = (rendementStdDev != 0.0) ? (mean / rendementStdDev) : 0.0;
+            sortinoRatio = (negCount > 0) ? (mean / Math.sqrt(sumNegSq / negCount)) : 0.0;
+        }
+        return new WalkForwardResultPro(segmentResults, avgRendement, avgDrawdown, avgWinRate, avgProfitFactor, avgTradeDuration, avgGainLossRatio, scoreSwingTrade, totalTrades, avgTrainRendement, avgTestRendement, overfitRatio, isOverfit, sharpeRatio, rendementStdDev, sortinoRatio);
     }
 
     /**
@@ -879,7 +900,28 @@ public class StrategieHelper {
         double avgTestRendement = testRendements.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
         double overfitRatio = (avgTrainRendement != 0.0) ? (avgTestRendement / avgTrainRendement) : 0.0;
         boolean isOverfit = overfitRatio < 0.7;
-        return new WalkForwardResultPro(segmentResults, avgRendement, avgDrawdown, avgWinRate, avgProfitFactor, avgTradeDuration, avgGainLossRatio, scoreSwingTrade, totalTrades, avgTrainRendement, avgTestRendement, overfitRatio, isOverfit);
+        // Calcul indicateurs de robustesse
+        double rendementStdDev = 0.0;
+        double sharpeRatio = 0.0;
+        double sortinoRatio = 0.0;
+        if (testRendements.size() > 1) {
+            double mean = avgTestRendement;
+            double sumSq = 0.0;
+            double sumNegSq = 0.0;
+            int negCount = 0;
+            for (double r : testRendements) {
+                double diff = r - mean;
+                sumSq += diff * diff;
+                if (diff < 0) {
+                    sumNegSq += diff * diff;
+                    negCount++;
+                }
+            }
+            rendementStdDev = Math.sqrt(sumSq / (testRendements.size() - 1));
+            sharpeRatio = (rendementStdDev != 0.0) ? (mean / rendementStdDev) : 0.0;
+            sortinoRatio = (negCount > 0) ? (mean / Math.sqrt(sumNegSq / negCount)) : 0.0;
+        }
+        return new WalkForwardResultPro(segmentResults, avgRendement, avgDrawdown, avgWinRate, avgProfitFactor, avgTradeDuration, avgGainLossRatio, scoreSwingTrade, totalTrades, avgTrainRendement, avgTestRendement, overfitRatio, isOverfit, sharpeRatio, rendementStdDev, sortinoRatio);
     }
 
     /**
