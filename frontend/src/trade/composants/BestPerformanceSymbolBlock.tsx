@@ -56,11 +56,16 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [limit, setLimit] = useState<number>(20);
   const [indices, setIndices] = useState<{ [symbol: string]: string }>({});
   const [sort, setSort] = useState<string>('rendement');
+  const [showOnlyNonFiltered, setShowOnlyNonFiltered] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`/api/stra/strategies/best_performance_actions?limit=${limit}&sort=${sort}`)
+    let url = `/api/stra/strategies/best_performance_actions?limit=${limit}&sort=${sort}`;
+    if (showOnlyNonFiltered) {
+      url += `&filtered=true`;
+    }
+    fetch(url)
       .then(res => {
         if (!res.ok) throw new Error('Erreur API');
         return res.json();
@@ -68,7 +73,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [limit, sort]);
+  }, [limit, sort, showOnlyNonFiltered]);
 
   useEffect(() => {
     if (!data || data.length === 0) return;
@@ -142,6 +147,17 @@ const BestPerformanceSymbolBlock: React.FC = () => {
             >
               Copier
             </Button>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ marginLeft: 16 }}>
+              <input
+                type="checkbox"
+                checked={showOnlyNonFiltered}
+                onChange={e => setShowOnlyNonFiltered(e.target.checked)}
+                style={{ marginRight: 8 }}
+              />
+              Afficher uniquement les stratégies non filtrées
+            </label>
           </div>
           {loading ? (
             <CircularProgress />

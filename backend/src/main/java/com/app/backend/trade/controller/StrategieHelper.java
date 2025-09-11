@@ -620,12 +620,16 @@ public class StrategieHelper {
      * @param sort critère de tri (par défaut rendement)
      * @return liste des meilleures stratégies BestInOutStrategy
      */
-    public List<BestInOutStrategy> getBestPerfActions(Integer limit, String sort){
+    public List<BestInOutStrategy> getBestPerfActions(Integer limit, String sort, Boolean filtered){
         String orderBy = "rendement";
         if ("score_swing_trade".equalsIgnoreCase(sort)) {
             orderBy = "score_swing_trade";
         }
-        String sql = "SELECT * FROM best_in_out_single_strategy WHERE profit_factor <> 0 AND max_drawdown <> 0 AND win_rate < 1 ORDER BY " + orderBy + " DESC";
+        String sql = "SELECT * FROM best_in_out_single_strategy WHERE profit_factor <> 0 AND max_drawdown <> 0 AND win_rate < 1";
+        if (filtered != null && filtered) {
+            sql += " AND fltred_out = false";
+        }
+        sql += " ORDER BY " + orderBy + " DESC";
         if (limit != null && limit > 0) {
             sql += " LIMIT " + limit;
         }
