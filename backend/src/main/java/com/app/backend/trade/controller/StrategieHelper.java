@@ -726,116 +726,59 @@ public class StrategieHelper {
      * @return WalkForwardResultPro
      */
     public WalkForwardResultPro optimseStrategy(BarSeries series, double optimWindowPct, double testWindowPct, double stepWindowPct, StrategyFilterConfig filterConfig, SwingTradeOptimParams swingParams) {
-        logger.info("[optimseStrategy] Démarrage de l'optimisation walk-forward (pourcentages) : optimWindowPct={}, testWindowPct={}, stepWindowPct={}", optimWindowPct, testWindowPct, stepWindowPct);
+        logger.info("[optimseStrategy] Démarrage de l'optimisation walk-forward avec validation croisée : optimWindowPct={}, testWindowPct={}, stepWindowPct={}", optimWindowPct, testWindowPct, stepWindowPct);
         int totalBars = series.getBarCount();
-        logger.info("[optimseStrategy] Nombre total de bougies : {}", totalBars);
         int optimWindow = Math.max(1, (int) Math.round(totalBars * optimWindowPct));
         int testWindow = Math.max(1, (int) Math.round(totalBars * testWindowPct));
         int stepWindow = Math.max(1, (int) Math.round(totalBars * stepWindowPct));
-        logger.info("[optimseStrategy] Fenêtre optimisation : {} | Fenêtre test : {} | Pas : {}", optimWindow, testWindow, stepWindow);
-        if (totalBars < (optimWindow + testWindow)) {
-            logger.error("[optimseStrategy] Série trop courte pour les fenêtres demandées. Abandon.");
-            // return WalkForwardResultPro.builder().segmentResults(new ArrayList<>()).build();
-        }
-        List<ComboResult> segmentResults = new ArrayList<>();
-        int start = 0;
-        double lastPerf = Double.NEGATIVE_INFINITY;
-        // Remplacer le cache simple par un cache LRU (max 100 entrées)
-        java.util.Map<String, Object> optimCache = new java.util.LinkedHashMap<String, Object>() {
-            protected boolean removeEldestEntry(java.util.Map.Entry<String, Object> eldest) {
-                return size() > 100;
-            }
-        };
-        int segmentCount = 0;
-        while (start + optimWindow + testWindow <= totalBars) {
-            long segmentStartTime = System.nanoTime();
-            logger.info("[optimseStrategy] Segment #{} start={} | optimWindow={} | testWindow={}", segmentCount+1, start, optimWindow, testWindow);
+        int kFolds = 5; // Nombre de folds pour la validation croisée (modifiable)
+        List<List<ComboResult>> foldsResults = new ArrayList<>();
+        int foldSize = (totalBars - (optimWindow + testWindow)) / kFolds;
+        if (foldSize < 1) foldSize = 1;
+        List<Double> trainPerformances = new ArrayList<>();
+        List<Double> testPerformances = new ArrayList<>();
+        for (int fold = 0; fold < kFolds; fold++) {
+            int start = fold * foldSize;
+            if (start + optimWindow + testWindow > totalBars) break;
             BarSeries optimSeries = series.getSubSeries(start, start + optimWindow);
             BarSeries testSeries = series.getSubSeries(start + optimWindow, start + optimWindow + testWindow);
-            long paramOptStart = System.nanoTime();
-            logger.info("[optimseStrategy] Optimisation des paramètres sur la partie optimisation...");
-            String cacheKey = optimSeries.getBeginIndex() + ":" + optimSeries.getEndIndex();
-            StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend;
-            StrategieBackTest.SmaCrossoverParams bestSmaCrossover;
-            StrategieBackTest.RsiParams bestRsi;
-            StrategieBackTest.BreakoutParams bestBreakout;
-            StrategieBackTest.MacdParams bestMacd;
-            StrategieBackTest.MeanReversionParams bestMeanReversion;
-            if (optimCache.containsKey(cacheKey+":trend")) {
-                bestImprovedTrend = (StrategieBackTest.ImprovedTrendFollowingParams)optimCache.get(cacheKey+":trend");
-            } else {
-                bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(
-                    optimSeries,
-                    swingParams.trendMaMin, swingParams.trendMaMax,
-                    swingParams.trendShortMaMin, swingParams.trendShortMaMax,
-                    swingParams.trendLongMaMin, swingParams.trendLongMaMax,
-                    swingParams.trendBreakoutMin, swingParams.trendBreakoutMax, swingParams.trendBreakoutStep
-                );
-                optimCache.put(cacheKey+":trend", bestImprovedTrend);
-            }
-            logger.info("[optimseStrategy] optimiseImprovedTrendFollowingParameters en {} ms", (System.nanoTime() - paramOptStart) / 1_000_000);
-            if (optimCache.containsKey(cacheKey+":sma")) {
-                bestSmaCrossover = (StrategieBackTest.SmaCrossoverParams)optimCache.get(cacheKey+":sma");
-            } else {
-                bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(
-                    optimSeries,
-                    swingParams.smaShortMin, swingParams.smaShortMax,
-                    swingParams.smaLongMin, swingParams.smaLongMax
-                );
-                optimCache.put(cacheKey+":sma", bestSmaCrossover);
-            }
-            logger.info("[optimseStrategy] optimiseSmaCrossoverParameters en {} ms", (System.nanoTime() - paramOptStart) / 1_000_000);
-            if (optimCache.containsKey(cacheKey+":rsi")) {
-                bestRsi = (StrategieBackTest.RsiParams)optimCache.get(cacheKey+":rsi");
-            } else {
-                bestRsi = strategieBackTest.optimiseRsiParameters(
-                    optimSeries,
-                    swingParams.rsiPeriodMin, swingParams.rsiPeriodMax,
-                    swingParams.rsiOversoldMin, swingParams.rsiOversoldMax,
-                    swingParams.rsiStep,
-                    swingParams.rsiOverboughtMin, swingParams.rsiOverboughtMax,
-                    swingParams.rsiStep
-                );
-                optimCache.put(cacheKey+":rsi", bestRsi);
-            }
-            logger.info("[optimseStrategy] optimiseSmaCrossoverParameters en {} ms", (System.nanoTime() - paramOptStart) / 1_000_000);
-            if (optimCache.containsKey(cacheKey+":breakout")) {
-                bestBreakout = (StrategieBackTest.BreakoutParams)optimCache.get(cacheKey+":breakout");
-            } else {
-                bestBreakout = strategieBackTest.optimiseBreakoutParameters(
-                    optimSeries,
-                    swingParams.breakoutLookbackMin, swingParams.breakoutLookbackMax
-                );
-                optimCache.put(cacheKey+":breakout", bestBreakout);
-            }
-            logger.info("[optimseStrategy] optimiseBreakoutParameters en {} ms", (System.nanoTime() - paramOptStart) / 1_000_000);
-            if (optimCache.containsKey(cacheKey+":macd")) {
-                bestMacd = (StrategieBackTest.MacdParams)optimCache.get(cacheKey+":macd");
-            } else {
-                bestMacd = strategieBackTest.optimiseMacdParameters(
-                    optimSeries,
-                    swingParams.macdShortMin, swingParams.macdShortMax,
-                    swingParams.macdLongMin, swingParams.macdLongMax,
-                    swingParams.macdSignalMin, swingParams.macdSignalMax
-                );
-                optimCache.put(cacheKey+":macd", bestMacd);
-            }
-            logger.info("[optimseStrategy] optimiseMacdParameters en {} ms", (System.nanoTime() - paramOptStart) / 1_000_000);
-            if (optimCache.containsKey(cacheKey+":meanrev")) {
-                bestMeanReversion = (StrategieBackTest.MeanReversionParams)optimCache.get(cacheKey+":meanrev");
-            } else {
-                bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(
-                    optimSeries,
-                    swingParams.meanRevSmaMin, swingParams.meanRevSmaMax,
-                    swingParams.meanRevThresholdMin, swingParams.meanRevThresholdMax,
-                    swingParams.meanRevThresholdStep
-                );
-                optimCache.put(cacheKey+":meanrev", bestMeanReversion);
-            }
-            logger.info("[optimseStrategy] optimiseMeanReversionParameters en {} ms", (System.nanoTime() - paramOptStart) / 1_000_000);
-            long paramOptEnd = System.nanoTime();
-            logger.info("[optimseStrategy] Paramètres optimisés en {} ms", (paramOptEnd - paramOptStart) / 1_000_000);
-            long comboStart = System.nanoTime();
+            // --- Optimisation des paramètres sur le train ---
+            StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(
+                optimSeries,
+                swingParams.trendMaMin, swingParams.trendMaMax,
+                swingParams.trendShortMaMin, swingParams.trendShortMaMax,
+                swingParams.trendLongMaMin, swingParams.trendLongMaMax,
+                swingParams.trendBreakoutMin, swingParams.trendBreakoutMax, swingParams.trendBreakoutStep
+            );
+            StrategieBackTest.SmaCrossoverParams bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(
+                optimSeries,
+                swingParams.smaShortMin, swingParams.smaShortMax,
+                swingParams.smaLongMin, swingParams.smaLongMax
+            );
+            StrategieBackTest.RsiParams bestRsi = strategieBackTest.optimiseRsiParameters(
+                optimSeries,
+                swingParams.rsiPeriodMin, swingParams.rsiPeriodMax,
+                swingParams.rsiOversoldMin, swingParams.rsiOversoldMax,
+                swingParams.rsiStep,
+                swingParams.rsiOverboughtMin, swingParams.rsiOverboughtMax,
+                swingParams.rsiStep
+            );
+            StrategieBackTest.BreakoutParams bestBreakout = strategieBackTest.optimiseBreakoutParameters(
+                optimSeries,
+                swingParams.breakoutLookbackMin, swingParams.breakoutLookbackMax
+            );
+            StrategieBackTest.MacdParams bestMacd = strategieBackTest.optimiseMacdParameters(
+                optimSeries,
+                swingParams.macdShortMin, swingParams.macdShortMax,
+                swingParams.macdLongMin, swingParams.macdLongMax,
+                swingParams.macdSignalMin, swingParams.macdSignalMax
+            );
+            StrategieBackTest.MeanReversionParams bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(
+                optimSeries,
+                swingParams.meanRevSmaMin, swingParams.meanRevSmaMax,
+                swingParams.meanRevThresholdMin, swingParams.meanRevThresholdMax,
+                swingParams.meanRevThresholdStep
+            );
             java.util.List<Object[]> strategies = java.util.Arrays.asList(
                 new Object[]{"Improved Trend", bestImprovedTrend},
                 new Object[]{"SMA Crossover", bestSmaCrossover},
@@ -844,8 +787,10 @@ public class StrategieHelper {
                 new Object[]{"MACD", bestMacd},
                 new Object[]{"Mean Reversion", bestMeanReversion}
             );
+            List<ComboResult> foldResults = new ArrayList<>();
             double bestPerf = Double.NEGATIVE_INFINITY;
             ComboResult bestCombo = null;
+            double bestTrainPerf = Double.NEGATIVE_INFINITY;
             for (Object[] entry : strategies) {
                 for (Object[] exit : strategies) {
                     String entryName = (String) entry[0];
@@ -855,41 +800,45 @@ public class StrategieHelper {
                     com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(entryName, entryParams);
                     com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
                     com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
+                    // Backtest sur train
+                    RiskResult trainResult = strategieBackTest.backtestStrategy(combined, optimSeries);
+                    if (trainResult.getRendement() > bestTrainPerf) {
+                        bestTrainPerf = trainResult.getRendement();
+                    }
+                    // Backtest sur test
                     RiskResult result = strategieBackTest.backtestStrategy(combined, testSeries);
+                    ComboResult combo = ComboResult.builder()
+                        .entryName(entryName)
+                        .entryParams(entryParams)
+                        .exitName(exitName)
+                        .exitParams(exitParams)
+                        .result(result)
+                        .build();
+                    foldResults.add(combo);
                     if (result.getRendement() > bestPerf) {
                         bestPerf = result.getRendement();
-                        bestCombo = ComboResult.builder()
-                            .entryName(entryName)
-                            .entryParams(entryParams)
-                            .exitName(exitName)
-                            .exitParams(exitParams)
-                            .result(result)
-                            .build();
+                        bestCombo = combo;
                     }
                 }
             }
-            long comboEnd = System.nanoTime();
-            logger.info("[optimseStrategy] Test des combinaisons IN/OUT terminé en {} ms", (comboEnd - comboStart) / 1_000_000);
-            if (bestCombo != null) segmentResults.add(bestCombo);
-            if (lastPerf != Double.NEGATIVE_INFINITY && bestPerf <= lastPerf * 1.01) {
-                logger.info("[optimseStrategy] Early stopping: performance stable ({} <= {})", bestPerf, lastPerf * 1.01);
-                break;
+            trainPerformances.add(bestTrainPerf);
+            // Backtest sur test (déjà fait dans foldResults)
+            double bestTestPerf = Double.NEGATIVE_INFINITY;
+            for (ComboResult combo : foldResults) {
+                double perf = combo.getResult().getRendement();
+                if (perf > bestTestPerf) bestTestPerf = perf;
             }
-            lastPerf = bestPerf;
-            start += stepWindow;
-            long segmentEndTime = System.nanoTime();
-            logger.info("[optimseStrategy] Segment #{} terminé en {} ms", segmentCount+1, (segmentEndTime - segmentStartTime) / 1_000_000);
-            segmentCount++;
+            testPerformances.add(bestTestPerf);
+            foldsResults.add(foldResults);
         }
-        logger.info("[optimseStrategy] Agrégation des résultats...");
-        // Agrégation des résultats swing trade
+        // Agrégation des résultats de tous les folds
+        List<ComboResult> allResults = new ArrayList<>();
+        for (List<ComboResult> fold : foldsResults) allResults.addAll(fold);
         double sumRendement = 0.0, sumDrawdown = 0.0, sumWinRate = 0.0, sumProfitFactor = 0.0, sumTradeDuration = 0.0;
         int totalTrades = 0;
-        List<Double> trainRendements = new ArrayList<>();
-        List<Double> testRendements = new ArrayList<>();
         ComboResult bestCombo = null;
         double bestPerf = Double.NEGATIVE_INFINITY;
-        for (ComboResult r : segmentResults) {
+        for (ComboResult r : allResults) {
             RiskResult res = r.getResult();
             sumRendement += res.getRendement();
             sumDrawdown += res.getMaxDrawdown();
@@ -897,81 +846,45 @@ public class StrategieHelper {
             sumProfitFactor += res.getProfitFactor();
             sumTradeDuration += res.getAvgTradeBars();
             totalTrades += res.getTradeCount();
-            // Sélection du meilleur ComboResult
             if (res.getRendement() > bestPerf) {
                 bestPerf = res.getRendement();
                 bestCombo = r;
             }
-            // Ajout du contrôle overfitting pour chaque segment
-            com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(r.getEntryName(), r.getEntryParams());
-            com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(r.getExitName(), r.getExitParams());
-            com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
-            int segmentIndex = segmentResults.indexOf(r);
-            int trainStart = segmentIndex * stepWindow;
-            int trainEnd = trainStart + optimWindow;
-            if (trainEnd <= series.getBarCount()) {
-                BarSeries optimSeries = series.getSubSeries(trainStart, trainEnd);
-                RiskResult trainResult = strategieBackTest.backtestStrategy(combined, optimSeries);
-                trainRendements.add(trainResult.getRendement());
-                testRendements.add(res.getRendement());
-                double ratio = (trainResult.getRendement() != 0.0) ? (res.getRendement() / trainResult.getRendement()) : 0.0;
-                boolean overfit = ratio < 0.7;
-                logger.info("[Overfitting] Segment {} : trainRendement={}\ttestRendement={}\tratio={}\toverfit={}", segmentIndex+1, String.format("%.4f", trainResult.getRendement()), String.format("%.4f", res.getRendement()), String.format("%.2f", ratio), overfit);
-            }
         }
-        int n = segmentResults.size();
+        int n = allResults.size();
         double avgRendement = n > 0 ? sumRendement / n : 0.0;
         double avgDrawdown = n > 0 ? sumDrawdown / n : 0.0;
         double avgWinRate = n > 0 ? sumWinRate / n : 0.0;
         double avgProfitFactor = n > 0 ? sumProfitFactor / n : 0.0;
         double avgTradeDuration = n > 0 ? sumTradeDuration / n : 0.0;
-        double avgGainLossRatio = 0.0; // non disponible dans OptimResult
-        double scoreSwingTrade = 0.0; // non disponible dans OptimResult
-        double avgTrainRendement = trainRendements.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-        double avgTestRendement = testRendements.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-        double overfitRatio = (avgTrainRendement != 0.0) ? (avgTestRendement / avgTrainRendement) : 0.0;
-        boolean isOverfit = overfitRatio < 0.7;
-        double rendementStdDev = 0.0;
-        double sharpeRatio = 0.0;
-        double sortinoRatio = 0.0;
-        if (testRendements.size() > 1) {
-            double sumSq = 0.0;
-            double sumNegSq = 0.0;
-            int negCount = 0;
-            for (double r : testRendements) {
-                double diff = r - avgTestRendement;
-                sumSq += diff * diff;
-                if (diff < 0) {
-                    sumNegSq += diff * diff;
-                    negCount++;
-                }
+        // --- Contrôle de l'overfitting ---
+        double avgTrainPerf = trainPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double avgTestPerf = testPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double overfitRatio = avgTestPerf / (avgTrainPerf == 0.0 ? 1.0 : avgTrainPerf);
+        boolean isOverfit = (overfitRatio < 0.7 || overfitRatio > 1.3);
+        if (isOverfit) {
+            if (bestCombo != null && bestCombo.getResult() != null) {
+                bestCombo.getResult().setFltredOut(true);
             }
-            rendementStdDev = Math.sqrt(sumSq / (testRendements.size() - 1));
-            sharpeRatio = (rendementStdDev != 0.0) ? (avgTestRendement / rendementStdDev) : 0.0;
-            sortinoRatio = (negCount > 0) ? (avgTestRendement / Math.sqrt(sumNegSq / negCount)) : 0.0;
         }
-        logger.info("[optimseStrategy] Fin de l'optimisation walk-forward, retour du résultat.");
         // --- Filtrage final sur le meilleur résultat ---
-        boolean stable = isStableAndSimple(bestCombo.getResult(), bestCombo.getEntryName(), bestCombo.getExitName(), bestCombo.getEntryParams(), bestCombo.getExitParams(), filterConfig);
-        bestCombo.getResult().setFltredOut(!stable);
+        boolean stable = bestCombo != null && bestCombo.getResult() != null && isStableAndSimple(bestCombo.getResult(), bestCombo.getEntryName(), bestCombo.getExitName(), bestCombo.getEntryParams(), bestCombo.getExitParams(), filterConfig);
+        if (bestCombo != null && bestCombo.getResult() != null) {
+            bestCombo.getResult().setFltredOut(!stable || isOverfit);
+        }
         return WalkForwardResultPro.builder()
-                .segmentResults(segmentResults)
+                .segmentResults(allResults)
                 .avgRendement(avgRendement)
                 .avgDrawdown(avgDrawdown)
                 .avgWinRate(avgWinRate)
                 .avgProfitFactor(avgProfitFactor)
                 .avgTradeDuration(avgTradeDuration)
-                .avgGainLossRatio(avgGainLossRatio)
-                .scoreSwingTrade(scoreSwingTrade)
                 .totalTrades(totalTrades)
-                .avgTrainRendement(avgTrainRendement)
-                .avgTestRendement(avgTestRendement)
+                .bestCombo(bestCombo)
+                .avgTrainRendement(avgTrainPerf)
+                .avgTestRendement(avgTestPerf)
                 .overfitRatio(overfitRatio)
                 .isOverfit(isOverfit)
-                .sharpeRatio(sharpeRatio)
-                .rendementStdDev(rendementStdDev)
-                .sortinoRatio(sortinoRatio)
-                .bestCombo(bestCombo)
                 .build();
     }
 
