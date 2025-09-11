@@ -699,55 +699,88 @@ public class StrategieHelper {
         logger.info("[optimseStrategy] Fenêtre optimisation : {} | Fenêtre test : {} | Pas : {}", optimWindow, testWindow, stepWindow);
         List<ComboResult> segmentResults = new ArrayList<>();
         int start = 0;
+        double lastPerf = Double.NEGATIVE_INFINITY;
+        // Cache pour les résultats d'optimisation
+        java.util.Map<String, Object> optimCache = new java.util.HashMap<>();
         while (start + optimWindow + testWindow <= totalBars) {
             logger.info("[optimseStrategy] Segment start={} | optimWindow={} | testWindow={}", start, optimWindow, testWindow);
             BarSeries optimSeries = series.getSubSeries(start, start + optimWindow);
             BarSeries testSeries = series.getSubSeries(start + optimWindow, start + optimWindow + testWindow);
             logger.info("[optimseStrategy] Optimisation des paramètres sur la partie optimisation...");
-            // Optimisation des paramètres sur la partie optimisation
-            StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(
-                optimSeries,
-                swingParams.trendMaMin, swingParams.trendMaMax,
-                swingParams.trendShortMaMin, swingParams.trendShortMaMax,
-                swingParams.trendLongMaMin, swingParams.trendLongMaMax,
-                swingParams.trendBreakoutMin, swingParams.trendBreakoutMax, swingParams.trendBreakoutStep
-            );
-            StrategieBackTest.SmaCrossoverParams bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(
-                optimSeries,
-                swingParams.smaShortMin, swingParams.smaShortMax,
-                swingParams.smaLongMin, swingParams.smaLongMax
-            );
-            StrategieBackTest.RsiParams bestRsi = strategieBackTest.optimiseRsiParameters(
-                optimSeries,
-                swingParams.rsiPeriodMin, swingParams.rsiPeriodMax,
-                swingParams.rsiOversoldMin, swingParams.rsiOversoldMax,
-                swingParams.rsiStep,
-                swingParams.rsiOverboughtMin, swingParams.rsiOverboughtMax,
-                swingParams.rsiStep
-            );
-            StrategieBackTest.BreakoutParams bestBreakout = strategieBackTest.optimiseBreakoutParameters(
-                optimSeries,
-                swingParams.breakoutLookbackMin, swingParams.breakoutLookbackMax
-            );
-            StrategieBackTest.MacdParams bestMacd = strategieBackTest.optimiseMacdParameters(
-                optimSeries,
-                swingParams.macdShortMin, swingParams.macdShortMax,
-                swingParams.macdLongMin, swingParams.macdLongMax,
-                swingParams.macdSignalMin, swingParams.macdSignalMax
-            );
-            StrategieBackTest.MeanReversionParams bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(
-                optimSeries,
-                swingParams.meanRevSmaMin, swingParams.meanRevSmaMax,
-                swingParams.meanRevThresholdMin, swingParams.meanRevThresholdMax,
-                swingParams.meanRevThresholdStep
-            );
-            logger.info("[optimseStrategy] Paramètres optimisés :");
-            logger.info("[optimseStrategy]  - Improved Trend : {}", bestImprovedTrend);
-            logger.info("[optimseStrategy]  - SMA Crossover : {}", bestSmaCrossover);
-            logger.info("[optimseStrategy]  - RSI : {}", bestRsi);
-            logger.info("[optimseStrategy]  - Breakout : {}", bestBreakout);
-            logger.info("[optimseStrategy]  - MACD : {}", bestMacd);
-            logger.info("[optimseStrategy]  - Mean Reversion : {}", bestMeanReversion);
+            // Optimisation des paramètres sur la partie optimisation avec cache
+            String cacheKey = optimSeries.getBeginIndex() + ":" + optimSeries.getEndIndex();
+            StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend;
+            StrategieBackTest.SmaCrossoverParams bestSmaCrossover;
+            StrategieBackTest.RsiParams bestRsi;
+            StrategieBackTest.BreakoutParams bestBreakout;
+            StrategieBackTest.MacdParams bestMacd;
+            StrategieBackTest.MeanReversionParams bestMeanReversion;
+            if (optimCache.containsKey(cacheKey+":trend")) {
+                bestImprovedTrend = (StrategieBackTest.ImprovedTrendFollowingParams)optimCache.get(cacheKey+":trend");
+            } else {
+                bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(
+                    optimSeries,
+                    swingParams.trendMaMin, swingParams.trendMaMax,
+                    swingParams.trendShortMaMin, swingParams.trendShortMaMax,
+                    swingParams.trendLongMaMin, swingParams.trendLongMaMax,
+                    swingParams.trendBreakoutMin, swingParams.trendBreakoutMax, swingParams.trendBreakoutStep
+                );
+                optimCache.put(cacheKey+":trend", bestImprovedTrend);
+            }
+            if (optimCache.containsKey(cacheKey+":sma")) {
+                bestSmaCrossover = (StrategieBackTest.SmaCrossoverParams)optimCache.get(cacheKey+":sma");
+            } else {
+                bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(
+                    optimSeries,
+                    swingParams.smaShortMin, swingParams.smaShortMax,
+                    swingParams.smaLongMin, swingParams.smaLongMax
+                );
+                optimCache.put(cacheKey+":sma", bestSmaCrossover);
+            }
+            if (optimCache.containsKey(cacheKey+":rsi")) {
+                bestRsi = (StrategieBackTest.RsiParams)optimCache.get(cacheKey+":rsi");
+            } else {
+                bestRsi = strategieBackTest.optimiseRsiParameters(
+                    optimSeries,
+                    swingParams.rsiPeriodMin, swingParams.rsiPeriodMax,
+                    swingParams.rsiOversoldMin, swingParams.rsiOversoldMax,
+                    swingParams.rsiStep,
+                    swingParams.rsiOverboughtMin, swingParams.rsiOverboughtMax,
+                    swingParams.rsiStep
+                );
+                optimCache.put(cacheKey+":rsi", bestRsi);
+            }
+            if (optimCache.containsKey(cacheKey+":breakout")) {
+                bestBreakout = (StrategieBackTest.BreakoutParams)optimCache.get(cacheKey+":breakout");
+            } else {
+                bestBreakout = strategieBackTest.optimiseBreakoutParameters(
+                    optimSeries,
+                    swingParams.breakoutLookbackMin, swingParams.breakoutLookbackMax
+                );
+                optimCache.put(cacheKey+":breakout", bestBreakout);
+            }
+            if (optimCache.containsKey(cacheKey+":macd")) {
+                bestMacd = (StrategieBackTest.MacdParams)optimCache.get(cacheKey+":macd");
+            } else {
+                bestMacd = strategieBackTest.optimiseMacdParameters(
+                    optimSeries,
+                    swingParams.macdShortMin, swingParams.macdShortMax,
+                    swingParams.macdLongMin, swingParams.macdLongMax,
+                    swingParams.macdSignalMin, swingParams.macdSignalMax
+                );
+                optimCache.put(cacheKey+":macd", bestMacd);
+            }
+            if (optimCache.containsKey(cacheKey+":meanrev")) {
+                bestMeanReversion = (StrategieBackTest.MeanReversionParams)optimCache.get(cacheKey+":meanrev");
+            } else {
+                bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(
+                    optimSeries,
+                    swingParams.meanRevSmaMin, swingParams.meanRevSmaMax,
+                    swingParams.meanRevThresholdMin, swingParams.meanRevThresholdMax,
+                    swingParams.meanRevThresholdStep
+                );
+                optimCache.put(cacheKey+":meanrev", bestMeanReversion);
+            }
             // Liste des stratégies et paramètres
             java.util.List<Object[]> strategies = java.util.Arrays.asList(
                 new Object[]{"Improved Trend", bestImprovedTrend},
@@ -770,29 +803,26 @@ public class StrategieHelper {
                     com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
                     OptimResult result = strategieBackTest.backtestStrategy(combined, testSeries);
                     if (!isStableAndSimple(result, entryName, exitName, entryParams, exitParams)) continue; // filtrage
-                    if (result.rendement > bestPerf) {
-                        bestPerf = result.rendement;
+                    if (result.getRendement() > bestPerf) {
+                        bestPerf = result.getRendement();
                         bestCombo = ComboResult.builder()
-                                .entryName(entryName)
-                                .exitName(exitName)
-                                .entryParams(entryParams)
-                                .exitParams(exitParams)
-                                .paramsOptim(ParamsOptim.builder()
-                                        .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
-                                        .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
-                                        .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
-                                        .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
-                                        .nbSimples(testSeries.getBarCount()).build())
-                                .result(result)
-                                .build();
+                            .entryName(entryName)
+                            .entryParams(entryParams)
+                            .exitName(exitName)
+                            .exitParams(exitParams)
+                            .result(result)
+                            .build();
                     }
                 }
             }
-            if (bestCombo != null) {
-                segmentResults.add(bestCombo);
+            if (bestCombo != null) segmentResults.add(bestCombo);
+            // Early stopping si la performance n'augmente pas de plus de 1%
+            if (lastPerf != Double.NEGATIVE_INFINITY && bestPerf <= lastPerf * 1.01) {
+                logger.info("[optimseStrategy] Early stopping: performance stable ({} <= {})", bestPerf, lastPerf * 1.01);
+                break;
             }
-            start += stepWindow; // avancer la fenêtre selon le pas
-            logger.info("[optimseStrategy] Fin optimisation du segment, meilleur rendement={} (si bestCombo!=null)", bestPerf);
+            lastPerf = bestPerf;
+            start += stepWindow;
         }
         logger.info("[optimseStrategy] Agrégation des résultats...");
         // Agrégation des résultats swing trade
@@ -1011,8 +1041,8 @@ public class StrategieHelper {
                 com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
                 OptimResult result = strategieBackTest.backtestStrategy(combined, testSeries);
                 if (!isStableAndSimple(result, entryName, exitName, entryParams, exitParams)) continue; // filtrage
-                if (result.rendement > bestPerf) {
-                    bestPerf = result.rendement;
+                if (result.getRendement() > bestPerf) {
+                    bestPerf = result.getRendement();
                     bestCombo = ComboResult.builder()
                             .entryName(entryName)
                             .exitName(exitName)
