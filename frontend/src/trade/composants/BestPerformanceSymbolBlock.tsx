@@ -35,6 +35,7 @@ interface BestInOutStrategy {
     maxTradeGain: number;
     maxTradeLoss: number;
     scoreSwingTrade?: number;
+    fltredOut?: boolean;
   };
   paramsOptim: {
     initialCapital: number;
@@ -154,6 +155,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Score Swing Trade</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Filtrée</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Indice</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie IN</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie OUT</TableCell>
@@ -168,7 +170,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                 <TableBody>
                   {data.map((row, i) => {
                     let bgColor = undefined;
-                    if (indices[row.symbol] === 'BUY') bgColor = 'rgba(76, 175, 80, 0.5)';
+                    if (indices[row.symbol] === 'BUY' && !row.result.fltredOut) bgColor = 'rgba(76, 175, 80, 0.5)';
                     if (indices[row.symbol] === 'SELL') bgColor = 'rgba(244, 67, 54, 0.05)';
                     return (
                       <TableRow key={i} sx={bgColor ? { backgroundColor: bgColor } : {}}>
@@ -181,6 +183,13 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         </TableCell>
                         <TableCell>{row.symbol}</TableCell>
                         <TableCell>{row.result.scoreSwingTrade !== undefined ? (row.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
+                        <TableCell>
+                          {row.result.fltredOut ? (
+                            <span style={{ color: 'red', fontWeight: 'bold' }}>Oui</span>
+                          ) : (
+                            <span>Non</span>
+                          )}
+                        </TableCell>
                         <TableCell>{indices[row.symbol] === 'pending' ? <CircularProgress size={16} /> : (indices[row.symbol] ?? '-')}</TableCell>
                         <TableCell>{row.entryName}</TableCell>
                         <TableCell>{row.exitName}</TableCell>
