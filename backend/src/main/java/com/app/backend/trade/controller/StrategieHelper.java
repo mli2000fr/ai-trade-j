@@ -747,6 +747,7 @@ public class StrategieHelper {
                     com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
                     com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
                     OptimResult result = strategieBackTest.backtestStrategy(combined, testSeries);
+                    if (!isStableAndSimple(result, entryName, exitName, entryParams, exitParams)) continue; // filtrage
                     if (result.rendement > bestPerf) {
                         bestPerf = result.rendement;
                         bestCombo = ComboResult.builder()
@@ -942,6 +943,7 @@ public class StrategieHelper {
                 com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
                 com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
                 OptimResult result = strategieBackTest.backtestStrategy(combined, testSeries);
+                if (!isStableAndSimple(result, entryName, exitName, entryParams, exitParams)) continue; // filtrage
                 if (result.rendement > bestPerf) {
                     bestPerf = result.rendement;
                     bestCombo = ComboResult.builder()
@@ -961,5 +963,31 @@ public class StrategieHelper {
             }
         }
         return bestCombo;
+    }
+
+    /**
+     * Filtre les stratégies trop complexes ou instables.
+     * Ajout contrôle durée moyenne des trades et ratio gain/perte.
+     * @return true si la stratégie est stable et simple
+     */
+    private boolean isStableAndSimple(OptimResult result, String entryName, String exitName, Object entryParams, Object exitParams) {
+        // Critères de stabilité
+        if (result.getMaxDrawdown() > 0.3) return false; // drawdown > 30%
+        if (result.getProfitFactor() < 1.2) return false; // profit factor < 1.2
+        if (result.getWinRate() < 0.3) return false; // win rate < 30%
+        // Durée moyenne des trades (swing trade typique: 2 à 20 bars)
+        if (result.getAvgTradeBars() < 2 || result.getAvgTradeBars() > 20) return false;
+        // Ratio gain/perte (maxTradeGain/maxTradeLoss)
+        double gainLossRatio = 0.0;
+        if (result.getMaxTradeLoss() != 0) {
+            gainLossRatio = Math.abs(result.getMaxTradeGain()) / Math.abs(result.getMaxTradeLoss());
+            if (gainLossRatio < 1.0) return false;
+        }
+        // Critère de complexité (exemple: trop de paramètres)
+        int paramCount = 0;
+        if (entryParams != null) paramCount += entryParams.getClass().getDeclaredFields().length;
+        if (exitParams != null) paramCount += exitParams.getClass().getDeclaredFields().length;
+        if (paramCount > 10) return false; // trop complexe
+        return true;
     }
 }
