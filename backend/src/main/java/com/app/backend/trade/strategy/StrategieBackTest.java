@@ -432,28 +432,82 @@ public class StrategieBackTest {
         double bestThreshold = thresholdMin;
         boolean bestUseRsi = true;
         int bestRsiPeriod = 14;
+        double earlyStopThreshold = 0.3; // Arrêt anticipé si rendement > 30%
+        int rsiPeriod = 14;
 
-        for (int trendPeriod = trendMin; trendPeriod <= trendMax; trendPeriod += 2) {
-            for (int shortMa = shortMaMin; shortMa <= shortMaMax; shortMa += 2) {
-                for (int longMa = longMaMin; longMa <= longMaMax; longMa += 3) {
-                    if (shortMa >= longMa) continue; // shortMa doit être < longMa
-                    for (double threshold = thresholdMin; threshold <= thresholdMax; threshold += thresholdStep) {
-                        for (boolean useRsi : new boolean[]{true, false}) {
-                            RiskResult result = backtestImprovedTrendFollowingStrategy(series, trendPeriod, shortMa, longMa, threshold, useRsi, 14);
-                            if (result.rendement > bestReturn) {
-                                bestReturn = result.rendement;
-                                bestTrend = trendPeriod;
-                                bestShortMa = shortMa;
-                                bestLongMa = longMa;
-                                bestThreshold = threshold;
-                                bestUseRsi = useRsi;
-                            }
-                        }
-                    }
+        // Calcul du nombre total de combinaisons
+        int trendStep = (trendMax - trendMin > 20) ? 4 : 2;
+        int shortMaStep = (shortMaMax - shortMaMin > 20) ? 4 : 2;
+        int longMaStep = (longMaMax - longMaMin > 20) ? 6 : 3;
+        int thresholdCount = (int) Math.ceil((thresholdMax - thresholdMin) / thresholdStep) + 1;
+        int totalCombinaisons = 0;
+        for (int trendPeriod = trendMin; trendPeriod <= trendMax; trendPeriod += trendStep) {
+            for (int shortMa = shortMaMin; shortMa <= shortMaMax; shortMa += shortMaStep) {
+                for (int longMa = longMaMin; longMa <= longMaMax; longMa += longMaStep) {
+                    if (shortMa >= longMa) continue;
+                    totalCombinaisons += 2 * thresholdCount; // 2 pour useRsi true/false
                 }
             }
         }
-        return new ImprovedTrendFollowingParams(bestTrend, bestShortMa, bestLongMa, bestThreshold, bestUseRsi, bestRsiPeriod, bestReturn);
+
+        java.util.Random rand = new java.util.Random();
+        int maxRandomTests = 200;
+        boolean useRandomSearch = totalCombinaisons > 1000;
+        int tested = 0;
+
+        if (useRandomSearch) {
+            // Random Search
+            for (int i = 0; i < maxRandomTests; i++) {
+                int trendPeriod = trendMin + rand.nextInt((trendMax - trendMin) / trendStep + 1) * trendStep;
+                int shortMa = shortMaMin + rand.nextInt((shortMaMax - shortMaMin) / shortMaStep + 1) * shortMaStep;
+                int longMa = longMaMin + rand.nextInt((longMaMax - longMaMin) / longMaStep + 1) * longMaStep;
+                if (shortMa >= longMa) continue;
+                double threshold = thresholdMin + rand.nextInt(thresholdCount) * thresholdStep;
+                boolean useRsi = rand.nextBoolean();
+                RiskResult result = backtestImprovedTrendFollowingStrategy(series, trendPeriod, shortMa, longMa, threshold, useRsi, rsiPeriod);
+                tested++;
+                if (result.rendement > bestReturn) {
+                    bestReturn = result.rendement;
+                    bestTrend = trendPeriod;
+                    bestShortMa = shortMa;
+                    bestLongMa = longMa;
+                    bestThreshold = threshold;
+                    bestUseRsi = useRsi;
+                }
+                if (bestReturn > earlyStopThreshold) break;
+            }
+        } else {
+            // Recherche exhaustive mais avec pas adaptatifs
+            for (int trendPeriod = trendMin; trendPeriod <= trendMax; trendPeriod += trendStep) {
+                for (int shortMa = shortMaMin; shortMa <= shortMaMax; shortMa += shortMaStep) {
+                    for (int longMa = longMaMin; longMa <= longMaMax; longMa += longMaStep) {
+                        if (shortMa >= longMa) continue;
+                        for (double threshold = thresholdMin; threshold <= thresholdMax; threshold += thresholdStep) {
+                            for (boolean useRsi : new boolean[]{true, false}) {
+                                RiskResult result = backtestImprovedTrendFollowingStrategy(series, trendPeriod, shortMa, longMa, threshold, useRsi, rsiPeriod);
+                                tested++;
+                                if (result.rendement > bestReturn) {
+                                    bestReturn = result.rendement;
+                                    bestTrend = trendPeriod;
+                                    bestShortMa = shortMa;
+                                    bestLongMa = longMa;
+                                    bestThreshold = threshold;
+                                    bestUseRsi = useRsi;
+                                }
+                                if (bestReturn > earlyStopThreshold) break;
+                            }
+                            if (bestReturn > earlyStopThreshold) break;
+                        }
+                        if (bestReturn > earlyStopThreshold) break;
+                    }
+                    if (bestReturn > earlyStopThreshold) break;
+                }
+                if (bestReturn > earlyStopThreshold) break;
+            }
+        }
+        // Optionnel : log du nombre de tests
+        // System.out.println("Paramètres testés: " + tested + ", randomSearch: " + useRandomSearch);
+        return new ImprovedTrendFollowingParams(bestTrend, bestShortMa, bestLongMa, bestThreshold, bestUseRsi, rsiPeriod, bestReturn);
     }
 
     /**
