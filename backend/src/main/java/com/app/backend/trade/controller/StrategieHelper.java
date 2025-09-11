@@ -321,7 +321,7 @@ public class StrategieHelper {
      */
     public void calculCroisedStrategies(){
         List<String> listeDbSymbols = this.getAllAssetSymbolsEligibleFromDb();
-        int nbThreads = 1;//Math.max(2, Runtime.getRuntime().availableProcessors());
+        int nbThreads = Math.max(2, Runtime.getRuntime().availableProcessors());
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(nbThreads);
         java.util.concurrent.atomic.AtomicInteger error = new java.util.concurrent.atomic.AtomicInteger(0);
         java.util.concurrent.atomic.AtomicInteger nbInsert = new java.util.concurrent.atomic.AtomicInteger(0);
