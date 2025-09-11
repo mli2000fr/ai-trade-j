@@ -307,19 +307,57 @@ public class StrategieBackTest {
     public MacdParams optimiseMacdParameters(BarSeries series, int shortMin, int shortMax, int longMin, int longMax, int signalMin, int signalMax) {
         double bestReturn = Double.NEGATIVE_INFINITY;
         int bestShort = shortMin, bestLong = longMin, bestSignal = signalMin;
-        for (int shortPeriod = shortMin; shortPeriod <= shortMax; shortPeriod++) {
-            for (int longPeriod = longMin; longPeriod <= longMax; longPeriod++) {
-                for (int signalPeriod = signalMin; signalPeriod <= signalMax; signalPeriod++) {
-                    RiskResult result = backtestMacdStrategy(series, shortPeriod, longPeriod, signalPeriod);
-                    if (result.rendement > bestReturn) {
-                        bestReturn = result.rendement;
-                        bestShort = shortPeriod;
-                        bestLong = longPeriod;
-                        bestSignal = signalPeriod;
-                    }
+        double earlyStopThreshold = 0.3; // Arrêt anticipé si rendement > 30%
+        // Pas adaptatifs
+        int shortStep = (shortMax - shortMin > 20) ? 4 : 2;
+        int longStep = (longMax - longMin > 20) ? 4 : 2;
+        int signalStep = (signalMax - signalMin > 20) ? 4 : 2;
+        int shortCount = (shortMax - shortMin) / shortStep + 1;
+        int longCount = (longMax - longMin) / longStep + 1;
+        int signalCount = (signalMax - signalMin) / signalStep + 1;
+        int totalCombinaisons = shortCount * longCount * signalCount;
+        java.util.Random rand = new java.util.Random();
+        int maxRandomTests = 80;
+        boolean useRandomSearch = totalCombinaisons > 300;
+        int tested = 0;
+        if (useRandomSearch) {
+            // Random Search
+            for (int i = 0; i < maxRandomTests; i++) {
+                int shortPeriod = shortMin + rand.nextInt(shortCount) * shortStep;
+                int longPeriod = longMin + rand.nextInt(longCount) * longStep;
+                int signalPeriod = signalMin + rand.nextInt(signalCount) * signalStep;
+                RiskResult result = backtestMacdStrategy(series, shortPeriod, longPeriod, signalPeriod);
+                tested++;
+                if (result.rendement > bestReturn) {
+                    bestReturn = result.rendement;
+                    bestShort = shortPeriod;
+                    bestLong = longPeriod;
+                    bestSignal = signalPeriod;
                 }
+                if (bestReturn > earlyStopThreshold) break;
+            }
+        } else {
+            // Recherche exhaustive mais avec pas adaptatifs
+            for (int shortPeriod = shortMin; shortPeriod <= shortMax; shortPeriod += shortStep) {
+                for (int longPeriod = longMin; longPeriod <= longMax; longPeriod += longStep) {
+                    for (int signalPeriod = signalMin; signalPeriod <= signalMax; signalPeriod += signalStep) {
+                        RiskResult result = backtestMacdStrategy(series, shortPeriod, longPeriod, signalPeriod);
+                        tested++;
+                        if (result.rendement > bestReturn) {
+                            bestReturn = result.rendement;
+                            bestShort = shortPeriod;
+                            bestLong = longPeriod;
+                            bestSignal = signalPeriod;
+                        }
+                        if (bestReturn > earlyStopThreshold) break;
+                    }
+                    if (bestReturn > earlyStopThreshold) break;
+                }
+                if (bestReturn > earlyStopThreshold) break;
             }
         }
+        // Optionnel : log du nombre de tests
+        // System.out.println("Paramètres testés: " + tested + ", randomSearch: " + useRandomSearch);
         return new MacdParams(bestShort, bestLong, bestSignal, bestReturn);
     }
 
@@ -329,13 +367,39 @@ public class StrategieBackTest {
     public BreakoutParams optimiseBreakoutParameters(BarSeries series, int lookbackMin, int lookbackMax) {
         double bestReturn = Double.NEGATIVE_INFINITY;
         int bestLookback = lookbackMin;
-        for (int lookback = lookbackMin; lookback <= lookbackMax; lookback++) {
-            RiskResult result = backtestBreakoutStrategy(series, lookback);
-            if (result.rendement > bestReturn) {
-                bestReturn = result.rendement;
-                bestLookback = lookback;
+        double earlyStopThreshold = 0.3; // Arrêt anticipé si rendement > 30%
+        int lookbackStep = (lookbackMax - lookbackMin > 20) ? 4 : 2;
+        int totalCombinaisons = ((lookbackMax - lookbackMin) / lookbackStep) + 1;
+        java.util.Random rand = new java.util.Random();
+        int maxRandomTests = 50;
+        boolean useRandomSearch = totalCombinaisons > 100;
+        int tested = 0;
+        if (useRandomSearch) {
+            // Random Search
+            for (int i = 0; i < maxRandomTests; i++) {
+                int lookback = lookbackMin + rand.nextInt((lookbackMax - lookbackMin) / lookbackStep + 1) * lookbackStep;
+                RiskResult result = backtestBreakoutStrategy(series, lookback);
+                tested++;
+                if (result.rendement > bestReturn) {
+                    bestReturn = result.rendement;
+                    bestLookback = lookback;
+                }
+                if (bestReturn > earlyStopThreshold) break;
+            }
+        } else {
+            // Recherche exhaustive mais avec pas adaptatif
+            for (int lookback = lookbackMin; lookback <= lookbackMax; lookback += lookbackStep) {
+                RiskResult result = backtestBreakoutStrategy(series, lookback);
+                tested++;
+                if (result.rendement > bestReturn) {
+                    bestReturn = result.rendement;
+                    bestLookback = lookback;
+                }
+                if (bestReturn > earlyStopThreshold) break;
             }
         }
+        // Optionnel : log du nombre de tests
+        // System.out.println("Paramètres testés: " + tested + ", randomSearch: " + useRandomSearch);
         return new BreakoutParams(bestLookback, bestReturn);
     }
 
@@ -346,40 +410,112 @@ public class StrategieBackTest {
         double bestReturn = Double.NEGATIVE_INFINITY;
         int bestSma = smaMin;
         double bestThreshold = thresholdMin;
-        for (int sma = smaMin; sma <= smaMax; sma++) {
-            for (double threshold = thresholdMin; threshold <= thresholdMax; threshold += thresholdStep) {
+        double earlyStopThreshold = 0.3; // Arrêt anticipé si rendement > 30%
+        // Pas adaptatifs
+        int smaStep = (smaMax - smaMin > 20) ? 4 : 2;
+        double thresholdStepAdapt = (thresholdMax - thresholdMin > 20 * thresholdStep) ? thresholdStep * 2 : thresholdStep;
+        int smaCount = (smaMax - smaMin) / smaStep + 1;
+        int thresholdCount = (int) ((thresholdMax - thresholdMin) / thresholdStepAdapt) + 1;
+        int totalCombinaisons = smaCount * thresholdCount;
+        java.util.Random rand = new java.util.Random();
+        int maxRandomTests = 80;
+        boolean useRandomSearch = totalCombinaisons > 300;
+        int tested = 0;
+        if (useRandomSearch) {
+            // Random Search
+            for (int i = 0; i < maxRandomTests; i++) {
+                int sma = smaMin + rand.nextInt(smaCount) * smaStep;
+                double threshold = thresholdMin + rand.nextInt(thresholdCount) * thresholdStepAdapt;
                 RiskResult result = backtestMeanReversionStrategy(series, sma, threshold);
+                tested++;
                 if (result.rendement > bestReturn) {
                     bestReturn = result.rendement;
                     bestSma = sma;
                     bestThreshold = threshold;
                 }
+                if (bestReturn > earlyStopThreshold) break;
+            }
+        } else {
+            // Recherche exhaustive mais avec pas adaptatifs
+            for (int sma = smaMin; sma <= smaMax; sma += smaStep) {
+                for (double threshold = thresholdMin; threshold <= thresholdMax; threshold += thresholdStepAdapt) {
+                    RiskResult result = backtestMeanReversionStrategy(series, sma, threshold);
+                    tested++;
+                    if (result.rendement > bestReturn) {
+                        bestReturn = result.rendement;
+                        bestSma = sma;
+                        bestThreshold = threshold;
+                    }
+                    if (bestReturn > earlyStopThreshold) break;
+                }
+                if (bestReturn > earlyStopThreshold) break;
             }
         }
+        // Optionnel : log du nombre de tests
+        // System.out.println("Paramètres testés: " + tested + ", randomSearch: " + useRandomSearch);
         return new MeanReversionParams(bestSma, bestThreshold, bestReturn);
     }
 
     /**
-     * Optimisation des paramètres pour RsiStrategy
+     * Optimisation des paramètres pour RsiStrategy (version optimisée)
      */
     public RsiParams optimiseRsiParameters(BarSeries series, int rsiMin, int rsiMax, double oversoldMin, double oversoldMax, double oversoldStep, double overboughtMin, double overboughtMax, double overboughtStep) {
         double bestReturn = Double.NEGATIVE_INFINITY;
         int bestRsi = rsiMin;
         double bestOversold = oversoldMin;
         double bestOverbought = overboughtMin;
-        for (int rsi = rsiMin; rsi <= rsiMax; rsi++) {
-            for (double oversold = oversoldMin; oversold <= oversoldMax; oversold += oversoldStep) {
-                for (double overbought = overboughtMin; overbought <= overboughtMax; overbought += overboughtStep) {
-                    RiskResult result = backtestRsiStrategy(series, rsi, oversold, overbought);
-                    if (result.rendement > bestReturn) {
-                        bestReturn = result.rendement;
-                        bestRsi = rsi;
-                        bestOversold = oversold;
-                        bestOverbought = overbought;
-                    }
+        double earlyStopThreshold = 0.3; // Arrêt anticipé si rendement > 30%
+        // Pas adaptatifs
+        int rsiStep = (rsiMax - rsiMin > 20) ? 4 : 2;
+        double oversoldStepAdapt = (oversoldMax - oversoldMin > 20 * oversoldStep) ? oversoldStep * 2 : oversoldStep;
+        double overboughtStepAdapt = (overboughtMax - overboughtMin > 20 * overboughtStep) ? overboughtStep * 2 : overboughtStep;
+        // Calcul du nombre total de combinaisons
+        int rsiCount = (rsiMax - rsiMin) / rsiStep + 1;
+        int oversoldCount = (int) ((oversoldMax - oversoldMin) / oversoldStepAdapt) + 1;
+        int overboughtCount = (int) ((overboughtMax - overboughtMin) / overboughtStepAdapt) + 1;
+        int totalCombinaisons = rsiCount * oversoldCount * overboughtCount;
+        java.util.Random rand = new java.util.Random();
+        int maxRandomTests = 80;
+        boolean useRandomSearch = totalCombinaisons > 300;
+        int tested = 0;
+        if (useRandomSearch) {
+            // Random Search
+            for (int i = 0; i < maxRandomTests; i++) {
+                int rsi = rsiMin + rand.nextInt(rsiCount) * rsiStep;
+                double oversold = oversoldMin + rand.nextInt(oversoldCount) * oversoldStepAdapt;
+                double overbought = overboughtMin + rand.nextInt(overboughtCount) * overboughtStepAdapt;
+                RiskResult result = backtestRsiStrategy(series, rsi, oversold, overbought);
+                tested++;
+                if (result.rendement > bestReturn) {
+                    bestReturn = result.rendement;
+                    bestRsi = rsi;
+                    bestOversold = oversold;
+                    bestOverbought = overbought;
                 }
+                if (bestReturn > earlyStopThreshold) break;
+            }
+        } else {
+            // Recherche exhaustive mais avec pas adaptatifs
+            for (int rsi = rsiMin; rsi <= rsiMax; rsi += rsiStep) {
+                for (double oversold = oversoldMin; oversold <= oversoldMax; oversold += oversoldStepAdapt) {
+                    for (double overbought = overboughtMin; overbought <= overboughtMax; overbought += overboughtStepAdapt) {
+                        RiskResult result = backtestRsiStrategy(series, rsi, oversold, overbought);
+                        tested++;
+                        if (result.rendement > bestReturn) {
+                            bestReturn = result.rendement;
+                            bestRsi = rsi;
+                            bestOversold = oversold;
+                            bestOverbought = overbought;
+                        }
+                        if (bestReturn > earlyStopThreshold) break;
+                    }
+                    if (bestReturn > earlyStopThreshold) break;
+                }
+                if (bestReturn > earlyStopThreshold) break;
             }
         }
+        // Optionnel : log du nombre de tests
+        // System.out.println("Paramètres testés: " + tested + ", randomSearch: " + useRandomSearch);
         return new RsiParams(bestRsi, bestOversold, bestOverbought, bestReturn);
     }
 
@@ -390,16 +526,52 @@ public class StrategieBackTest {
         double bestReturn = Double.NEGATIVE_INFINITY;
         int bestShort = shortMin;
         int bestLong = longMin;
-        for (int shortPeriod = shortMin; shortPeriod <= shortMax; shortPeriod++) {
-            for (int longPeriod = longMin; longPeriod <= longMax; longPeriod++) {
+        double earlyStopThreshold = 0.3; // Arrêt anticipé si rendement > 30%
+        // Pas adaptatifs
+        int shortStep = (shortMax - shortMin > 20) ? 4 : 2;
+        int longStep = (longMax - longMin > 20) ? 4 : 2;
+        int totalCombinaisons = 0;
+        for (int shortPeriod = shortMin; shortPeriod <= shortMax; shortPeriod += shortStep) {
+            for (int longPeriod = longMin; longPeriod <= longMax; longPeriod += longStep) {
+                totalCombinaisons++;
+            }
+        }
+        java.util.Random rand = new java.util.Random();
+        int maxRandomTests = 100;
+        boolean useRandomSearch = totalCombinaisons > 500;
+        int tested = 0;
+        if (useRandomSearch) {
+            // Random Search
+            for (int i = 0; i < maxRandomTests; i++) {
+                int shortPeriod = shortMin + rand.nextInt((shortMax - shortMin) / shortStep + 1) * shortStep;
+                int longPeriod = longMin + rand.nextInt((longMax - longMin) / longStep + 1) * longStep;
                 RiskResult result = backtestSmaCrossoverStrategy(series, shortPeriod, longPeriod);
+                tested++;
                 if (result.rendement > bestReturn) {
                     bestReturn = result.rendement;
                     bestShort = shortPeriod;
                     bestLong = longPeriod;
                 }
+                if (bestReturn > earlyStopThreshold) break;
+            }
+        } else {
+            // Recherche exhaustive mais avec pas adaptatifs
+            for (int shortPeriod = shortMin; shortPeriod <= shortMax; shortPeriod += shortStep) {
+                for (int longPeriod = longMin; longPeriod <= longMax; longPeriod += longStep) {
+                    RiskResult result = backtestSmaCrossoverStrategy(series, shortPeriod, longPeriod);
+                    tested++;
+                    if (result.rendement > bestReturn) {
+                        bestReturn = result.rendement;
+                        bestShort = shortPeriod;
+                        bestLong = longPeriod;
+                    }
+                    if (bestReturn > earlyStopThreshold) break;
+                }
+                if (bestReturn > earlyStopThreshold) break;
             }
         }
+        // Optionnel : log du nombre de tests
+        // System.out.println("Paramètres testés: " + tested + ", randomSearch: " + useRandomSearch);
         return new SmaCrossoverParams(bestShort, bestLong, bestReturn);
     }
 
