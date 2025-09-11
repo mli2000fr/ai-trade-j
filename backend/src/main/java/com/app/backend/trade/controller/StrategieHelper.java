@@ -35,6 +35,8 @@ public class StrategieHelper {
     private final JdbcTemplate jdbcTemplate;
     private final StrategieBackTest strategieBackTest;
     private static final boolean INSERT_ONLY = true;
+    private final SwingTradeOptimParams swingParams = new SwingTradeOptimParams();
+
 
     @Autowired
     public StrategieHelper(AlpacaService alpacaService,
@@ -673,73 +675,122 @@ public class StrategieHelper {
 
 
 
-    public ComboResult optimseStrategy(BarSeries series) {
-        BarSeries[] split = TradeUtils.splitSeriesForWalkForward(series);
-        BarSeries optimSeries = split[0];
-        BarSeries testSeries = split[1];
-        // Optimisation des paramètres sur la partie optimisation
-        StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(optimSeries, 10, 30, 5, 15, 15, 25, 0.001, 0.01, 0.002);
-        StrategieBackTest.SmaCrossoverParams bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(optimSeries, 5, 20, 10, 50);
-        StrategieBackTest.RsiParams bestRsi = strategieBackTest.optimiseRsiParameters(optimSeries, 10, 20, 20, 40, 5, 60, 80, 5);
-        StrategieBackTest.BreakoutParams bestBreakout = strategieBackTest.optimiseBreakoutParameters(optimSeries, 5, 50);
-        StrategieBackTest.MacdParams bestMacd = strategieBackTest.optimiseMacdParameters(optimSeries, 8, 16, 20, 30, 6, 12);
-        StrategieBackTest.MeanReversionParams bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(optimSeries, 10, 30, 1.0, 5.0, 0.5);
-        // Liste des stratégies et paramètres
-        java.util.List<Object[]> strategies = java.util.Arrays.asList(
+    /**
+     * Optimisation walk-forward professionnelle pour le swing trade.
+     * @param series série de prix
+     * @param optimWindow taille de la fenêtre d'optimisation
+     * @param testWindow taille de la fenêtre de test
+     * @param stepWindow taille du pas de glissement (par défaut = testWindow)
+     * @return WalkForwardResultPro
+     */
+    public WalkForwardResultPro optimseStrategy(BarSeries series, int optimWindow, int testWindow, int stepWindow) {
+        int totalBars = series.getBarCount();
+        List<ComboResult> segmentResults = new ArrayList<>();
+        int start = 0;
+        while (start + optimWindow + testWindow <= totalBars) {
+            BarSeries optimSeries = series.getSubSeries(start, start + optimWindow);
+            BarSeries testSeries = series.getSubSeries(start + optimWindow, start + optimWindow + testWindow);
+            // Optimisation des paramètres sur la partie optimisation
+            StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(
+                optimSeries,
+                swingParams.trendMaMin, swingParams.trendMaMax,
+                swingParams.trendShortMaMin, swingParams.trendShortMaMax,
+                swingParams.trendLongMaMin, swingParams.trendLongMaMax,
+                swingParams.trendBreakoutMin, swingParams.trendBreakoutMax, swingParams.trendBreakoutStep
+            );
+            StrategieBackTest.SmaCrossoverParams bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(
+                optimSeries,
+                swingParams.smaShortMin, swingParams.smaShortMax,
+                swingParams.smaLongMin, swingParams.smaLongMax
+            );
+            StrategieBackTest.RsiParams bestRsi = strategieBackTest.optimiseRsiParameters(
+                optimSeries,
+                swingParams.rsiPeriodMin, swingParams.rsiPeriodMax,
+                swingParams.rsiOversoldMin, swingParams.rsiOversoldMax,
+                swingParams.rsiStep,
+                swingParams.rsiOverboughtMin, swingParams.rsiOverboughtMax,
+                swingParams.rsiStep
+            );
+            StrategieBackTest.BreakoutParams bestBreakout = strategieBackTest.optimiseBreakoutParameters(
+                optimSeries,
+                swingParams.breakoutLookbackMin, swingParams.breakoutLookbackMax
+            );
+            StrategieBackTest.MacdParams bestMacd = strategieBackTest.optimiseMacdParameters(
+                optimSeries,
+                swingParams.macdShortMin, swingParams.macdShortMax,
+                swingParams.macdLongMin, swingParams.macdLongMax,
+                swingParams.macdSignalMin, swingParams.macdSignalMax
+            );
+            StrategieBackTest.MeanReversionParams bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(
+                optimSeries,
+                swingParams.meanRevSmaMin, swingParams.meanRevSmaMax,
+                swingParams.meanRevThresholdMin, swingParams.meanRevThresholdMax,
+                swingParams.meanRevThresholdStep
+            );
+            java.util.List<Object[]> strategies = java.util.Arrays.asList(
                 new Object[]{"Improved Trend", bestImprovedTrend},
                 new Object[]{"SMA Crossover", bestSmaCrossover},
                 new Object[]{"RSI", bestRsi},
                 new Object[]{"Breakout", bestBreakout},
                 new Object[]{"MACD", bestMacd},
                 new Object[]{"Mean Reversion", bestMeanReversion}
-        );
-        double bestPerf = Double.NEGATIVE_INFINITY;
-        ComboResult bestCombo = null;
-        System.out.println("=== TESTS CROISÉS IN/OUT ===");
-        com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
-        for (Object[] entry : strategies) {
-            for (Object[] exit : strategies) {
-                String entryName = (String) entry[0];
-                Object entryParams = entry[1];
-                String exitName = (String) exit[0];
-                Object exitParams = exit[1];
-                // Instancier les stratégies
-                com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(entryName, entryParams);
-                com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
-                com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
-                // Backtest sur la partie test uniquement
-                OptimResult result = strategieBackTest.backtestStrategy(combined, testSeries);
-                System.out.println("IN: " + entryName + " " + gson.toJson(entryParams) +
-                        " | OUT: " + exitName + " " + gson.toJson(exitParams) +
-                        " | Rendement: " + String.format("%.4f", result.rendement * 100) + "%"
-                        + " | Trades: " + result.tradeCount
-                        + " | WinRate: " + String.format("%.2f", result.winRate * 100) + "%"
-                        + " | Drawdown: " + String.format("%.2f", result.maxDrawdown * 100) + "%");
-                if (result.rendement > bestPerf) {
-                    bestPerf = result.rendement;
-                    bestCombo = ComboResult.builder()
-                            .entryName(entryName)
-                            .exitName(exitName)
-                            .entryParams(entryParams)
-                            .exitParams(exitParams)
-                            .paramsOptim(ParamsOptim.builder()
-                                    .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
-                                    .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
-                                    .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
-                                    .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
-                                    .nbSimples(series.getBarCount()).build())
-                            .result(result)
-                            .build();
+            );
+            double bestPerf = Double.NEGATIVE_INFINITY;
+            ComboResult bestCombo = null;
+            for (Object[] entry : strategies) {
+                for (Object[] exit : strategies) {
+                    String entryName = (String) entry[0];
+                    Object entryParams = entry[1];
+                    String exitName = (String) exit[0];
+                    Object exitParams = exit[1];
+                    com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(entryName, entryParams);
+                    com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
+                    com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
+                    OptimResult result = strategieBackTest.backtestStrategy(combined, testSeries);
+                    if (result.rendement > bestPerf) {
+                        bestPerf = result.rendement;
+                        bestCombo = ComboResult.builder()
+                                .entryName(entryName)
+                                .exitName(exitName)
+                                .entryParams(entryParams)
+                                .exitParams(exitParams)
+                                .paramsOptim(ParamsOptim.builder()
+                                        .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
+                                        .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
+                                        .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
+                                        .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
+                                        .nbSimples(testSeries.getBarCount()).build())
+                                .result(result)
+                                .build();
+                    }
                 }
             }
+            if (bestCombo != null) {
+                segmentResults.add(bestCombo);
+            }
+            start += stepWindow; // avancer la fenêtre selon le pas
         }
-        System.out.println("=== MEILLEUR COUPLE IN/OUT ===");
-        if (bestCombo != null) {
-            System.out.println("IN: " + bestCombo.getEntryName() + " | OUT: " + bestCombo.getExitName() + " | Rendement: " + String.format("%.4f", bestCombo.getResult().getRendement() * 100) + "% | Trades: " + bestCombo.getResult().getTradeCount());
-            System.out.println("Paramètres IN: " + gson.toJson(bestCombo.getEntryParams()));
-            System.out.println("Paramètres OUT: " + gson.toJson(bestCombo.getExitParams()));
+        // Agrégation des résultats swing trade
+        double sumRendement = 0.0, sumDrawdown = 0.0, sumWinRate = 0.0, sumProfitFactor = 0.0, sumTradeDuration = 0.0;
+        int totalTrades = 0;
+        for (ComboResult r : segmentResults) {
+            OptimResult res = r.getResult();
+            sumRendement += res.getRendement();
+            sumDrawdown += res.getMaxDrawdown();
+            sumWinRate += res.getWinRate();
+            sumProfitFactor += res.getProfitFactor();
+            sumTradeDuration += res.getAvgTradeBars();
+            totalTrades += res.getTradeCount();
         }
-        return bestCombo;
+        int n = segmentResults.size();
+        double avgRendement = n > 0 ? sumRendement / n : 0.0;
+        double avgDrawdown = n > 0 ? sumDrawdown / n : 0.0;
+        double avgWinRate = n > 0 ? sumWinRate / n : 0.0;
+        double avgProfitFactor = n > 0 ? sumProfitFactor / n : 0.0;
+        double avgTradeDuration = n > 0 ? sumTradeDuration / n : 0.0;
+        double avgGainLossRatio = 0.0; // non disponible dans OptimResult
+        double scoreSwingTrade = 0.0; // non disponible dans OptimResult
+        return new WalkForwardResultPro(segmentResults, avgRendement, avgDrawdown, avgWinRate, avgProfitFactor, avgTradeDuration, avgGainLossRatio, scoreSwingTrade, totalTrades);
     }
 
 }
