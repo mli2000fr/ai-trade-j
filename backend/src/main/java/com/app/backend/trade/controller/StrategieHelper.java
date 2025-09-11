@@ -103,7 +103,12 @@ public class StrategieHelper {
         String sql = "SELECT MAX(date) FROM daily_value WHERE symbol = ?";
         java.sql.Date lastDate = null;
         try {
-            lastDate = jdbcTemplate.queryForObject(sql, new Object[]{symbol}, java.sql.Date.class);
+            lastDate = jdbcTemplate.query(sql, ps -> ps.setString(1, symbol), rs -> {
+                if (rs.next()) {
+                    return rs.getDate(1);
+                }
+                return null;
+            });
         } catch (Exception e) {
             logger.warn("Aucune date trouvée pour le symbole {} dans daily_value ou erreur SQL: {}", symbol, e.getMessage());
         }
@@ -137,7 +142,9 @@ public class StrategieHelper {
                 }
                 try{
                     Thread.sleep(200);
-                }catch(Exception e){}
+                }catch(Exception e){
+                    logger.warn("Erreur lors du sleep: {}", e.getMessage());
+                }
             }
         }
     }
@@ -277,7 +284,12 @@ public class StrategieHelper {
         String sql = "SELECT MAX(date) FROM daily_value WHERE symbol = ?";
         java.sql.Date lastDate = null;
         try {
-            lastDate = jdbcTemplate.queryForObject(sql, new Object[]{symbol}, java.sql.Date.class);
+            lastDate = jdbcTemplate.query(sql, ps -> ps.setString(1, symbol), rs -> {
+                if (rs.next()) {
+                    return rs.getDate(1);
+                }
+                return null;
+            });
         } catch (Exception e) {
             logger.warn("Aucune date trouvée pour le symbole {} dans daily_value ou erreur SQL: {}", symbol, e.getMessage());
         }
@@ -742,6 +754,7 @@ public class StrategieHelper {
                 );
                 optimCache.put(cacheKey+":trend", bestImprovedTrend);
             }
+            logger.info("[optimseStrategy] optimiseImprovedTrendFollowingParameters en {} ms", (System.nanoTime() - paramOptStart) / 1_000_000);
             if (optimCache.containsKey(cacheKey+":sma")) {
                 bestSmaCrossover = (StrategieBackTest.SmaCrossoverParams)optimCache.get(cacheKey+":sma");
             } else {
@@ -752,6 +765,7 @@ public class StrategieHelper {
                 );
                 optimCache.put(cacheKey+":sma", bestSmaCrossover);
             }
+            logger.info("[optimseStrategy] optimiseSmaCrossoverParameters en {} ms", (System.nanoTime() - paramOptStart) / 1_000_000);
             if (optimCache.containsKey(cacheKey+":rsi")) {
                 bestRsi = (StrategieBackTest.RsiParams)optimCache.get(cacheKey+":rsi");
             } else {
@@ -765,6 +779,7 @@ public class StrategieHelper {
                 );
                 optimCache.put(cacheKey+":rsi", bestRsi);
             }
+            logger.info("[optimseStrategy] optimiseSmaCrossoverParameters en {} ms", (System.nanoTime() - paramOptStart) / 1_000_000);
             if (optimCache.containsKey(cacheKey+":breakout")) {
                 bestBreakout = (StrategieBackTest.BreakoutParams)optimCache.get(cacheKey+":breakout");
             } else {
@@ -774,6 +789,7 @@ public class StrategieHelper {
                 );
                 optimCache.put(cacheKey+":breakout", bestBreakout);
             }
+            logger.info("[optimseStrategy] optimiseBreakoutParameters en {} ms", (System.nanoTime() - paramOptStart) / 1_000_000);
             if (optimCache.containsKey(cacheKey+":macd")) {
                 bestMacd = (StrategieBackTest.MacdParams)optimCache.get(cacheKey+":macd");
             } else {
@@ -785,6 +801,7 @@ public class StrategieHelper {
                 );
                 optimCache.put(cacheKey+":macd", bestMacd);
             }
+            logger.info("[optimseStrategy] optimiseMacdParameters en {} ms", (System.nanoTime() - paramOptStart) / 1_000_000);
             if (optimCache.containsKey(cacheKey+":meanrev")) {
                 bestMeanReversion = (StrategieBackTest.MeanReversionParams)optimCache.get(cacheKey+":meanrev");
             } else {
@@ -796,6 +813,7 @@ public class StrategieHelper {
                 );
                 optimCache.put(cacheKey+":meanrev", bestMeanReversion);
             }
+            logger.info("[optimseStrategy] optimiseMeanReversionParameters en {} ms", (System.nanoTime() - paramOptStart) / 1_000_000);
             long paramOptEnd = System.nanoTime();
             logger.info("[optimseStrategy] Paramètres optimisés en {} ms", (paramOptEnd - paramOptStart) / 1_000_000);
             long comboStart = System.nanoTime();
