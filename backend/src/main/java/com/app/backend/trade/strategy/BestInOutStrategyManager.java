@@ -1,7 +1,6 @@
 package com.app.backend.trade.strategy;
 
 import com.app.backend.model.RiskResult;
-import com.app.backend.trade.model.ContextOptim;
 import com.app.backend.trade.util.TradeUtils;
 import com.app.backend.trade.model.DailyValue;
 import org.ta4j.core.BarSeries;
@@ -62,7 +61,7 @@ public class BestInOutStrategyManager {
                             .exitName(exitName)
                             .entryParams(entryParams)
                             .exitParams(exitParams)
-                            .contextOptim(ContextOptim.builder()
+                            .paramsOptim(ParamsOptim.builder()
                                     .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
                                     .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
                                     .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)

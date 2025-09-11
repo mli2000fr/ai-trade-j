@@ -1,7 +1,6 @@
 package com.app.backend.trade.strategy;
 
 import com.app.backend.model.RiskResult;
-import com.app.backend.trade.model.ContextOptim;
 import lombok.*;
 
 @Builder
@@ -16,6 +15,6 @@ public class BestInOutStrategy {
     public String exitName;
     public Object exitParams;
     public RiskResult result;
-    public ContextOptim contextOptim;
+    public ParamsOptim paramsOptim;
 }
 

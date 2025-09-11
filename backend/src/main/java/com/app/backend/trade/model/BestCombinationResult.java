@@ -1,7 +1,7 @@
 package com.app.backend.trade.model;
 
 import com.app.backend.model.RiskResult;
-import com.app.backend.trade.strategy.StrategieBackTest;
+import com.app.backend.trade.strategy.ParamsOptim;
 import lombok.*;
 
 import java.util.List;
@@ -20,6 +20,6 @@ public class BestCombinationResult {
     public Map<String, Object> inParams = new HashMap<>();
     public Map<String, Object> outParams = new HashMap<>();
     public RiskResult backtestResult;
-    public ContextOptim contextOptim;
+    public ParamsOptim contextOptim;
 }
 

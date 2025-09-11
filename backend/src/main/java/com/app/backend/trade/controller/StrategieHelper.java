@@ -5,6 +5,7 @@ import com.app.backend.trade.model.*;
 import com.app.backend.trade.model.alpaca.AlpacaAsset;
 import com.app.backend.trade.service.*;
 import com.app.backend.trade.strategy.BestInOutStrategy;
+import com.app.backend.trade.strategy.ParamsOptim;
 import com.app.backend.trade.strategy.StrategieBackTest;
 import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
@@ -402,7 +403,7 @@ public class StrategieHelper {
                             .exitName(exitName)
                             .entryParams(entryParams)
                             .exitParams(exitParams)
-                            .contextOptim(ContextOptim.builder()
+                            .paramsOptim(ParamsOptim.builder()
                                     .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
                                     .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
                                     .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
@@ -505,11 +506,11 @@ public class StrategieHelper {
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
                 best.result.scoreSwingTrade,
-                best.contextOptim.initialCapital,
-                best.contextOptim.riskPerTrade,
-                best.contextOptim.stopLossPct,
-                best.contextOptim.takeProfitPct,
-                best.contextOptim.nbSimples,
+                best.paramsOptim.initialCapital,
+                best.paramsOptim.riskPerTrade,
+                best.paramsOptim.stopLossPct,
+                best.paramsOptim.takeProfitPct,
+                best.paramsOptim.nbSimples,
                 symbol
             );
         } else {
@@ -539,11 +540,11 @@ public class StrategieHelper {
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
                 best.result.scoreSwingTrade,
-                best.contextOptim.initialCapital,
-                best.contextOptim.riskPerTrade,
-                best.contextOptim.stopLossPct,
-                best.contextOptim.takeProfitPct,
-                best.contextOptim.nbSimples,
+                best.paramsOptim.initialCapital,
+                best.paramsOptim.riskPerTrade,
+                best.paramsOptim.stopLossPct,
+                best.paramsOptim.takeProfitPct,
+                best.paramsOptim.nbSimples,
                 java.sql.Date.valueOf(java.time.LocalDate.now())
             );
         }
@@ -570,7 +571,7 @@ public class StrategieHelper {
                         .exitName(exitName)
                         .entryParams(entryParams)
                         .exitParams(exitParams)
-                        .contextOptim(ContextOptim.builder()
+                        .paramsOptim(ParamsOptim.builder()
                                 .initialCapital(rs.getDouble("initial_capital"))
                                 .riskPerTrade(rs.getDouble("risk_per_trade"))
                                 .stopLossPct(rs.getDouble("stop_loss_pct"))
@@ -624,7 +625,7 @@ public class StrategieHelper {
                     .exitName(exitName)
                     .entryParams(entryParams)
                     .exitParams(exitParams)
-                    .contextOptim(ContextOptim.builder()
+                    .paramsOptim(ParamsOptim.builder()
                             .initialCapital(rs.getDouble("initial_capital"))
                             .riskPerTrade(rs.getDouble("risk_per_trade"))
                             .stopLossPct(rs.getDouble("stop_loss_pct"))
@@ -668,4 +669,77 @@ public class StrategieHelper {
         if (exitSignal) return SignalType.SELL;
         return SignalType.NONE;
     }
+
+
+
+
+    public ComboResult optimseStrategy(BarSeries series) {
+        BarSeries[] split = TradeUtils.splitSeriesForWalkForward(series);
+        BarSeries optimSeries = split[0];
+        BarSeries testSeries = split[1];
+        // Optimisation des paramètres sur la partie optimisation
+        StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(optimSeries, 10, 30, 5, 15, 15, 25, 0.001, 0.01, 0.002);
+        StrategieBackTest.SmaCrossoverParams bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(optimSeries, 5, 20, 10, 50);
+        StrategieBackTest.RsiParams bestRsi = strategieBackTest.optimiseRsiParameters(optimSeries, 10, 20, 20, 40, 5, 60, 80, 5);
+        StrategieBackTest.BreakoutParams bestBreakout = strategieBackTest.optimiseBreakoutParameters(optimSeries, 5, 50);
+        StrategieBackTest.MacdParams bestMacd = strategieBackTest.optimiseMacdParameters(optimSeries, 8, 16, 20, 30, 6, 12);
+        StrategieBackTest.MeanReversionParams bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(optimSeries, 10, 30, 1.0, 5.0, 0.5);
+        // Liste des stratégies et paramètres
+        java.util.List<Object[]> strategies = java.util.Arrays.asList(
+                new Object[]{"Improved Trend", bestImprovedTrend},
+                new Object[]{"SMA Crossover", bestSmaCrossover},
+                new Object[]{"RSI", bestRsi},
+                new Object[]{"Breakout", bestBreakout},
+                new Object[]{"MACD", bestMacd},
+                new Object[]{"Mean Reversion", bestMeanReversion}
+        );
+        double bestPerf = Double.NEGATIVE_INFINITY;
+        ComboResult bestCombo = null;
+        System.out.println("=== TESTS CROISÉS IN/OUT ===");
+        com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
+        for (Object[] entry : strategies) {
+            for (Object[] exit : strategies) {
+                String entryName = (String) entry[0];
+                Object entryParams = entry[1];
+                String exitName = (String) exit[0];
+                Object exitParams = exit[1];
+                // Instancier les stratégies
+                com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(entryName, entryParams);
+                com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
+                com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
+                // Backtest sur la partie test uniquement
+                OptimResult result = strategieBackTest.backtestStrategy(combined, testSeries);
+                System.out.println("IN: " + entryName + " " + gson.toJson(entryParams) +
+                        " | OUT: " + exitName + " " + gson.toJson(exitParams) +
+                        " | Rendement: " + String.format("%.4f", result.rendement * 100) + "%"
+                        + " | Trades: " + result.tradeCount
+                        + " | WinRate: " + String.format("%.2f", result.winRate * 100) + "%"
+                        + " | Drawdown: " + String.format("%.2f", result.maxDrawdown * 100) + "%");
+                if (result.rendement > bestPerf) {
+                    bestPerf = result.rendement;
+                    bestCombo = ComboResult.builder()
+                            .entryName(entryName)
+                            .exitName(exitName)
+                            .entryParams(entryParams)
+                            .exitParams(exitParams)
+                            .paramsOptim(ParamsOptim.builder()
+                                    .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
+                                    .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
+                                    .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
+                                    .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
+                                    .nbSimples(series.getBarCount()).build())
+                            .result(result)
+                            .build();
+                }
+            }
+        }
+        System.out.println("=== MEILLEUR COUPLE IN/OUT ===");
+        if (bestCombo != null) {
+            System.out.println("IN: " + bestCombo.getEntryName() + " | OUT: " + bestCombo.getExitName() + " | Rendement: " + String.format("%.4f", bestCombo.getResult().getRendement() * 100) + "% | Trades: " + bestCombo.getResult().getTradeCount());
+            System.out.println("Paramètres IN: " + gson.toJson(bestCombo.getEntryParams()));
+            System.out.println("Paramètres OUT: " + gson.toJson(bestCombo.getExitParams()));
+        }
+        return bestCombo;
+    }
+
 }

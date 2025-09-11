@@ -1,4 +1,4 @@
-package com.app.backend.trade.model;
+package com.app.backend.trade.strategy;
 
 import lombok.*;
 
@@ -7,7 +7,7 @@ import lombok.*;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class ContextOptim {
+public class ParamsOptim {
     public double initialCapital;
     public double riskPerTrade;
     public double stopLossPct;

@@ -1,11 +1,13 @@
-package com.app.backend.model;
+package com.app.backend.trade.model;
 
 import lombok.*;
 
 @Builder
 @Getter
 @Setter
-public class RiskResult {
+@AllArgsConstructor
+@NoArgsConstructor
+public class OptimResult {
     /** Rendement total du backtest (capital final / capital initial - 1) */
     public double rendement;
     /** Drawdown maximal observé (plus forte baisse du capital) */
@@ -24,8 +26,6 @@ public class RiskResult {
     public double maxTradeGain;
     /** Maximum perte réalisée sur un trade */
     public double maxTradeLoss;
-
-    public double scoreSwingTrade = 0;
 
 }
 

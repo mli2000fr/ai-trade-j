@@ -2,7 +2,7 @@ package com.app.backend.trade.controller;
 
 import com.app.backend.model.RiskResult;
 import com.app.backend.trade.model.BestCombinationResult;
-import com.app.backend.trade.model.ContextOptim;
+import com.app.backend.trade.strategy.ParamsOptim;
 import com.app.backend.trade.model.DailyValue;
 import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.strategy.*;
@@ -217,7 +217,7 @@ public class BestCombinationStrategyHelper {
         resultObj.backtestResult = backtestResult;
         resultObj.inStrategyNames = inStrategyNames;
         resultObj.outStrategyNames = outStrategyNames;
-        resultObj.contextOptim = ContextOptim.builder()
+        resultObj.contextOptim = ParamsOptim.builder()
                 .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
                 .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
                 .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
@@ -379,19 +379,19 @@ public class BestCombinationStrategyHelper {
         result.outStrategyNames = gson.fromJson((String) row.get("out_strategy_names"), new TypeToken<List<String>>(){}.getType());
         result.inParams = gson.fromJson((String) row.get("in_params"), new TypeToken<Map<String, Object>>(){}.getType());
         result.outParams = gson.fromJson((String) row.get("out_params"), new TypeToken<Map<String, Object>>(){}.getType());
-        result.backtestResult = new RiskResult(
-                row.get("rendement") != null ? ((Number) row.get("rendement")).doubleValue() : 0.0,
-                row.get("max_drawdown") != null ? ((Number) row.get("max_drawdown")).doubleValue() : 0.0,
-                row.get("trade_count") != null ? ((Number) row.get("trade_count")).intValue() : 0,
-                row.get("win_rate") != null ? ((Number) row.get("win_rate")).doubleValue() : 0.0,
-                row.get("avg_pnl") != null ? ((Number) row.get("avg_pnl")).doubleValue() : 0.0,
-                row.get("profit_factor") != null ? ((Number) row.get("profit_factor")).doubleValue() : 0.0,
-                row.get("avg_trade_bars") != null ? ((Number) row.get("avg_trade_bars")).doubleValue() : 0.0,
-                row.get("max_trade_gain") != null ? ((Number) row.get("max_trade_gain")).doubleValue() : 0.0,
-                row.get("max_trade_loss") != null ? ((Number) row.get("max_trade_loss")).doubleValue() : 0.0,
-                row.get("score_swing_trade") != null ? ((Number) row.get("score_swing_trade")).doubleValue() : 0.0
-        );
-        result.contextOptim = ContextOptim.builder()
+        result.backtestResult = RiskResult.builder()
+                .rendement(row.get("rendement") != null ? ((Number) row.get("rendement")).doubleValue() : 0.0)
+                .maxDrawdown(row.get("max_drawdown") != null ? ((Number) row.get("max_drawdown")).doubleValue() : 0.0)
+                .tradeCount(row.get("trade_count") != null ? ((Number) row.get("trade_count")).intValue() : 0)
+                .winRate(row.get("win_rate") != null ? ((Number) row.get("win_rate")).doubleValue() : 0.)
+                .avgPnL(row.get("avg_pnl") != null ? ((Number) row.get("avg_pnl")).doubleValue() : 0.0)
+                .profitFactor(row.get("profit_factor") != null ? ((Number) row.get("profit_factor")).doubleValue() : 0.0)
+                .avgTradeBars( row.get("avg_trade_bars") != null ? ((Number) row.get("avg_trade_bars")).doubleValue() : 0.0)
+                .maxTradeGain(row.get("max_trade_gain") != null ? ((Number) row.get("max_trade_gain")).doubleValue() : 0.0)
+                .maxTradeLoss(row.get("max_trade_loss") != null ? ((Number) row.get("max_trade_loss")).doubleValue() : 0.0)
+                .scoreSwingTrade(row.get("score_swing_trade") != null ? ((Number) row.get("score_swing_trade")).doubleValue() : 0.0)
+                .build();
+        result.contextOptim = ParamsOptim.builder()
                 .initialCapital(row.get("initial_capital") != null ? ((Number) row.get("initial_capital")).doubleValue() : 0.0)
                 .riskPerTrade(row.get("risk_per_trade") != null ? ((Number) row.get("risk_per_trade")).doubleValue() : 0.0)
                 .stopLossPct(row.get("stop_loss_pct") != null ? ((Number) row.get("stop_loss_pct")).doubleValue() : 0.0)

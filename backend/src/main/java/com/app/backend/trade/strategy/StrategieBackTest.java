@@ -1,6 +1,7 @@
 package com.app.backend.trade.strategy;
 
 import com.app.backend.model.RiskResult;
+import com.app.backend.trade.model.OptimResult;
 import com.app.backend.trade.util.TradeUtils;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
@@ -17,8 +18,8 @@ public class StrategieBackTest {
     public final static double STOP_LOSS_PCT = 0.05; // Stop loss à 2% (plus serré)
     public final static double TAKE_PROFIL_PCT = 0.1;    // Take profit à 6% (ratio risque/récompense 1:3)
 
-    // Backtest générique pour une stratégie TradeStrategy
-    private double backtestStrategy(TradeStrategy strategy, BarSeries series) {
+    // Backtest générique pour une stratégie TradeStrategy (rendement simple)
+    private double backtestStrategySimple(TradeStrategy strategy, BarSeries series) {
         Rule entryRule = strategy.getEntryRule(series);
         Rule exitRule = strategy.getExitRule(series);
         boolean inPosition = false;
@@ -142,10 +143,111 @@ public class StrategieBackTest {
                 .avgTradeBars(avgTradeBars)
                 .maxTradeGain(maxTradeGain)
                 .maxTradeLoss(maxTradeLoss)
+                .scoreSwingTrade(0)
                 .build();
         double scoreSwingTrade = TradeUtils.calculerScoreSwingTrade(riskResult);
         riskResult.setScoreSwingTrade(scoreSwingTrade);
         return riskResult;
+    }
+
+    public OptimResult backtestStrategy(TradeStrategy strategy, BarSeries series) {
+        return backtestStrategy(strategy, series, INITIAL_CAPITAL, RISK_PER_TRADE, STOP_LOSS_PCT, TAKE_PROFIL_PCT);
+    }
+
+    public OptimResult backtestStrategy(TradeStrategy strategy, BarSeries series, double initialCapital, double riskPerTrade, double stopLossPct, double takeProfitPct) {
+        Rule entryRule = strategy.getEntryRule(series);
+        Rule exitRule = strategy.getExitRule(series);
+        boolean inPosition = false;
+        double entryPrice = 0.0;
+        double capital = initialCapital;
+        double positionSize = 0.0;
+        double maxDrawdown = 0.0;
+        double peakCapital = initialCapital;
+        int tradeCount = 0;
+        int winCount = 0;
+        double totalGain = 0.0;
+        double totalLoss = 0.0;
+        double sumPnL = 0.0;
+        double maxGain = Double.NEGATIVE_INFINITY;
+        double maxLoss = Double.POSITIVE_INFINITY;
+        int totalTradeBars = 0;
+        int tradeStartIndex = 0;
+        for (int i = 0; i < series.getBarCount(); i++) {
+            double price = series.getBar(i).getClosePrice().doubleValue();
+            if (!inPosition && entryRule.isSatisfied(i)) {
+                // Entrée en position
+                positionSize = capital * riskPerTrade;
+                entryPrice = price;
+                inPosition = true;
+                tradeStartIndex = i;
+            } else if (inPosition) {
+                // Gestion du stop loss / take profit
+                double stopLossPrice = entryPrice * (1 - stopLossPct);
+                double takeProfitPrice = entryPrice * (1 + takeProfitPct);
+                boolean stopLossHit = price <= stopLossPrice;
+                boolean takeProfitHit = price >= takeProfitPrice;
+                boolean exitSignal = exitRule.isSatisfied(i);
+                if (stopLossHit || takeProfitHit || exitSignal) {
+                    double exitPrice = price;
+                    if (stopLossHit) exitPrice = stopLossPrice;
+                    if (takeProfitHit) exitPrice = takeProfitPrice;
+                    double pnl = positionSize * ((exitPrice - entryPrice) / entryPrice);
+                    capital += pnl;
+                    tradeCount++;
+                    sumPnL += pnl;
+                    if (pnl > 0) {
+                        winCount++;
+                        totalGain += pnl;
+                        if (pnl > maxGain) maxGain = pnl;
+                    } else {
+                        totalLoss += Math.abs(pnl);
+                        if (pnl < maxLoss) maxLoss = pnl;
+                    }
+                    totalTradeBars += (i - tradeStartIndex + 1);
+                    inPosition = false;
+                    // Drawdown
+                    if (capital > peakCapital) peakCapital = capital;
+                    double drawdown = (peakCapital - capital) / peakCapital;
+                    if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+                }
+            }
+        }
+        // Si une position reste ouverte à la fin, on la clôture au dernier prix
+        if (inPosition) {
+            double price = series.getBar(series.getEndIndex()).getClosePrice().doubleValue();
+            double pnl = positionSize * ((price - entryPrice) / entryPrice);
+            capital += pnl;
+            tradeCount++;
+            sumPnL += pnl;
+            if (pnl > 0) {
+                winCount++;
+                totalGain += pnl;
+                if (pnl > maxGain) maxGain = pnl;
+            } else {
+                totalLoss += Math.abs(pnl);
+                if (pnl < maxLoss) maxLoss = pnl;
+            }
+            totalTradeBars += (series.getEndIndex() - tradeStartIndex + 1);
+        }
+        double rendement = (capital / initialCapital) - 1.0;
+        double winRate = tradeCount > 0 ? (double) winCount / tradeCount : 0.0;
+        double avgPnL = tradeCount > 0 ? sumPnL / tradeCount : 0.0;
+        double profitFactor = totalLoss > 0 ? totalGain / totalLoss : 0.0;
+        double avgTradeBars = tradeCount > 0 ? (double) totalTradeBars / tradeCount : 0.0;
+        double maxTradeGain = (maxGain == Double.NEGATIVE_INFINITY) ? 0.0 : maxGain;
+        double maxTradeLoss = (maxLoss == Double.POSITIVE_INFINITY) ? 0.0 : maxLoss;
+        OptimResult optimResult = OptimResult.builder()
+                .rendement(rendement)
+                .tradeCount(tradeCount)
+                .winRate(winRate)
+                .maxDrawdown(maxDrawdown)
+                .avgPnL(avgPnL)
+                .profitFactor(profitFactor)
+                .avgTradeBars(avgTradeBars)
+                .maxTradeGain(maxTradeGain)
+                .maxTradeLoss(maxTradeLoss)
+                .build();
+        return optimResult;
     }
 
 
