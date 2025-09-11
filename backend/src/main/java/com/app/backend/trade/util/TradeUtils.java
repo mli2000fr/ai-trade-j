@@ -313,4 +313,23 @@ public class TradeUtils {
                 return null;
         }
     }
+
+    /**
+     * Concatène tous les sous-segments de la série sauf l'intervalle [excludeStart, excludeEnd).
+     * Utile pour la validation croisée (cross-validation).
+     * @param series série complète
+     * @param excludeStart index de début à exclure (inclus)
+     * @param excludeEnd index de fin à exclure (exclus)
+     * @return nouvelle série sans l'intervalle exclu
+     */
+    public static BarSeries concatSubSeriesExcept(BarSeries series, int excludeStart, int excludeEnd) {
+        BaseBarSeries result = new BaseBarSeries();
+        int n = series.getBarCount();
+        for (int i = 0; i < n; i++) {
+            if (i < excludeStart || i >= excludeEnd) {
+                result.addBar(series.getBar(i));
+            }
+        }
+        return result;
+    }
 }
