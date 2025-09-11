@@ -318,7 +318,7 @@ public class StrategieBackTest {
         int totalCombinaisons = shortCount * longCount * signalCount;
         java.util.Random rand = new java.util.Random();
         int maxRandomTests = 80;
-        boolean useRandomSearch = totalCombinaisons > 300;
+        boolean useRandomSearch = totalCombinaisons > 1000;
         int tested = 0;
         if (useRandomSearch) {
             // Random Search
@@ -372,7 +372,7 @@ public class StrategieBackTest {
         int totalCombinaisons = ((lookbackMax - lookbackMin) / lookbackStep) + 1;
         java.util.Random rand = new java.util.Random();
         int maxRandomTests = 50;
-        boolean useRandomSearch = totalCombinaisons > 100;
+        boolean useRandomSearch = totalCombinaisons > 1000;
         int tested = 0;
         if (useRandomSearch) {
             // Random Search
@@ -419,7 +419,7 @@ public class StrategieBackTest {
         int totalCombinaisons = smaCount * thresholdCount;
         java.util.Random rand = new java.util.Random();
         int maxRandomTests = 80;
-        boolean useRandomSearch = totalCombinaisons > 300;
+        boolean useRandomSearch = totalCombinaisons > 1000;
         int tested = 0;
         if (useRandomSearch) {
             // Random Search
@@ -476,7 +476,7 @@ public class StrategieBackTest {
         int totalCombinaisons = rsiCount * oversoldCount * overboughtCount;
         java.util.Random rand = new java.util.Random();
         int maxRandomTests = 80;
-        boolean useRandomSearch = totalCombinaisons > 300;
+        boolean useRandomSearch = totalCombinaisons > 1000;
         int tested = 0;
         if (useRandomSearch) {
             // Random Search

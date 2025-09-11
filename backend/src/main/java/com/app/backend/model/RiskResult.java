@@ -27,5 +27,7 @@ public class RiskResult {
 
     public double scoreSwingTrade = 0;
 
+    public boolean fltredOut;
+
 }
 

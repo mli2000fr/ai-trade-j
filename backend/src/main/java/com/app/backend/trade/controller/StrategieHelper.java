@@ -321,7 +321,7 @@ public class StrategieHelper {
      */
     public void calculCroisedStrategies(){
         List<String> listeDbSymbols = this.getAllAssetSymbolsEligibleFromDb();
-        int nbThreads = Math.max(2, Runtime.getRuntime().availableProcessors());
+        int nbThreads = 1;//Math.max(2, Runtime.getRuntime().availableProcessors());
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(nbThreads);
         java.util.concurrent.atomic.AtomicInteger error = new java.util.concurrent.atomic.AtomicInteger(0);
         java.util.concurrent.atomic.AtomicInteger nbInsert = new java.util.concurrent.atomic.AtomicInteger(0);
@@ -497,6 +497,7 @@ public class StrategieHelper {
                     max_trade_gain = ?,
                     max_trade_loss = ?,
                     score_swing_trade = ?,
+                    fltred_out = ?,
                     initial_capital = ?,
                     risk_per_trade = ?,
                     stop_loss_pct = ?,
@@ -520,6 +521,7 @@ public class StrategieHelper {
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
                 best.result.scoreSwingTrade,
+                best.result.fltredOut,
                 best.paramsOptim.initialCapital,
                 best.paramsOptim.riskPerTrade,
                 best.paramsOptim.stopLossPct,
@@ -534,9 +536,9 @@ public class StrategieHelper {
                     symbol, entry_strategy_name, entry_strategy_params,
                     exit_strategy_name, exit_strategy_params,
                     rendement, trade_count, win_rate, max_drawdown, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss,
-                    score_swing_trade, initial_capital, risk_per_trade, stop_loss_pct, take_profit_pct, nb_simples,
-                    created_date, updated_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    score_swing_trade, fltred_out, initial_capital, risk_per_trade, stop_loss_pct, 
+                    take_profit_pct, nb_simples, created_date, updated_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """;
             jdbcTemplate.update(insertSql,
                 symbol,
@@ -554,6 +556,7 @@ public class StrategieHelper {
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
                 best.result.scoreSwingTrade,
+                best.result.fltredOut,
                 best.paramsOptim.initialCapital,
                 best.paramsOptim.riskPerTrade,
                 best.paramsOptim.stopLossPct,
@@ -827,6 +830,7 @@ public class StrategieHelper {
             );
             double bestPerf = Double.NEGATIVE_INFINITY;
             ComboResult bestCombo = null;
+            // --- Nouvelle logique : NE PAS filtrer ici ---
             for (Object[] entry : strategies) {
                 for (Object[] exit : strategies) {
                     String entryName = (String) entry[0];
@@ -837,7 +841,7 @@ public class StrategieHelper {
                     com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
                     com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
                     RiskResult result = strategieBackTest.backtestStrategy(combined, testSeries);
-                    if (!isStableAndSimple(result, entryName, exitName, entryParams, exitParams)) continue;
+                    // NE PAS filtrer ici, juste comparer le rendement
                     if (result.getRendement() > bestPerf) {
                         bestPerf = result.getRendement();
                         bestCombo = ComboResult.builder()
@@ -933,109 +937,32 @@ public class StrategieHelper {
             sortinoRatio = (negCount > 0) ? (avgTestRendement / Math.sqrt(sumNegSq / negCount)) : 0.0;
         }
         logger.info("[optimseStrategy] Fin de l'optimisation walk-forward, retour du résultat.");
-        return new WalkForwardResultPro(
-                segmentResults,
-                avgRendement,
-                avgDrawdown,
-                avgWinRate,
-                avgProfitFactor,
-                avgTradeDuration,
-                avgGainLossRatio,
-                scoreSwingTrade,
-                totalTrades,
-                avgTrainRendement,
-                avgTestRendement,
-                overfitRatio,
-                isOverfit,
-                sharpeRatio,
-                rendementStdDev,
-                sortinoRatio,
-                bestCombo);
+        // --- Filtrage final sur le meilleur résultat ---
+        boolean stable = isStableAndSimple(bestCombo.getResult(), bestCombo.getEntryName(), bestCombo.getExitName(), bestCombo.getEntryParams(), bestCombo.getExitParams());
+        bestCombo.getResult().setFltredOut(!stable);
+        // --- Construction avec builder et filteredOut ---
+        return WalkForwardResultPro.builder()
+                .segmentResults(segmentResults)
+                .avgRendement(avgRendement)
+                .avgDrawdown(avgDrawdown)
+                .avgWinRate(avgWinRate)
+                .avgProfitFactor(avgProfitFactor)
+                .avgTradeDuration(avgTradeDuration)
+                .avgGainLossRatio(avgGainLossRatio)
+                .scoreSwingTrade(scoreSwingTrade)
+                .totalTrades(totalTrades)
+                .avgTrainRendement(avgTrainRendement)
+                .avgTestRendement(avgTestRendement)
+                .overfitRatio(overfitRatio)
+                .isOverfit(isOverfit)
+                .sharpeRatio(sharpeRatio)
+                .rendementStdDev(rendementStdDev)
+                .sortinoRatio(sortinoRatio)
+                .bestCombo(bestCombo)
+                .build();
     }
 
 
-    /**
-     * Optimise la meilleure combinaison IN/OUT pour un segment donné.
-     */
-    private ComboResult optimiseComboForSegment(BarSeries optimSeries, BarSeries testSeries) {
-        // Optimisation des paramètres sur la partie optimisation
-        StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(
-            optimSeries,
-            swingParams.trendMaMin, swingParams.trendMaMax,
-            swingParams.trendShortMaMin, swingParams.trendShortMaMax,
-            swingParams.trendLongMaMin, swingParams.trendLongMaMax,
-            swingParams.trendBreakoutMin, swingParams.trendBreakoutMax, swingParams.trendBreakoutStep
-        );
-        StrategieBackTest.SmaCrossoverParams bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(
-            optimSeries,
-            swingParams.smaShortMin, swingParams.smaShortMax,
-            swingParams.smaLongMin, swingParams.smaLongMax
-        );
-        StrategieBackTest.RsiParams bestRsi = strategieBackTest.optimiseRsiParameters(
-            optimSeries,
-            swingParams.rsiPeriodMin, swingParams.rsiPeriodMax,
-            swingParams.rsiOversoldMin, swingParams.rsiOversoldMax,
-            swingParams.rsiStep,
-            swingParams.rsiOverboughtMin, swingParams.rsiOverboughtMax,
-            swingParams.rsiStep
-        );
-        StrategieBackTest.BreakoutParams bestBreakout = strategieBackTest.optimiseBreakoutParameters(
-            optimSeries,
-            swingParams.breakoutLookbackMin, swingParams.breakoutLookbackMax
-        );
-        StrategieBackTest.MacdParams bestMacd = strategieBackTest.optimiseMacdParameters(
-            optimSeries,
-            swingParams.macdShortMin, swingParams.macdShortMax,
-            swingParams.macdLongMin, swingParams.macdLongMax,
-            swingParams.macdSignalMin, swingParams.macdSignalMax
-        );
-        StrategieBackTest.MeanReversionParams bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(
-            optimSeries,
-            swingParams.meanRevSmaMin, swingParams.meanRevSmaMax,
-            swingParams.meanRevThresholdMin, swingParams.meanRevThresholdMax,
-            swingParams.meanRevThresholdStep
-        );
-        java.util.List<Object[]> strategies = java.util.Arrays.asList(
-            new Object[]{"Improved Trend", bestImprovedTrend},
-            new Object[]{"SMA Crossover", bestSmaCrossover},
-            new Object[]{"RSI", bestRsi},
-            new Object[]{"Breakout", bestBreakout},
-            new Object[]{"MACD", bestMacd},
-            new Object[]{"Mean Reversion", bestMeanReversion}
-        );
-        double bestPerf = Double.NEGATIVE_INFINITY;
-        ComboResult bestCombo = null;
-        for (Object[] entry : strategies) {
-            for (Object[] exit : strategies) {
-                String entryName = (String) entry[0];
-                Object entryParams = entry[1];
-                String exitName = (String) exit[0];
-                Object exitParams = exit[1];
-                com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(entryName, entryParams);
-                com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
-                com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
-                RiskResult result = strategieBackTest.backtestStrategy(combined, testSeries);
-                if (!isStableAndSimple(result, entryName, exitName, entryParams, exitParams)) continue; // filtrage
-                if (result.getRendement() > bestPerf) {
-                    bestPerf = result.getRendement();
-                    bestCombo = ComboResult.builder()
-                            .entryName(entryName)
-                            .exitName(exitName)
-                            .entryParams(entryParams)
-                            .exitParams(exitParams)
-                            .paramsOptim(ParamsOptim.builder()
-                                    .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
-                                    .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
-                                    .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
-                                    .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
-                                    .nbSimples(testSeries.getBarCount()).build())
-                            .result(result)
-                            .build();
-                }
-            }
-        }
-        return bestCombo;
-    }
 
     /**
      * Filtre les stratégies trop complexes ou instables.
@@ -1043,23 +970,41 @@ public class StrategieHelper {
      * @return true si la stratégie est stable et simple
      */
     private boolean isStableAndSimple(RiskResult result, String entryName, String exitName, Object entryParams, Object exitParams) {
-        // Critères de stabilité
-        if (result.getMaxDrawdown() > 0.3) return false; // drawdown > 30%
-        if (result.getProfitFactor() < 1.2) return false; // profit factor < 1.2
-        if (result.getWinRate() < 0.3) return false; // win rate < 30%
-        // Durée moyenne des trades (swing trade typique: 2 à 20 bars)
-        if (result.getAvgTradeBars() < 2 || result.getAvgTradeBars() > 20) return false;
+        // Critères de stabilité assouplis + logs
+        if (result.getMaxDrawdown() > 0.5) {
+            System.out.println("Blocage: Drawdown > 50% (" + result.getMaxDrawdown() + ")");
+            return false;
+        }
+        if (result.getProfitFactor() < 1.0) {
+            System.out.println("Blocage: Profit factor < 1.0 (" + result.getProfitFactor() + ")");
+            return false;
+        }
+        if (result.getWinRate() < 0.2) {
+            System.out.println("Blocage: Win rate < 20% (" + result.getWinRate() + ")");
+            return false;
+        }
+        // Durée moyenne des trades (swing trade typique: 1 à 30 bars)
+        if (result.getAvgTradeBars() < 1 || result.getAvgTradeBars() > 30) {
+            System.out.println("Blocage: Durée moyenne des trades hors intervalle (" + result.getAvgTradeBars() + ")");
+            return false;
+        }
         // Ratio gain/perte (maxTradeGain/maxTradeLoss)
         double gainLossRatio = 0.0;
         if (result.getMaxTradeLoss() != 0) {
             gainLossRatio = Math.abs(result.getMaxTradeGain()) / Math.abs(result.getMaxTradeLoss());
-            if (gainLossRatio < 1.0) return false;
+            if (gainLossRatio < 0.7) {
+                System.out.println("Blocage: Ratio gain/perte < 0.7 (" + gainLossRatio + ")");
+                return false;
+            }
         }
         // Critère de complexité (exemple: trop de paramètres)
         int paramCount = 0;
         if (entryParams != null) paramCount += entryParams.getClass().getDeclaredFields().length;
         if (exitParams != null) paramCount += exitParams.getClass().getDeclaredFields().length;
-        if (paramCount > 10) return false; // trop complexe
+        if (paramCount > 15) {
+            System.out.println("Blocage: Trop de paramètres (" + paramCount + ")");
+            return false;
+        }
         return true;
     }
 }
