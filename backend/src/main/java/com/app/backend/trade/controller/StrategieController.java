@@ -75,8 +75,8 @@ public class StrategieController {
     }
 
     @GetMapping("/strategies/test")
-    public ResponseEntity<WalkForwardResultPro> test(@RequestParam(value = "symbol", required = false) String symbol) {
-        WalkForwardResultPro st = strategieHelper.optimseStrategy(symbol);
+    public ResponseEntity<BestInOutStrategy> test(@RequestParam(value = "symbol", required = false) String symbol) {
+        BestInOutStrategy st = strategieHelper.optimseStrategy(symbol);
         return ResponseEntity.ok(st);
     }
 

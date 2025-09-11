@@ -673,10 +673,24 @@ public class StrategieHelper {
     }
 
 
-    public WalkForwardResultPro optimseStrategy(String symbol) {
+    public BestInOutStrategy optimseStrategy(String symbol) {
         List<DailyValue> listeValus = this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_OPTIM);
         BarSeries series = TradeUtils.mapping(listeValus);
-        return this.optimseStrategy(series, 0.2, 0.1, 0.1);
+        WalkForwardResultPro walkForwardResultPro =  this.optimseStrategy(series, 0.2, 0.1, 0.1);
+        return BestInOutStrategy.builder()
+                .symbol(symbol)
+                .entryName(walkForwardResultPro.getBestCombo().getEntryName())
+                .entryParams(walkForwardResultPro.getBestCombo().getEntryParams())
+                .exitName(walkForwardResultPro.getBestCombo().getExitName())
+                .exitParams(walkForwardResultPro.getBestCombo().getExitParams())
+                .paramsOptim(ParamsOptim.builder()
+                        .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
+                        .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
+                        .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
+                        .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
+                        .nbSimples(listeValus.size())
+                        .build())
+                .result(walkForwardResultPro.getBestCombo().getResult()).build();
     }
 
 
@@ -801,7 +815,7 @@ public class StrategieHelper {
                     com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(entryName, entryParams);
                     com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
                     com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
-                    OptimResult result = strategieBackTest.backtestStrategy(combined, testSeries);
+                    RiskResult result = strategieBackTest.backtestStrategy(combined, testSeries);
                     if (!isStableAndSimple(result, entryName, exitName, entryParams, exitParams)) continue; // filtrage
                     if (result.getRendement() > bestPerf) {
                         bestPerf = result.getRendement();
@@ -833,7 +847,7 @@ public class StrategieHelper {
         ComboResult bestCombo = null;
         double bestPerf = Double.NEGATIVE_INFINITY;
         for (ComboResult r : segmentResults) {
-            OptimResult res = r.getResult();
+            RiskResult res = r.getResult();
             sumRendement += res.getRendement();
             sumDrawdown += res.getMaxDrawdown();
             sumWinRate += res.getWinRate();
@@ -857,9 +871,12 @@ public class StrategieHelper {
             int trainEnd = trainStart + optimWindow;
             if (trainEnd <= series.getBarCount()) {
                 BarSeries optimSeries = series.getSubSeries(trainStart, trainEnd);
-                OptimResult trainResult = strategieBackTest.backtestStrategy(combined, optimSeries);
+                RiskResult trainResult = strategieBackTest.backtestStrategy(combined, optimSeries);
                 trainRendements.add(trainResult.getRendement());
                 testRendements.add(res.getRendement());
+                double ratio = (trainResult.getRendement() != 0.0) ? (res.getRendement() / trainResult.getRendement()) : 0.0;
+                boolean overfit = ratio < 0.7;
+                logger.info("[Overfitting] Segment {} : trainRendement={}	testRendement={}	ratio={}	overfit={}", segmentIndex+1, String.format("%.4f", trainResult.getRendement()), String.format("%.4f", res.getRendement()), String.format("%.2f", ratio), overfit);
             }
         }
         int n = segmentResults.size();
@@ -978,7 +995,7 @@ public class StrategieHelper {
                 com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(entryName, entryParams);
                 com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
                 com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
-                OptimResult result = strategieBackTest.backtestStrategy(combined, testSeries);
+                RiskResult result = strategieBackTest.backtestStrategy(combined, testSeries);
                 if (!isStableAndSimple(result, entryName, exitName, entryParams, exitParams)) continue; // filtrage
                 if (result.getRendement() > bestPerf) {
                     bestPerf = result.getRendement();
@@ -1006,7 +1023,7 @@ public class StrategieHelper {
      * Ajout contrôle durée moyenne des trades et ratio gain/perte.
      * @return true si la stratégie est stable et simple
      */
-    private boolean isStableAndSimple(OptimResult result, String entryName, String exitName, Object entryParams, Object exitParams) {
+    private boolean isStableAndSimple(RiskResult result, String entryName, String exitName, Object entryParams, Object exitParams) {
         // Critères de stabilité
         if (result.getMaxDrawdown() > 0.3) return false; // drawdown > 30%
         if (result.getProfitFactor() < 1.2) return false; // profit factor < 1.2

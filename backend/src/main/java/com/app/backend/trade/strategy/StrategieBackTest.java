@@ -150,11 +150,13 @@ public class StrategieBackTest {
         return riskResult;
     }
 
-    public OptimResult backtestStrategy(TradeStrategy strategy, BarSeries series) {
-        return backtestStrategy(strategy, series, INITIAL_CAPITAL, RISK_PER_TRADE, STOP_LOSS_PCT, TAKE_PROFIL_PCT);
+    public RiskResult backtestStrategy(TradeStrategy strategy, BarSeries series) {
+        RiskResult riskResult =  backtestStrategy(strategy, series, INITIAL_CAPITAL, RISK_PER_TRADE, STOP_LOSS_PCT, TAKE_PROFIL_PCT);
+        riskResult.setScoreSwingTrade(TradeUtils.calculerScoreSwingTrade(riskResult));
+        return riskResult;
     }
 
-    public OptimResult backtestStrategy(TradeStrategy strategy, BarSeries series, double initialCapital, double riskPerTrade, double stopLossPct, double takeProfitPct) {
+    public RiskResult backtestStrategy(TradeStrategy strategy, BarSeries series, double initialCapital, double riskPerTrade, double stopLossPct, double takeProfitPct) {
         Rule entryRule = strategy.getEntryRule(series);
         Rule exitRule = strategy.getExitRule(series);
         boolean inPosition = false;
@@ -236,7 +238,7 @@ public class StrategieBackTest {
         double avgTradeBars = tradeCount > 0 ? (double) totalTradeBars / tradeCount : 0.0;
         double maxTradeGain = (maxGain == Double.NEGATIVE_INFINITY) ? 0.0 : maxGain;
         double maxTradeLoss = (maxLoss == Double.POSITIVE_INFINITY) ? 0.0 : maxLoss;
-        OptimResult optimResult = OptimResult.builder()
+        RiskResult optimResult = RiskResult.builder()
                 .rendement(rendement)
                 .tradeCount(tradeCount)
                 .winRate(winRate)
@@ -246,7 +248,7 @@ public class StrategieBackTest {
                 .avgTradeBars(avgTradeBars)
                 .maxTradeGain(maxTradeGain)
                 .maxTradeLoss(maxTradeLoss)
-                .build();
+                .scoreSwingTrade(0).build();
         return optimResult;
     }
 

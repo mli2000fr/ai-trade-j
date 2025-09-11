@@ -1,5 +1,6 @@
 package com.app.backend.trade.model;
 
+import com.app.backend.model.RiskResult;
 import com.app.backend.trade.strategy.ParamsOptim;
 import lombok.Builder;
 import lombok.Data;
@@ -14,6 +15,6 @@ public class ComboResult {
     private Object entryParams;
     private String exitName;
     private Object exitParams;
-    private OptimResult result;
+    private RiskResult result;
     private ParamsOptim paramsOptim;
 }
