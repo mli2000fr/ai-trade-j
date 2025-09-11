@@ -690,15 +690,20 @@ public class StrategieHelper {
      * @return WalkForwardResultPro
      */
     public WalkForwardResultPro optimseStrategy(BarSeries series, double optimWindowPct, double testWindowPct, double stepWindowPct) {
+        logger.info("[optimseStrategy] Démarrage de l'optimisation walk-forward (pourcentages) : optimWindowPct={}, testWindowPct={}, stepWindowPct={}", optimWindowPct, testWindowPct, stepWindowPct);
         int totalBars = series.getBarCount();
+        logger.info("[optimseStrategy] Nombre total de bougies : {}", totalBars);
         int optimWindow = Math.max(1, (int) Math.round(totalBars * optimWindowPct));
         int testWindow = Math.max(1, (int) Math.round(totalBars * testWindowPct));
         int stepWindow = Math.max(1, (int) Math.round(totalBars * stepWindowPct));
+        logger.info("[optimseStrategy] Fenêtre optimisation : {} | Fenêtre test : {} | Pas : {}", optimWindow, testWindow, stepWindow);
         List<ComboResult> segmentResults = new ArrayList<>();
         int start = 0;
         while (start + optimWindow + testWindow <= totalBars) {
+            logger.info("[optimseStrategy] Segment start={} | optimWindow={} | testWindow={}", start, optimWindow, testWindow);
             BarSeries optimSeries = series.getSubSeries(start, start + optimWindow);
             BarSeries testSeries = series.getSubSeries(start + optimWindow, start + optimWindow + testWindow);
+            logger.info("[optimseStrategy] Optimisation des paramètres sur la partie optimisation...");
             // Optimisation des paramètres sur la partie optimisation
             StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(
                 optimSeries,
@@ -736,6 +741,14 @@ public class StrategieHelper {
                 swingParams.meanRevThresholdMin, swingParams.meanRevThresholdMax,
                 swingParams.meanRevThresholdStep
             );
+            logger.info("[optimseStrategy] Paramètres optimisés :");
+            logger.info("[optimseStrategy]  - Improved Trend : {}", bestImprovedTrend);
+            logger.info("[optimseStrategy]  - SMA Crossover : {}", bestSmaCrossover);
+            logger.info("[optimseStrategy]  - RSI : {}", bestRsi);
+            logger.info("[optimseStrategy]  - Breakout : {}", bestBreakout);
+            logger.info("[optimseStrategy]  - MACD : {}", bestMacd);
+            logger.info("[optimseStrategy]  - Mean Reversion : {}", bestMeanReversion);
+            // Liste des stratégies et paramètres
             java.util.List<Object[]> strategies = java.util.Arrays.asList(
                 new Object[]{"Improved Trend", bestImprovedTrend},
                 new Object[]{"SMA Crossover", bestSmaCrossover},
@@ -779,7 +792,9 @@ public class StrategieHelper {
                 segmentResults.add(bestCombo);
             }
             start += stepWindow; // avancer la fenêtre selon le pas
+            logger.info("[optimseStrategy] Fin optimisation du segment, meilleur rendement={} (si bestCombo!=null)", bestPerf);
         }
+        logger.info("[optimseStrategy] Agrégation des résultats...");
         // Agrégation des résultats swing trade
         double sumRendement = 0.0, sumDrawdown = 0.0, sumWinRate = 0.0, sumProfitFactor = 0.0, sumTradeDuration = 0.0;
         int totalTrades = 0;
@@ -834,6 +849,7 @@ public class StrategieHelper {
             sharpeRatio = (rendementStdDev != 0.0) ? (mean / rendementStdDev) : 0.0;
             sortinoRatio = (negCount > 0) ? (mean / Math.sqrt(sumNegSq / negCount)) : 0.0;
         }
+        logger.info("[optimseStrategy] Fin de l'optimisation walk-forward, retour du résultat.");
         return new WalkForwardResultPro(segmentResults, avgRendement, avgDrawdown, avgWinRate, avgProfitFactor, avgTradeDuration, avgGainLossRatio, scoreSwingTrade, totalTrades, avgTrainRendement, avgTestRendement, overfitRatio, isOverfit, sharpeRatio, rendementStdDev, sortinoRatio);
     }
 
