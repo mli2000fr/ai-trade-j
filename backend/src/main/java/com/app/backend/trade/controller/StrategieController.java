@@ -1,6 +1,7 @@
 package com.app.backend.trade.controller;
 
 import com.app.backend.trade.model.SignalType;
+import com.app.backend.trade.model.WalkForwardResultPro;
 import com.app.backend.trade.strategy.BestInOutStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -70,6 +71,12 @@ public class StrategieController {
     @GetMapping("/strategies/get_indice")
     public ResponseEntity<SignalType> getIndice(@RequestParam(value = "symbol", required = false) String symbol) {
         SignalType st = strategieHelper.getBestInOutSignal(symbol);
+        return ResponseEntity.ok(st);
+    }
+
+    @GetMapping("/strategies/test")
+    public ResponseEntity<WalkForwardResultPro> test(@RequestParam(value = "symbol", required = false) String symbol) {
+        WalkForwardResultPro st = strategieHelper.optimseStrategy(symbol);
         return ResponseEntity.ok(st);
     }
 

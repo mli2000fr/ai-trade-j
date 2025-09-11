@@ -673,18 +673,27 @@ public class StrategieHelper {
     }
 
 
+    public WalkForwardResultPro optimseStrategy(String symbol) {
+        List<DailyValue> listeValus = this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_OPTIM);
+        BarSeries series = TradeUtils.mapping(listeValus);
+        return this.optimseStrategy(series, 0.2, 0.1, 0.1);
+    }
 
 
     /**
      * Optimisation walk-forward professionnelle pour le swing trade.
+     * Les paramètres sont des pourcentages du nombre total de bougies.
      * @param series série de prix
-     * @param optimWindow taille de la fenêtre d'optimisation
-     * @param testWindow taille de la fenêtre de test
-     * @param stepWindow taille du pas de glissement (par défaut = testWindow)
+     * @param optimWindowPct pourcentage de la fenêtre d'optimisation (ex: 0.2 pour 20%)
+     * @param testWindowPct pourcentage de la fenêtre de test
+     * @param stepWindowPct pourcentage du pas de glissement
      * @return WalkForwardResultPro
      */
-    public WalkForwardResultPro optimseStrategy(BarSeries series, int optimWindow, int testWindow, int stepWindow) {
+    public WalkForwardResultPro optimseStrategy(BarSeries series, double optimWindowPct, double testWindowPct, double stepWindowPct) {
         int totalBars = series.getBarCount();
+        int optimWindow = Math.max(1, (int) Math.round(totalBars * optimWindowPct));
+        int testWindow = Math.max(1, (int) Math.round(totalBars * testWindowPct));
+        int stepWindow = Math.max(1, (int) Math.round(totalBars * stepWindowPct));
         List<ComboResult> segmentResults = new ArrayList<>();
         int start = 0;
         while (start + optimWindow + testWindow <= totalBars) {
