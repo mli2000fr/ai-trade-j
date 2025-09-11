@@ -606,7 +606,7 @@ public class StrategieHelper {
                                 .maxTradeGain(rs.getDouble("max_trade_gain"))
                                 .maxTradeLoss(rs.getDouble("max_trade_loss"))
                                 .scoreSwingTrade(rs.getDouble("score_swing_trade"))
-                        .build()).build();
+                                .fltredOut(rs.getBoolean("fltred_out")).build()).build();
             }, symbol);
         } catch (org.springframework.dao.EmptyResultDataAccessException e) {
             logger.warn("Aucun BestInOutStrategy trouvé pour le symbole: {}", symbol);
@@ -660,6 +660,7 @@ public class StrategieHelper {
                             .maxTradeGain(rs.getDouble("max_trade_gain"))
                             .maxTradeLoss(rs.getDouble("max_trade_loss"))
                             .scoreSwingTrade(rs.getDouble("score_swing_trade"))
+                            .fltredOut(rs.getBoolean("fltred_out"))
                             .build()).build();
         });
         return results;
@@ -691,7 +692,11 @@ public class StrategieHelper {
     public BestInOutStrategy optimseStrategy(String symbol) {
         List<DailyValue> listeValus = this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_OPTIM);
         BarSeries series = TradeUtils.mapping(listeValus);
-        WalkForwardResultPro walkForwardResultPro =  this.optimseStrategy(series, 0.2, 0.1, 0.1);
+        // Création d'une config de filtrage par défaut (modifiable si besoin)
+        StrategyFilterConfig filterConfig = new StrategyFilterConfig();
+        // Utilisation du swingParams de la classe (modifiable si besoin)
+        WalkForwardResultPro walkForwardResultPro =  this.optimseStrategy(series, 0.2, 0.1, 0.1, filterConfig, swingParams);
+
         return BestInOutStrategy.builder()
                 .symbol(symbol)
                 .entryName(walkForwardResultPro.getBestCombo().getEntryName())
@@ -716,9 +721,11 @@ public class StrategieHelper {
      * @param optimWindowPct pourcentage de la fenêtre d'optimisation (ex: 0.2 pour 20%)
      * @param testWindowPct pourcentage de la fenêtre de test
      * @param stepWindowPct pourcentage du pas de glissement
+     * @param filterConfig configuration des critères de filtrage
+     * @param swingParams paramètres d'optimisation swing trade
      * @return WalkForwardResultPro
      */
-    public WalkForwardResultPro optimseStrategy(BarSeries series, double optimWindowPct, double testWindowPct, double stepWindowPct) {
+    public WalkForwardResultPro optimseStrategy(BarSeries series, double optimWindowPct, double testWindowPct, double stepWindowPct, StrategyFilterConfig filterConfig, SwingTradeOptimParams swingParams) {
         logger.info("[optimseStrategy] Démarrage de l'optimisation walk-forward (pourcentages) : optimWindowPct={}, testWindowPct={}, stepWindowPct={}", optimWindowPct, testWindowPct, stepWindowPct);
         int totalBars = series.getBarCount();
         logger.info("[optimseStrategy] Nombre total de bougies : {}", totalBars);
@@ -726,10 +733,19 @@ public class StrategieHelper {
         int testWindow = Math.max(1, (int) Math.round(totalBars * testWindowPct));
         int stepWindow = Math.max(1, (int) Math.round(totalBars * stepWindowPct));
         logger.info("[optimseStrategy] Fenêtre optimisation : {} | Fenêtre test : {} | Pas : {}", optimWindow, testWindow, stepWindow);
+        if (totalBars < (optimWindow + testWindow)) {
+            logger.error("[optimseStrategy] Série trop courte pour les fenêtres demandées. Abandon.");
+            // return WalkForwardResultPro.builder().segmentResults(new ArrayList<>()).build();
+        }
         List<ComboResult> segmentResults = new ArrayList<>();
         int start = 0;
         double lastPerf = Double.NEGATIVE_INFINITY;
-        java.util.Map<String, Object> optimCache = new java.util.HashMap<>();
+        // Remplacer le cache simple par un cache LRU (max 100 entrées)
+        java.util.Map<String, Object> optimCache = new java.util.LinkedHashMap<String, Object>() {
+            protected boolean removeEldestEntry(java.util.Map.Entry<String, Object> eldest) {
+                return size() > 100;
+            }
+        };
         int segmentCount = 0;
         while (start + optimWindow + testWindow <= totalBars) {
             long segmentStartTime = System.nanoTime();
@@ -830,7 +846,6 @@ public class StrategieHelper {
             );
             double bestPerf = Double.NEGATIVE_INFINITY;
             ComboResult bestCombo = null;
-            // --- Nouvelle logique : NE PAS filtrer ici ---
             for (Object[] entry : strategies) {
                 for (Object[] exit : strategies) {
                     String entryName = (String) entry[0];
@@ -841,7 +856,6 @@ public class StrategieHelper {
                     com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
                     com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
                     RiskResult result = strategieBackTest.backtestStrategy(combined, testSeries);
-                    // NE PAS filtrer ici, juste comparer le rendement
                     if (result.getRendement() > bestPerf) {
                         bestPerf = result.getRendement();
                         bestCombo = ComboResult.builder()
@@ -938,9 +952,8 @@ public class StrategieHelper {
         }
         logger.info("[optimseStrategy] Fin de l'optimisation walk-forward, retour du résultat.");
         // --- Filtrage final sur le meilleur résultat ---
-        boolean stable = isStableAndSimple(bestCombo.getResult(), bestCombo.getEntryName(), bestCombo.getExitName(), bestCombo.getEntryParams(), bestCombo.getExitParams());
+        boolean stable = isStableAndSimple(bestCombo.getResult(), bestCombo.getEntryName(), bestCombo.getExitName(), bestCombo.getEntryParams(), bestCombo.getExitParams(), filterConfig);
         bestCombo.getResult().setFltredOut(!stable);
-        // --- Construction avec builder et filteredOut ---
         return WalkForwardResultPro.builder()
                 .segmentResults(segmentResults)
                 .avgRendement(avgRendement)
@@ -962,47 +975,41 @@ public class StrategieHelper {
                 .build();
     }
 
-
-
     /**
      * Filtre les stratégies trop complexes ou instables.
      * Ajout contrôle durée moyenne des trades et ratio gain/perte.
      * @return true si la stratégie est stable et simple
      */
-    private boolean isStableAndSimple(RiskResult result, String entryName, String exitName, Object entryParams, Object exitParams) {
-        // Critères de stabilité assouplis + logs
-        if (result.getMaxDrawdown() > 0.5) {
-            System.out.println("Blocage: Drawdown > 50% (" + result.getMaxDrawdown() + ")");
+    private boolean isStableAndSimple(RiskResult result, String entryName, String exitName, Object entryParams, Object exitParams, StrategyFilterConfig config) {
+        if (result.getMaxDrawdown() > config.maxDrawdown) {
+            logger.warn("Blocage: Drawdown > {} ({})", config.maxDrawdown, result.getMaxDrawdown());
             return false;
         }
-        if (result.getProfitFactor() < 1.0) {
-            System.out.println("Blocage: Profit factor < 1.0 (" + result.getProfitFactor() + ")");
+        if (result.getProfitFactor() < config.minProfitFactor) {
+            logger.warn("Blocage: Profit factor < {} ({})", config.minProfitFactor, result.getProfitFactor());
             return false;
         }
-        if (result.getWinRate() < 0.2) {
-            System.out.println("Blocage: Win rate < 20% (" + result.getWinRate() + ")");
+        if (result.getWinRate() < config.minWinRate) {
+            logger.warn("Blocage: Win rate < {} ({})", config.minWinRate, result.getWinRate());
             return false;
         }
-        // Durée moyenne des trades (swing trade typique: 1 à 30 bars)
-        if (result.getAvgTradeBars() < 1 || result.getAvgTradeBars() > 30) {
-            System.out.println("Blocage: Durée moyenne des trades hors intervalle (" + result.getAvgTradeBars() + ")");
+        if (result.getAvgTradeBars() < config.minAvgTradeBars || result.getAvgTradeBars() > config.maxAvgTradeBars) {
+            logger.warn("Blocage: Durée moyenne des trades hors intervalle ({})", result.getAvgTradeBars());
             return false;
         }
-        // Ratio gain/perte (maxTradeGain/maxTradeLoss)
         double gainLossRatio = 0.0;
         if (result.getMaxTradeLoss() != 0) {
             gainLossRatio = Math.abs(result.getMaxTradeGain()) / Math.abs(result.getMaxTradeLoss());
-            if (gainLossRatio < 0.7) {
-                System.out.println("Blocage: Ratio gain/perte < 0.7 (" + gainLossRatio + ")");
+            if (gainLossRatio < config.minGainLossRatio) {
+                logger.warn("Blocage: Ratio gain/perte < {} ({})", config.minGainLossRatio, gainLossRatio);
                 return false;
             }
         }
-        // Critère de complexité (exemple: trop de paramètres)
         int paramCount = 0;
         if (entryParams != null) paramCount += entryParams.getClass().getDeclaredFields().length;
         if (exitParams != null) paramCount += exitParams.getClass().getDeclaredFields().length;
-        if (paramCount > 15) {
-            System.out.println("Blocage: Trop de paramètres (" + paramCount + ")");
+        if (paramCount > config.maxParamCount) {
+            logger.warn("Blocage: Trop de paramètres ({})", paramCount);
             return false;
         }
         return true;
