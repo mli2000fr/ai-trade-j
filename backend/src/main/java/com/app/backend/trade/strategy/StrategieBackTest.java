@@ -2,6 +2,7 @@ package com.app.backend.trade.strategy;
 
 import com.app.backend.model.RiskResult;
 import com.app.backend.trade.model.OptimResult;
+import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
@@ -318,7 +319,7 @@ public class StrategieBackTest {
         int totalCombinaisons = shortCount * longCount * signalCount;
         java.util.Random rand = new java.util.Random();
         int maxRandomTests = 80;
-        boolean useRandomSearch = totalCombinaisons > 1000;
+        boolean useRandomSearch = totalCombinaisons > TradeConstant.RANDO_COUNT;
         int tested = 0;
         if (useRandomSearch) {
             // Random Search
@@ -372,7 +373,7 @@ public class StrategieBackTest {
         int totalCombinaisons = ((lookbackMax - lookbackMin) / lookbackStep) + 1;
         java.util.Random rand = new java.util.Random();
         int maxRandomTests = 50;
-        boolean useRandomSearch = totalCombinaisons > 1000;
+        boolean useRandomSearch = totalCombinaisons > TradeConstant.RANDO_COUNT;
         int tested = 0;
         if (useRandomSearch) {
             // Random Search
@@ -419,7 +420,7 @@ public class StrategieBackTest {
         int totalCombinaisons = smaCount * thresholdCount;
         java.util.Random rand = new java.util.Random();
         int maxRandomTests = 80;
-        boolean useRandomSearch = totalCombinaisons > 1000;
+        boolean useRandomSearch = totalCombinaisons > TradeConstant.RANDO_COUNT;
         int tested = 0;
         if (useRandomSearch) {
             // Random Search
@@ -476,7 +477,7 @@ public class StrategieBackTest {
         int totalCombinaisons = rsiCount * oversoldCount * overboughtCount;
         java.util.Random rand = new java.util.Random();
         int maxRandomTests = 80;
-        boolean useRandomSearch = totalCombinaisons > 1000;
+        boolean useRandomSearch = totalCombinaisons > TradeConstant.RANDO_COUNT;
         int tested = 0;
         if (useRandomSearch) {
             // Random Search
@@ -538,7 +539,7 @@ public class StrategieBackTest {
         }
         java.util.Random rand = new java.util.Random();
         int maxRandomTests = 100;
-        boolean useRandomSearch = totalCombinaisons > 500;
+        boolean useRandomSearch = totalCombinaisons > TradeConstant.RANDO_COUNT;
         int tested = 0;
         if (useRandomSearch) {
             // Random Search
@@ -623,11 +624,11 @@ public class StrategieBackTest {
         }
 
         java.util.Random rand = new java.util.Random();
-        int maxRandomTests = 200;
-        boolean useRandomSearch = totalCombinaisons > 1000;
+        int maxRandomTests = Math.min(totalCombinaisons, Math.max(TradeConstant.RANDO_COUNT, ((totalCombinaisons > TradeConstant.RANDO_COUNT * 10) ? (totalCombinaisons / 4) : TradeConstant.RANDO_COUNT)));
+        boolean useRandomSearch = totalCombinaisons > TradeConstant.RANDO_COUNT;
         int tested = 0;
-
         if (useRandomSearch) {
+            System.out.println("[Optimisation] ImprovedTrendFollowing: totalCombinaisons=" + totalCombinaisons + ", randomTests=" + maxRandomTests + " (" + (100.0 * maxRandomTests / totalCombinaisons) + "%)");
             // Random Search
             for (int i = 0; i < maxRandomTests; i++) {
                 int trendPeriod = trendMin + rand.nextInt((trendMax - trendMin) / trendStep + 1) * trendStep;
