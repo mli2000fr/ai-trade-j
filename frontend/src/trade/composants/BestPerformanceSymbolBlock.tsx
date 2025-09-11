@@ -135,6 +135,15 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               <option value="rendement">Rendement</option>
               <option value="score_swing_trade">Score Swing Trade</option>
             </select>
+            <label style={{ marginLeft: 16, marginRight: 16 }}>
+              <input
+                type="checkbox"
+                checked={showOnlyNonFiltered}
+                onChange={e => setShowOnlyNonFiltered(e.target.checked)}
+                style={{ marginRight: 8 }}
+              />
+              Stratégies non filtrées
+            </label>
             {/* Bouton copier */}
             <Button
               variant="contained"
@@ -147,17 +156,6 @@ const BestPerformanceSymbolBlock: React.FC = () => {
             >
               Copier
             </Button>
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ marginLeft: 16 }}>
-              <input
-                type="checkbox"
-                checked={showOnlyNonFiltered}
-                onChange={e => setShowOnlyNonFiltered(e.target.checked)}
-                style={{ marginRight: 8 }}
-              />
-              Afficher uniquement les stratégies non filtrées
-            </label>
           </div>
           {loading ? (
             <CircularProgress />
@@ -177,6 +175,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie OUT</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Trades</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Durée moyenne trade</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>WinRate</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Drawdown</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Profit Factor</TableCell>
@@ -211,6 +210,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         <TableCell>{row.exitName}</TableCell>
                         <TableCell>{(row.result.rendement * 100).toFixed(2)} %</TableCell>
                         <TableCell>{row.result.tradeCount}</TableCell>
+                        <TableCell>{row.result.avgTradeBars !== undefined ? row.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
                         <TableCell>{(row.result.winRate * 100).toFixed(2)} %</TableCell>
                         <TableCell>{(row.result.maxDrawdown * 100).toFixed(2)} %</TableCell>
                         <TableCell>{row.result.profitFactor.toFixed(2)}</TableCell>
