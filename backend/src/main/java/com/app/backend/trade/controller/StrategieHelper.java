@@ -830,6 +830,8 @@ public class StrategieHelper {
         int totalTrades = 0;
         List<Double> trainRendements = new ArrayList<>();
         List<Double> testRendements = new ArrayList<>();
+        ComboResult bestCombo = null;
+        double bestPerf = Double.NEGATIVE_INFINITY;
         for (ComboResult r : segmentResults) {
             OptimResult res = r.getResult();
             sumRendement += res.getRendement();
@@ -838,12 +840,27 @@ public class StrategieHelper {
             sumProfitFactor += res.getProfitFactor();
             sumTradeDuration += res.getAvgTradeBars();
             totalTrades += res.getTradeCount();
+            // Sélection du meilleur ComboResult
+            if (res.getRendement() > bestPerf) {
+                bestPerf = res.getRendement();
+                bestCombo = r;
+            }
             // Ajout du contrôle overfitting pour chaque segment
-            BarSeries optimSeries = null;
-            BarSeries testSeries = null;
-            // Si possible, récupérer les séries utilisées pour chaque segment
-            // Ici, on suppose que ComboResult ou segmentResults contient l'info, sinon à adapter
-            // trainRendements.add(...); testRendements.add(...);
+            // On récupère la stratégie utilisée pour le test
+            com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(r.getEntryName(), r.getEntryParams());
+            com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(r.getExitName(), r.getExitParams());
+            com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
+            // On backteste sur la partie optimisation (train) du segment
+            // On suppose que chaque segment correspond à une fenêtre glissante, donc on recalcule la fenêtre train
+            int segmentIndex = segmentResults.indexOf(r);
+            int trainStart = segmentIndex * stepWindow;
+            int trainEnd = trainStart + optimWindow;
+            if (trainEnd <= series.getBarCount()) {
+                BarSeries optimSeries = series.getSubSeries(trainStart, trainEnd);
+                OptimResult trainResult = strategieBackTest.backtestStrategy(combined, optimSeries);
+                trainRendements.add(trainResult.getRendement());
+                testRendements.add(res.getRendement());
+            }
         }
         int n = segmentResults.size();
         double avgRendement = n > 0 ? sumRendement / n : 0.0;
@@ -880,104 +897,26 @@ public class StrategieHelper {
             sortinoRatio = (negCount > 0) ? (mean / Math.sqrt(sumNegSq / negCount)) : 0.0;
         }
         logger.info("[optimseStrategy] Fin de l'optimisation walk-forward, retour du résultat.");
-        return new WalkForwardResultPro(segmentResults, avgRendement, avgDrawdown, avgWinRate, avgProfitFactor, avgTradeDuration, avgGainLossRatio, scoreSwingTrade, totalTrades, avgTrainRendement, avgTestRendement, overfitRatio, isOverfit, sharpeRatio, rendementStdDev, sortinoRatio);
+        return new WalkForwardResultPro(
+                segmentResults,
+                avgRendement,
+                avgDrawdown,
+                avgWinRate,
+                avgProfitFactor,
+                avgTradeDuration,
+                avgGainLossRatio,
+                scoreSwingTrade,
+                totalTrades,
+                avgTrainRendement,
+                avgTestRendement,
+                overfitRatio,
+                isOverfit,
+                sharpeRatio,
+                rendementStdDev,
+                sortinoRatio,
+                bestCombo);
     }
 
-    /**
-     * Optimisation walk-forward professionnelle avec validation croisée (cross-validation) pour le swing trade.
-     * @param series série de prix
-     * @param optimWindow taille de la fenêtre d'optimisation
-     * @param testWindow taille de la fenêtre de test
-     * @param stepWindow taille du pas de glissement (par défaut = testWindow)
-     * @param nFolds nombre de folds pour la validation croisée
-     * @return WalkForwardResultPro
-     */
-    public WalkForwardResultPro optimseStrategy(BarSeries series, int optimWindow, int testWindow, int stepWindow, int nFolds) {
-        int totalBars = series.getBarCount();
-        List<ComboResult> segmentResults = new ArrayList<>();
-        List<Double> trainRendements = new ArrayList<>();
-        List<Double> testRendements = new ArrayList<>();
-        if (nFolds <= 1) {
-            int start = 0;
-            while (start + optimWindow + testWindow <= totalBars) {
-                BarSeries optimSeries = series.getSubSeries(start, start + optimWindow);
-                BarSeries testSeries = series.getSubSeries(start + optimWindow, start + optimWindow + testWindow);
-                ComboResult bestCombo = optimiseComboForSegment(optimSeries, testSeries);
-                if (bestCombo != null) {
-                    segmentResults.add(bestCombo);
-                    // Calcul du rendement sur optimisation (train)
-                    OptimResult trainResult = strategieBackTest.backtestStrategy(
-                        createStrategy(bestCombo.getEntryName(), bestCombo.getEntryParams()), optimSeries);
-                    trainRendements.add(trainResult.getRendement());
-                    testRendements.add(bestCombo.getResult().getRendement());
-                }
-                start += stepWindow;
-            }
-        } else {
-            int foldSize = totalBars / nFolds;
-            for (int fold = 0; fold < nFolds; fold++) {
-                int testStart = fold * foldSize;
-                int testEnd = (fold == nFolds - 1) ? totalBars : (testStart + foldSize);
-                BarSeries testSeries = series.getSubSeries(testStart, testEnd);
-                BarSeries optimSeries = TradeUtils.concatSubSeriesExcept(series, testStart, testEnd);
-                ComboResult bestCombo = optimiseComboForSegment(optimSeries, testSeries);
-                if (bestCombo != null) {
-                    segmentResults.add(bestCombo);
-                    OptimResult trainResult = strategieBackTest.backtestStrategy(
-                        createStrategy(bestCombo.getEntryName(), bestCombo.getEntryParams()), optimSeries);
-                    trainRendements.add(trainResult.getRendement());
-                    testRendements.add(bestCombo.getResult().getRendement());
-                }
-            }
-        }
-        // Agrégation des résultats
-        double sumRendement = 0.0, sumDrawdown = 0.0, sumWinRate = 0.0, sumProfitFactor = 0.0, sumTradeDuration = 0.0;
-        int totalTrades = 0;
-        for (ComboResult r : segmentResults) {
-            OptimResult res = r.getResult();
-            sumRendement += res.getRendement();
-            sumDrawdown += res.getMaxDrawdown();
-            sumWinRate += res.getWinRate();
-            sumProfitFactor += res.getProfitFactor();
-            sumTradeDuration += res.getAvgTradeBars();
-            totalTrades += res.getTradeCount();
-        }
-        int n = segmentResults.size();
-        double avgRendement = n > 0 ? sumRendement / n : 0.0;
-        double avgDrawdown = n > 0 ? sumDrawdown / n : 0.0;
-        double avgWinRate = n > 0 ? sumWinRate / n : 0.0;
-        double avgProfitFactor = n > 0 ? sumProfitFactor / n : 0.0;
-        double avgTradeDuration = n > 0 ? sumTradeDuration / n : 0.0;
-        double avgGainLossRatio = 0.0;
-        double scoreSwingTrade = 0.0;
-        // Contrôle du sur-apprentissage
-        double avgTrainRendement = trainRendements.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-        double avgTestRendement = testRendements.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-        double overfitRatio = (avgTrainRendement != 0.0) ? (avgTestRendement / avgTrainRendement) : 0.0;
-        boolean isOverfit = overfitRatio < 0.7;
-        // Calcul indicateurs de robustesse
-        double rendementStdDev = 0.0;
-        double sharpeRatio = 0.0;
-        double sortinoRatio = 0.0;
-        if (testRendements.size() > 1) {
-            double mean = avgTestRendement;
-            double sumSq = 0.0;
-            double sumNegSq = 0.0;
-            int negCount = 0;
-            for (double r : testRendements) {
-                double diff = r - mean;
-                sumSq += diff * diff;
-                if (diff < 0) {
-                    sumNegSq += diff * diff;
-                    negCount++;
-                }
-            }
-            rendementStdDev = Math.sqrt(sumSq / (testRendements.size() - 1));
-            sharpeRatio = (rendementStdDev != 0.0) ? (mean / rendementStdDev) : 0.0;
-            sortinoRatio = (negCount > 0) ? (mean / Math.sqrt(sumNegSq / negCount)) : 0.0;
-        }
-        return new WalkForwardResultPro(segmentResults, avgRendement, avgDrawdown, avgWinRate, avgProfitFactor, avgTradeDuration, avgGainLossRatio, scoreSwingTrade, totalTrades, avgTrainRendement, avgTestRendement, overfitRatio, isOverfit, sharpeRatio, rendementStdDev, sortinoRatio);
-    }
 
     /**
      * Optimise la meilleure combinaison IN/OUT pour un segment donné.
