@@ -21,6 +21,7 @@ import java.util.*;
 @Service
 public class BestCombinationStrategyHelper {
 
+    private final SwingTradeOptimParams swingParams = new SwingTradeOptimParams();
     private final StrategieHelper strategieHelper;
     private final JdbcTemplate jdbcTemplate;
     private final Gson gson = new Gson();
@@ -71,7 +72,10 @@ public class BestCombinationStrategyHelper {
                 List<List<Class<? extends TradeStrategy>>> outCombinations = (outClass != null) ? generateCombinationsWithMandatory(strategies, out, outClass) : generateCombinations(strategies, out);
                 for (List<Class<? extends TradeStrategy>> inCombo : inCombinations) {
                     for (List<Class<? extends TradeStrategy>> outCombo : outCombinations) {
-                        BestCombinationResult result = evaluateCombination(Arrays.asList(barSeries), inCombo, outCombo);
+                        //BestCombinationResult result = evaluateCombination(Arrays.asList(barSeries), inCombo, outCombo);
+
+                        StrategyFilterConfig filterConfig = new StrategyFilterConfig();
+                        BestCombinationResult result = optimseStrategyMix(Arrays.asList(barSeries), inCombo, outCombo, filterConfig, swingParams);
                         // TradeUtils.log("Global search: inCombo=" + inCombo + ", outCombo=" + outCombo + " => score=" + result.score);
                         if (result != null && result.backtestResult.rendement > bestScore) {
                             bestScore = result.backtestResult.rendement;
@@ -292,6 +296,7 @@ public class BestCombinationStrategyHelper {
                     max_trade_gain = ?, 
                     max_trade_loss = ?, 
                     score_swing_trade = ?, 
+                    fltred_out = ?,
                     nb_simples = ?,
                     initial_capital = ?, 
                     risk_per_trade = ?, 
@@ -313,6 +318,7 @@ public class BestCombinationStrategyHelper {
                     result.backtestResult.maxTradeGain,
                     result.backtestResult.maxTradeLoss,
                     result.backtestResult.scoreSwingTrade,
+                    result.backtestResult.fltredOut,
                     result.contextOptim.nbSimples,
                     result.contextOptim.initialCapital,
                     result.contextOptim.riskPerTrade,
@@ -338,13 +344,15 @@ public class BestCombinationStrategyHelper {
                     max_trade_gain,
                     max_trade_loss,
                     score_swing_trade, 
+                    fltred_out,
                     initial_capital, 
                     risk_per_trade, 
                     stop_loss_pct, 
                     take_profit_pct, 
                     nb_simples,
+                    created_date,
                     update_date
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""";
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""";
             jdbcTemplate.update(insertSql,
                     symbol,
                     inStrategyNamesJson,
@@ -361,11 +369,13 @@ public class BestCombinationStrategyHelper {
                     result.backtestResult.maxTradeGain,
                     result.backtestResult.maxTradeLoss,
                     result.backtestResult.scoreSwingTrade,
+                    result.backtestResult.fltredOut,
                     result.contextOptim.initialCapital,
                     result.contextOptim.riskPerTrade,
                     result.contextOptim.stopLossPct,
                     result.contextOptim.takeProfitPct,
-                    result.contextOptim.nbSimples);
+                    result.contextOptim.nbSimples,
+                    java.sql.Date.valueOf(java.time.LocalDate.now()));
         }
     }
 
