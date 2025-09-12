@@ -811,6 +811,11 @@ public class StrategieHelper {
                     }
                     // Backtest sur test
                     RiskResult result = strategieBackTest.backtestStrategy(combined, testSeries);
+                    // Calcul du ratio overfit pour ce combo
+                    double overfitRatioCombo = result.getRendement() / (trainResult.getRendement() == 0.0 ? 1.0 : trainResult.getRendement());
+                    boolean isOverfitCombo = (overfitRatioCombo < 0.7 || overfitRatioCombo > 1.3);
+                    boolean stable = result != null && TradeUtils.isStableAndSimple(result, filterConfig);
+                    result.setFltredOut(!stable || isOverfitCombo);
                     ComboResult combo = ComboResult.builder()
                         .entryName(entryName)
                         .entryParams(entryParams)
@@ -838,6 +843,24 @@ public class StrategieHelper {
         // Agrégation des résultats de tous les folds
         List<ComboResult> allResults = new ArrayList<>();
         for (List<ComboResult> fold : foldsResults) allResults.addAll(fold);
+        // Filtrage des combos non overfit
+        List<ComboResult> nonOverfitResults = new ArrayList<>();
+        for (ComboResult r : allResults) {
+            if (!r.getResult().isFltredOut()) {
+                nonOverfitResults.add(r);
+            }
+        }
+        // Sélection du meilleur combo parmi les non-overfit
+        ComboResult bestComboNonOverfit = null;
+        double bestPerfNonOverfit = Double.NEGATIVE_INFINITY;
+        for (ComboResult r : nonOverfitResults) {
+            RiskResult res = r.getResult();
+            if (res.getRendement() > bestPerfNonOverfit) {
+                bestPerfNonOverfit = res.getRendement();
+                bestComboNonOverfit = r;
+            }
+        }
+
         double sumRendement = 0.0, sumDrawdown = 0.0, sumWinRate = 0.0, sumProfitFactor = 0.0, sumTradeDuration = 0.0;
         int totalTrades = 0;
         ComboResult bestCombo = null;
@@ -861,16 +884,13 @@ public class StrategieHelper {
         double avgWinRate = n > 0 ? sumWinRate / n : 0.0;
         double avgProfitFactor = n > 0 ? sumProfitFactor / n : 0.0;
         double avgTradeDuration = n > 0 ? sumTradeDuration / n : 0.0;
-        // --- Contrôle de l'overfitting ---
         double avgTrainPerf = trainPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
         double avgTestPerf = testPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
         double overfitRatio = avgTestPerf / (avgTrainPerf == 0.0 ? 1.0 : avgTrainPerf);
         boolean isOverfit = (overfitRatio < 0.7 || overfitRatio > 1.3);
-        // --- Filtrage final sur le meilleur résultat ---
-        boolean stable = bestCombo != null && bestCombo.getResult() != null && TradeUtils.isStableAndSimple(bestCombo.getResult(), filterConfig);
-        if (bestCombo != null && bestCombo.getResult() != null) {
-            bestCombo.getResult().setFltredOut(!stable || isOverfit);
-        }
+
+        // Si aucun combo non-overfit, fallback sur le meilleur combo global
+        ComboResult finalBestCombo = bestComboNonOverfit != null ? bestComboNonOverfit : bestCombo;
         return WalkForwardResultPro.builder()
                 .segmentResults(allResults)
                 .avgRendement(avgRendement)
@@ -879,7 +899,7 @@ public class StrategieHelper {
                 .avgProfitFactor(avgProfitFactor)
                 .avgTradeDuration(avgTradeDuration)
                 .totalTrades(totalTrades)
-                .bestCombo(bestCombo)
+                .bestCombo(finalBestCombo)
                 .avgTrainRendement(avgTrainPerf)
                 .avgTestRendement(avgTestPerf)
                 .overfitRatio(overfitRatio)
