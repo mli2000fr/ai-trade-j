@@ -588,6 +588,8 @@ public class BestCombinationStrategyHelper {
         int foldSize = (totalCount - (optimWindow + testWindow)) / kFolds;
         if (foldSize < 1) foldSize = 1;
         List<RiskResult> foldResults = new ArrayList<>();
+        List<Double> trainPerformances = new ArrayList<>();
+        List<Double> testPerformances = new ArrayList<>();
         for (int fold = 0; fold < kFolds; fold++) {
             int start = fold * foldSize;
             if (start + optimWindow + testWindow > totalCount) break;
@@ -679,8 +681,13 @@ public class BestCombinationStrategyHelper {
                 @Override
                 public String getName() { return "CombinedStrategy"; }
             };
-            RiskResult backtestResult = backTest.backtestStrategyRisk(combinedStrategy, testSeries);
-            foldResults.add(backtestResult);
+            // Backtest sur la partie optimisation (train)
+            RiskResult trainResult = backTest.backtestStrategyRisk(combinedStrategy, optimSeries);
+            trainPerformances.add(trainResult.rendement);
+            // Backtest sur la partie test
+            RiskResult testResult = backTest.backtestStrategyRisk(combinedStrategy, testSeries);
+            testPerformances.add(testResult.rendement);
+            foldResults.add(testResult);
         }
         // Agrégation des résultats des folds
         double sumRendement = 0.0, sumDrawdown = 0.0, sumWinRate = 0.0, sumProfitFactor = 0.0, sumAvgPnL = 0.0;
@@ -701,6 +708,12 @@ public class BestCombinationStrategyHelper {
             sumTradeCount += res.tradeCount;
         }
         int n = foldResults.size();
+        // Calcul du ratio d'overfitting
+        double avgTrainPerf = trainPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double avgTestPerf = testPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double overfitRatio = (avgTestPerf != 0.0) ? avgTrainPerf / avgTestPerf : 0.0;
+        // Ajout de l'annotation de sur-optimisation
+        boolean isOverfit = overfitRatio > 1.5; // seuil à ajuster selon besoin
         RiskResult aggResult = RiskResult.builder()
                 .rendement(n > 0 ? sumRendement / n : Double.NEGATIVE_INFINITY)
                 .maxDrawdown(n > 0 ? sumDrawdown / n : 0.0)
@@ -711,7 +724,7 @@ public class BestCombinationStrategyHelper {
                 .maxTradeGain(n > 0 ? sumMaxTradeGain / n : 0.0)
                 .maxTradeLoss(n > 0 ? sumMaxTradeLoss / n : 0.0)
                 .scoreSwingTrade(n > 0 ? sumScoreSwingTrade / n : 0.0)
-                .fltredOut(fltredOut)
+                .fltredOut(fltredOut || isOverfit)
                 .tradeCount(sumTradeCount)
                 .build();
         resultObj.backtestResult = aggResult;
