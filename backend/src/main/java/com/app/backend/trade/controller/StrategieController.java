@@ -1,11 +1,17 @@
 package com.app.backend.trade.controller;
 
+import com.app.backend.trade.model.DailyValue;
 import com.app.backend.trade.model.SignalType;
-import com.app.backend.trade.model.WalkForwardResultPro;
 import com.app.backend.trade.strategy.BestInOutStrategy;
+import com.app.backend.trade.util.TradeUtils;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -79,6 +85,20 @@ public class StrategieController {
     public ResponseEntity<BestInOutStrategy> test(@RequestParam(value = "symbol", required = false) String symbol) {
         BestInOutStrategy st = strategieHelper.optimseStrategy(symbol);
         return ResponseEntity.ok(st);
+    }
+
+
+
+    @GetMapping("/getBougiesBySymbol")
+    public ResponseEntity<List<DailyValue>> getBougiesBySymbol(@RequestParam String symbol, @RequestParam int historique) {
+        String bougies = TradeUtils.readResourceFile("trade/test/bougies.json");
+        List<DailyValue> dailyValues = new ArrayList<>();
+        if (bougies != null && !bougies.isEmpty()) {
+            Gson gson = new Gson();
+            Type listType = new TypeToken<List<DailyValue>>(){}.getType();
+            dailyValues = gson.fromJson(bougies, listType);
+        }
+        return ResponseEntity.ok(dailyValues);
     }
 
 }

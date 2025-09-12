@@ -94,6 +94,7 @@ public class StrategieHelper {
         TradeUtils.log("updateDBDailyValuAllSymbols: total "+listeDbSymbols.size()+", error" + error);
     }
 
+
     /**
      * Récupère et met à jour les valeurs journalières en base, puis retourne la série correspondante.
      * @param symbol symbole à traiter
