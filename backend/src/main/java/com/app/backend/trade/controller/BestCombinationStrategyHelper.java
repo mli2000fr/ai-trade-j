@@ -495,9 +495,15 @@ public class BestCombinationStrategyHelper {
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
+    public List<String> getSymbolFitredFromTabSingle() {
+        String sql = "select symbol from trade_ai.best_in_out_single_strategy where fltred_out = 'false' order by rendement desc;";
+        return jdbcTemplate.queryForList(sql, String.class);
+    }
+
 
     public void calculMixStrategies(){
-        List<String> listeDbSymbols = this.getAllAssetSymbolsEligibleFromDb();
+        List<String> listeDbSymbols = this.getSymbolFitredFromTabSingle();
+
         int nbThreads = Math.max(2, Runtime.getRuntime().availableProcessors());
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(nbThreads);
         java.util.concurrent.atomic.AtomicInteger error = new java.util.concurrent.atomic.AtomicInteger(0);

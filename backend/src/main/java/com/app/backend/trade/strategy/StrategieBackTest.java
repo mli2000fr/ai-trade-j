@@ -596,8 +596,13 @@ public class StrategieBackTest {
      * Optimisation des paramètres pour ImprovedTrendFollowingStrategy
      */
     public ImprovedTrendFollowingParams optimiseImprovedTrendFollowingParameters(BarSeries series,
+                                                                                 int trendMin, int trendMax, int shortMaMin, int shortMaMax, int longMaMin, int longMaMax,
+                                                                                 double thresholdMin, double thresholdMax, double thresholdStep) {
+        return this.optimiseImprovedTrendFollowingParameters(series, trendMin, trendMax, shortMaMin, shortMaMax, longMaMin, longMaMax, thresholdMin, thresholdMax, thresholdStep, null);
+    }
+    public ImprovedTrendFollowingParams optimiseImprovedTrendFollowingParameters(BarSeries series,
             int trendMin, int trendMax, int shortMaMin, int shortMaMax, int longMaMin, int longMaMax,
-            double thresholdMin, double thresholdMax, double thresholdStep) {
+            double thresholdMin, double thresholdMax, double thresholdStep, Integer maxCombos) {
         double bestReturn = Double.NEGATIVE_INFINITY;
         int bestTrend = trendMin;
         int bestShortMa = shortMaMin;
@@ -624,8 +629,13 @@ public class StrategieBackTest {
         }
 
         java.util.Random rand = new java.util.Random();
+
         int maxRandomTests = Math.min(totalCombinaisons, Math.max(TradeConstant.RANDO_COUNT, ((totalCombinaisons > TradeConstant.RANDO_COUNT * 10) ? (totalCombinaisons / 4) : TradeConstant.RANDO_COUNT)));
-        boolean useRandomSearch = totalCombinaisons > TradeConstant.RANDO_COUNT;
+        boolean useRandomSearch = (totalCombinaisons > TradeConstant.RANDO_COUNT);
+        if(maxCombos != null){
+            useRandomSearch = (totalCombinaisons > maxCombos);
+            maxRandomTests = 1000;
+        }
         int tested = 0;
         if (useRandomSearch) {
             System.out.println("[Optimisation] ImprovedTrendFollowing: totalCombinaisons=" + totalCombinaisons + ", randomTests=" + maxRandomTests + " (" + (100.0 * maxRandomTests / totalCombinaisons) + "%)");
