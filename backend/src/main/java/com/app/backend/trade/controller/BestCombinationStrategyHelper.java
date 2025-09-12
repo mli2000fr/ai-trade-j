@@ -2,6 +2,7 @@ package com.app.backend.trade.controller;
 
 import com.app.backend.model.RiskResult;
 import com.app.backend.trade.model.BestCombinationResult;
+import com.app.backend.trade.model.StrategyFilterConfig;
 import com.app.backend.trade.strategy.ParamsOptim;
 import com.app.backend.trade.model.DailyValue;
 import com.app.backend.trade.model.SignalType;
@@ -569,7 +570,7 @@ public class BestCombinationStrategyHelper {
 
 
 
-    private BestCombinationResult optimseStrategyMix(List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo) {
+    private BestCombinationResult optimseStrategyMix(List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo, StrategyFilterConfig filterConfig) {
         BestCombinationResult resultObj = new BestCombinationResult();
         if (seriesList == null || seriesList.isEmpty()) {
             resultObj.backtestResult.rendement = Double.NEGATIVE_INFINITY;
@@ -693,7 +694,6 @@ public class BestCombinationStrategyHelper {
         double sumRendement = 0.0, sumDrawdown = 0.0, sumWinRate = 0.0, sumProfitFactor = 0.0, sumAvgPnL = 0.0;
         double sumAvgTradeBars = 0.0, sumMaxTradeGain = 0.0, sumMaxTradeLoss = 0.0, sumScoreSwingTrade = 0.0;
         int sumTradeCount = 0;
-        boolean fltredOut = false;
         for (RiskResult res : foldResults) {
             sumRendement += res.rendement;
             sumDrawdown += res.maxDrawdown;
@@ -704,16 +704,9 @@ public class BestCombinationStrategyHelper {
             sumMaxTradeGain += res.maxTradeGain;
             sumMaxTradeLoss += res.maxTradeLoss;
             sumScoreSwingTrade += res.scoreSwingTrade;
-            if (res.fltredOut) fltredOut = true;
             sumTradeCount += res.tradeCount;
         }
         int n = foldResults.size();
-        // Calcul du ratio d'overfitting
-        double avgTrainPerf = trainPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-        double avgTestPerf = testPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-        double overfitRatio = (avgTestPerf != 0.0) ? avgTrainPerf / avgTestPerf : 0.0;
-        // Ajout de l'annotation de sur-optimisation
-        boolean isOverfit = overfitRatio > 1.5; // seuil à ajuster selon besoin
         RiskResult aggResult = RiskResult.builder()
                 .rendement(n > 0 ? sumRendement / n : Double.NEGATIVE_INFINITY)
                 .maxDrawdown(n > 0 ? sumDrawdown / n : 0.0)
@@ -724,9 +717,20 @@ public class BestCombinationStrategyHelper {
                 .maxTradeGain(n > 0 ? sumMaxTradeGain / n : 0.0)
                 .maxTradeLoss(n > 0 ? sumMaxTradeLoss / n : 0.0)
                 .scoreSwingTrade(n > 0 ? sumScoreSwingTrade / n : 0.0)
-                .fltredOut(fltredOut || isOverfit)
                 .tradeCount(sumTradeCount)
                 .build();
+        // Calcul du ratio d'overfitting
+        double avgTrainPerf = trainPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double avgTestPerf = testPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double overfitRatio = avgTestPerf / (avgTrainPerf == 0.0 ? 1.0 : avgTrainPerf);
+        boolean isOverfit = (overfitRatio < 0.7 || overfitRatio > 1.3);
+        // --- Filtrage final sur le meilleur résultat ---
+        boolean stable = aggResult != null && TradeUtils.isStableAndSimple(aggResult, filterConfig);
+        if (aggResult != null) {
+            aggResult.setFltredOut(!stable || isOverfit);
+        }
+
+
         resultObj.backtestResult = aggResult;
         resultObj.inStrategyNames = inCombo.stream().map(Class::getSimpleName).toList();
         resultObj.outStrategyNames = outCombo.stream().map(Class::getSimpleName).toList();
@@ -742,3 +746,4 @@ public class BestCombinationStrategyHelper {
     }
 
 }
+

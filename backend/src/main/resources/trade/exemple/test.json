@@ -9,4 +9,8 @@ Multi-stratégies : Elle optimise et teste plusieurs familles de stratégies (
 
 
 
-Analyser StrategieHelper.optimseStrategy(BarSeries series, double optimWindowPct, double testWindowPct, double stepWindowPct, StrategyFilterConfig filterConfig, SwingTradeOptimParams swingParams), ensuite pour optimseStrategyMix(List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo), il faut tu ajouter Optimisation walk-forward dans optimseStrategyMix de la meme manière que dans StrategieHelper.optimseStrategy
+Analyser StrategieHelper.optimseStrategy(BarSeries series, double optimWindowPct, double testWindowPct, double stepWindowPct, StrategyFilterConfig filterConfig, SwingTradeOptimParams swingParams), ensuite pour optimseStrategyMix(List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo), il faut tu adapter le Filtrage avancé dans optimseStrategyMix de la meme manière que dans StrategieHelper.optimseStrategy.
+N'oublie pas de vérifier aucune erreur après la modification
+
+
+revoir fltredOut

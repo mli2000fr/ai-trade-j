@@ -866,13 +866,8 @@ public class StrategieHelper {
         double avgTestPerf = testPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
         double overfitRatio = avgTestPerf / (avgTrainPerf == 0.0 ? 1.0 : avgTrainPerf);
         boolean isOverfit = (overfitRatio < 0.7 || overfitRatio > 1.3);
-        if (isOverfit) {
-            if (bestCombo != null && bestCombo.getResult() != null) {
-                bestCombo.getResult().setFltredOut(true);
-            }
-        }
         // --- Filtrage final sur le meilleur résultat ---
-        boolean stable = bestCombo != null && bestCombo.getResult() != null && isStableAndSimple(bestCombo.getResult(), bestCombo.getEntryName(), bestCombo.getExitName(), bestCombo.getEntryParams(), bestCombo.getExitParams(), filterConfig);
+        boolean stable = bestCombo != null && bestCombo.getResult() != null && TradeUtils.isStableAndSimple(bestCombo.getResult(), filterConfig);
         if (bestCombo != null && bestCombo.getResult() != null) {
             bestCombo.getResult().setFltredOut(!stable || isOverfit);
         }
@@ -892,43 +887,5 @@ public class StrategieHelper {
                 .build();
     }
 
-    /**
-     * Filtre les stratégies trop complexes ou instables.
-     * Ajout contrôle durée moyenne des trades et ratio gain/perte.
-     * @return true si la stratégie est stable et simple
-     */
-    private boolean isStableAndSimple(RiskResult result, String entryName, String exitName, Object entryParams, Object exitParams, StrategyFilterConfig config) {
-        if (result.getMaxDrawdown() > config.maxDrawdown) {
-            logger.warn("Blocage: Drawdown > {} ({})", config.maxDrawdown, result.getMaxDrawdown());
-            return false;
-        }
-        if (result.getProfitFactor() < config.minProfitFactor) {
-            logger.warn("Blocage: Profit factor < {} ({})", config.minProfitFactor, result.getProfitFactor());
-            return false;
-        }
-        if (result.getWinRate() < config.minWinRate) {
-            logger.warn("Blocage: Win rate < {} ({})", config.minWinRate, result.getWinRate());
-            return false;
-        }
-        if (result.getAvgTradeBars() < config.minAvgTradeBars || result.getAvgTradeBars() > config.maxAvgTradeBars) {
-            logger.warn("Blocage: Durée moyenne des trades hors intervalle ({})", result.getAvgTradeBars());
-            return false;
-        }
-        double gainLossRatio = 0.0;
-        if (result.getMaxTradeLoss() != 0) {
-            gainLossRatio = Math.abs(result.getMaxTradeGain()) / Math.abs(result.getMaxTradeLoss());
-            if (gainLossRatio < config.minGainLossRatio) {
-                logger.warn("Blocage: Ratio gain/perte < {} ({})", config.minGainLossRatio, gainLossRatio);
-                return false;
-            }
-        }
-        int paramCount = 0;
-        if (entryParams != null) paramCount += entryParams.getClass().getDeclaredFields().length;
-        if (exitParams != null) paramCount += exitParams.getClass().getDeclaredFields().length;
-        if (paramCount > config.maxParamCount) {
-            logger.warn("Blocage: Trop de paramètres ({})", paramCount);
-            return false;
-        }
-        return true;
-    }
+
 }

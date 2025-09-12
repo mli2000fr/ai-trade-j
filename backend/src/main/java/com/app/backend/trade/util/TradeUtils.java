@@ -1,18 +1,22 @@
 package com.app.backend.trade.util;
 
 import com.app.backend.model.RiskResult;
-import com.app.backend.trade.model.DailyValue;
+import com.app.backend.trade.model.StrategyFilterConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseBarSeries;
-
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 
 /**
  * Classe utilitaire pour fonctions diverses liées au trading (logs, dates, nettoyage HTML, etc.).
  */
+@Service
 public class TradeUtils {
+
+    private static final Logger logger = LoggerFactory.getLogger(TradeUtils.class);
     /**
      * Affiche un message de log dans la console (préfixé).
      * @param message message à afficher
@@ -331,5 +335,38 @@ public class TradeUtils {
             }
         }
         return result;
+    }
+
+    /**
+     * Filtre les stratégies trop complexes ou instables.
+     * Ajout contrôle durée moyenne des trades et ratio gain/perte.
+     * @return true si la stratégie est stable et simple
+     */
+    public static boolean isStableAndSimple(RiskResult result, StrategyFilterConfig config) {
+        if (result.getMaxDrawdown() > config.maxDrawdown) {
+            logger.warn("Blocage: Drawdown > {} ({})", config.maxDrawdown, result.getMaxDrawdown());
+            return false;
+        }
+        if (result.getProfitFactor() < config.minProfitFactor) {
+            logger.warn("Blocage: Profit factor < {} ({})", config.minProfitFactor, result.getProfitFactor());
+            return false;
+        }
+        if (result.getWinRate() < config.minWinRate) {
+            logger.warn("Blocage: Win rate < {} ({})", config.minWinRate, result.getWinRate());
+            return false;
+        }
+        if (result.getAvgTradeBars() < config.minAvgTradeBars || result.getAvgTradeBars() > config.maxAvgTradeBars) {
+            logger.warn("Blocage: Durée moyenne des trades hors intervalle ({})", result.getAvgTradeBars());
+            return false;
+        }
+        double gainLossRatio = 0.0;
+        if (result.getMaxTradeLoss() != 0) {
+            gainLossRatio = Math.abs(result.getMaxTradeGain()) / Math.abs(result.getMaxTradeLoss());
+            if (gainLossRatio < config.minGainLossRatio) {
+                logger.warn("Blocage: Ratio gain/perte < {} ({})", config.minGainLossRatio, gainLossRatio);
+                return false;
+            }
+        }
+        return true;
     }
 }
