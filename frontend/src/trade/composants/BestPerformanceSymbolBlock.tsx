@@ -156,7 +156,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
     if (open && selected?.symbol) {
       setBougiesLoading(true);
       setBougiesError(null);
-      fetch(`/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.symbol)}&historique=200`)
+      fetch(`/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.symbol)}&historique=250`)
         .then(res => {
           if (!res.ok) throw new Error('Erreur API bougies');
           return res.json();
@@ -357,7 +357,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
           )}
         </CardContent>
       </Card>
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="lg" fullWidth PaperProps={{ sx: { maxWidth: '60vw' } }}>
         <DialogTitle>Détails de la performance</DialogTitle>
         <DialogContent>
           {selected && (
@@ -365,7 +365,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               <Typography variant="h6" sx={{ mb: 2, color: '#1976d2' }}>Symbole : {selected.symbol}</Typography>
               <Accordion defaultExpanded>
                               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Graphique des 200 dernières bougies</Typography>
+                                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Graphique des 250 dernières bougies</Typography>
                               </AccordionSummary>
                               <AccordionDetails>
                                 {bougiesLoading ? (
