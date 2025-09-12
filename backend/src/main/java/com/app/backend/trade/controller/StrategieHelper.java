@@ -479,6 +479,7 @@ public class StrategieHelper {
         int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
         String entryParamsJson = new com.google.gson.Gson().toJson(best.entryParams);
         String exitParamsJson = new com.google.gson.Gson().toJson(best.exitParams);
+        String check = new com.google.gson.Gson().toJson(best.check);
         if (count > 0) {
             // Mise à jour
             String updateSql = """
@@ -503,6 +504,7 @@ public class StrategieHelper {
                     stop_loss_pct = ?,
                     take_profit_pct = ?,
                     nb_simples = ?,
+                    check = ?
                     updated_date = CURRENT_TIMESTAMP
                 WHERE symbol = ?
             """;
@@ -527,6 +529,7 @@ public class StrategieHelper {
                 best.paramsOptim.stopLossPct,
                 best.paramsOptim.takeProfitPct,
                 best.paramsOptim.nbSimples,
+                    check,
                 symbol
             );
         } else {
@@ -537,8 +540,8 @@ public class StrategieHelper {
                     exit_strategy_name, exit_strategy_params,
                     rendement, trade_count, win_rate, max_drawdown, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss,
                     score_swing_trade, fltred_out, initial_capital, risk_per_trade, stop_loss_pct, 
-                    take_profit_pct, nb_simples, created_date, updated_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    take_profit_pct, nb_simples, check_result, created_date, updated_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """;
             jdbcTemplate.update(insertSql,
                 symbol,
@@ -562,6 +565,7 @@ public class StrategieHelper {
                 best.paramsOptim.stopLossPct,
                 best.paramsOptim.takeProfitPct,
                 best.paramsOptim.nbSimples,
+                    check,
                 java.sql.Date.valueOf(java.time.LocalDate.now())
             );
         }
@@ -588,6 +592,7 @@ public class StrategieHelper {
                         .exitName(exitName)
                         .entryParams(entryParams)
                         .exitParams(exitParams)
+                        .check(new com.google.gson.Gson().fromJson(rs.getString("check_result"), RiskResult.class))
                         .paramsOptim(ParamsOptim.builder()
                                 .initialCapital(rs.getDouble("initial_capital"))
                                 .riskPerTrade(rs.getDouble("risk_per_trade"))
@@ -646,6 +651,7 @@ public class StrategieHelper {
                     .exitName(exitName)
                     .entryParams(entryParams)
                     .exitParams(exitParams)
+                    .check(new com.google.gson.Gson().fromJson(rs.getString("check_result"), RiskResult.class))
                     .paramsOptim(ParamsOptim.builder()
                             .initialCapital(rs.getDouble("initial_capital"))
                             .riskPerTrade(rs.getDouble("risk_per_trade"))
@@ -714,7 +720,8 @@ public class StrategieHelper {
                         .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
                         .nbSimples(listeValus.size())
                         .build())
-                .result(walkForwardResultPro.getBestCombo().getResult()).build();
+                .result(walkForwardResultPro.getBestCombo().getResult())
+                .check(walkForwardResultPro.getCheck()).build();
     }
 
 
@@ -890,6 +897,15 @@ public class StrategieHelper {
 
         // Si aucun combo non-overfit, fallback sur le meilleur combo global
         ComboResult finalBestCombo = bestComboNonOverfit != null ? bestComboNonOverfit : bestCombo;
+
+        //fait un check final
+        com.app.backend.trade.strategy.TradeStrategy entryStrategyCheck = createStrategy(finalBestCombo.getEntryName(), finalBestCombo.getEntryParams());
+        com.app.backend.trade.strategy.TradeStrategy exitStrategyCheck = createStrategy(finalBestCombo.getExitName(), finalBestCombo.getExitParams());
+        com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategyCheck, exitStrategyCheck);
+        BarSeries checkSeries = series.getSubSeries(series.getBarCount() - testWindow, series.getBarCount());
+        RiskResult checkR = strategieBackTest.backtestStrategy(combined, checkSeries);
+
+
         return WalkForwardResultPro.builder()
                 .segmentResults(allResults)
                 .avgRendement(avgRendement)
@@ -903,6 +919,7 @@ public class StrategieHelper {
                 .avgTestRendement(avgTestPerf)
                 .overfitRatio(overfitRatio)
                 .isOverfit(isOverfit)
+                .check(checkR)
                 .build();
     }
 

@@ -1,5 +1,6 @@
 package com.app.backend.trade.model;
 
+import com.app.backend.model.RiskResult;
 import lombok.Builder;
 import lombok.Data;
 
@@ -25,5 +26,6 @@ public class WalkForwardResultPro {
     private double rendementStdDev;
     private double sortinoRatio;
     private ComboResult bestCombo;
+    private RiskResult check;
 
 }

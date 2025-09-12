@@ -15,6 +15,7 @@ public class BestInOutStrategy {
     public String exitName;
     public Object exitParams;
     public RiskResult result;
+    public RiskResult check;
     public ParamsOptim paramsOptim;
 }
 

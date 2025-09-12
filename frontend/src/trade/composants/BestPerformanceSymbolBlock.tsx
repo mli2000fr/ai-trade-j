@@ -37,6 +37,19 @@ interface BestInOutStrategy {
     scoreSwingTrade?: number;
     fltredOut?: boolean;
   };
+  check: {
+    rendement: number;
+    tradeCount: number;
+    winRate: number;
+    maxDrawdown: number;
+    avgPnL: number;
+    profitFactor: number;
+    avgTradeBars: number;
+    maxTradeGain: number;
+    maxTradeLoss: number;
+    scoreSwingTrade?: number;
+    fltredOut?: boolean;
+  };
   paramsOptim: {
     initialCapital: number;
     riskPerTrade: number;
@@ -174,6 +187,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie IN</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie OUT</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement check</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Trades</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Durée moyenne trade</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>WinRate</TableCell>
@@ -209,6 +223,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         <TableCell>{row.entryName}</TableCell>
                         <TableCell>{row.exitName}</TableCell>
                         <TableCell>{(row.result.rendement * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.check.rendement * 100).toFixed(2)} %</TableCell>
                         <TableCell>{row.result.tradeCount}</TableCell>
                         <TableCell>{row.result.avgTradeBars !== undefined ? row.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
                         <TableCell>{(row.result.winRate * 100).toFixed(2)} %</TableCell>

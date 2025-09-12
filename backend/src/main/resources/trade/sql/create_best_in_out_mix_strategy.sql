@@ -16,6 +16,7 @@ CREATE TABLE trade_ai.best_in_out_mix_strategy (
     max_trade_loss DOUBLE,
     score_swing_trade DOUBLE,
     fltred_out BOOLEAN DEFAULT FALSE,
+    check_result TEXT,
     create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             -- param de test
