@@ -731,7 +731,7 @@ public class StrategieHelper {
                 .symbol(symbol)
                 .rendementSum(rendementSum)
                 .rendementDiff(rendementDiff)
-                .rendementScore(rendementSum - rendementDiff)
+                .rendementScore(rendementSum - (rendementDiff > 0 ? rendementDiff : -rendementDiff))
                 .entryName(walkForwardResultPro.getBestCombo().getEntryName())
                 .entryParams(walkForwardResultPro.getBestCombo().getEntryParams())
                 .exitName(walkForwardResultPro.getBestCombo().getExitName())
