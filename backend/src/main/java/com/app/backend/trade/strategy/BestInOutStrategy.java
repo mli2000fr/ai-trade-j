@@ -17,5 +17,8 @@ public class BestInOutStrategy {
     public RiskResult result;
     public RiskResult check;
     public ParamsOptim paramsOptim;
+    public double rendementSum;
+    public double rendementDiff;
+    public double rendementScore;
 }
 

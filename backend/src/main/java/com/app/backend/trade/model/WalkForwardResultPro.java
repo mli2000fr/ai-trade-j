@@ -27,5 +27,4 @@ public class WalkForwardResultPro {
     private double sortinoRatio;
     private ComboResult bestCombo;
     private RiskResult check;
-
 }

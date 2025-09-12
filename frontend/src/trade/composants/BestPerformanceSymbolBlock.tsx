@@ -24,9 +24,11 @@ interface BestInOutStrategy {
   entryParams?: any;
   exitName: string;
   exitParams?: any;
+  rendementSum?: any;
+  rendementDiff?: any;
+  rendementScore?: any;
   result: {
     rendement: number;
-    rendementCheck: number;
     tradeCount: number;
     winRate: number;
     maxDrawdown: number;
@@ -147,6 +149,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               style={{ padding: '4px 8px', marginRight: 16 }}
             >
               <option value="rendement">Rendement</option>
+              <option value="rendement_sum">Rendement Sum</option>
+              <option value="rendement_score">Score Rendement</option>
               <option value="score_swing_trade">Score Swing Trade</option>
             </select>
             <label style={{ marginLeft: 16, marginRight: 16 }}>
@@ -189,6 +193,9 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie OUT</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement check</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement Sum</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement Diff</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement Score</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Trades</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Durée moyenne trade</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>WinRate</TableCell>
@@ -224,7 +231,10 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         <TableCell>{row.entryName}</TableCell>
                         <TableCell>{row.exitName}</TableCell>
                         <TableCell>{(row.result.rendement * 100).toFixed(2)} %</TableCell>
-                        <TableCell>{(row.result.rendementCheck * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.check.rendement * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.rendementSum * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.rendementDiff * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.rendementScore * 100).toFixed(2)}</TableCell>
                         <TableCell>{row.result.tradeCount}</TableCell>
                         <TableCell>{row.result.avgTradeBars !== undefined ? row.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
                         <TableCell>{(row.result.winRate * 100).toFixed(2)} %</TableCell>
