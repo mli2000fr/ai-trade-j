@@ -82,6 +82,13 @@ public class TradeHelper {
         }
     }
 
+    public String getPromptAnalyseSymbol(String compteId, String symbols) {
+        CompteEntity compte = compteService.getCompteCredentialsById(compteId);
+        String prompt = TradeUtils.readResourceFile("trade/prompt/prompt_analyse_stocks.txt");
+        return prompt.replace("{{symbols}}", symbols);
+    }
+
+
     /**
      * Exécute le trading automatique IA pour une liste de symboles.
      * @param compte CompteEntity

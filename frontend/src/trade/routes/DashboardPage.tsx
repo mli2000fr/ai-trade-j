@@ -107,11 +107,11 @@ const DashboardPage: React.FC = () => {
     setAiJsonResult(null);
     setAiTextResult(null);
     try {
-      const symboles = autoSymbols.split(',').map(s => s.trim()).filter(Boolean);
+      const symbols = autoSymbols.split(',').map(s => s.trim()).filter(Boolean);
       const res = await fetch('/api/trade/trade-ai-auto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symboles, id: selectedCompteId, analyseGpt: analyseGptText }),
+        body: JSON.stringify({ symbols, id: selectedCompteId, analyseGpt: analyseGptText }),
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();

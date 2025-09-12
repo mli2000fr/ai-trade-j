@@ -1,4 +1,4 @@
-You are a financial expert specialized in swing trading. Analyze these stocks: ONDS,ANTE,AEHR,CPIX,SCLX,CIFR,CRDO
+You are a financial expert specialized in swing trading. Analyze these stocks: {{symbols}}
 
 For each stock, provide in a structured way:
 

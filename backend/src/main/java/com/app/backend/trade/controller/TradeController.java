@@ -125,4 +125,8 @@ public class TradeController {
         return ResponseEntity.ok(comptes);
     }
 
+    @GetMapping("/getPromptAnalyseSymbol")
+    public ResponseEntity<String> getPromptAnalyseSymbol(@RequestParam String idCompte, @RequestParam String symbols) {
+        return ResponseEntity.ok(tradeHelper.getPromptAnalyseSymbol(idCompte, symbols));
+    }
 }
