@@ -8,6 +8,7 @@ import lombok.*;
 public class RiskResult {
     /** Rendement total du backtest (capital final / capital initial - 1) */
     public double rendement;
+    public double rendementCheck;
     /** Drawdown maximal observé (plus forte baisse du capital) */
     public double maxDrawdown;
     /** Nombre total de trades réalisés */

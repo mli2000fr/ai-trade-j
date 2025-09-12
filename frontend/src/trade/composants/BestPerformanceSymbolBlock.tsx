@@ -26,6 +26,7 @@ interface BestInOutStrategy {
   exitParams?: any;
   result: {
     rendement: number;
+    rendementCheck: number;
     tradeCount: number;
     winRate: number;
     maxDrawdown: number;
@@ -223,7 +224,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         <TableCell>{row.entryName}</TableCell>
                         <TableCell>{row.exitName}</TableCell>
                         <TableCell>{(row.result.rendement * 100).toFixed(2)} %</TableCell>
-                        <TableCell>{(row.check.rendement * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.result.rendementCheck * 100).toFixed(2)} %</TableCell>
                         <TableCell>{row.result.tradeCount}</TableCell>
                         <TableCell>{row.result.avgTradeBars !== undefined ? row.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
                         <TableCell>{(row.result.winRate * 100).toFixed(2)} %</TableCell>

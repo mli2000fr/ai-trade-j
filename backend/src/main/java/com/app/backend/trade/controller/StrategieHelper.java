@@ -489,6 +489,7 @@ public class StrategieHelper {
                     exit_strategy_name = ?,
                     exit_strategy_params = ?,
                     rendement = ?,
+                    rendement_check = ?,
                     trade_count = ?,
                     win_rate = ?,
                     max_drawdown = ?,
@@ -514,6 +515,7 @@ public class StrategieHelper {
                 best.exitName,
                 exitParamsJson,
                 best.result.rendement,
+                best.result.rendementCheck,
                 best.result.tradeCount,
                 best.result.winRate,
                 best.result.maxDrawdown,
@@ -538,10 +540,10 @@ public class StrategieHelper {
                 INSERT INTO best_in_out_single_strategy (
                     symbol, entry_strategy_name, entry_strategy_params,
                     exit_strategy_name, exit_strategy_params,
-                    rendement, trade_count, win_rate, max_drawdown, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss,
+                    rendement, rendement_check, trade_count, win_rate, max_drawdown, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss,
                     score_swing_trade, fltred_out, initial_capital, risk_per_trade, stop_loss_pct, 
                     take_profit_pct, nb_simples, check_result, created_date, updated_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """;
             jdbcTemplate.update(insertSql,
                 symbol,
@@ -550,6 +552,7 @@ public class StrategieHelper {
                 best.exitName,
                 exitParamsJson,
                 best.result.rendement,
+                best.result.rendementCheck,
                 best.result.tradeCount,
                 best.result.winRate,
                 best.result.maxDrawdown,
@@ -602,6 +605,7 @@ public class StrategieHelper {
                                 .build())
                         .result(RiskResult.builder()
                                 .rendement(rs.getDouble("rendement"))
+                                .rendementCheck(rs.getDouble("rendement_check"))
                                 .tradeCount(rs.getInt("trade_count"))
                                 .winRate(rs.getDouble("win_rate"))
                                 .maxDrawdown(rs.getDouble("max_drawdown"))
@@ -661,6 +665,7 @@ public class StrategieHelper {
                             .build())
                     .result(RiskResult.builder()
                             .rendement(rs.getDouble("rendement"))
+                            .rendementCheck(rs.getDouble("rendement_check"))
                             .tradeCount(rs.getInt("trade_count"))
                             .winRate(rs.getDouble("win_rate"))
                             .maxDrawdown(rs.getDouble("max_drawdown"))
@@ -904,7 +909,7 @@ public class StrategieHelper {
         com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategyCheck, exitStrategyCheck);
         BarSeries checkSeries = series.getSubSeries(series.getBarCount() - testWindow, series.getBarCount());
         RiskResult checkR = strategieBackTest.backtestStrategy(combined, checkSeries);
-
+        finalBestCombo.getResult().setRendementCheck(checkR.getRendement());
 
         return WalkForwardResultPro.builder()
                 .segmentResults(allResults)

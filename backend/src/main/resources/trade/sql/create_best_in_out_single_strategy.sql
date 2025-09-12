@@ -5,6 +5,7 @@ CREATE TABLE trade_ai.best_in_out_single_strategy (
     exit_strategy_name VARCHAR(50),
     exit_strategy_params TEXT,
     rendement DOUBLE,
+    rendement_check DOUBLE,
     trade_count INT,
     win_rate DOUBLE,
     max_drawdown DOUBLE,

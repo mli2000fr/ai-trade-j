@@ -6,6 +6,7 @@ CREATE TABLE trade_ai.best_in_out_mix_strategy (
     in_params TEXT,
     out_params TEXT,
     rendement DOUBLE,
+    rendement_check DOUBLE,
     trade_count INT,
     win_rate DOUBLE,
     max_drawdown DOUBLE,
