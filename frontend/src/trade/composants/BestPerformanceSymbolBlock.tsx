@@ -75,7 +75,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [checkedRows, setCheckedRows] = useState<{[key: number]: boolean}>({});
   const [limit, setLimit] = useState<number>(20);
   const [indices, setIndices] = useState<{ [symbol: string]: string }>({});
-  const [sort, setSort] = useState<string>('rendement');
+  const [sort, setSort] = useState<string>('rendement_score');
   const [showOnlyNonFiltered, setShowOnlyNonFiltered] = useState(false);
 
   useEffect(() => {
@@ -174,9 +174,9 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               onChange={e => setSort(e.target.value)}
               style={{ padding: '4px 8px', marginRight: 16 }}
             >
+              <option value="rendement_score">Score Rendement</option>
               <option value="rendement">Rendement</option>
               <option value="rendement_sum">Rendement Sum</option>
-              <option value="rendement_score">Score Rendement</option>
               <option value="score_swing_trade">Score Swing Trade</option>
             </select>
             <label style={{ marginLeft: 16, marginRight: 16 }}>
@@ -212,7 +212,6 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <TableRow>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Score Swing Trade</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Filtrée</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Indice</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie IN</TableCell>
@@ -221,7 +220,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement check</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement Sum</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement Diff</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement Score</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Score Rendement</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Score Swing Trade</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Trades</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Durée moyenne trade</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>WinRate</TableCell>
@@ -245,7 +245,6 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                           />
                         </TableCell>
                         <TableCell>{row.symbol}</TableCell>
-                        <TableCell>{row.result.scoreSwingTrade !== undefined ? (row.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
                         <TableCell>
                           {row.result.fltredOut ? (
                             <span style={{ color: 'red', fontWeight: 'bold' }}>Oui</span>
@@ -261,6 +260,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         <TableCell>{(row.rendementSum * 100).toFixed(2)} %</TableCell>
                         <TableCell>{(row.rendementDiff * 100).toFixed(2)} %</TableCell>
                         <TableCell>{(row.rendementScore * 100).toFixed(2)}</TableCell>
+                        <TableCell>{row.result.scoreSwingTrade !== undefined ? (row.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
                         <TableCell>{row.result.tradeCount}</TableCell>
                         <TableCell>{row.result.avgTradeBars !== undefined ? row.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
                         <TableCell>{(row.result.winRate * 100).toFixed(2)} %</TableCell>
@@ -348,7 +348,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                                 </Table>
                               </AccordionDetails>
                             </Accordion>
-              <Accordion defaultExpanded>
+              <Accordion>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie d'entrée</Typography>
                 </AccordionSummary>
@@ -357,7 +357,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   {selected.entryParams && renderObjectTable(selected.entryParams)}
                 </AccordionDetails>
               </Accordion>
-              <Accordion defaultExpanded>
+              <Accordion>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie de sortie</Typography>
                 </AccordionSummary>
@@ -367,7 +367,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                 </AccordionDetails>
               </Accordion>
 
-              <Accordion defaultExpanded>
+              <Accordion>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Paramètres d'optimisation</Typography>
                 </AccordionSummary>

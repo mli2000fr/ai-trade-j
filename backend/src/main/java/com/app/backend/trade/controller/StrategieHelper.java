@@ -638,13 +638,13 @@ public class StrategieHelper {
      * @return liste des meilleures stratégies BestInOutStrategy
      */
     public List<BestInOutStrategy> getBestPerfActions(Integer limit, String sort, Boolean filtered){
-        String orderBy = "rendement";
+        String orderBy = "rendement_score";
         if ("score_swing_trade".equalsIgnoreCase(sort)) {
             orderBy = "score_swing_trade";
         }else if ("rendement_sum".equalsIgnoreCase(sort)) {
             orderBy = "rendement_sum";
-        }else if ("rendement_score".equalsIgnoreCase(sort)) {
-            orderBy = "rendement_score";
+        }else if ("rendement".equalsIgnoreCase(sort)) {
+            orderBy = "rendement";
         }
         String sql = "SELECT * FROM best_in_out_single_strategy WHERE profit_factor <> 0 AND max_drawdown <> 0 AND win_rate < 1";
         if (filtered != null && filtered) {
