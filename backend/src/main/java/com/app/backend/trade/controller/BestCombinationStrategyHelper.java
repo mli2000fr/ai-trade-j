@@ -567,4 +567,120 @@ public class BestCombinationStrategyHelper {
         }
     }
 
+
+
+    private BestCombinationResult optimseStrategyMix(List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo) {
+        BestCombinationResult resultObj = new BestCombinationResult();
+        if (seriesList == null || seriesList.isEmpty()) {
+            resultObj.backtestResult.rendement = Double.NEGATIVE_INFINITY;
+            return resultObj;
+        }
+        BarSeries fullSeries = seriesList.get(0);
+        int totalCount = fullSeries.getBarCount();
+        int optimCount = (int) Math.round(totalCount * TradeConstant.PC_OPTIM);
+        int testCount = totalCount - optimCount;
+        // Séparer les bougies pour optimisation et test
+        BarSeries[] split = TradeUtils.splitSeriesForWalkForward(fullSeries);
+        BarSeries optimSeries = split[0];
+        BarSeries testSeries = split[1];
+        StrategieBackTest backTest = new StrategieBackTest();
+        List<TradeStrategy> inStrategies = new ArrayList<>();
+        List<String> inStrategyNames = new ArrayList<>();
+        for (Class<? extends TradeStrategy> clazz : inCombo) {
+            inStrategyNames.add(clazz.getSimpleName());
+            if (clazz.equals(ImprovedTrendFollowingStrategy.class)) {
+                StrategieBackTest.ImprovedTrendFollowingParams params = backTest.optimiseImprovedTrendFollowingParameters(optimSeries, 10, 30, 5, 15, 15, 25, 0.001, 0.01, 0.002);
+                inStrategies.add(new ImprovedTrendFollowingStrategy(params.trendPeriod, params.shortMaPeriod, params.longMaPeriod, params.breakoutThreshold, params.useRsiFilter, params.rsiPeriod));
+                resultObj.inParams.put("ImprovedTrendFollowing", params);
+            } else if (clazz.equals(SmaCrossoverStrategy.class)) {
+                StrategieBackTest.SmaCrossoverParams params = backTest.optimiseSmaCrossoverParameters(optimSeries, 5, 20, 10, 50);
+                inStrategies.add(new SmaCrossoverStrategy(params.shortPeriod, params.longPeriod));
+                resultObj.inParams.put("SmaCrossover", params);
+            } else if (clazz.equals(RsiStrategy.class)) {
+                StrategieBackTest.RsiParams params = backTest.optimiseRsiParameters(optimSeries, 10, 20, 20, 40, 5, 60, 80, 5);
+                inStrategies.add(new RsiStrategy(params.rsiPeriod, params.oversold, params.overbought));
+                resultObj.inParams.put("Rsi", params);
+            } else if (clazz.equals(BreakoutStrategy.class)) {
+                StrategieBackTest.BreakoutParams params = backTest.optimiseBreakoutParameters(optimSeries, 5, 50);
+                inStrategies.add(new BreakoutStrategy(params.lookbackPeriod));
+                resultObj.inParams.put("Breakout", params);
+            } else if (clazz.equals(MacdStrategy.class)) {
+                StrategieBackTest.MacdParams params = backTest.optimiseMacdParameters(optimSeries, 8, 16, 20, 30, 6, 12);
+                inStrategies.add(new MacdStrategy(params.shortPeriod, params.longPeriod, params.signalPeriod));
+                resultObj.inParams.put("Macd", params);
+            } else if (clazz.equals(MeanReversionStrategy.class)) {
+                StrategieBackTest.MeanReversionParams params = backTest.optimiseMeanReversionParameters(optimSeries, 10, 30, 1.0, 5.0, 0.5);
+                inStrategies.add(new MeanReversionStrategy(params.smaPeriod, params.threshold));
+                resultObj.inParams.put("MeanReversion", params);
+            }
+        }
+        List<TradeStrategy> outStrategies = new ArrayList<>();
+        List<String> outStrategyNames = new ArrayList<>();
+        for (Class<? extends TradeStrategy> clazz : outCombo) {
+            outStrategyNames.add(clazz.getSimpleName());
+            if (clazz.equals(ImprovedTrendFollowingStrategy.class)) {
+                StrategieBackTest.ImprovedTrendFollowingParams params = backTest.optimiseImprovedTrendFollowingParameters(optimSeries, 10, 30, 5, 15, 15, 25, 0.001, 0.01, 0.002);
+                outStrategies.add(new ImprovedTrendFollowingStrategy(params.trendPeriod, params.shortMaPeriod, params.longMaPeriod, params.breakoutThreshold, params.useRsiFilter, params.rsiPeriod));
+                resultObj.outParams.put("ImprovedTrendFollowing", params);
+            } else if (clazz.equals(SmaCrossoverStrategy.class)) {
+                StrategieBackTest.SmaCrossoverParams params = backTest.optimiseSmaCrossoverParameters(optimSeries, 5, 20, 10, 50);
+                outStrategies.add(new SmaCrossoverStrategy(params.shortPeriod, params.longPeriod));
+                resultObj.outParams.put("SmaCrossover", params);
+            } else if (clazz.equals(RsiStrategy.class)) {
+                StrategieBackTest.RsiParams params = backTest.optimiseRsiParameters(optimSeries, 10, 20, 20, 40, 5, 60, 80, 5);
+                outStrategies.add(new RsiStrategy(params.rsiPeriod, params.oversold, params.overbought));
+                resultObj.outParams.put("Rsi", params);
+            } else if (clazz.equals(BreakoutStrategy.class)) {
+                StrategieBackTest.BreakoutParams params = backTest.optimiseBreakoutParameters(optimSeries, 5, 50);
+                outStrategies.add(new BreakoutStrategy(params.lookbackPeriod));
+                resultObj.outParams.put("Breakout", params);
+            } else if (clazz.equals(MacdStrategy.class)) {
+                StrategieBackTest.MacdParams params = backTest.optimiseMacdParameters(optimSeries, 8, 16, 20, 30, 6, 12);
+                outStrategies.add(new MacdStrategy(params.shortPeriod, params.longPeriod, params.signalPeriod));
+                resultObj.outParams.put("Macd", params);
+            } else if (clazz.equals(MeanReversionStrategy.class)) {
+                StrategieBackTest.MeanReversionParams params = backTest.optimiseMeanReversionParameters(optimSeries, 10, 30, 1.0, 5.0, 0.5);
+                outStrategies.add(new MeanReversionStrategy(params.smaPeriod, params.threshold));
+                resultObj.outParams.put("MeanReversion", params);
+            }
+        }
+        final Rule finalEntryRule;
+        final Rule finalExitRule;
+        {
+            Rule tempEntryRule = null;
+            Rule tempExitRule = null;
+            for (TradeStrategy strat : inStrategies) {
+                if (tempEntryRule == null) tempEntryRule = strat.getEntryRule(testSeries);
+                else tempEntryRule = tempEntryRule.or(strat.getEntryRule(testSeries));
+            }
+            for (TradeStrategy strat : outStrategies) {
+                if (tempExitRule == null) tempExitRule = strat.getExitRule(testSeries);
+                else tempExitRule = tempExitRule.or(strat.getExitRule(testSeries));
+            }
+            finalEntryRule = tempEntryRule;
+            finalExitRule = tempExitRule;
+        }
+        TradeStrategy combinedStrategy = new TradeStrategy() {
+            @Override
+            public Rule getEntryRule(BarSeries s) { return finalEntryRule; }
+            @Override
+            public Rule getExitRule(BarSeries s) { return finalExitRule; }
+            @Override
+            public String getName() { return "CombinedStrategy"; }
+        };
+        RiskResult backtestResult = backTest.backtestStrategyRisk(combinedStrategy, testSeries);
+        resultObj.backtestResult = backtestResult;
+        resultObj.inStrategyNames = inStrategyNames;
+        resultObj.outStrategyNames = outStrategyNames;
+        resultObj.contextOptim = ParamsOptim.builder()
+                .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
+                .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
+                .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
+                .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
+                .nbSimples(totalCount)
+                .build();
+        TradeUtils.log("BestCombinationResult : " + resultObjToString(resultObj));
+        return resultObj;
+    }
+
 }
