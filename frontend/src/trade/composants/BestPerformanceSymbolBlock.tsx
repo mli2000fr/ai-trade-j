@@ -259,28 +259,22 @@ const BestPerformanceSymbolBlock: React.FC = () => {
         <DialogContent>
           {selected && (
             <div>
-              <Typography variant="subtitle1"><b>Symbole :</b> {selected.symbol}</Typography>
-              <Typography variant="subtitle1"><b>Score Swing Trade :</b> {selected.result.scoreSwingTrade !== undefined ? (selected.result.scoreSwingTrade).toFixed(2) : '-'}</Typography>
-              <Typography variant="subtitle1"><b>Stratégie Entrée :</b> {selected.entryName}</Typography>
-              <Typography variant="body2">Paramètres entrée : <pre>{JSON.stringify(selected.entryParams, null, 2)}</pre></Typography>
-              <Typography variant="subtitle1"><b>Stratégie Sortie :</b> {selected.exitName}</Typography>
-              <Typography variant="body2">Paramètres sortie : <pre>{JSON.stringify(selected.exitParams, null, 2)}</pre></Typography>
-              <ul>
-                <li>Drawdown : {(selected.result.maxDrawdown * 100).toFixed(2)}%</li>
-                <li>Profit Factor : {selected.result.profitFactor.toFixed(2)}</li>
-                <li>Profit moyen : {selected.result.avgPnL.toFixed(2)}</li>
-                <li>Durée moyenne trade : {selected.result.avgTradeBars.toFixed(2)}</li>
-                <li>Max gain trade : {selected.result.maxTradeGain.toFixed(2)}</li>
-                <li>Max perte trade : {selected.result.maxTradeLoss.toFixed(2)}</li>
-              </ul>
-              <Typography variant="subtitle1"><b>Gestion du risque :</b></Typography>
-              <ul>
-                <li>Capital initial : {selected.paramsOptim.initialCapital}</li>
-                <li>Risk/trade : {selected.paramsOptim.riskPerTrade}</li>
-                <li>Stop loss (%) : {selected.paramsOptim.stopLossPct}</li>
-                <li>Take profit (%) : {selected.paramsOptim.takeProfitPct}</li>
-                <li>Nb Simples : {selected.paramsOptim.nbSimples}</li>
-              </ul>
+              {Object.entries(selected).map(([key, value]) => (
+                <div key={key} style={{ marginBottom: 12 }}>
+                  <Typography variant="subtitle1" style={{ fontWeight: 'bold' }}>{key} :</Typography>
+                  {typeof value === 'object' && value !== null ? (
+                    <div style={{ marginLeft: 16 }}>
+                      {Object.entries(value).map(([subKey, subValue]) => (
+                        <Typography variant="body2" key={subKey}>
+                          <b>{subKey} :</b> {typeof subValue === 'number' ? (Math.abs(subValue) > 1 ? subValue.toFixed(2) : (subValue * 100).toFixed(2) + (subKey.toLowerCase().includes('pct') || subKey.toLowerCase().includes('rate') || subKey.toLowerCase().includes('drawdown') || subKey.toLowerCase().includes('rendement') ? ' %' : '')) : String(subValue)}
+                        </Typography>
+                      ))}
+                    </div>
+                  ) : (
+                    <Typography variant="body2">{String(value)}</Typography>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </DialogContent>
