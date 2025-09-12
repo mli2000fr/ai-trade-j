@@ -17,6 +17,10 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 interface BestInOutStrategy {
   symbol: string;
@@ -282,69 +286,95 @@ const BestPerformanceSymbolBlock: React.FC = () => {
           {selected && (
             <div>
               <Typography variant="h6" sx={{ mb: 2, color: '#1976d2' }}>Symbole : {selected.symbol}</Typography>
-              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>Stratégie d'entrée</Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.entryName}</b></Typography>
-              {selected.entryParams && renderObjectTable(selected.entryParams)}
-              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>Stratégie de sortie</Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.exitName}</b></Typography>
-              {selected.exitParams && renderObjectTable(selected.exitParams)}
-              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>Résultats & Vérification</Typography>
-              <Table size="small" sx={{ mb: 2, backgroundColor: '#f9f9f9' }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 'bold', width: '40%' }}>Métrique</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Résultat</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Vérification</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {Array.from(new Set([...Object.keys(selected.result || {}), ...Object.keys(selected.check || {})])).map((key) => {
-                    const resultObj = selected.result as Record<string, any>;
-                    const checkObj = selected.check as Record<string, any>;
-                    return (
-                      <TableRow key={key}>
-                        <TableCell sx={{ fontWeight: 'bold' }}>{key}</TableCell>
-                        <TableCell>
-                          {typeof resultObj?.[key] === 'number'
-                            ? (Math.abs(resultObj[key]) > 1
-                                ? resultObj[key].toFixed(2)
-                                : (resultObj[key] * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
-                            : typeof resultObj?.[key] === 'boolean'
-                              ? resultObj[key] ? 'Oui' : 'Non'
-                              : resultObj?.[key] ?? '-'}
-                        </TableCell>
-                        <TableCell>
-                          {typeof checkObj?.[key] === 'number'
-                            ? (Math.abs(checkObj[key]) > 1
-                                ? checkObj[key].toFixed(2)
-                                : (checkObj[key] * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
-                            : typeof checkObj?.[key] === 'boolean'
-                              ? checkObj[key] ? 'Oui' : 'Non'
-                              : checkObj?.[key] ?? '-'}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>Paramètres d'optimisation</Typography>
-              {selected.paramsOptim && renderObjectTable(selected.paramsOptim)}
-              <Table size="small" sx={{ mt: 2, backgroundColor: '#f1f8e9' }}>
-                <TableBody>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Rendement Sum</TableCell>
-                    <TableCell>{(selected.rendementSum * 100).toFixed(2)} %</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Rendement Diff</TableCell>
-                    <TableCell>{(selected.rendementDiff * 100).toFixed(2)} %</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Rendement Score</TableCell>
-                    <TableCell>{(selected.rendementScore * 100).toFixed(2)}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+              <Accordion defaultExpanded>
+                              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Résultats & Vérification</Typography>
+                              </AccordionSummary>
+                              <AccordionDetails>
+                                <Table size="small" sx={{ mt: 2, backgroundColor: '#f1f8e9' }}>
+                                  <TableBody>
+                                    <TableRow>
+                                      <TableCell sx={{ fontWeight: 'bold' }}>Rendement Sum</TableCell>
+                                      <TableCell>{(selected.rendementSum * 100).toFixed(2)} %</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell sx={{ fontWeight: 'bold' }}>Rendement Diff</TableCell>
+                                      <TableCell>{(selected.rendementDiff * 100).toFixed(2)} %</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell sx={{ fontWeight: 'bold' }}>Rendement Score</TableCell>
+                                      <TableCell>{(selected.rendementScore * 100).toFixed(2)}</TableCell>
+                                    </TableRow>
+                                  </TableBody>
+                                </Table>
+                                <br/>
+                                <Table size="small" sx={{ mb: 2, backgroundColor: '#f9f9f9' }}>
+                                  <TableHead>
+                                    <TableRow>
+                                      <TableCell sx={{ fontWeight: 'bold', width: '40%' }}>Métrique</TableCell>
+                                      <TableCell sx={{ fontWeight: 'bold' }}>Résultat</TableCell>
+                                      <TableCell sx={{ fontWeight: 'bold' }}>Vérification</TableCell>
+                                    </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                    {Array.from(new Set([...Object.keys(selected.result || {}), ...Object.keys(selected.check || {})])).map((key) => {
+                                      const resultObj = selected.result as Record<string, any>;
+                                      const checkObj = selected.check as Record<string, any>;
+                                      return (
+                                        <TableRow key={key}>
+                                          <TableCell sx={{ fontWeight: 'bold' }}>{key}</TableCell>
+                                          <TableCell>
+                                            {typeof resultObj?.[key] === 'number'
+                                              ? (Math.abs(resultObj[key]) > 1
+                                                  ? resultObj[key].toFixed(2)
+                                                  : (resultObj[key] * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
+                                              : typeof resultObj?.[key] === 'boolean'
+                                                ? resultObj[key] ? 'Oui' : 'Non'
+                                                : resultObj?.[key] ?? '-'}
+                                          </TableCell>
+                                          <TableCell>
+                                            {typeof checkObj?.[key] === 'number'
+                                              ? (Math.abs(checkObj[key]) > 1
+                                                  ? checkObj[key].toFixed(2)
+                                                  : (checkObj[key] * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
+                                              : typeof checkObj?.[key] === 'boolean'
+                                                ? checkObj[key] ? 'Oui' : 'Non'
+                                                : checkObj?.[key] ?? '-'}
+                                          </TableCell>
+                                        </TableRow>
+                                      );
+                                    })}
+                                  </TableBody>
+                                </Table>
+                              </AccordionDetails>
+                            </Accordion>
+              <Accordion defaultExpanded>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie d'entrée</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.entryName}</b></Typography>
+                  {selected.entryParams && renderObjectTable(selected.entryParams)}
+                </AccordionDetails>
+              </Accordion>
+              <Accordion defaultExpanded>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie de sortie</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.exitName}</b></Typography>
+                  {selected.exitParams && renderObjectTable(selected.exitParams)}
+                </AccordionDetails>
+              </Accordion>
+
+              <Accordion defaultExpanded>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Paramètres d'optimisation</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  {selected.paramsOptim && renderObjectTable(selected.paramsOptim)}
+                </AccordionDetails>
+              </Accordion>
             </div>
           )}
         </DialogContent>
