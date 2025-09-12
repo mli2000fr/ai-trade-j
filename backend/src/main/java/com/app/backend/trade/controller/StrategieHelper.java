@@ -826,7 +826,6 @@ public class StrategieHelper {
                     foldResults.add(combo);
                     if (result.getRendement() > bestPerf) {
                         bestPerf = result.getRendement();
-                        bestCombo = combo;
                     }
                 }
             }
@@ -864,7 +863,7 @@ public class StrategieHelper {
         double sumRendement = 0.0, sumDrawdown = 0.0, sumWinRate = 0.0, sumProfitFactor = 0.0, sumTradeDuration = 0.0;
         int totalTrades = 0;
         ComboResult bestCombo = null;
-        double bestPerf = Double.NEGATIVE_INFINITY;
+        // Suppression de la variable bestPerf inutile
         for (ComboResult r : allResults) {
             RiskResult res = r.getResult();
             sumRendement += res.getRendement();
@@ -873,8 +872,8 @@ public class StrategieHelper {
             sumProfitFactor += res.getProfitFactor();
             sumTradeDuration += res.getAvgTradeBars();
             totalTrades += res.getTradeCount();
-            if (res.getRendement() > bestPerf) {
-                bestPerf = res.getRendement();
+            // Mise à jour du meilleur combo global (fallback)
+            if (bestCombo == null || res.getRendement() > bestCombo.getResult().getRendement()) {
                 bestCombo = r;
             }
         }
