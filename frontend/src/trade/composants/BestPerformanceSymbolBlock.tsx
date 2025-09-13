@@ -239,6 +239,10 @@ const BestPerformanceSymbolBlock: React.FC = () => {
     return <ReactApexChart options={options} series={series} type="candlestick" height={300} />;
   };
 
+  useEffect(() => {
+    setCheckedRows({});
+  }, [sort, showOnlyNonFiltered]);
+
   return (
     <>
       <Card sx={{ mb: 2 }}>

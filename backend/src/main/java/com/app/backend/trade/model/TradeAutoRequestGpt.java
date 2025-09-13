@@ -11,6 +11,6 @@ import java.util.List;
 @AllArgsConstructor
 public class TradeAutoRequestGpt {
     private String id;
-    private List<String> symboles;
+    private List<String> symbols;
     private String analyseGpt;
 }
