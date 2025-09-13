@@ -3,6 +3,7 @@ package com.app.backend.trade.lstm;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
+import org.springframework.stereotype.Component;
 
 /**
  * Classe de configuration pour les hyperparamètres du modèle LSTM.
@@ -12,6 +13,7 @@ import java.util.Properties;
  * les hyperparamètres du modèle sans changer le code source.
  * </p>
  */
+@Component
 public class LstmConfig {
     private int windowSize;
     private int lstmNeurons;

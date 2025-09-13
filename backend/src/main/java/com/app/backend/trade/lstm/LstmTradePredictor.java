@@ -39,6 +39,7 @@ public class LstmTradePredictor {
     private MultiLayerNetwork model;
     private static final Logger logger = LoggerFactory.getLogger(LstmTradePredictor.class);
     private LstmConfig config;
+    private int currentWindowSize = -1;
 
     /**
      * Constructeur principal.
@@ -59,8 +60,8 @@ public class LstmTradePredictor {
     }
 
     /**
-     * Initialise le modèle LSTM avec les hyperparamètres fournis.
-     * @param inputSize taille de l'entrée
+     * Initialise le modèle LSTM avec les hyperparamètres fournis et mémorise le windowSize courant.
+     * @param inputSize taille de l'entrée (doit être égal au windowSize utilisé)
      * @param outputSize taille de la sortie
      * @param lstmNeurons nombre de neurones dans la couche LSTM
      * @param dropoutRate taux de Dropout (ex : 0.2)
@@ -93,6 +94,26 @@ public class LstmTradePredictor {
             .build();
         model = new MultiLayerNetwork(conf);
         model.init();
+        currentWindowSize = inputSize;
+    }
+
+    /**
+     * Vérifie et réinitialise le modèle si le windowSize demandé est différent du modèle courant.
+     */
+    private void ensureModelWindowSize(int windowSize) {
+        if (model == null || currentWindowSize != windowSize) {
+            logger.info("Réinitialisation du modèle LSTM : windowSize courant = {} | windowSize demandé = {}", currentWindowSize, windowSize);
+            initModel(
+                windowSize,
+                1,
+                config.getLstmNeurons(),
+                config.getDropoutRate(),
+                config.getLearningRate(),
+                config.getOptimizer()
+            );
+        } else {
+            logger.info("Modèle LSTM déjà initialisé avec windowSize = {}", currentWindowSize);
+        }
     }
 
     // Ancienne version conservée pour compatibilité
@@ -222,6 +243,7 @@ public class LstmTradePredictor {
      * @param minDelta Amélioration minimale pour considérer le score comme meilleur
      */
     public void trainLstm(BarSeries series, int windowSize, int numEpochs, int patience, double minDelta) {
+        ensureModelWindowSize(windowSize);
         double[] closes = extractCloseValues(series);
         double[] normalized = normalize(closes);
         double[][][] sequences = createSequences(normalized, windowSize);
@@ -282,6 +304,7 @@ public class LstmTradePredictor {
      * @param optimizer nom de l'optimiseur
      */
     public void crossValidateLstm(BarSeries series, int windowSize, int numEpochs, int kFolds, int lstmNeurons, double dropoutRate, int patience, double minDelta, double learningRate, String optimizer) {
+        ensureModelWindowSize(windowSize);
         double[] closes = extractCloseValues(series);
         double[] normalized = normalize(closes);
         double[][][] sequences = createSequences(normalized, windowSize);
@@ -385,6 +408,7 @@ public class LstmTradePredictor {
      */
     // Prédiction de la prochaine valeur de clôture
     public double predictNextClose(BarSeries series, int windowSize) {
+        ensureModelWindowSize(windowSize);
         if (model == null) {
             throw new ModelNotFoundException("Le modèle LSTM n'est pas initialisé.");
         }
@@ -416,6 +440,7 @@ public class LstmTradePredictor {
      */
     // Prédiction du delta (variation) de la prochaine clôture
     public double predictNextDelta(BarSeries series, int windowSize) {
+        ensureModelWindowSize(windowSize);
         double predicted = predictNextClose(series, windowSize);
         double[] closes = extractCloseValues(series);
         double lastClose = closes[closes.length - 1];
@@ -437,6 +462,7 @@ public class LstmTradePredictor {
      * @return "up" si hausse, "down" si baisse, "stable" sinon
      */
     public String predictNextClass(BarSeries series, int windowSize, double threshold) {
+        ensureModelWindowSize(windowSize);
         double delta = predictNextDelta(series, windowSize);
         if (delta > threshold) {
             return "up";

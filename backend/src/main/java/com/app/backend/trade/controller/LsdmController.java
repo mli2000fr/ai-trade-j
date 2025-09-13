@@ -3,6 +3,12 @@ package com.app.backend.trade.controller;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * Contrôleur REST pour la gestion des opérations LSTM (entraînement et prédiction).
+ * <p>
+ * Permet d'entraîner un modèle LSTM et de prédire la prochaine clôture via des endpoints HTTP.
+ * </p>
+ */
 @RestController
 @RequestMapping("/api/lsdm")
 public class LsdmController {
@@ -10,14 +16,40 @@ public class LsdmController {
     @Autowired
     private LsdmHelper lsdmHelper;
 
+    /**
+     * Lance l'entraînement du modèle LSTM pour un symbole donné.
+     * @param symbol le symbole à entraîner (ex : "BTCUSDT")
+     * @param windowSize la taille de la fenêtre pour le LSTM
+     * @param numEpochs le nombre d'epochs pour l'entraînement
+     * @param learningRate le taux d'apprentissage
+     * @param optimizer le nom de l'optimiseur (ex : "adam")
+     * @return message de confirmation
+     */
     @GetMapping("/train")
-    public String trainLstm(@RequestParam String symbol, @RequestParam int windowSize, @RequestParam int numEpochs) {
-        lsdmHelper.trainLstm(symbol, windowSize, numEpochs);
+    public String trainLstm(
+            @RequestParam String symbol,
+            @RequestParam int windowSize,
+            @RequestParam int numEpochs,
+            @RequestParam double learningRate,
+            @RequestParam String optimizer) {
+        lsdmHelper.trainLstm(symbol, windowSize, numEpochs, learningRate, optimizer);
         return "Entraînement LSTM terminé pour " + symbol;
     }
 
+    /**
+     * Prédit la prochaine valeur de clôture pour un symbole donné.
+     * @param symbol le symbole à prédire (ex : "BTCUSDT")
+     * @param windowSize la taille de la fenêtre pour le LSTM
+     * @param learningRate le taux d'apprentissage
+     * @param optimizer le nom de l'optimiseur (ex : "adam")
+     * @return la valeur de clôture prédite
+     */
     @GetMapping("/predict")
-    public double predictNextClose(@RequestParam String symbol, @RequestParam int windowSize) {
-        return lsdmHelper.predictNextClose(symbol, windowSize);
+    public double predictNextClose(
+            @RequestParam String symbol,
+            @RequestParam int windowSize,
+            @RequestParam double learningRate,
+            @RequestParam String optimizer) {
+        return lsdmHelper.predictNextClose(symbol, windowSize, learningRate, optimizer);
     }
 }
