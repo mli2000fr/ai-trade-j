@@ -318,7 +318,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Filtrée</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Indice</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0', minWidth: 100, width: 200, maxWidth: 300 }}>Indice</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie IN</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie OUT</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement</TableCell>
@@ -347,7 +347,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         <TableCell><input type="checkbox" checked={!!checkedRows[i]} onChange={e => setCheckedRows({...checkedRows, [i]: e.target.checked})} /></TableCell>
                         <TableCell>{row.symbol}</TableCell>
                         <TableCell>{row.result.fltredOut ? <span style={{ color: 'red', fontWeight: 'bold' }}>Oui</span> : <span>Non</span>}</TableCell>
-                        <TableCell>{indices[row.symbol] === 'pending' ? <CircularProgress size={16} /> : (indice && indice.type ? indice.type + (indice.dateStr ? ' ' + indice.dateStr : '') : '-')}</TableCell>
+                        <TableCell>{indices[row.symbol] === 'pending' ? (<CircularProgress size={16} />) : (indice && indice.type ? (indice.type + ' (' + indice.dateStr + ')') : '-')}</TableCell>
                         <TableCell>{row.entryName}</TableCell>
                         <TableCell>{row.exitName}</TableCell>
                         <TableCell>{(row.result.rendement * 100).toFixed(2)} %</TableCell>

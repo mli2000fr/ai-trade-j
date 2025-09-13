@@ -706,7 +706,7 @@ public class StrategieHelper {
     public SignalInfo getBestInOutSignal(String symbol) {
         SignalInfo singleDB = this.getSingalTypeFromDB(symbol);
         if(singleDB != null){
-            String dateStr = singleDB.getDate().toLocalDate().format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"));
+            String dateStr = singleDB.getDate().toLocalDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"));
             return SignalInfo.builder().symbol(symbol).type(singleDB.getType()).dateStr(dateStr).build();
         }
         java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
@@ -724,7 +724,7 @@ public class StrategieHelper {
         com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(best.exitName, best.exitParams);
         boolean entrySignal = entryStrategy.getEntryRule(series).isSatisfied(lastIndex);
         boolean exitSignal = exitStrategy.getExitRule(series).isSatisfied(lastIndex);
-        SignalType signal = SignalType.NONE;
+        SignalType signal = SignalType.HOLD;
         if (entrySignal) signal =  SignalType.BUY;
         if (exitSignal) signal = SignalType.SELL;
         LocalDate dateSaved = saveSignalHistory(symbol, signal);

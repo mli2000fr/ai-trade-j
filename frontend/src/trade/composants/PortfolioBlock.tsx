@@ -21,6 +21,12 @@ interface PortfolioBlockProps {
   compteId?: string | null;
   resetSellErrorKey?: string | number;
 }
+interface SignalInfo {
+    symbol: string;
+    type: string;
+    date?: string | null;
+    dateStr?: string;
+}
 
 const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, loading, compteId, resetSellErrorKey }) => {
   const initialDeposit = portfolio && portfolio.initialDeposit !== undefined ? Number(portfolio.initialDeposit) : undefined;
@@ -29,7 +35,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
   const plPercent = initialDeposit !== undefined && initialDeposit !== 0 && !isNaN(initialDeposit) && equity !== undefined && !isNaN(equity) ? ((equity - initialDeposit) / initialDeposit) * 100 : undefined;
 
   // Ajout d'un cache local pour les indices
-  const [indices, setIndices] = useState<{ [symbol: string]: string }>({});
+  const [indices, setIndices] = useState<{ [symbol: string]: SignalInfo | string }>({});
   const [sellError, setSellError] = useState<string | null>(null);
 
   // Réinitialisation de sellError quand resetSellErrorKey change
@@ -47,7 +53,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
       setIndices(prev => ({ ...prev, [symbol]: 'pending' }));
       fetch(`/api/stra/strategies/get_indice?symbol=${encodeURIComponent(symbol)}`)
         .then(res => res.json())
-        .then(data => {
+        .then((data: SignalInfo) => {
           setIndices(prev => ({ ...prev, [symbol]: data ?? '-' }));
         })
         .catch(() => {
@@ -189,6 +195,22 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                     {portfolio.positions.map((pos: any, i: number) => {
                       const isNegative = pos.unrealized_pl < 0;
                       const cellStyle = isNegative ? { color: 'error.main' } : {};
+                      const indice = indices[pos.symbol] as SignalInfo | string;
+                      const isSellSignal = typeof indice === 'object' && indice !== null && indice.type === 'SELL';
+                      const isPendingSignal = indice === 'pending';
+                      const signalCellStyle = isSellSignal ? { color: 'error.main', fontWeight: 'bold' } : cellStyle;
+                      let signalCellContent;
+                      if (isPendingSignal) {
+                        signalCellContent = <CircularProgress size={16} />;
+                      } else if (isSellSignal) {
+                        signalCellContent = <Button variant="contained" color="error" size="small" onClick={() => handleSell(pos)} disabled={pos.qty <= 0}>SELL</Button>;
+                      } else if (typeof indice === 'object' && indice !== null && indice.type) {
+                        signalCellContent = indice.type + ' (' + indice.dateStr + ')';
+                      } else if (typeof indice === 'string') {
+                        signalCellContent = indice;
+                      } else {
+                        signalCellContent = '-';
+                      }
                       return (
                         <TableRow
                           key={i}
@@ -201,17 +223,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                           }
                         >
                           <TableCell sx={cellStyle}>{pos.symbol}</TableCell>
-                          <TableCell sx={
-                            indices[pos.symbol] === 'SELL'
-                              ? { color: 'error.main', fontWeight: 'bold' }
-                              : cellStyle
-                          }>
-                            {indices[pos.symbol] === 'pending' ? <CircularProgress size={16} /> : (
-                              indices[pos.symbol] === 'SELL'
-                                ? <Button variant="contained" color="error" size="small" onClick={() => handleSell(pos)} disabled={pos.qty <= 0}>SELL</Button>
-                                : (indices[pos.symbol] ?? '-')
-                            )}
-                          </TableCell>
+                          <TableCell sx={signalCellStyle}>{signalCellContent}</TableCell>
                           <TableCell sx={cellStyle}>{pos.avg_entry_price !== undefined && pos.avg_entry_price !== null ? Number(pos.avg_entry_price).toFixed(2) + ' $' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.current_price !== undefined && pos.current_price !== null ? Number(pos.current_price).toFixed(2) + ' $' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.qty}</TableCell>
