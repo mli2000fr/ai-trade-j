@@ -299,74 +299,110 @@ public class TradeHelper {
         );
     }
 
-    public List<Double> getLastEMA20(List<DailyValue> values, int historique) {
+    public List<IndicateurTech> getLastEMA20(List<DailyValue> values, int historique) {
         String indicateurName = "ema20";
         BarSeries series = TradeUtils.mapping(values);
         EMAIndicator ema = new EMAIndicator(new ClosePriceIndicator(series), 20);
         int count = series.getBarCount();
-        List<Double> result = new java.util.ArrayList<>();
+        List<IndicateurTech> result = new java.util.ArrayList<>();
         for (int i = Math.max(0, count - historique); i < count; i++) {
-            result.add(ema.getValue(i).doubleValue());
+            String dateStr = series.getBar(i).getEndTime().toString();
+            double value = ema.getValue(i).doubleValue();
+            result.add(IndicateurTech.builder()
+                .indicateurName(indicateurName)
+                .dateStr(dateStr)
+                .value(value)
+                .build());
         }
         return result;
     }
 
-    public List<Double> getLastEMA50(List<DailyValue> values, int historique) {
+    public List<IndicateurTech> getLastEMA50(List<DailyValue> values, int historique) {
         String indicateurName = "ema50";
         BarSeries series = TradeUtils.mapping(values);
         EMAIndicator ema = new EMAIndicator(new ClosePriceIndicator(series), 50);
         int count = series.getBarCount();
-        List<Double> result = new java.util.ArrayList<>();
+        List<IndicateurTech> result = new java.util.ArrayList<>();
         for (int i = Math.max(0, count - historique); i < count; i++) {
-            result.add(ema.getValue(i).doubleValue());
+            String dateStr = series.getBar(i).getEndTime().toString();
+            double value = ema.getValue(i).doubleValue();
+            result.add(IndicateurTech.builder()
+                .indicateurName(indicateurName)
+                .dateStr(dateStr)
+                .value(value)
+                .build());
         }
         return result;
     }
 
-    public List<Double> getLastEMA200(List<DailyValue> values, int historique) {
+    public List<IndicateurTech> getLastEMA200(List<DailyValue> values, int historique) {
         String indicateurName = "ema200";
         BarSeries series = TradeUtils.mapping(values);
         EMAIndicator ema = new EMAIndicator(new ClosePriceIndicator(series), 200);
         int count = series.getBarCount();
-        List<Double> result = new java.util.ArrayList<>();
+        List<IndicateurTech> result = new java.util.ArrayList<>();
         for (int i = Math.max(0, count - historique); i < count; i++) {
-            result.add(ema.getValue(i).doubleValue());
+            String dateStr = series.getBar(i).getEndTime().toString();
+            double value = ema.getValue(i).doubleValue();
+            result.add(IndicateurTech.builder()
+                .indicateurName(indicateurName)
+                .dateStr(dateStr)
+                .value(value)
+                .build());
         }
         return result;
     }
 
-    public List<Double> getLastRSI(List<DailyValue> values, int historique) {
+    public List<IndicateurTech> getLastRSI(List<DailyValue> values, int historique) {
         String indicateurName = "rsi";
         BarSeries series = TradeUtils.mapping(values);
         RSIIndicator rsi = new RSIIndicator(new ClosePriceIndicator(series), 14);
         int count = series.getBarCount();
-        List<Double> result = new java.util.ArrayList<>();
+        List<IndicateurTech> result = new java.util.ArrayList<>();
         for (int i = Math.max(0, count - historique); i < count; i++) {
-            result.add(rsi.getValue(i).doubleValue());
+            String dateStr = series.getBar(i).getEndTime().toString();
+            double value = rsi.getValue(i).doubleValue();
+            result.add(IndicateurTech.builder()
+                .indicateurName(indicateurName)
+                .dateStr(dateStr)
+                .value(value)
+                .build());
         }
         return result;
     }
 
-    public List<Double> getLastMACD(List<DailyValue> values, int historique) {
+    public List<IndicateurTech> getLastMACD(List<DailyValue> values, int historique) {
         String indicateurName = "macd";
         BarSeries series = TradeUtils.mapping(values);
         MACDIndicator macd = new MACDIndicator(new ClosePriceIndicator(series), 12, 26);
         int count = series.getBarCount();
-        List<Double> result = new java.util.ArrayList<>();
+        List<IndicateurTech> result = new java.util.ArrayList<>();
         for (int i = Math.max(0, count - historique); i < count; i++) {
-            result.add(macd.getValue(i).doubleValue());
+            String dateStr = series.getBar(i).getEndTime().toString();
+            double value = macd.getValue(i).doubleValue();
+            result.add(IndicateurTech.builder()
+                .indicateurName(indicateurName)
+                .dateStr(dateStr)
+                .value(value)
+                .build());
         }
         return result;
     }
 
-    public List<Double> getLastATR(List<DailyValue> values, int historique) {
+    public List<IndicateurTech> getLastATR(List<DailyValue> values, int historique) {
         String indicateurName = "atr";
         BarSeries series = TradeUtils.mapping(values);
         ATRIndicator atr = new ATRIndicator(series, 14);
         int count = series.getBarCount();
-        List<Double> result = new java.util.ArrayList<>();
+        List<IndicateurTech> result = new java.util.ArrayList<>();
         for (int i = Math.max(0, count - historique); i < count; i++) {
-            result.add(atr.getValue(i).doubleValue());
+            String dateStr = series.getBar(i).getEndTime().toString();
+            double value = atr.getValue(i).doubleValue();
+            result.add(IndicateurTech.builder()
+                .indicateurName(indicateurName)
+                .dateStr(dateStr)
+                .value(value)
+                .build());
         }
         return result;
     }
