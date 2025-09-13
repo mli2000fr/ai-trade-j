@@ -1,3 +1,12 @@
+/**
+ * Service de prédiction LSTM pour le trading.
+ * <p>
+ * Permet d'entraîner, valider, sauvegarder, charger et utiliser un modèle LSTM
+ * pour prédire la prochaine clôture, le delta ou la classe (hausse/baisse/stable)
+ * d'une série de données financières.
+ * Les hyperparamètres sont configurés dynamiquement via {@link LstmConfig}.
+ * </p>
+ */
 package com.app.backend.trade.lstm;
 
 import java.io.ByteArrayInputStream;
@@ -31,6 +40,11 @@ public class LstmTradePredictor {
     private static final Logger logger = LoggerFactory.getLogger(LstmTradePredictor.class);
     private LstmConfig config;
 
+    /**
+     * Constructeur principal.
+     * Initialise le modèle LSTM avec les paramètres du fichier de configuration.
+     * @param config configuration des hyperparamètres LSTM
+     */
     public LstmTradePredictor(LstmConfig config) {
         this.config = config;
         // Initialisation automatique du modèle avec les paramètres du fichier de config
@@ -45,7 +59,7 @@ public class LstmTradePredictor {
     }
 
     /**
-     * Initialise le modèle LSTM avec Dropout, learning rate et optimiseur.
+     * Initialise le modèle LSTM avec les hyperparamètres fournis.
      * @param inputSize taille de l'entrée
      * @param outputSize taille de la sortie
      * @param lstmNeurons nombre de neurones dans la couche LSTM
@@ -84,6 +98,7 @@ public class LstmTradePredictor {
     // Ancienne version conservée pour compatibilité
     /**
      * @deprecated Utiliser initModel avec tous les paramètres
+     * Initialise le modèle avec des paramètres par défaut.
      */
     @Deprecated
     public void initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate) {
@@ -91,6 +106,7 @@ public class LstmTradePredictor {
     }
     /**
      * @deprecated Utiliser initModel avec tous les paramètres
+     * Initialise le modèle avec des paramètres par défaut.
      */
     @Deprecated
     public void initModel(int inputSize, int outputSize, int lstmNeurons) {
@@ -98,12 +114,18 @@ public class LstmTradePredictor {
     }
     /**
      * @deprecated Utiliser initModel avec tous les paramètres
+     * Initialise le modèle avec des paramètres par défaut.
      */
     @Deprecated
     public void initModel(int inputSize, int outputSize) {
         initModel(inputSize, outputSize, 50, 0.2, 0.001, "adam");
     }
 
+    /**
+     * Extrait les valeurs de clôture d'une série de bougies.
+     * @param series série de bougies TA4J
+     * @return tableau des valeurs de clôture
+     */
     // Extraction des valeurs de clôture
     public double[] extractCloseValues(BarSeries series) {
         double[] closes = new double[series.getBarCount()];
@@ -113,6 +135,11 @@ public class LstmTradePredictor {
         return closes;
     }
 
+    /**
+     * Normalise un tableau de valeurs selon la méthode MinMax.
+     * @param values tableau de valeurs à normaliser
+     * @return tableau normalisé entre 0 et 1
+     */
     // Normalisation MinMax
     public double[] normalize(double[] values) {
         double min = Double.MAX_VALUE;
@@ -135,6 +162,12 @@ public class LstmTradePredictor {
         return normalized;
     }
 
+    /**
+     * Crée les séquences d'entrée pour le LSTM à partir des valeurs normalisées.
+     * @param values tableau de valeurs normalisées
+     * @param windowSize taille de la fenêtre
+     * @return séquences 3D pour le LSTM
+     */
     // Création des séquences pour LSTM
     public double[][][] createSequences(double[] values, int windowSize) {
         int numSeq = values.length - windowSize;
@@ -147,11 +180,22 @@ public class LstmTradePredictor {
         return sequences;
     }
 
+    /**
+     * Convertit les séquences en INDArray pour ND4J.
+     * @param sequences séquences 3D
+     * @return INDArray ND4J
+     */
     // Conversion en INDArray
     public org.nd4j.linalg.api.ndarray.INDArray toINDArray(double[][][] sequences) {
         return org.nd4j.linalg.factory.Nd4j.create(sequences);
     }
 
+    /**
+     * Prépare l'entrée LSTM complète à partir d'une série de bougies.
+     * @param series série de bougies
+     * @param windowSize taille de la fenêtre
+     * @return INDArray prêt pour le modèle LSTM
+     */
     // Préparation complète des données pour LSTM
     public org.nd4j.linalg.api.ndarray.INDArray prepareLstmInput(BarSeries series, int windowSize) {
         double[] closes = extractCloseValues(series);
@@ -160,6 +204,14 @@ public class LstmTradePredictor {
         return toINDArray(sequences);
     }
 
+    /**
+     * Entraîne le modèle LSTM avec early stopping et séparation train/test.
+     * @param series série de bougies
+     * @param windowSize taille de la fenêtre
+     * @param numEpochs nombre maximal d'epochs
+     * @param patience nombre d'epochs sans amélioration avant arrêt
+     * @param minDelta amélioration minimale pour considérer le score comme meilleur
+     */
     /**
      * Entraîne le modèle LSTM avec séparation train/test (80/20) et early stopping.
      * Arrête l'entraînement si le score MSE sur le jeu de test ne s'améliore plus selon patience/minDelta.
@@ -218,16 +270,16 @@ public class LstmTradePredictor {
     /**
      * Effectue une validation croisée k-fold sur le modèle LSTM.
      * Logge le score MSE, RMSE et MAE moyen et l'écart-type sur les k folds.
-     * @param series Série de bougies
-     * @param windowSize Taille de la fenêtre
-     * @param numEpochs Nombre maximal d'epochs
-     * @param kFolds Nombre de folds pour la cross-validation
-     * @param lstmNeurons Nombre de neurones LSTM
-     * @param dropoutRate Taux de Dropout
-     * @param patience Nombre d'epochs sans amélioration avant early stopping
-     * @param minDelta Amélioration minimale pour considérer le score comme meilleur
-     * @param learningRate Taux d'apprentissage
-     * @param optimizer Nom de l'optimiseur
+     * @param series série de bougies
+     * @param windowSize taille de la fenêtre
+     * @param numEpochs nombre maximal d'epochs
+     * @param kFolds nombre de folds pour la cross-validation
+     * @param lstmNeurons nombre de neurones LSTM
+     * @param dropoutRate taux de Dropout
+     * @param patience nombre d'epochs sans amélioration avant early stopping
+     * @param minDelta amélioration minimale pour considérer le score comme meilleur
+     * @param learningRate taux d'apprentissage
+     * @param optimizer nom de l'optimiseur
      */
     public void crossValidateLstm(BarSeries series, int windowSize, int numEpochs, int kFolds, int lstmNeurons, double dropoutRate, int patience, double minDelta, double learningRate, String optimizer) {
         double[] closes = extractCloseValues(series);
@@ -323,6 +375,14 @@ public class LstmTradePredictor {
         logger.info("Validation croisée terminée. MSE moyen : {}, Ecart-type : {} | RMSE moyen : {}, Ecart-type : {} | MAE moyen : {}, Ecart-type : {}", meanMSE, stdMSE, meanRMSE, stdRMSE, meanMAE, stdMAE);
     }
 
+    /**
+     * Prédit la prochaine valeur de clôture à partir de la série et du windowSize.
+     * @param series série de bougies
+     * @param windowSize taille de la fenêtre
+     * @return valeur de clôture prédite
+     * @throws ModelNotFoundException si le modèle n'est pas initialisé
+     * @throws InsufficientDataException si la série est trop courte
+     */
     // Prédiction de la prochaine valeur de clôture
     public double predictNextClose(BarSeries series, int windowSize) {
         if (model == null) {
@@ -348,6 +408,12 @@ public class LstmTradePredictor {
         return predicted;
     }
 
+    /**
+     * Prédit le delta (variation) entre la dernière clôture et la prédiction.
+     * @param series série de bougies
+     * @param windowSize taille de la fenêtre
+     * @return variation prédite
+     */
     // Prédiction du delta (variation) de la prochaine clôture
     public double predictNextDelta(BarSeries series, int windowSize) {
         double predicted = predictNextClose(series, windowSize);
@@ -356,6 +422,13 @@ public class LstmTradePredictor {
         return predicted - lastClose;
     }
 
+    /**
+     * Prédit la classe (hausse/baisse/stable) pour la prochaine clôture.
+     * @param series série de bougies
+     * @param windowSize taille de la fenêtre
+     * @param threshold seuil pour considérer une variation comme stable
+     * @return "up" si hausse, "down" si baisse, "stable" sinon
+     */
     /**
      * Prédiction de la classe (hausse/baisse/stable) pour la prochaine clôture.
      * @param series Série de bougies
@@ -374,6 +447,12 @@ public class LstmTradePredictor {
         }
     }
 
+    /**
+     * Sauvegarde le modèle LSTM dans un fichier.
+     * @param path chemin du fichier
+     * @throws ModelPersistenceException en cas d'erreur de sauvegarde
+     * @throws ModelNotFoundException si le modèle n'est pas initialisé
+     */
     // Sauvegarde du modèle
     public void saveModel(String path) throws ModelPersistenceException {
         if (model != null) {
@@ -394,6 +473,12 @@ public class LstmTradePredictor {
         }
     }
 
+    /**
+     * Charge le modèle LSTM depuis un fichier.
+     * @param path chemin du fichier
+     * @throws ModelPersistenceException en cas d'erreur de chargement
+     * @throws ModelNotFoundException si le fichier n'existe pas
+     */
     // Chargement du modèle
     public void loadModel(String path) throws ModelPersistenceException {
         File f = new File(path);
@@ -410,6 +495,12 @@ public class LstmTradePredictor {
         }
     }
 
+    /**
+     * Sauvegarde le modèle LSTM en base MySQL.
+     * @param symbol symbole du modèle
+     * @param jdbcTemplate template JDBC Spring
+     * @throws IOException en cas d'erreur d'accès à la base
+     */
     // Sauvegarde du modèle dans MySQL
     public void saveModelToDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException {
         if (model != null) {
@@ -427,6 +518,13 @@ public class LstmTradePredictor {
         }
     }
 
+    /**
+     * Charge le modèle LSTM depuis la base MySQL.
+     * @param symbol symbole du modèle
+     * @param jdbcTemplate template JDBC Spring
+     * @throws IOException en cas d'erreur d'accès à la base
+     * @throws SQLException jamais levée (pour compatibilité)
+     */
     // Chargement du modèle depuis MySQL
     public void loadModelFromDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException, SQLException {
         String sql = "SELECT model_blob FROM lstm_models WHERE symbol = ?";
@@ -446,6 +544,10 @@ public class LstmTradePredictor {
         }
     }
 
+    /**
+     * Entraîne le modèle avec les paramètres du fichier de configuration.
+     * @param series série de bougies
+     */
     // Méthode utilitaire pour entraîner le modèle avec les paramètres du fichier de config
     public void trainWithConfig(BarSeries series) {
         trainLstm(
