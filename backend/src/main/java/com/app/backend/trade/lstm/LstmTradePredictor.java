@@ -19,10 +19,13 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class LstmTradePredictor {
     private MultiLayerNetwork model;
+    private static final Logger logger = LoggerFactory.getLogger(LstmTradePredictor.class);
 
     public LstmTradePredictor() {
         // Le modèle sera initialisé via la méthode initModel
@@ -129,24 +132,41 @@ public class LstmTradePredictor {
         return toINDArray(sequences);
     }
 
-    // Entraînement du modèle LSTM
+    /**
+     * Entraîne le modèle LSTM avec séparation train/test (80/20).
+     * Affiche le score MSE sur le jeu de test après l'entraînement.
+     */
     public void trainLstm(BarSeries series, int windowSize, int numEpochs) {
         double[] closes = extractCloseValues(series);
         double[] normalized = normalize(closes);
         double[][][] sequences = createSequences(normalized, windowSize);
-        org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(sequences);
-        // Les labels sont la valeur suivante après chaque séquence, sous forme 3D
+        // Labels : valeur suivante après chaque séquence
         double[][][] labelSeq = new double[sequences.length][1][1];
         for (int i = 0; i < labelSeq.length; i++) {
             labelSeq[i][0][0] = normalized[i + windowSize];
         }
-        org.nd4j.linalg.api.ndarray.INDArray labelArray = org.nd4j.linalg.factory.Nd4j.create(labelSeq);
-        org.nd4j.linalg.dataset.api.iterator.DataSetIterator iterator = new ListDataSetIterator<>(
-            java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(input, labelArray))
+        // Séparation train/test (80/20)
+        int splitIdx = (int)(sequences.length * 0.8);
+        double[][][] trainSeq = java.util.Arrays.copyOfRange(sequences, 0, splitIdx);
+        double[][][] testSeq = java.util.Arrays.copyOfRange(sequences, splitIdx, sequences.length);
+        double[][][] trainLabel = java.util.Arrays.copyOfRange(labelSeq, 0, splitIdx);
+        double[][][] testLabel = java.util.Arrays.copyOfRange(labelSeq, splitIdx, labelSeq.length);
+        org.nd4j.linalg.api.ndarray.INDArray trainInput = toINDArray(trainSeq);
+        org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabel);
+        org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(testSeq);
+        org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel);
+        org.nd4j.linalg.dataset.api.iterator.DataSetIterator trainIterator = new ListDataSetIterator<>(
+            java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput))
         );
+        // Entraînement
         for (int i = 0; i < numEpochs; i++) {
-            model.fit(iterator);
+            model.fit(trainIterator);
+            logger.info("Epoch {} terminé", i + 1);
         }
+        // Évaluation sur le jeu de test
+        org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
+        double mse = predictions.squaredDistance(testOutput) / testOutput.length();
+        logger.info("Test MSE : {}", mse);
     }
 
     // Prédiction de la prochaine valeur de clôture
@@ -176,7 +196,13 @@ public class LstmTradePredictor {
             if (parent != null && !parent.exists()) {
                 parent.mkdirs();
             }
-            ModelSerializer.writeModel(model, file, true);
+            try {
+                ModelSerializer.writeModel(model, file, true);
+                logger.info("Modèle sauvegardé dans le fichier : {}", path);
+            } catch (IOException e) {
+                logger.error("Erreur lors de la sauvegarde du modèle : {}", e.getMessage());
+                throw e;
+            }
         }
     }
 
@@ -184,7 +210,13 @@ public class LstmTradePredictor {
     public void loadModel(String path) throws IOException {
         File f = new File(path);
         if (f.exists()) {
-            model = ModelSerializer.restoreMultiLayerNetwork(f);
+            try {
+                model = ModelSerializer.restoreMultiLayerNetwork(f);
+                logger.info("Modèle chargé depuis le fichier : {}", path);
+            } catch (IOException e) {
+                logger.error("Erreur lors du chargement du modèle : {}", e.getMessage());
+                throw e;
+            }
         }
     }
 
@@ -195,7 +227,13 @@ public class LstmTradePredictor {
             ModelSerializer.writeModel(model, baos, true);
             byte[] modelBytes = baos.toByteArray();
             String sql = "REPLACE INTO lstm_models (symbol, model_blob, updated_date) VALUES (?, ?, CURRENT_TIMESTAMP)";
-            jdbcTemplate.update(sql, symbol, modelBytes);
+            try {
+                jdbcTemplate.update(sql, symbol, modelBytes);
+                logger.info("Modèle sauvegardé en base pour le symbole : {}", symbol);
+            } catch (Exception e) {
+                logger.error("Erreur lors de la sauvegarde du modèle en base : {}", e.getMessage());
+                throw e;
+            }
         }
     }
 
@@ -207,9 +245,14 @@ public class LstmTradePredictor {
             if (modelBytes != null) {
                 ByteArrayInputStream bais = new ByteArrayInputStream(modelBytes);
                 model = ModelSerializer.restoreMultiLayerNetwork(bais);
+                logger.info("Modèle chargé depuis la base pour le symbole : {}", symbol);
             }
         } catch (EmptyResultDataAccessException e) {
+            logger.error("Modèle non trouvé en base pour le symbole : {}", symbol);
             throw new IOException("Modèle non trouvé en base");
+        } catch (Exception e) {
+            logger.error("Erreur lors du chargement du modèle en base : {}", e.getMessage());
+            throw e;
         }
     }
 }
