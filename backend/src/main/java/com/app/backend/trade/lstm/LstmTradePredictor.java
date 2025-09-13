@@ -4,12 +4,11 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-
 import org.deeplearning4j.datasets.iterator.utilty.ListDataSetIterator;
 import org.deeplearning4j.nn.conf.MultiLayerConfiguration;
 import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
+import org.deeplearning4j.nn.conf.layers.DropoutLayer;
 import org.deeplearning4j.nn.conf.layers.LSTM;
 import org.deeplearning4j.nn.conf.layers.RnnOutputLayer;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
@@ -29,23 +28,49 @@ public class LstmTradePredictor {
         // Le modèle sera initialisé via la méthode initModel
     }
 
-    public void initModel(int inputSize, int outputSize) {
+    /**
+     * Initialise le modèle LSTM avec Dropout.
+     * @param inputSize taille de l'entrée
+     * @param outputSize taille de la sortie
+     * @param lstmNeurons nombre de neurones dans la couche LSTM
+     * @param dropoutRate taux de Dropout (ex : 0.2)
+     */
+    public void initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate) {
         MultiLayerConfiguration conf = new NeuralNetConfiguration.Builder()
             .list()
             .layer(new LSTM.Builder()
                 .nIn(inputSize)
-                .nOut(50)
+                .nOut(lstmNeurons)
                 .activation(Activation.TANH)
                 .build())
+            .layer(new DropoutLayer.Builder()
+                .dropOut(dropoutRate)
+                .build())
             .layer(new RnnOutputLayer.Builder()
-                .nIn(50)
+                .nIn(lstmNeurons)
                 .nOut(outputSize)
-                .activation(Activation.IDENTITY) // Correction ici
-                .lossFunction(LossFunctions.LossFunction.MSE) // Correction ici
+                .activation(Activation.IDENTITY)
+                .lossFunction(LossFunctions.LossFunction.MSE)
                 .build())
             .build();
         model = new MultiLayerNetwork(conf);
         model.init();
+    }
+
+    // Ancienne version conservée pour compatibilité
+    /**
+     * @deprecated Utiliser initModel avec lstmNeurons et dropoutRate
+     */
+    @Deprecated
+    public void initModel(int inputSize, int outputSize, int lstmNeurons) {
+        initModel(inputSize, outputSize, lstmNeurons, 0.2);
+    }
+    /**
+     * @deprecated Utiliser initModel avec lstmNeurons et dropoutRate
+     */
+    @Deprecated
+    public void initModel(int inputSize, int outputSize) {
+        initModel(inputSize, outputSize, 50, 0.2);
     }
 
     // Extraction des valeurs de clôture
@@ -65,11 +90,18 @@ public class LstmTradePredictor {
             if (v < min) min = v;
             if (v > max) max = v;
         }
-        double[] norm = new double[values.length];
-        for (int i = 0; i < values.length; i++) {
-            norm[i] = (values[i] - min) / (max - min);
+        double[] normalized = new double[values.length];
+        if (min == max) {
+            // Toutes les valeurs sont identiques, éviter division par zéro
+            for (int i = 0; i < values.length; i++) {
+                normalized[i] = 0.5; // ou 0.0, ou 1.0 selon convention
+            }
+        } else {
+            for (int i = 0; i < values.length; i++) {
+                normalized[i] = (values[i] - min) / (max - min);
+            }
         }
-        return norm;
+        return normalized;
     }
 
     // Création des séquences pour LSTM
