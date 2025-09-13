@@ -29,6 +29,14 @@ CREATE TABLE trade_ai.best_in_out_single_strategy (
     nb_simples INT
 );
 
+CREATE INDEX idx_rendement ON trade_ai.best_in_out_single_strategy (rendement);
+CREATE INDEX idx_rendement_sum ON trade_ai.best_in_out_single_strategy (rendement_sum);
+CREATE INDEX idx_rendement_score ON trade_ai.best_in_out_single_strategy (rendement_score);
+CREATE INDEX idx_created_date ON trade_ai.best_in_out_single_strategy (created_date);
+CREATE INDEX idx_updated_date ON trade_ai.best_in_out_single_strategy (updated_date);
+CREATE INDEX idx_fltred_out ON trade_ai.best_in_out_single_strategy (fltred_out);
+CREATE INDEX idx_score_swing_trade ON trade_ai.best_in_out_single_strategy (score_swing_trade);
+
 Voici l’explication de chaque colonne de la table best_in_out_strategy :
 symbol : le symbole de l’actif (ex : « AAPL » pour Apple). C’est la clé primaire, chaque ligne correspond à un actif unique.
 entry_strategy_name : nom de la stratégie utilisée pour l’entrée (achat), par exemple « RSI », « SMA Crossover », etc.

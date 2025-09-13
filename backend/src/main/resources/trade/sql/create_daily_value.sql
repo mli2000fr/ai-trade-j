@@ -10,3 +10,4 @@ CREATE TABLE daily_value (
     number_of_trades VARCHAR(32),
     volume_weighted_average_price VARCHAR(32)
 );
+CREATE INDEX idx_symbol_date ON trade_ai.daily_value (symbol, date);
