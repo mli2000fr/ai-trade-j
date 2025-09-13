@@ -24,6 +24,14 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ReactApexChart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
 
+
+interface SignalInfo {
+    symbol: string;
+    type: string;
+    date?: string | null;
+    dateStr?: string;
+}
+
 interface BestInOutStrategy {
   symbol: string;
   entryName: string;
@@ -76,7 +84,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [selected, setSelected] = useState<BestInOutStrategy | null>(null);
   const [checkedRows, setCheckedRows] = useState<{[key: number]: boolean}>({});
   const [limit, setLimit] = useState<number>(20);
-  const [indices, setIndices] = useState<{ [symbol: string]: string }>({});
+  const [indices, setIndices] = useState<{ [symbol: string]: SignalInfo | string }>({});
   const [sort, setSort] = useState<string>('rendement_score');
   const [showOnlyNonFiltered, setShowOnlyNonFiltered] = useState(false);
   const [bougies, setBougies] = useState<any[]>([]);
@@ -111,7 +119,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
       setIndices(prev => ({ ...prev, [symbol]: 'pending' }));
       fetch(`/api/stra/strategies/get_indice?symbol=${encodeURIComponent(symbol)}`)
         .then(res => res.json())
-        .then(data => {
+        .then((data: SignalInfo) => {
           setIndices(prev => ({ ...prev, [symbol]: data ?? '-' }));
         })
         .catch(() => {
@@ -330,16 +338,16 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                 <TableBody>
                   {data.map((row, i) => {
                     let bgColor = undefined;
-                    const indice = indices[row.symbol];
+                    const indice = indices[row.symbol] as SignalInfo;
                     // Vérifie que indice est un objet et non une chaîne
-                    if (indice && typeof indice === 'object' && indice.type === 'BUY' && !row.result.fltredOut) bgColor = 'rgba(76, 175, 80, 0.5)';
-                    if (indice && typeof indice === 'object' && indice.type === 'SELL') bgColor = 'rgba(244, 67, 54, 0.05)';
+                    if (indice && indice.type === 'BUY' && !row.result.fltredOut) bgColor = 'rgba(76, 175, 80, 0.5)';
+                    if (indice && indice.type === 'SELL') bgColor = 'rgba(244, 67, 54, 0.05)';
                     return (
                       <TableRow key={i} sx={bgColor ? { backgroundColor: bgColor } : {}}>
                         <TableCell><input type="checkbox" checked={!!checkedRows[i]} onChange={e => setCheckedRows({...checkedRows, [i]: e.target.checked})} /></TableCell>
                         <TableCell>{row.symbol}</TableCell>
                         <TableCell>{row.result.fltredOut ? <span style={{ color: 'red', fontWeight: 'bold' }}>Oui</span> : <span>Non</span>}</TableCell>
-                        <TableCell>{indices[row.symbol] === 'pending' ? <CircularProgress size={16} /> : (()indice && typeof indice === 'object' ? indice.type + indice.dateStr : '-') ?? '-'}</TableCell>
+                        <TableCell>{indices[row.symbol] === 'pending' ? <CircularProgress size={16} /> : (indice && indice.type ? indice.type + (indice.dateStr ? ' ' + indice.dateStr : '') : '-')}</TableCell>
                         <TableCell>{row.entryName}</TableCell>
                         <TableCell>{row.exitName}</TableCell>
                         <TableCell>{(row.result.rendement * 100).toFixed(2)} %</TableCell>
