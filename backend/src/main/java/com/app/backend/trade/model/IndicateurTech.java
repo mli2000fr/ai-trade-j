@@ -6,8 +6,6 @@ import lombok.Data;
 @Builder
 @Data
 public class IndicateurTech {
-    private Integer id;
-    private String indicateurName;
-    private String dateStr;
+    private String date;
     private Double value;
 }

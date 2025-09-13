@@ -12,15 +12,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
-import org.ta4j.core.indicators.ATRIndicator;
-import org.ta4j.core.indicators.EMAIndicator;
-import org.ta4j.core.indicators.MACDIndicator;
-import org.ta4j.core.indicators.RSIIndicator;
+import org.ta4j.core.indicators.*;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 
 import java.lang.reflect.Type;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+
+import static com.app.backend.trade.util.TradeConstant.NOMBRE_TOTAL_BOUGIES_FOR_SIGNAL;
 
 
 @Controller
@@ -263,12 +263,23 @@ public class TradeHelper {
         }
         Double lastPrice = alpacaService.getLastPrice(compte, symbol);
         String historical = alpacaService.getHistoricalBarsJson(symbol, 200);
+        /*
         String ema20 = twelveDataService.getEMA20(symbol);
         String ema50 = twelveDataService.getEMA50(symbol);
         String sma200 = twelveDataService.getSMA200(symbol);
         String rsi = twelveDataService.getRSI(symbol);
         String macd = twelveDataService.getMACD(symbol);
         String atr = twelveDataService.getATR(symbol);
+        */
+        List<DailyValue> listeValus = this.getDailyValuesFromDb(symbol, 500);
+        BarSeries series = TradeUtils.mapping(listeValus);
+        String ema20 = this.getLastEMA20(series, 100);
+        String ema50 = this.getLastEMA50(series, 100);
+        String sma200 = this.getLastSMA200(series, 100);
+        String rsi = this.getLastRSI(series, 100);
+        String macd = this.getLastMACD(series, 100);
+        String atr = this.getLastATR(series, 100);
+
         String financial = finnhubService.getFinancialData(symbol);
         String statistics = finnhubService.getDefaultKeyStatistics(symbol);
         String earnings = finnhubService.getEarnings(symbol);
@@ -299,111 +310,128 @@ public class TradeHelper {
         );
     }
 
-    public List<IndicateurTech> getLastEMA20(List<DailyValue> values, int historique) {
-        String indicateurName = "ema20";
-        BarSeries series = TradeUtils.mapping(values);
+    /**
+     * Récupère les valeurs journalières d'un symbole depuis la base, avec limite.
+     * @param symbol symbole
+     * @param limit nombre de valeurs
+     * @return liste de DailyValue
+     */
+    public List<DailyValue> getDailyValuesFromDb(String symbol, Integer limit) {
+
+        String sql = "SELECT date, open, high, low, close, volume, number_of_trades, volume_weighted_average_price " +
+                "FROM daily_value WHERE symbol = ? ORDER BY date ASC";
+        if (limit != null && limit > 0) {
+            sql = "SELECT date, open, high, low, close, volume, number_of_trades, volume_weighted_average_price " +
+                    "FROM daily_value WHERE symbol = ? ORDER BY date DESC LIMIT " + limit;
+        }
+        List<DailyValue> results = jdbcTemplate.query(sql, new Object[]{symbol}, (rs, rowNum) -> {
+            return DailyValue.builder()
+                    .date(rs.getDate("date").toString())
+                    .open(rs.getString("open"))
+                    .high(rs.getString("high"))
+                    .low(rs.getString("low"))
+                    .close(rs.getString("close"))
+                    .volume(rs.getString("volume"))
+                    .numberOfTrades(rs.getString("number_of_trades"))
+                    .volumeWeightedAveragePrice(rs.getString("volume_weighted_average_price"))
+                    .build();
+        });
+
+        // Inverser la liste pour avoir les dates en ordre croissant
+        if (limit != null && limit > 0) {
+            Collections.reverse(results);
+        }
+        return results;
+    }
+
+
+    public String getLastEMA20(BarSeries series, int historique) {
         EMAIndicator ema = new EMAIndicator(new ClosePriceIndicator(series), 20);
         int count = series.getBarCount();
         List<IndicateurTech> result = new java.util.ArrayList<>();
         for (int i = Math.max(0, count - historique); i < count; i++) {
-            String dateStr = series.getBar(i).getEndTime().toString();
+            String dateStr = series.getBar(i).getEndTime().toLocalDate().toString();
             double value = ema.getValue(i).doubleValue();
             result.add(IndicateurTech.builder()
-                .indicateurName(indicateurName)
-                .dateStr(dateStr)
+                .date(dateStr)
                 .value(value)
                 .build());
         }
-        return result;
+        return new Gson().toJson(result);
     }
 
-    public List<IndicateurTech> getLastEMA50(List<DailyValue> values, int historique) {
-        String indicateurName = "ema50";
-        BarSeries series = TradeUtils.mapping(values);
+    public String getLastEMA50(BarSeries series, int historique) {
         EMAIndicator ema = new EMAIndicator(new ClosePriceIndicator(series), 50);
         int count = series.getBarCount();
         List<IndicateurTech> result = new java.util.ArrayList<>();
         for (int i = Math.max(0, count - historique); i < count; i++) {
-            String dateStr = series.getBar(i).getEndTime().toString();
+            String dateStr = series.getBar(i).getEndTime().toLocalDate().toString();
             double value = ema.getValue(i).doubleValue();
             result.add(IndicateurTech.builder()
-                .indicateurName(indicateurName)
-                .dateStr(dateStr)
+                .date(dateStr)
                 .value(value)
                 .build());
         }
-        return result;
+        return new Gson().toJson(result);
     }
 
-    public List<IndicateurTech> getLastEMA200(List<DailyValue> values, int historique) {
-        String indicateurName = "ema200";
-        BarSeries series = TradeUtils.mapping(values);
-        EMAIndicator ema = new EMAIndicator(new ClosePriceIndicator(series), 200);
+    public String getLastSMA200(BarSeries series, int historique) {
+        SMAIndicator sma = new SMAIndicator(new ClosePriceIndicator(series), 200);
         int count = series.getBarCount();
         List<IndicateurTech> result = new java.util.ArrayList<>();
         for (int i = Math.max(0, count - historique); i < count; i++) {
-            String dateStr = series.getBar(i).getEndTime().toString();
-            double value = ema.getValue(i).doubleValue();
+            String dateStr = series.getBar(i).getEndTime().toLocalDate().toString();
+            double value = sma.getValue(i).doubleValue();
             result.add(IndicateurTech.builder()
-                .indicateurName(indicateurName)
-                .dateStr(dateStr)
+                .date(dateStr)
                 .value(value)
                 .build());
         }
-        return result;
+        return new Gson().toJson(result);
     }
 
-    public List<IndicateurTech> getLastRSI(List<DailyValue> values, int historique) {
-        String indicateurName = "rsi";
-        BarSeries series = TradeUtils.mapping(values);
+    public String getLastRSI(BarSeries series, int historique) {
         RSIIndicator rsi = new RSIIndicator(new ClosePriceIndicator(series), 14);
         int count = series.getBarCount();
         List<IndicateurTech> result = new java.util.ArrayList<>();
         for (int i = Math.max(0, count - historique); i < count; i++) {
-            String dateStr = series.getBar(i).getEndTime().toString();
+            String dateStr = series.getBar(i).getEndTime().toLocalDate().toString();
             double value = rsi.getValue(i).doubleValue();
             result.add(IndicateurTech.builder()
-                .indicateurName(indicateurName)
-                .dateStr(dateStr)
+                .date(dateStr)
                 .value(value)
                 .build());
         }
-        return result;
+        return new Gson().toJson(result);
     }
 
-    public List<IndicateurTech> getLastMACD(List<DailyValue> values, int historique) {
-        String indicateurName = "macd";
-        BarSeries series = TradeUtils.mapping(values);
+    public String getLastMACD(BarSeries series, int historique) {
         MACDIndicator macd = new MACDIndicator(new ClosePriceIndicator(series), 12, 26);
         int count = series.getBarCount();
         List<IndicateurTech> result = new java.util.ArrayList<>();
         for (int i = Math.max(0, count - historique); i < count; i++) {
-            String dateStr = series.getBar(i).getEndTime().toString();
+            String dateStr = series.getBar(i).getEndTime().toLocalDate().toString();
             double value = macd.getValue(i).doubleValue();
             result.add(IndicateurTech.builder()
-                .indicateurName(indicateurName)
-                .dateStr(dateStr)
+                .date(dateStr)
                 .value(value)
                 .build());
         }
-        return result;
+        return new Gson().toJson(result);
     }
 
-    public List<IndicateurTech> getLastATR(List<DailyValue> values, int historique) {
-        String indicateurName = "atr";
-        BarSeries series = TradeUtils.mapping(values);
+    public String getLastATR(BarSeries series, int historique) {
         ATRIndicator atr = new ATRIndicator(series, 14);
         int count = series.getBarCount();
         List<IndicateurTech> result = new java.util.ArrayList<>();
         for (int i = Math.max(0, count - historique); i < count; i++) {
-            String dateStr = series.getBar(i).getEndTime().toString();
+            String dateStr = series.getBar(i).getEndTime().toLocalDate().toString();
             double value = atr.getValue(i).doubleValue();
             result.add(IndicateurTech.builder()
-                .indicateurName(indicateurName)
-                .dateStr(dateStr)
+                .date(dateStr)
                 .value(value)
                 .build());
         }
-        return result;
+        return new Gson().toJson(result);
     }
 }
