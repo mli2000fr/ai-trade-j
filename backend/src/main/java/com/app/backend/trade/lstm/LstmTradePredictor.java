@@ -21,14 +21,27 @@ import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.app.backend.trade.exception.InsufficientDataException;
+import com.app.backend.trade.exception.ModelNotFoundException;
+import com.app.backend.trade.exception.ModelPersistenceException;
 
 @Service
 public class LstmTradePredictor {
     private MultiLayerNetwork model;
     private static final Logger logger = LoggerFactory.getLogger(LstmTradePredictor.class);
+    private LstmConfig config;
 
-    public LstmTradePredictor() {
-        // Le modèle sera initialisé via la méthode initModel
+    public LstmTradePredictor(LstmConfig config) {
+        this.config = config;
+        // Initialisation automatique du modèle avec les paramètres du fichier de config
+        initModel(
+            config.getWindowSize(),
+            1,
+            config.getLstmNeurons(),
+            config.getDropoutRate(),
+            config.getLearningRate(),
+            config.getOptimizer()
+        );
     }
 
     /**
@@ -312,7 +325,13 @@ public class LstmTradePredictor {
 
     // Prédiction de la prochaine valeur de clôture
     public double predictNextClose(BarSeries series, int windowSize) {
+        if (model == null) {
+            throw new ModelNotFoundException("Le modèle LSTM n'est pas initialisé.");
+        }
         double[] closes = extractCloseValues(series);
+        if (closes.length < windowSize) {
+            throw new InsufficientDataException("Données insuffisantes pour la prédiction (windowSize=" + windowSize + ", closes=" + closes.length + ").");
+        }
         double[] normalized = normalize(closes);
         // Prendre la dernière séquence
         double[][][] lastSequence = new double[1][windowSize][1];
@@ -356,7 +375,7 @@ public class LstmTradePredictor {
     }
 
     // Sauvegarde du modèle
-    public void saveModel(String path) throws IOException {
+    public void saveModel(String path) throws ModelPersistenceException {
         if (model != null) {
             File file = new File(path);
             File parent = file.getParentFile();
@@ -368,13 +387,15 @@ public class LstmTradePredictor {
                 logger.info("Modèle sauvegardé dans le fichier : {}", path);
             } catch (IOException e) {
                 logger.error("Erreur lors de la sauvegarde du modèle : {}", e.getMessage());
-                throw e;
+                throw new ModelPersistenceException("Erreur lors de la sauvegarde du modèle", e);
             }
+        } else {
+            throw new ModelNotFoundException("Impossible de sauvegarder : modèle non initialisé.");
         }
     }
 
     // Chargement du modèle
-    public void loadModel(String path) throws IOException {
+    public void loadModel(String path) throws ModelPersistenceException {
         File f = new File(path);
         if (f.exists()) {
             try {
@@ -382,8 +403,10 @@ public class LstmTradePredictor {
                 logger.info("Modèle chargé depuis le fichier : {}", path);
             } catch (IOException e) {
                 logger.error("Erreur lors du chargement du modèle : {}", e.getMessage());
-                throw e;
+                throw new ModelPersistenceException("Erreur lors du chargement du modèle", e);
             }
+        } else {
+            throw new ModelNotFoundException("Modèle non trouvé dans le fichier : " + path);
         }
     }
 
@@ -421,5 +444,16 @@ public class LstmTradePredictor {
             logger.error("Erreur lors du chargement du modèle en base : {}", e.getMessage());
             throw e;
         }
+    }
+
+    // Méthode utilitaire pour entraîner le modèle avec les paramètres du fichier de config
+    public void trainWithConfig(BarSeries series) {
+        trainLstm(
+            series,
+            config.getWindowSize(),
+            config.getNumEpochs(),
+            config.getPatience(),
+            config.getMinDelta()
+        );
     }
 }
