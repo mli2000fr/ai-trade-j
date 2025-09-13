@@ -11,6 +11,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
+import org.ta4j.core.BarSeries;
+import org.ta4j.core.indicators.ATRIndicator;
+import org.ta4j.core.indicators.EMAIndicator;
+import org.ta4j.core.indicators.MACDIndicator;
+import org.ta4j.core.indicators.RSIIndicator;
+import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
+
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
@@ -290,5 +297,77 @@ public class TradeHelper {
                 news,
                 portfolioJson
         );
+    }
+
+    public List<Double> getLastEMA20(List<DailyValue> values, int historique) {
+        String indicateurName = "ema20";
+        BarSeries series = TradeUtils.mapping(values);
+        EMAIndicator ema = new EMAIndicator(new ClosePriceIndicator(series), 20);
+        int count = series.getBarCount();
+        List<Double> result = new java.util.ArrayList<>();
+        for (int i = Math.max(0, count - historique); i < count; i++) {
+            result.add(ema.getValue(i).doubleValue());
+        }
+        return result;
+    }
+
+    public List<Double> getLastEMA50(List<DailyValue> values, int historique) {
+        String indicateurName = "ema50";
+        BarSeries series = TradeUtils.mapping(values);
+        EMAIndicator ema = new EMAIndicator(new ClosePriceIndicator(series), 50);
+        int count = series.getBarCount();
+        List<Double> result = new java.util.ArrayList<>();
+        for (int i = Math.max(0, count - historique); i < count; i++) {
+            result.add(ema.getValue(i).doubleValue());
+        }
+        return result;
+    }
+
+    public List<Double> getLastEMA200(List<DailyValue> values, int historique) {
+        String indicateurName = "ema200";
+        BarSeries series = TradeUtils.mapping(values);
+        EMAIndicator ema = new EMAIndicator(new ClosePriceIndicator(series), 200);
+        int count = series.getBarCount();
+        List<Double> result = new java.util.ArrayList<>();
+        for (int i = Math.max(0, count - historique); i < count; i++) {
+            result.add(ema.getValue(i).doubleValue());
+        }
+        return result;
+    }
+
+    public List<Double> getLastRSI(List<DailyValue> values, int historique) {
+        String indicateurName = "rsi";
+        BarSeries series = TradeUtils.mapping(values);
+        RSIIndicator rsi = new RSIIndicator(new ClosePriceIndicator(series), 14);
+        int count = series.getBarCount();
+        List<Double> result = new java.util.ArrayList<>();
+        for (int i = Math.max(0, count - historique); i < count; i++) {
+            result.add(rsi.getValue(i).doubleValue());
+        }
+        return result;
+    }
+
+    public List<Double> getLastMACD(List<DailyValue> values, int historique) {
+        String indicateurName = "macd";
+        BarSeries series = TradeUtils.mapping(values);
+        MACDIndicator macd = new MACDIndicator(new ClosePriceIndicator(series), 12, 26);
+        int count = series.getBarCount();
+        List<Double> result = new java.util.ArrayList<>();
+        for (int i = Math.max(0, count - historique); i < count; i++) {
+            result.add(macd.getValue(i).doubleValue());
+        }
+        return result;
+    }
+
+    public List<Double> getLastATR(List<DailyValue> values, int historique) {
+        String indicateurName = "atr";
+        BarSeries series = TradeUtils.mapping(values);
+        ATRIndicator atr = new ATRIndicator(series, 14);
+        int count = series.getBarCount();
+        List<Double> result = new java.util.ArrayList<>();
+        for (int i = Math.max(0, count - historique); i < count; i++) {
+            result.add(atr.getValue(i).doubleValue());
+        }
+        return result;
     }
 }
