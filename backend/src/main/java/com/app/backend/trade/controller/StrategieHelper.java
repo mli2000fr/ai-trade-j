@@ -702,6 +702,11 @@ public class StrategieHelper {
      * @return type de signal (SignalType)
      */
     public SignalType getBestInOutSignal(String symbol) {
+        SignalInfo singleDB = this.getSingalTypeFromDB(symbol);
+        if(singleDB != null){
+            return singleDB.getType();
+        }
+
         BestInOutStrategy best = getBestInOutStrategy(symbol);
         if (best == null) return SignalType.NONE;
         updateDBDailyValu(symbol);
@@ -715,7 +720,56 @@ public class StrategieHelper {
         boolean exitSignal = exitStrategy.getExitRule(series).isSatisfied(lastIndex);
         if (entrySignal) return SignalType.BUY;
         if (exitSignal) return SignalType.SELL;
-        return SignalType.NONE;
+        SignalType signal = SignalType.NONE;
+        saveSignalHistory(symbol, signal);
+        return signal;
+    }
+
+    /**
+     * Récupère le dernier signal enregistré en base pour un symbole donné, avec sa date.
+     * @param symbol symbole à analyser
+     * @return SignalInfo (type + date)
+     */
+    public SignalInfo getSingalTypeFromDB(String symbol) {
+        String sql = "SELECT signal_single, single_created_at FROM signal_single WHERE symbol = ? ORDER BY single_created_at DESC LIMIT 1";
+        try {
+            return jdbcTemplate.query(sql, ps -> ps.setString(1, symbol), rs -> {
+                if (rs.next()) {
+                    String signalStr = rs.getString("signal_single");
+                    java.sql.Date lastDate = rs.getDate("single_created_at");
+                    SignalType type;
+                    try {
+                        type = SignalType.valueOf(signalStr);
+                    } catch (Exception e) {
+                        logger.warn("SignalType inconnu en base: {}", signalStr);
+                        type = null;
+                    }
+
+                    java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
+                    java.time.LocalDate lastKnown = lastDate.toLocalDate();
+                    // Si la dernière date connue est le dernier jour de cotation, la base est à jour
+                    if (lastKnown.isEqual(lastTradingDay) || lastKnown.isAfter(lastTradingDay)) {
+                        return new SignalInfo(symbol, type, lastDate);
+                    }else{
+                        return null;
+                    }
+                }
+                return null;
+            });
+        } catch (Exception e) {
+            logger.warn("Erreur SQL getSingalTypeFromDB pour {}: {}", symbol, e.getMessage());
+            return null;
+        }
+    }
+
+    public void saveSignalHistory(String symbol, SignalType signal) {
+        java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
+        String insertSql = "INSERT INTO signal_single (symbol, signal_single, single_created_at) VALUES (?, ?, ?)";
+        jdbcTemplate.update(insertSql,
+                symbol,
+                signal.name(),
+                java.sql.Date.valueOf(lastTradingDay));
+
     }
 
 

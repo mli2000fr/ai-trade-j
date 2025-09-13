@@ -240,15 +240,37 @@ public class TradeUtils {
      */
     public static java.time.LocalDate getLastTradingDayBefore(java.time.LocalDate date) {
         java.util.Set<java.time.LocalDate> MARKET_HOLIDAYS = java.util.Set.of(
-            java.time.LocalDate.of(2025, 1, 1),
-            java.time.LocalDate.of(2025, 1, 20),
-            java.time.LocalDate.of(2025, 2, 17),
-            java.time.LocalDate.of(2025, 4, 18),
-            java.time.LocalDate.of(2025, 5, 26),
-            java.time.LocalDate.of(2025, 7, 4),
-            java.time.LocalDate.of(2025, 9, 1),
-            java.time.LocalDate.of(2025, 11, 27),
-            java.time.LocalDate.of(2025, 12, 25)
+            // 2025
+            java.time.LocalDate.of(2025, 1, 1),   // New Year's Day
+            java.time.LocalDate.of(2025, 1, 20),  // Martin Luther King Jr. Day
+            java.time.LocalDate.of(2025, 2, 17),  // Presidents' Day
+            java.time.LocalDate.of(2025, 4, 18),  // Good Friday
+            java.time.LocalDate.of(2025, 5, 26),  // Memorial Day
+            java.time.LocalDate.of(2025, 7, 4),   // Independence Day
+            java.time.LocalDate.of(2025, 9, 1),   // Labor Day
+            java.time.LocalDate.of(2025, 11, 27), // Thanksgiving
+            java.time.LocalDate.of(2025, 12, 25), // Christmas
+            // 2026
+            java.time.LocalDate.of(2026, 1, 1),   // New Year's Day
+            java.time.LocalDate.of(2026, 1, 19),  // Martin Luther King Jr. Day
+            java.time.LocalDate.of(2026, 2, 16),  // Presidents' Day
+            java.time.LocalDate.of(2026, 4, 3),   // Good Friday
+            java.time.LocalDate.of(2026, 5, 25),  // Memorial Day
+            java.time.LocalDate.of(2026, 7, 3),   // Independence Day (observed)
+            java.time.LocalDate.of(2026, 9, 7),   // Labor Day
+            java.time.LocalDate.of(2026, 11, 26), // Thanksgiving
+            java.time.LocalDate.of(2026, 12, 25), // Christmas
+            // 2027
+            java.time.LocalDate.of(2027, 1, 1),   // New Year's Day
+            java.time.LocalDate.of(2027, 1, 18),  // Martin Luther King Jr. Day
+            java.time.LocalDate.of(2027, 2, 15),  // Presidents' Day
+            java.time.LocalDate.of(2027, 3, 26),  // Good Friday
+            java.time.LocalDate.of(2027, 5, 31),  // Memorial Day
+            java.time.LocalDate.of(2027, 7, 5),   // Independence Day (observed)
+            java.time.LocalDate.of(2027, 9, 6),   // Labor Day
+            java.time.LocalDate.of(2027, 11, 25), // Thanksgiving
+            java.time.LocalDate.of(2027, 12, 24), // Christmas (observed)
+            java.time.LocalDate.of(2027, 12, 25)  // Christmas
         );
         java.time.LocalDate d = date.minusDays(1);
         while (d.getDayOfWeek() == java.time.DayOfWeek.SATURDAY ||
