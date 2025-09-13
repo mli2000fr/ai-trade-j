@@ -59,13 +59,13 @@ public class LsdmHelper {
     }
 
     // Entraînement LSTM
-    public void trainLstm(String symbol, int windowSize, int numEpochs) {
+    public void trainLstm(String symbol, int windowSize, int numEpochs, double learningRate, String optimizer) {
         BarSeries series = getBarBySymbol(symbol, null);
         int lstmNeurons = 64;
         double dropoutRate = 0.2;
         int patience = 10;
         double minDelta = 0.0001;
-        lstmTradePredictor.initModel(windowSize, 1, lstmNeurons, dropoutRate);
+        lstmTradePredictor.initModel(windowSize, 1, lstmNeurons, dropoutRate, learningRate, optimizer);
         lstmTradePredictor.trainLstm(series, windowSize, numEpochs, patience, minDelta);
         // Sauvegarder le modèle dans la base après entraînement
         try {
@@ -76,7 +76,7 @@ public class LsdmHelper {
     }
 
     // Prédiction LSTM
-    public double predictNextClose(String symbol, int windowSize) {
+    public double predictNextClose(String symbol, int windowSize, double learningRate, String optimizer) {
         boolean modelLoaded;
         try {
             lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
@@ -90,7 +90,7 @@ public class LsdmHelper {
             double dropoutRate = 0.2;
             int patience = 10;
             double minDelta = 0.0001;
-            lstmTradePredictor.initModel(windowSize, 1, lstmNeurons, dropoutRate);
+            lstmTradePredictor.initModel(windowSize, 1, lstmNeurons, dropoutRate, learningRate, optimizer);
             lstmTradePredictor.trainLstm(series, windowSize, 10, patience, minDelta); // 10 epochs par défaut
             try {
                 lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate);
@@ -105,8 +105,8 @@ public class LsdmHelper {
      * Lance une validation croisée k-fold sur le modèle LSTM pour un symbole donné.
      * Les résultats sont loggés (voir app.log).
      */
-    public void crossValidateLstm(String symbol, int windowSize, int numEpochs, int kFolds, int lstmNeurons, double dropoutRate, int patience, double minDelta) {
+    public void crossValidateLstm(String symbol, int windowSize, int numEpochs, int kFolds, int lstmNeurons, double dropoutRate, int patience, double minDelta, double learningRate, String optimizer) {
         BarSeries series = getBarBySymbol(symbol, null);
-        lstmTradePredictor.crossValidateLstm(series, windowSize, numEpochs, kFolds, lstmNeurons, dropoutRate, patience, minDelta);
+        lstmTradePredictor.crossValidateLstm(series, windowSize, numEpochs, kFolds, lstmNeurons, dropoutRate, patience, minDelta, learningRate, optimizer);
     }
 }

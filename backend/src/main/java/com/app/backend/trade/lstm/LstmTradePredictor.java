@@ -32,14 +32,22 @@ public class LstmTradePredictor {
     }
 
     /**
-     * Initialise le modèle LSTM avec Dropout.
+     * Initialise le modèle LSTM avec Dropout, learning rate et optimiseur.
      * @param inputSize taille de l'entrée
      * @param outputSize taille de la sortie
      * @param lstmNeurons nombre de neurones dans la couche LSTM
      * @param dropoutRate taux de Dropout (ex : 0.2)
+     * @param learningRate taux d'apprentissage
+     * @param optimizer nom de l'optimiseur ("adam", "rmsprop", "sgd")
      */
-    public void initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate) {
-        MultiLayerConfiguration conf = new NeuralNetConfiguration.Builder()
+    public void initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate, double learningRate, String optimizer) {
+        NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
+        builder.updater(
+            "adam".equalsIgnoreCase(optimizer) ? new org.nd4j.linalg.learning.config.Adam(learningRate)
+            : "rmsprop".equalsIgnoreCase(optimizer) ? new org.nd4j.linalg.learning.config.RmsProp(learningRate)
+            : new org.nd4j.linalg.learning.config.Sgd(learningRate)
+        );
+        MultiLayerConfiguration conf = builder
             .list()
             .layer(new LSTM.Builder()
                 .nIn(inputSize)
@@ -62,18 +70,25 @@ public class LstmTradePredictor {
 
     // Ancienne version conservée pour compatibilité
     /**
-     * @deprecated Utiliser initModel avec lstmNeurons et dropoutRate
+     * @deprecated Utiliser initModel avec tous les paramètres
+     */
+    @Deprecated
+    public void initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate) {
+        initModel(inputSize, outputSize, lstmNeurons, dropoutRate, 0.001, "adam");
+    }
+    /**
+     * @deprecated Utiliser initModel avec tous les paramètres
      */
     @Deprecated
     public void initModel(int inputSize, int outputSize, int lstmNeurons) {
-        initModel(inputSize, outputSize, lstmNeurons, 0.2);
+        initModel(inputSize, outputSize, lstmNeurons, 0.2, 0.001, "adam");
     }
     /**
-     * @deprecated Utiliser initModel avec lstmNeurons et dropoutRate
+     * @deprecated Utiliser initModel avec tous les paramètres
      */
     @Deprecated
     public void initModel(int inputSize, int outputSize) {
-        initModel(inputSize, outputSize, 50, 0.2);
+        initModel(inputSize, outputSize, 50, 0.2, 0.001, "adam");
     }
 
     // Extraction des valeurs de clôture
@@ -198,8 +213,10 @@ public class LstmTradePredictor {
      * @param dropoutRate Taux de Dropout
      * @param patience Nombre d'epochs sans amélioration avant early stopping
      * @param minDelta Amélioration minimale pour considérer le score comme meilleur
+     * @param learningRate Taux d'apprentissage
+     * @param optimizer Nom de l'optimiseur
      */
-    public void crossValidateLstm(BarSeries series, int windowSize, int numEpochs, int kFolds, int lstmNeurons, double dropoutRate, int patience, double minDelta) {
+    public void crossValidateLstm(BarSeries series, int windowSize, int numEpochs, int kFolds, int lstmNeurons, double dropoutRate, int patience, double minDelta, double learningRate, String optimizer) {
         double[] closes = extractCloseValues(series);
         double[] normalized = normalize(closes);
         double[][][] sequences = createSequences(normalized, windowSize);
@@ -236,8 +253,8 @@ public class LstmTradePredictor {
             org.nd4j.linalg.dataset.api.iterator.DataSetIterator trainIterator = new ListDataSetIterator<>(
                 java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput))
             );
-            // Initialiser un nouveau modèle pour ce fold
-            initModel(windowSize, 1, lstmNeurons, dropoutRate);
+            // Initialiser un nouveau modèle pour ce fold avec les bons paramètres
+            initModel(windowSize, 1, lstmNeurons, dropoutRate, learningRate, optimizer);
             // Early stopping
             double bestMSE = Double.MAX_VALUE;
             double bestRMSE = Double.MAX_VALUE;
@@ -310,6 +327,32 @@ public class LstmTradePredictor {
         double predictedNorm = output.getDouble(0);
         double predicted = predictedNorm * (max - min) + min;
         return predicted;
+    }
+
+    // Prédiction du delta (variation) de la prochaine clôture
+    public double predictNextDelta(BarSeries series, int windowSize) {
+        double predicted = predictNextClose(series, windowSize);
+        double[] closes = extractCloseValues(series);
+        double lastClose = closes[closes.length - 1];
+        return predicted - lastClose;
+    }
+
+    /**
+     * Prédiction de la classe (hausse/baisse/stable) pour la prochaine clôture.
+     * @param series Série de bougies
+     * @param windowSize Taille de la fenêtre
+     * @param threshold Seuil pour considérer une variation comme stable
+     * @return "up" si hausse, "down" si baisse, "stable" sinon
+     */
+    public String predictNextClass(BarSeries series, int windowSize, double threshold) {
+        double delta = predictNextDelta(series, windowSize);
+        if (delta > threshold) {
+            return "up";
+        } else if (delta < -threshold) {
+            return "down";
+        } else {
+            return "stable";
+        }
     }
 
     // Sauvegarde du modèle
