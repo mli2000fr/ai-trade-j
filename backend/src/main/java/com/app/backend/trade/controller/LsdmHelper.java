@@ -11,6 +11,8 @@ import org.ta4j.core.BarSeries;
 
 import java.util.Collections;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Controller
 public class LsdmHelper {
@@ -18,6 +20,8 @@ public class LsdmHelper {
 
     private JdbcTemplate jdbcTemplate;
     private LstmTradePredictor lstmTradePredictor;
+
+    private static final Logger logger = LoggerFactory.getLogger(LsdmHelper.class);
 
     @Autowired
     public LsdmHelper(JdbcTemplate jdbcTemplate, LstmTradePredictor lstmTradePredictor) {
@@ -57,37 +61,52 @@ public class LsdmHelper {
     // Entraînement LSTM
     public void trainLstm(String symbol, int windowSize, int numEpochs) {
         BarSeries series = getBarBySymbol(symbol, null);
-        lstmTradePredictor.initModel(windowSize, 1);
-        lstmTradePredictor.trainLstm(series, windowSize, numEpochs);
+        int lstmNeurons = 64;
+        double dropoutRate = 0.2;
+        int patience = 10;
+        double minDelta = 0.0001;
+        lstmTradePredictor.initModel(windowSize, 1, lstmNeurons, dropoutRate);
+        lstmTradePredictor.trainLstm(series, windowSize, numEpochs, patience, minDelta);
         // Sauvegarder le modèle dans la base après entraînement
         try {
             lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate);
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("Erreur lors de la sauvegarde du modèle : {}", e.getMessage());
         }
     }
 
     // Prédiction LSTM
     public double predictNextClose(String symbol, int windowSize) {
-        boolean modelLoaded = false;
+        boolean modelLoaded;
         try {
             lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
             modelLoaded = true;
         } catch (Exception e) {
-            // Le modèle n'existe pas ou erreur de chargement
             modelLoaded = false;
         }
         BarSeries series = getBarBySymbol(symbol, null);
         if (!modelLoaded) {
-            // Entraînement automatique si le modèle n'existe pas
-            lstmTradePredictor.initModel(windowSize, 1);
-            lstmTradePredictor.trainLstm(series, windowSize, 10); // 10 epochs par défaut
+            int lstmNeurons = 64;
+            double dropoutRate = 0.2;
+            int patience = 10;
+            double minDelta = 0.0001;
+            lstmTradePredictor.initModel(windowSize, 1, lstmNeurons, dropoutRate);
+            lstmTradePredictor.trainLstm(series, windowSize, 10, patience, minDelta); // 10 epochs par défaut
             try {
                 lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate);
             } catch (Exception ex) {
-                ex.printStackTrace();
+                logger.error("Erreur lors de la sauvegarde du modèle : {}", ex.getMessage());
             }
         }
         return lstmTradePredictor.predictNextClose(series, windowSize);
+    }
+
+    /**
+     * Lance une validation croisée k-fold sur le modèle LSTM pour un symbole donné.
+     * Les résultats sont loggés (voir app.log).
+     */
+    public void crossValidateLstm(String symbol, int windowSize, int numEpochs, int kFolds, int lstmNeurons, double dropoutRate, int patience, double minDelta) {
+        BarSeries series = getBarBySymbol(symbol, null);
+        lstmTradePredictor.crossValidateLstm(series, windowSize, numEpochs, kFolds, lstmNeurons, dropoutRate, patience, minDelta);
     }
 }
