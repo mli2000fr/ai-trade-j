@@ -1,16 +1,20 @@
-Optimisation walk-forward : Elle utilise une approche d’optimisation walk-forward, qui consiste à diviser la série temporelle en fenêtres d’optimisation et de test, puis à glisser ces fenêtres sur l’ensemble des données. Cela permet de simuler des conditions de marché variées et d’éviter l’overfitting, ce qui est crucial pour le swing trade en conditions réelles.
-Validation croisée (k-folds) : La méthode applique une validation croisée (par défaut 5 folds), ce qui renforce la robustesse des résultats en testant la stratégie sur plusieurs segments du marché. Cela permet de vérifier la stabilité et la performance de la stratégie sur différentes périodes.
-Filtrage avancé : Elle intègre un filtrage des stratégies selon des critères professionnels : drawdown maximal, profit factor, win rate, durée moyenne des trades, ratio gain/perte, et complexité des paramètres. Ce filtrage garantit que seules les stratégies robustes et simples sont retenues, ce qui est essentiel pour le swing trade.
-Contrôle de l’overfitting : La méthode calcule le ratio de sur-apprentissage (overfit ratio) entre les performances en optimisation et en test, et marque les stratégies instables ou sur-optimisées. Cela évite de sélectionner des stratégies qui ne fonctionneraient pas en production.
-Paramétrage flexible : Les fenêtres d’optimisation, de test et de glissement sont paramétrables en pourcentage du nombre total de bougies, ce qui permet d’adapter la méthode à différents horizons de swing trade.
-Multi-stratégies : Elle optimise et teste plusieurs familles de stratégies (trend following, SMA crossover, RSI, breakout, MACD, mean reversion) et leurs combinaisons IN/OUT, ce qui est adapté à la diversité des marchés et des styles de swing trading.
+Oui, avec Deeplearning4j, vous pouvez tout faire : régression logistique, SVM, Random Forest et LSTM.
+Pour la régression logistique et les réseaux de neurones (dont LSTM), Deeplearning4j est très complet.
+Pour SVM et Random Forest, Deeplearning4j propose des implémentations, mais elles sont moins utilisées que celles de bibliothèques comme Smile ou Weka (qui sont plus spécialisées dans les algorithmes classiques).
+En résumé :
+Deeplearning4j permet de tout faire, surtout pour le deep learning (LSTM, réseaux de neurones).
+Pour les algorithmes classiques (SVM, Random Forest), Smile ou Weka peuvent être plus simples à utiliser, mais Deeplearning4j reste possible.
 
-
-
-
-
-Analyser StrategieHelper.optimseStrategy(BarSeries series, double optimWindowPct, double testWindowPct, double stepWindowPct, StrategyFilterConfig filterConfig, SwingTradeOptimParams swingParams), ensuite pour optimseStrategyMix(List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo), il faut tu adapter/ajouter le Paramétrage flexible dans optimseStrategyMix de la meme manière que dans StrategieHelper.optimseStrategy.
-N'oublie pas de vérifier aucune erreur après la modification
-
-
-revoir fltredOut
+Pour prédire la tendance boursière, le choix de l’algorithme dépend du type de données et de la complexité du problème :
+Données tabulaires classiques (prix, indicateurs techniques, etc.)
+Random Forest : robuste, gère bien les données bruitées, facile à interpréter.
+SVM : efficace pour des données bien préparées, mais moins adapté aux séries temporelles longues.
+Régression logistique : utile pour des prédictions binaires (hausse/baisse), mais limitée pour des tendances complexes.
+Données séquentielles (séries temporelles, historique des prix)
+LSTM (Long Short-Term Memory, réseau de neurones récurrent) : très adapté pour capturer les dépendances temporelles et les tendances sur des séries de prix.
+Résumé :
+Pour des données historiques et séquentielles (prévision de tendance sur plusieurs jours), LSTM est le plus adapté.
+Pour des données tabulaires ou des prédictions simples (hausse/baisse à partir d’indicateurs), Random Forest ou SVM sont efficaces.
+Recommandation :
+Si vous avez des séries temporelles (prix sur plusieurs jours), utilisez LSTM.
+Si vous avez des indicateurs techniques ou des données tabulaires, commencez par Random Forest.
