@@ -189,7 +189,7 @@ public class LstmTradePredictor {
 
     /**
      * Effectue une validation croisée k-fold sur le modèle LSTM.
-     * Logge le score MSE moyen et l'écart-type sur les k folds.
+     * Logge le score MSE, RMSE et MAE moyen et l'écart-type sur les k folds.
      * @param series Série de bougies
      * @param windowSize Taille de la fenêtre
      * @param numEpochs Nombre maximal d'epochs
@@ -208,7 +208,9 @@ public class LstmTradePredictor {
             labelSeq[i][0][0] = normalized[i + windowSize];
         }
         int foldSize = sequences.length / kFolds;
-        double[] foldScores = new double[kFolds];
+        double[] foldMSE = new double[kFolds];
+        double[] foldRMSE = new double[kFolds];
+        double[] foldMAE = new double[kFolds];
         for (int fold = 0; fold < kFolds; fold++) {
             // Définir les indices de test
             int testStart = fold * foldSize;
@@ -237,34 +239,58 @@ public class LstmTradePredictor {
             // Initialiser un nouveau modèle pour ce fold
             initModel(windowSize, 1, lstmNeurons, dropoutRate);
             // Early stopping
-            double bestScore = Double.MAX_VALUE;
+            double bestMSE = Double.MAX_VALUE;
+            double bestRMSE = Double.MAX_VALUE;
+            double bestMAE = Double.MAX_VALUE;
             int epochsWithoutImprovement = 0;
             for (int epoch = 0; epoch < numEpochs; epoch++) {
                 model.fit(trainIterator);
                 org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
                 double mse = predictions.squaredDistance(testOutput) / testOutput.length();
-                if (bestScore - mse > minDelta) {
-                    bestScore = mse;
+                double rmse = Math.sqrt(mse);
+                double mae = 0.0;
+                for (int i = 0; i < testOutput.length(); i++) {
+                    mae += Math.abs(predictions.getDouble(i) - testOutput.getDouble(i));
+                }
+                mae /= testOutput.length();
+                if (bestMSE - mse > minDelta) {
+                    bestMSE = mse;
+                    bestRMSE = rmse;
+                    bestMAE = mae;
                     epochsWithoutImprovement = 0;
                 } else {
                     epochsWithoutImprovement++;
                     if (epochsWithoutImprovement >= patience) {
-                        logger.info("Early stopping fold {} à l'epoch {}. Meilleur Test MSE : {}", fold + 1, epoch + 1, bestScore);
+                        logger.info("Early stopping fold {} à l'epoch {}. Meilleur Test MSE : {}, RMSE : {}, MAE : {}", fold + 1, epoch + 1, bestMSE, bestRMSE, bestMAE);
                         break;
                     }
                 }
             }
-            foldScores[fold] = bestScore;
-            logger.info("Fold {} terminé. Meilleur Test MSE : {}", fold + 1, bestScore);
+            foldMSE[fold] = bestMSE;
+            foldRMSE[fold] = bestRMSE;
+            foldMAE[fold] = bestMAE;
+            logger.info("Fold {} terminé. Meilleur Test MSE : {}, RMSE : {}, MAE : {}", fold + 1, bestMSE, bestRMSE, bestMAE);
         }
-        // Calculer la moyenne et l'écart-type
-        double sum = 0.0;
-        for (double score : foldScores) sum += score;
-        double mean = sum / kFolds;
-        double variance = 0.0;
-        for (double score : foldScores) variance += Math.pow(score - mean, 2);
-        double std = Math.sqrt(variance / kFolds);
-        logger.info("Validation croisée terminée. MSE moyen : {}, Ecart-type : {}", mean, std);
+        // Calculer la moyenne et l'écart-type pour chaque métrique
+        double meanMSE = 0.0, meanRMSE = 0.0, meanMAE = 0.0;
+        for (int i = 0; i < kFolds; i++) {
+            meanMSE += foldMSE[i];
+            meanRMSE += foldRMSE[i];
+            meanMAE += foldMAE[i];
+        }
+        meanMSE /= kFolds;
+        meanRMSE /= kFolds;
+        meanMAE /= kFolds;
+        double stdMSE = 0.0, stdRMSE = 0.0, stdMAE = 0.0;
+        for (int i = 0; i < kFolds; i++) {
+            stdMSE += Math.pow(foldMSE[i] - meanMSE, 2);
+            stdRMSE += Math.pow(foldRMSE[i] - meanRMSE, 2);
+            stdMAE += Math.pow(foldMAE[i] - meanMAE, 2);
+        }
+        stdMSE = Math.sqrt(stdMSE / kFolds);
+        stdRMSE = Math.sqrt(stdRMSE / kFolds);
+        stdMAE = Math.sqrt(stdMAE / kFolds);
+        logger.info("Validation croisée terminée. MSE moyen : {}, Ecart-type : {} | RMSE moyen : {}, Ecart-type : {} | MAE moyen : {}, Ecart-type : {}", meanMSE, stdMSE, meanRMSE, stdRMSE, meanMAE, stdMAE);
     }
 
     // Prédiction de la prochaine valeur de clôture
