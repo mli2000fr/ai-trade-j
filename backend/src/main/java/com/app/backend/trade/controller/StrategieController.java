@@ -1,6 +1,7 @@
 package com.app.backend.trade.controller;
 
 import com.app.backend.trade.model.DailyValue;
+import com.app.backend.trade.model.SignalInfo;
 import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.model.WalkForwardResultPro;
 import com.app.backend.trade.strategy.BestInOutStrategy;
@@ -74,8 +75,8 @@ public class StrategieController {
      * @return type de signal (SignalType)
      */
     @GetMapping("/strategies/get_indice")
-    public ResponseEntity<SignalType> getIndice(@RequestParam(value = "symbol", required = false) String symbol) {
-        SignalType st = strategieHelper.getBestInOutSignal(symbol);
+    public ResponseEntity<SignalInfo> getIndice(@RequestParam(value = "symbol", required = false) String symbol) {
+        SignalInfo st = strategieHelper.getBestInOutSignal(symbol);
         return ResponseEntity.ok(st);
     }
 

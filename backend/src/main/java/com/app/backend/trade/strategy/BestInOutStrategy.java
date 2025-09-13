@@ -1,6 +1,6 @@
 package com.app.backend.trade.strategy;
 
-import com.app.backend.model.RiskResult;
+import com.app.backend.trade.model.RiskResult;
 import lombok.*;
 
 @Builder

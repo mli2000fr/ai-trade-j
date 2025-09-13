@@ -1,6 +1,6 @@
 package com.app.backend.trade.strategy;
 
-import com.app.backend.model.RiskResult;
+import com.app.backend.trade.model.RiskResult;
 import com.app.backend.trade.util.TradeUtils;
 import com.app.backend.trade.model.DailyValue;
 import org.ta4j.core.BarSeries;

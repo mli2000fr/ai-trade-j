@@ -1,6 +1,5 @@
 package com.app.backend.trade.model;
 
-import com.app.backend.model.RiskResult;
 import lombok.Builder;
 import lombok.Data;
 

@@ -1,6 +1,6 @@
 package com.app.backend.trade.util;
 
-import com.app.backend.model.RiskResult;
+import com.app.backend.trade.model.RiskResult;
 import com.app.backend.trade.model.StrategyFilterConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -125,7 +125,7 @@ public class TradeUtils {
     /**
      * Convertit une Map<String, RiskResult> détaillée en JSON.
      */
-    public static String convertDetailedResults(java.util.Map<String, com.app.backend.model.RiskResult> detailedResults) {
+    public static String convertDetailedResults(java.util.Map<String, RiskResult> detailedResults) {
         if (detailedResults == null) return null;
         com.google.gson.JsonObject jsonObj = new com.google.gson.JsonObject();
         detailedResults.forEach((key, result) -> {

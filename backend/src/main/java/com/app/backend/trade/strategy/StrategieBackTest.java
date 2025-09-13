@@ -1,7 +1,6 @@
 package com.app.backend.trade.strategy;
 
-import com.app.backend.model.RiskResult;
-import com.app.backend.trade.model.OptimResult;
+import com.app.backend.trade.model.RiskResult;
 import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
 import org.springframework.stereotype.Controller;

@@ -1,6 +1,6 @@
 package com.app.backend.trade.controller;
 
-import com.app.backend.model.RiskResult;
+import com.app.backend.trade.model.RiskResult;
 import com.app.backend.trade.model.*;
 import com.app.backend.trade.model.alpaca.AlpacaAsset;
 import com.app.backend.trade.service.*;
@@ -16,6 +16,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
+
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -701,14 +703,18 @@ public class StrategieHelper {
      * @param symbol symbole à analyser (optionnel)
      * @return type de signal (SignalType)
      */
-    public SignalType getBestInOutSignal(String symbol) {
+    public SignalInfo getBestInOutSignal(String symbol) {
         SignalInfo singleDB = this.getSingalTypeFromDB(symbol);
         if(singleDB != null){
-            return singleDB.getType();
+            String dateStr = singleDB.getDate().toLocalDate().format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"));
+            return SignalInfo.builder().symbol(symbol).type(singleDB.getType()).dateStr(dateStr).build();
         }
+        java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
+
 
         BestInOutStrategy best = getBestInOutStrategy(symbol);
-        if (best == null) return SignalType.NONE;
+        if (best == null) return SignalInfo.builder().symbol(symbol).type(SignalType.NONE)
+                .dateStr(lastTradingDay.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"))).build();
         updateDBDailyValu(symbol);
         List<DailyValue> listeValus = this.getDailyValuesFromDb(symbol, NOMBRE_TOTAL_BOUGIES_FOR_SIGNAL);
         BarSeries series = TradeUtils.mapping(listeValus);
@@ -718,11 +724,12 @@ public class StrategieHelper {
         com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(best.exitName, best.exitParams);
         boolean entrySignal = entryStrategy.getEntryRule(series).isSatisfied(lastIndex);
         boolean exitSignal = exitStrategy.getExitRule(series).isSatisfied(lastIndex);
-        if (entrySignal) return SignalType.BUY;
-        if (exitSignal) return SignalType.SELL;
         SignalType signal = SignalType.NONE;
-        saveSignalHistory(symbol, signal);
-        return signal;
+        if (entrySignal) signal =  SignalType.BUY;
+        if (exitSignal) signal = SignalType.SELL;
+        LocalDate dateSaved = saveSignalHistory(symbol, signal);
+        String dateSavedStr = dateSaved.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"));
+        return SignalInfo.builder().symbol(symbol).type(signal).dateStr(dateSavedStr).build();
     }
 
     /**
@@ -749,7 +756,7 @@ public class StrategieHelper {
                     java.time.LocalDate lastKnown = lastDate.toLocalDate();
                     // Si la dernière date connue est le dernier jour de cotation, la base est à jour
                     if (lastKnown.isEqual(lastTradingDay) || lastKnown.isAfter(lastTradingDay)) {
-                        return new SignalInfo(symbol, type, lastDate);
+                        return SignalInfo.builder().symbol(symbol).type(type).date(lastDate).build();
                     }else{
                         return null;
                     }
@@ -762,13 +769,14 @@ public class StrategieHelper {
         }
     }
 
-    public void saveSignalHistory(String symbol, SignalType signal) {
+    public LocalDate saveSignalHistory(String symbol, SignalType signal) {
         java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
         String insertSql = "INSERT INTO signal_single (symbol, signal_single, single_created_at) VALUES (?, ?, ?)";
         jdbcTemplate.update(insertSql,
                 symbol,
                 signal.name(),
                 java.sql.Date.valueOf(lastTradingDay));
+        return lastTradingDay;
 
     }
 

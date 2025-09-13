@@ -1,11 +1,7 @@
 package com.app.backend.trade.controller;
 
-import com.app.backend.model.RiskResult;
-import com.app.backend.trade.model.BestCombinationResult;
-import com.app.backend.trade.model.StrategyFilterConfig;
+import com.app.backend.trade.model.*;
 import com.app.backend.trade.strategy.ParamsOptim;
-import com.app.backend.trade.model.DailyValue;
-import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.strategy.*;
 import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
@@ -545,7 +541,7 @@ public class BestCombinationStrategyHelper {
 
 
 
-    public SignalType getBestSignal(String symbol){
+    public SignalType getBestSignal(String symbol){/*
         BestCombinationResult bestCombinationResult = getBestCombinationResult(symbol);
         BestInOutStrategy best = strategieHelper.getBestInOutStrategy(symbol);
         if(bestCombinationResult == null && best == null){
@@ -560,7 +556,8 @@ public class BestCombinationStrategyHelper {
             }else {
                 return strategieHelper.getBestInOutSignal(symbol);
             }
-        }
+        }*/
+        return null;//TODO
     }
 
 
