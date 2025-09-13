@@ -474,8 +474,8 @@ public class LstmTradePredictor {
     }
 
     /**
-     * Sauvegarde le modèle LSTM dans un fichier.
-     * @param path chemin du fichier
+     * Sauvegarde le modèle LSTM dans un fichier et exporte les hyperparamètres dans un fichier JSON à côté.
+     * @param path chemin du fichier du modèle
      * @throws ModelPersistenceException en cas d'erreur de sauvegarde
      * @throws ModelNotFoundException si le modèle n'est pas initialisé
      */
@@ -490,6 +490,20 @@ public class LstmTradePredictor {
             try {
                 ModelSerializer.writeModel(model, file, true);
                 logger.info("Modèle sauvegardé dans le fichier : {}", path);
+                // Sauvegarde des hyperparamètres
+                LstmHyperparameters params = new LstmHyperparameters(
+                    currentWindowSize,
+                    config.getLstmNeurons(),
+                    config.getDropoutRate(),
+                    config.getLearningRate(),
+                    config.getNumEpochs(),
+                    config.getPatience(),
+                    config.getMinDelta(),
+                    config.getOptimizer()
+                );
+                String paramsPath = path + ".params.json";
+                params.saveToFile(paramsPath);
+                logger.info("Hyperparamètres sauvegardés dans le fichier : {}", paramsPath);
             } catch (IOException e) {
                 logger.error("Erreur lors de la sauvegarde du modèle : {}", e.getMessage());
                 throw new ModelPersistenceException("Erreur lors de la sauvegarde du modèle", e);
@@ -533,10 +547,24 @@ public class LstmTradePredictor {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ModelSerializer.writeModel(model, baos, true);
             byte[] modelBytes = baos.toByteArray();
-            String sql = "REPLACE INTO lstm_models (symbol, model_blob, updated_date) VALUES (?, ?, CURRENT_TIMESTAMP)";
+            // Création des hyperparamètres
+            LstmHyperparameters params = new LstmHyperparameters(
+                currentWindowSize,
+                config.getLstmNeurons(),
+                config.getDropoutRate(),
+                config.getLearningRate(),
+                config.getNumEpochs(),
+                config.getPatience(),
+                config.getMinDelta(),
+                config.getOptimizer()
+            );
+            // Sérialisation JSON
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            String hyperparamsJson = mapper.writeValueAsString(params);
+            String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, updated_date) VALUES (?, ?, ?, CURRENT_TIMESTAMP)";
             try {
-                jdbcTemplate.update(sql, symbol, modelBytes);
-                logger.info("Modèle sauvegardé en base pour le symbole : {}", symbol);
+                jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson);
+                logger.info("Modèle et hyperparamètres sauvegardés en base pour le symbole : {}", symbol);
             } catch (Exception e) {
                 logger.error("Erreur lors de la sauvegarde du modèle en base : {}", e.getMessage());
                 throw e;
@@ -553,20 +581,37 @@ public class LstmTradePredictor {
      */
     // Chargement du modèle depuis MySQL
     public void loadModelFromDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException, SQLException {
-        String sql = "SELECT model_blob FROM lstm_models WHERE symbol = ?";
+        String sql = "SELECT model_blob, hyperparams_json FROM lstm_models WHERE symbol = ?";
         try {
-            byte[] modelBytes = jdbcTemplate.queryForObject(sql, new Object[]{symbol}, byte[].class);
+            java.util.Map<String, Object> result = jdbcTemplate.queryForMap(sql, symbol);
+            byte[] modelBytes = (byte[]) result.get("model_blob");
+            String hyperparamsJson = (String) result.get("hyperparams_json");
             if (modelBytes != null) {
                 ByteArrayInputStream bais = new ByteArrayInputStream(modelBytes);
                 model = ModelSerializer.restoreMultiLayerNetwork(bais);
                 logger.info("Modèle chargé depuis la base pour le symbole : {}", symbol);
             }
+            if (hyperparamsJson != null) {
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    LstmHyperparameters params = mapper.readValue(hyperparamsJson, LstmHyperparameters.class);
+                    // Injection des hyperparamètres dans l'objet (à adapter selon usage)
+                    currentWindowSize = params.windowSize;
+                    config.setLstmNeurons(params.lstmNeurons);
+                    config.setDropoutRate(params.dropoutRate);
+                    config.setLearningRate(params.learningRate);
+                    config.setNumEpochs(params.numEpochs);
+                    config.setPatience(params.patience);
+                    config.setMinDelta(params.minDelta);
+                    config.setOptimizer(params.optimizer);
+                    logger.info("Hyperparamètres chargés depuis la base pour le symbole : {}", symbol);
+                } catch (Exception e) {
+                    logger.error("Erreur de désérialisation des hyperparamètres : {}", e.getMessage());
+                }
+            }
         } catch (EmptyResultDataAccessException e) {
             logger.error("Modèle non trouvé en base pour le symbole : {}", symbol);
             throw new IOException("Modèle non trouvé en base");
-        } catch (Exception e) {
-            logger.error("Erreur lors du chargement du modèle en base : {}", e.getMessage());
-            throw e;
         }
     }
 

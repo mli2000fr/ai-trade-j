@@ -3,6 +3,8 @@ package com.app.backend.trade.lstm;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
+
+import lombok.Setter;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Component;
  * les hyperparamètres du modèle sans changer le code source.
  * </p>
  */
+@Setter
 @Component
 public class LstmConfig {
     private int windowSize;

@@ -38,6 +38,7 @@ public class LsdmController {
 
     /**
      * Prédit la prochaine valeur de clôture pour un symbole donné.
+     * http://localhost:8080/api/lsdm/predict?symbol=CELUW&windowSize=20&learningRate=0.001&optimizer=adam
      * @param symbol le symbole à prédire (ex : "BTCUSDT")
      * @param windowSize la taille de la fenêtre pour le LSTM
      * @param learningRate le taux d'apprentissage
