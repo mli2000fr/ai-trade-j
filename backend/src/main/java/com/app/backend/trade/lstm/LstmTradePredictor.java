@@ -1,7 +1,11 @@
 package com.app.backend.trade.lstm;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 import org.deeplearning4j.datasets.iterator.utilty.ListDataSetIterator;
 import org.deeplearning4j.nn.conf.MultiLayerConfiguration;
@@ -12,6 +16,8 @@ import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.util.ModelSerializer;
 import org.nd4j.linalg.activations.Activation;
 import org.nd4j.linalg.lossfunctions.LossFunctions;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 
@@ -147,6 +153,31 @@ public class LstmTradePredictor {
         File f = new File(path);
         if (f.exists()) {
             model = ModelSerializer.restoreMultiLayerNetwork(f);
+        }
+    }
+
+    // Sauvegarde du modèle dans MySQL
+    public void saveModelToDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException {
+        if (model != null) {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ModelSerializer.writeModel(model, baos, true);
+            byte[] modelBytes = baos.toByteArray();
+            String sql = "REPLACE INTO lstm_models (symbol, model_blob, updated_date) VALUES (?, ?, CURRENT_TIMESTAMP)";
+            jdbcTemplate.update(sql, symbol, modelBytes);
+        }
+    }
+
+    // Chargement du modèle depuis MySQL
+    public void loadModelFromDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException, SQLException {
+        String sql = "SELECT model_blob FROM lstm_models WHERE symbol = ?";
+        try {
+            byte[] modelBytes = jdbcTemplate.queryForObject(sql, new Object[]{symbol}, byte[].class);
+            if (modelBytes != null) {
+                ByteArrayInputStream bais = new ByteArrayInputStream(modelBytes);
+                model = ModelSerializer.restoreMultiLayerNetwork(bais);
+            }
+        } catch (EmptyResultDataAccessException e) {
+            throw new IOException("Modèle non trouvé en base");
         }
     }
 }

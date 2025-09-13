@@ -59,10 +59,9 @@ public class LsdmHelper {
         BarSeries series = getBarBySymbol(symbol, null);
         lstmTradePredictor.initModel(windowSize, 1);
         lstmTradePredictor.trainLstm(series, windowSize, numEpochs);
-        // Sauvegarder le modèle après entraînement
+        // Sauvegarder le modèle dans la base après entraînement
         try {
-            String modelPath = "models/lstm_model_" + symbol + ".zip";
-            lstmTradePredictor.saveModel(modelPath);
+            lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -70,10 +69,9 @@ public class LsdmHelper {
 
     // Prédiction LSTM
     public double predictNextClose(String symbol, int windowSize) {
-        String modelPath = "models/lstm_model_" + symbol + ".zip";
         boolean modelLoaded = false;
         try {
-            lstmTradePredictor.loadModel(modelPath);
+            lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
             modelLoaded = true;
         } catch (Exception e) {
             // Le modèle n'existe pas ou erreur de chargement
@@ -85,7 +83,7 @@ public class LsdmHelper {
             lstmTradePredictor.initModel(windowSize, 1);
             lstmTradePredictor.trainLstm(series, windowSize, 10); // 10 epochs par défaut
             try {
-                lstmTradePredictor.saveModel(modelPath);
+                lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate);
             } catch (Exception ex) {
                 ex.printStackTrace();
             }

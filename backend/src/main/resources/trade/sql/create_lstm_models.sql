@@ -1,0 +1,5 @@
+CREATE TABLE trade_ai.lstm_models (
+    symbol VARCHAR(32) PRIMARY KEY,
+    updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    model_blob LONGBLOB
+);
