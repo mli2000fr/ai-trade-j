@@ -513,7 +513,7 @@ public class BestCombinationStrategyHelper {
     }
 
     public List<String> getSymbolFitredFromTabSingle() {
-        String sql = "select symbol from trade_ai.best_in_out_single_strategy where fltred_out = 'false' order by rendement desc;";
+        String sql = "select symbol from trade_ai.best_in_out_single_strategy where fltred_out = 'false' order by rendement_score desc;";
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
