@@ -1,5 +1,6 @@
 package com.app.backend.trade.controller;
 
+import com.app.backend.trade.model.SignalInfo;
 import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.strategy.*;
 import org.springframework.http.ResponseEntity;
@@ -15,8 +16,8 @@ public class BestCombinaisonStrategyRestController {
     private BestCombinationStrategyHelper bestCombinationStrategyHelper;
 
 
-    @GetMapping("/best-signal")
-    public SignalType getBestSignal(@RequestParam String symbol) {
+    @GetMapping("/get_indice")
+    public SignalInfo getSignal(@RequestParam String symbol) {
         return bestCombinationStrategyHelper.getSignal(symbol);
     }
 

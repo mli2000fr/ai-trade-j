@@ -18,9 +18,6 @@ import org.ta4j.core.Rule;
 import java.time.LocalDate;
 import java.util.*;
 
-import static com.app.backend.trade.util.TradeConstant.NOMBRE_TOTAL_BOUGIES_FOR_SIGNAL;
-import static com.app.backend.trade.util.TradeUtils.logger;
-
 @Service
 public class BestCombinationStrategyHelper {
 
@@ -408,6 +405,7 @@ public class BestCombinationStrategyHelper {
         if (rows.isEmpty()) return null;
         Map<String, Object> row = rows.get(0);
         BestCombinationResult result = new BestCombinationResult();
+        result.symbol = symbol;
         result.inStrategyNames = gson.fromJson((String) row.get("in_strategy_names"), new TypeToken<List<String>>(){}.getType());
         result.outStrategyNames = gson.fromJson((String) row.get("out_strategy_names"), new TypeToken<List<String>>(){}.getType());
         result.inParams = gson.fromJson((String) row.get("in_params"), new TypeToken<Map<String, Object>>(){}.getType());
