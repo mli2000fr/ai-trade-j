@@ -74,7 +74,13 @@ public class LsdmHelper {
             logger.error("Erreur lors de la sauvegarde du modèle : {}", e.getMessage());
         }
     }
-
+/*LstmConfig
+    windowSize=10
+    lstmNeurons=64
+    dropoutRate=0.25
+    learningRate=0.001
+    optimizer=adam
+*/
     // Prédiction LSTM
     public double predictNextClose(String symbol, int windowSize, double learningRate, String optimizer) {
         boolean modelLoaded;

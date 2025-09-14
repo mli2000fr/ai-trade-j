@@ -617,16 +617,34 @@ public class LstmTradePredictor {
 
     /**
      * Entraîne le modèle avec les paramètres du fichier de configuration.
+     * Permet d'activer ou désactiver la validation croisée k-fold via le paramètre crossValidation.
      * @param series série de bougies
+     * @param crossValidation true pour activer la validation croisée, false pour entraînement classique
      */
-    // Méthode utilitaire pour entraîner le modèle avec les paramètres du fichier de config
-    public void trainWithConfig(BarSeries series) {
-        trainLstm(
-            series,
-            config.getWindowSize(),
-            config.getNumEpochs(),
-            config.getPatience(),
-            config.getMinDelta()
-        );
+    public void trainWithConfig(BarSeries series, boolean crossValidation) {
+        if (crossValidation) {
+            logger.info("Entraînement LSTM avec validation croisée ({} folds)", config.getKFolds());
+            crossValidateLstm(
+                series,
+                config.getWindowSize(),
+                config.getNumEpochs(),
+                config.getKFolds(),
+                config.getLstmNeurons(),
+                config.getDropoutRate(),
+                config.getPatience(),
+                config.getMinDelta(),
+                config.getLearningRate(),
+                config.getOptimizer()
+            );
+        } else {
+            logger.info("Entraînement LSTM classique (train/test split 80/20)");
+            trainLstm(
+                series,
+                config.getWindowSize(),
+                config.getNumEpochs(),
+                config.getPatience(),
+                config.getMinDelta()
+            );
+        }
     }
 }

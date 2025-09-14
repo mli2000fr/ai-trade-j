@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
+import lombok.Builder;
+import lombok.Getter;
 import lombok.Setter;
 import org.springframework.stereotype.Component;
 
@@ -16,15 +18,62 @@ import org.springframework.stereotype.Component;
  * </p>
  */
 @Setter
+@Getter
+@Builder
 @Component
 public class LstmConfig {
+    /**
+     * Nombre de périodes utilisées pour chaque séquence d'entrée du LSTM.
+     * Représente la taille de la fenêtre glissante (ex : 20 jours).
+     */
     private int windowSize;
+
+    /**
+     * Nombre de neurones dans la couche LSTM.
+     * Plus ce nombre est élevé, plus le modèle peut apprendre des patterns complexes.
+     */
     private int lstmNeurons;
+
+    /**
+     * Taux de dropout pour la régularisation.
+     * Pourcentage de neurones désactivés aléatoirement à chaque itération afin d'éviter le sur-apprentissage.
+     */
     private double dropoutRate;
+
+    /**
+     * Taux d'apprentissage du modèle.
+     * Contrôle la vitesse d'ajustement des poids lors de l'entraînement.
+     */
     private double learningRate;
+
+    /**
+     * Nombre d'époques d'entraînement.
+     * Définit combien de fois le modèle parcourt l'ensemble des données.
+     */
     private int numEpochs;
+
+    /**
+     * Patience pour l'arrêt anticipé (early stopping).
+     * Nombre d'époques sans amélioration avant d'arrêter l'entraînement.
+     */
     private int patience;
+
+    /**
+     * Amélioration minimale pour l'arrêt anticipé.
+     * Seuil de progression requis pour considérer qu'il y a amélioration.
+     */
     private double minDelta;
+
+    /**
+     * Nombre de folds pour la validation croisée (cross-validation).
+     * Permet d'évaluer la robustesse du modèle sur plusieurs sous-ensembles.
+     */
+    private int kFolds;
+
+    /**
+     * Algorithme d'optimisation utilisé pour l'entraînement.
+     * Exemple : "adam", "sgd", "rmsprop".
+     */
     private String optimizer;
 
     /**
@@ -44,42 +93,12 @@ public class LstmConfig {
                 patience = Integer.parseInt(props.getProperty("patience", "10"));
                 minDelta = Double.parseDouble(props.getProperty("minDelta", "0.0001"));
                 optimizer = props.getProperty("optimizer", "adam");
+                kFolds = Integer.parseInt(props.getProperty("kFolds", "5"));
             }
+            optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
             throw new RuntimeException("Impossible de charger lstm-config.properties", e);
         }
     }
 
-    /**
-     * @return la taille de la fenêtre (windowSize) utilisée pour les séquences LSTM
-     */
-    public int getWindowSize() { return windowSize; }
-    /**
-     * @return le nombre de neurones dans la couche LSTM
-     */
-    public int getLstmNeurons() { return lstmNeurons; }
-    /**
-     * @return le taux de dropout appliqué au modèle LSTM
-     */
-    public double getDropoutRate() { return dropoutRate; }
-    /**
-     * @return le taux d'apprentissage utilisé pour l'optimiseur
-     */
-    public double getLearningRate() { return learningRate; }
-    /**
-     * @return le nombre d'epochs pour l'entraînement du modèle
-     */
-    public int getNumEpochs() { return numEpochs; }
-    /**
-     * @return le nombre d'epochs sans amélioration avant early stopping
-     */
-    public int getPatience() { return patience; }
-    /**
-     * @return l'amélioration minimale du score pour considérer une epoch comme meilleure
-     */
-    public double getMinDelta() { return minDelta; }
-    /**
-     * @return le nom de l'optimiseur utilisé (adam, rmsprop, sgd, etc.)
-     */
-    public String getOptimizer() { return optimizer; }
 }
