@@ -130,7 +130,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<BestInOutStrategy | null>(null);
+  const [selected, setSelected] = useState<MixResultat | null>(null);
   const [checkedRows, setCheckedRows] = useState<{[key: number]: boolean}>({});
   const [limit, setLimit] = useState<number>(20);
   const [indices, setIndices] = useState<{ [symbol: string]: SignalInfo | string }>({});
@@ -210,10 +210,10 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   );
 
   useEffect(() => {
-    if (open && selected?.symbol) {
+    if (open && selected?.single.symbol) {
       setBougiesLoading(true);
       setBougiesError(null);
-      fetch(`/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.symbol)}&historique=250`)
+      fetch(`/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.single.symbol)}&historique=250`)
         .then(res => {
           if (!res.ok) throw new Error('Erreur API bougies');
           return res.json();
@@ -364,22 +364,29 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow>
+                    <TableCell sx={{ backgroundColor: '#e0e0e0' }}></TableCell>
+                    <TableCell sx={{ backgroundColor: '#e0e0e0' }}></TableCell>
+                    <TableCell colSpan={7} align="center" sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
+                    <TableCell colSpan={7} align="center" sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
+                    <TableCell sx={{ backgroundColor: '#e0e0e0' }}></TableCell>
+                  </TableRow>
+                  <TableRow>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Filtrée</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement check</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Score Rendement</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement check</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Score Rendement</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Score Swing Trade</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Trades</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Durée moyenne trade</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>WinRate</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Drawdown</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Profit Factor</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Filtrée</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement check</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Score Rendement</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Score Swing Trade</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Durée moyenne trade</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Filtrée</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement check</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Rendement</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Swing Trade</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Durée moyenne trade</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Détails</TableCell>
                   </TableRow>
                 </TableHead>
@@ -399,16 +406,16 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         <TableCell>{(row.single.result.rendement * 100).toFixed(2)} %</TableCell>
                         <TableCell>{(row.single.check.rendement * 100).toFixed(2)} %</TableCell>
                         <TableCell>{(row.single.rendementScore * 100).toFixed(2)}</TableCell>
+                        <TableCell>{row.single.result.scoreSwingTrade !== undefined ? (row.single.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
+                        <TableCell>{row.single.result.avgTradeBars !== undefined ? row.single.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
+                        <TableCell>{row.mix.result.fltredOut ? <span style={{ color: 'red', fontWeight: 'bold' }}>Oui</span> : <span>Non</span>}</TableCell>
+                        <TableCell>tet</TableCell>
                         <TableCell>{(row.mix.result.rendement * 100).toFixed(2)} %</TableCell>
                         <TableCell>{(row.mix.check.rendement * 100).toFixed(2)} %</TableCell>
                         <TableCell>{(row.mix.rendementScore * 100).toFixed(2)}</TableCell>
-                        <TableCell>{row.single.result.scoreSwingTrade !== undefined ? (row.single.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
-                        <TableCell>{row.single.result.tradeCount}</TableCell>
-                        <TableCell>{row.single.result.avgTradeBars !== undefined ? row.single.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
-                        <TableCell>{(row.single.result.winRate * 100).toFixed(2)} %</TableCell>
-                        <TableCell>{(row.single.result.maxDrawdown * 100).toFixed(2)} %</TableCell>
-                        <TableCell>{row.single.result.profitFactor.toFixed(2)}</TableCell>
-                        <TableCell><Button size="small" variant="outlined" onClick={() => { setSelected(row.single); setOpen(true); }}>Détails</Button></TableCell>
+                        <TableCell>{row.mix.result.scoreSwingTrade !== undefined ? (row.mix.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
+                        <TableCell>{row.mix.result.avgTradeBars !== undefined ? row.mix.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
+                        <TableCell><Button size="small" variant="outlined" onClick={() => { setSelected(row); setOpen(true); }}>Détails</Button></TableCell>
                       </TableRow>
                     );
                   })}
@@ -423,7 +430,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
         <DialogContent>
           {selected && (
             <div>
-              <Typography variant="h6" sx={{ mb: 2, color: '#1976d2' }}>Symbole : {selected.symbol}</Typography>
+              <Typography variant="h6" sx={{ mb: 2, color: '#1976d2' }}>Symbole : {selected.single.symbol}</Typography>
               <Accordion defaultExpanded>
                               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                                 <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Graphique des 250 dernières bougies</Typography>
@@ -448,54 +455,92 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                               </AccordionSummary>
                               <AccordionDetails>
                                 <Table size="small" sx={{ mt: 2, backgroundColor: '#f1f8e9' }}>
+                                <TableHead>
+                                   <TableRow>
+                                     <TableCell sx={{ backgroundColor: '#e0e0e0' }}></TableCell>
+                                     <TableCell align="center" sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
+                                     <TableCell align="center" sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
+                                   </TableRow>
+                                 </TableHead>
                                   <TableBody>
                                     <TableRow>
                                       <TableCell sx={{ fontWeight: 'bold' }}>Rendement Sum</TableCell>
-                                      <TableCell>{(selected.rendementSum * 100).toFixed(2)} %</TableCell>
+                                      <TableCell align="center" >{(selected.single.rendementSum * 100).toFixed(2)} %</TableCell>
+                                      <TableCell align="center" >{(selected.mix.rendementSum * 100).toFixed(2)} %</TableCell>
                                     </TableRow>
                                     <TableRow>
                                       <TableCell sx={{ fontWeight: 'bold' }}>Rendement Diff</TableCell>
-                                      <TableCell>{(selected.rendementDiff * 100).toFixed(2)} %</TableCell>
+                                      <TableCell align="center" >{(selected.single.rendementDiff * 100).toFixed(2)} %</TableCell>
+                                      <TableCell align="center" >{(selected.mix.rendementDiff * 100).toFixed(2)} %</TableCell>
                                     </TableRow>
                                     <TableRow>
                                       <TableCell sx={{ fontWeight: 'bold' }}>Rendement Score</TableCell>
-                                      <TableCell>{(selected.rendementScore * 100).toFixed(2)}</TableCell>
+                                      <TableCell align="center" >{(selected.single.rendementScore * 100).toFixed(2)}</TableCell>
+                                      <TableCell align="center" >{(selected.mix.rendementScore * 100).toFixed(2)}</TableCell>
                                     </TableRow>
                                   </TableBody>
                                 </Table>
                                 <br/>
                                 <Table size="small" sx={{ mb: 2, backgroundColor: '#f9f9f9' }}>
                                   <TableHead>
+                                  <TableRow>
+                                       <TableCell sx={{ backgroundColor: '#e0e0e0' }}></TableCell>
+                                       <TableCell colSpan={2} align="center" sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
+                                       <TableCell colSpan={2} align="center" sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
+                                     </TableRow>
                                     <TableRow>
                                       <TableCell sx={{ fontWeight: 'bold', width: '40%' }}>Métrique</TableCell>
-                                      <TableCell sx={{ fontWeight: 'bold' }}>Résultat</TableCell>
-                                      <TableCell sx={{ fontWeight: 'bold' }}>Vérification</TableCell>
+                                      <TableCell align="center"  sx={{ fontWeight: 'bold' }}>Résultat</TableCell>
+                                      <TableCell align="center"  sx={{ fontWeight: 'bold' }}>Vérification</TableCell>
+                                      <TableCell align="center"  sx={{ fontWeight: 'bold' }}>Résultat</TableCell>
+                                      <TableCell align="center"  sx={{ fontWeight: 'bold' }}>Vérification</TableCell>
                                     </TableRow>
                                   </TableHead>
                                   <TableBody>
-                                    {Array.from(new Set([...Object.keys(selected.result || {}), ...Object.keys(selected.check || {})])).map((key) => {
-                                      const resultObj = selected.result as Record<string, any>;
-                                      const checkObj = selected.check as Record<string, any>;
+                                    {Array.from(new Set([...Object.keys(selected.single.result || {}), ...Object.keys(selected.single.check || {})])).map((key) => {
+                                      const resultObjSingle = selected.single.result as Record<string, any>;
+                                      const checkObjSingle = selected.single.check as Record<string, any>;
+                                      const resultObjMix = selected.mix.result as Record<string, any>;
+                                      const checkObjMix = selected.mix.check as Record<string, any>;
+
                                       return (
                                         <TableRow key={key}>
                                           <TableCell sx={{ fontWeight: 'bold' }}>{key}</TableCell>
-                                          <TableCell>
-                                            {typeof resultObj?.[key] === 'number'
-                                              ? (Math.abs(resultObj[key]) > 1
-                                                  ? resultObj[key].toFixed(2)
-                                                  : (resultObj[key] * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
-                                              : typeof resultObj?.[key] === 'boolean'
-                                                ? resultObj[key] ? 'Oui' : 'Non'
-                                                : resultObj?.[key] ?? '-'}
+                                          <TableCell align="center" >
+                                            {typeof resultObjSingle?.[key] === 'number'
+                                              ? (Math.abs(resultObjSingle[key]) > 1
+                                                  ? resultObjSingle[key].toFixed(2)
+                                                  : (resultObjSingle[key] * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
+                                              : typeof resultObjSingle?.[key] === 'boolean'
+                                                ? resultObjSingle[key] ? 'Oui' : 'Non'
+                                                : resultObjSingle?.[key] ?? '-'}
                                           </TableCell>
-                                          <TableCell>
-                                            {typeof checkObj?.[key] === 'number'
-                                              ? (Math.abs(checkObj[key]) > 1
-                                                  ? checkObj[key].toFixed(2)
-                                                  : (checkObj[key] * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
-                                              : typeof checkObj?.[key] === 'boolean'
-                                                ? checkObj[key] ? 'Oui' : 'Non'
-                                                : checkObj?.[key] ?? '-'}
+                                          <TableCell align="center" >
+                                            {typeof checkObjSingle?.[key] === 'number'
+                                              ? (Math.abs(checkObjSingle[key]) > 1
+                                                  ? checkObjSingle[key].toFixed(2)
+                                                  : (checkObjSingle[key] * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
+                                              : typeof checkObjSingle?.[key] === 'boolean'
+                                                ? checkObjSingle[key] ? 'Oui' : 'Non'
+                                                : checkObjSingle?.[key] ?? '-'}
+                                          </TableCell>
+                                          <TableCell align="center" >
+                                               {typeof resultObjMix?.[key] === 'number'
+                                                 ? (Math.abs(resultObjMix[key]) > 1
+                                                     ? resultObjMix[key].toFixed(2)
+                                                     : (resultObjMix[key] * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
+                                                 : typeof resultObjMix?.[key] === 'boolean'
+                                                   ? resultObjMix[key] ? 'Oui' : 'Non'
+                                                   : resultObjMix?.[key] ?? '-'}
+                                             </TableCell>
+                                             <TableCell align="center" >
+                                               {typeof checkObjMix?.[key] === 'number'
+                                                 ? (Math.abs(checkObjMix[key]) > 1
+                                                     ? checkObjMix[key].toFixed(2)
+                                                     : (checkObjMix[key] * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
+                                                 : typeof checkObjMix?.[key] === 'boolean'
+                                                   ? checkObjMix[key] ? 'Oui' : 'Non'
+                                                   : checkObjMix?.[key] ?? '-'}
                                           </TableCell>
                                         </TableRow>
                                       );
@@ -509,8 +554,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie d'entrée</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
-                  <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.entryName}</b></Typography>
-                  {selected.entryParams && renderObjectTable(selected.entryParams)}
+                  <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.single.entryName}</b></Typography>
+                  {selected.single.entryParams && renderObjectTable(selected.single.entryParams)}
                 </AccordionDetails>
               </Accordion>
               <Accordion>
@@ -518,8 +563,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie de sortie</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
-                  <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.exitName}</b></Typography>
-                  {selected.exitParams && renderObjectTable(selected.exitParams)}
+                  <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.single.exitName}</b></Typography>
+                  {selected.single.exitParams && renderObjectTable(selected.single.exitParams)}
                 </AccordionDetails>
               </Accordion>
 
@@ -528,7 +573,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Paramètres d'optimisation</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
-                  {selected.paramsOptim && renderObjectTable(selected.paramsOptim)}
+                  {selected.single.paramsOptim && renderObjectTable(selected.single.paramsOptim)}
                 </AccordionDetails>
               </Accordion>
 
