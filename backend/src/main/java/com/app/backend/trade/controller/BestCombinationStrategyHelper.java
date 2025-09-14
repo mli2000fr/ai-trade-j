@@ -20,16 +20,18 @@ public class BestCombinationStrategyHelper {
     private final SwingTradeOptimParams swingParams = new SwingTradeOptimParams();
     private final StrategieHelper strategieHelper;
     private final JdbcTemplate jdbcTemplate;
+    private final StrategieBackTest strategieBackTest;
     private final Gson gson = new Gson();
 
-    private static final int NB_IN = 2;
-    private static final int NB_OUT = 2;
+    private static final int NB_IN = 1;
+    private static final int NB_OUT = 1;
     private static final boolean INSERT_ONLY = true;
 
     @Autowired
-    public BestCombinationStrategyHelper(StrategieHelper strategieHelper, JdbcTemplate jdbcTemplate) {
+    public BestCombinationStrategyHelper(StrategieHelper strategieHelper, JdbcTemplate jdbcTemplate, StrategieBackTest strategieBackTest) {
         this.strategieHelper = strategieHelper;
         this.jdbcTemplate = jdbcTemplate;
+        this.strategieBackTest = strategieBackTest;
     }
 
 
@@ -68,7 +70,6 @@ public class BestCombinationStrategyHelper {
                 List<List<Class<? extends TradeStrategy>>> outCombinations = (outClass != null) ? generateCombinationsWithMandatory(strategies, out, outClass) : generateCombinations(strategies, out);
                 for (List<Class<? extends TradeStrategy>> inCombo : inCombinations) {
                     for (List<Class<? extends TradeStrategy>> outCombo : outCombinations) {
-                        //BestCombinationResult result = evaluateCombination(Arrays.asList(barSeries), inCombo, outCombo);
 
                         StrategyFilterConfig filterConfig = new StrategyFilterConfig();
                         BestCombinationResult result = optimseStrategyMix(Arrays.asList(barSeries), inCombo, outCombo, filterConfig, swingParams);
@@ -630,18 +631,19 @@ public class BestCombinationStrategyHelper {
         List<RiskResult> foldResults = new ArrayList<>();
         List<Double> trainPerformances = new ArrayList<>();
         List<Double> testPerformances = new ArrayList<>();
+        List<ComboMixResult> listeComboMixResult = new ArrayList<>();
+
         for (int fold = 0; fold < kFolds; fold++) {
             int start = fold * foldSize;
             if (start + optimWindow + testWindow > totalCount) break;
             BarSeries optimSeries = fullSeries.getSubSeries(start, start + optimWindow);
             BarSeries testSeries = fullSeries.getSubSeries(start + optimWindow, start + optimWindow + testWindow);
-            StrategieBackTest backTest = new StrategieBackTest();
             List<TradeStrategy> inStrategies = new ArrayList<>();
             List<String> inStrategyNames = new ArrayList<>();
             for (Class<? extends TradeStrategy> clazz : inCombo) {
                 inStrategyNames.add(clazz.getSimpleName());
                 if (clazz.equals(ImprovedTrendFollowingStrategy.class)) {
-                    StrategieBackTest.ImprovedTrendFollowingParams params = backTest.optimiseImprovedTrendFollowingParameters(
+                    StrategieBackTest.ImprovedTrendFollowingParams params = strategieBackTest.optimiseImprovedTrendFollowingParameters(
                         optimSeries,
                         swingParams.trendMaMin, swingParams.trendMaMax,
                         swingParams.trendShortMaMin, swingParams.trendShortMaMax,
@@ -651,7 +653,7 @@ public class BestCombinationStrategyHelper {
                     inStrategies.add(new ImprovedTrendFollowingStrategy(params.trendPeriod, params.shortMaPeriod, params.longMaPeriod, params.breakoutThreshold, params.useRsiFilter, params.rsiPeriod));
                     resultObj.inParams.put("ImprovedTrendFollowing", params);
                 } else if (clazz.equals(SmaCrossoverStrategy.class)) {
-                    StrategieBackTest.SmaCrossoverParams params = backTest.optimiseSmaCrossoverParameters(
+                    StrategieBackTest.SmaCrossoverParams params = strategieBackTest.optimiseSmaCrossoverParameters(
                         optimSeries,
                         swingParams.smaShortMin, swingParams.smaShortMax,
                         swingParams.smaLongMin, swingParams.smaLongMax
@@ -659,7 +661,7 @@ public class BestCombinationStrategyHelper {
                     inStrategies.add(new SmaCrossoverStrategy(params.shortPeriod, params.longPeriod));
                     resultObj.inParams.put("SmaCrossover", params);
                 } else if (clazz.equals(RsiStrategy.class)) {
-                    StrategieBackTest.RsiParams params = backTest.optimiseRsiParameters(
+                    StrategieBackTest.RsiParams params = strategieBackTest.optimiseRsiParameters(
                         optimSeries,
                         swingParams.rsiPeriodMin, swingParams.rsiPeriodMax,
                         swingParams.rsiOversoldMin, swingParams.rsiOversoldMax,
@@ -670,14 +672,14 @@ public class BestCombinationStrategyHelper {
                     inStrategies.add(new RsiStrategy(params.rsiPeriod, params.oversold, params.overbought));
                     resultObj.inParams.put("Rsi", params);
                 } else if (clazz.equals(BreakoutStrategy.class)) {
-                    StrategieBackTest.BreakoutParams params = backTest.optimiseBreakoutParameters(
+                    StrategieBackTest.BreakoutParams params = strategieBackTest.optimiseBreakoutParameters(
                         optimSeries,
                         swingParams.breakoutLookbackMin, swingParams.breakoutLookbackMax
                     );
                     inStrategies.add(new BreakoutStrategy(params.lookbackPeriod));
                     resultObj.inParams.put("Breakout", params);
                 } else if (clazz.equals(MacdStrategy.class)) {
-                    StrategieBackTest.MacdParams params = backTest.optimiseMacdParameters(
+                    StrategieBackTest.MacdParams params = strategieBackTest.optimiseMacdParameters(
                         optimSeries,
                         swingParams.macdShortMin, swingParams.macdShortMax,
                         swingParams.macdLongMin, swingParams.macdLongMax,
@@ -686,7 +688,7 @@ public class BestCombinationStrategyHelper {
                     inStrategies.add(new MacdStrategy(params.shortPeriod, params.longPeriod, params.signalPeriod));
                     resultObj.inParams.put("Macd", params);
                 } else if (clazz.equals(MeanReversionStrategy.class)) {
-                    StrategieBackTest.MeanReversionParams params = backTest.optimiseMeanReversionParameters(
+                    StrategieBackTest.MeanReversionParams params = strategieBackTest.optimiseMeanReversionParameters(
                             optimSeries,
                             swingParams.meanRevSmaMin, swingParams.meanRevSmaMax,
                             swingParams.meanRevThresholdMin, swingParams.meanRevThresholdMax,
@@ -701,7 +703,7 @@ public class BestCombinationStrategyHelper {
             for (Class<? extends TradeStrategy> clazz : outCombo) {
                 outStrategyNames.add(clazz.getSimpleName());
                 if (clazz.equals(ImprovedTrendFollowingStrategy.class)) {
-                    StrategieBackTest.ImprovedTrendFollowingParams params = backTest.optimiseImprovedTrendFollowingParameters(
+                    StrategieBackTest.ImprovedTrendFollowingParams params = strategieBackTest.optimiseImprovedTrendFollowingParameters(
                             optimSeries,
                             swingParams.trendMaMin, swingParams.trendMaMax,
                             swingParams.trendShortMaMin, swingParams.trendShortMaMax,
@@ -711,7 +713,7 @@ public class BestCombinationStrategyHelper {
                     outStrategies.add(new ImprovedTrendFollowingStrategy(params.trendPeriod, params.shortMaPeriod, params.longMaPeriod, params.breakoutThreshold, params.useRsiFilter, params.rsiPeriod));
                     resultObj.outParams.put("ImprovedTrendFollowing", params);
                 } else if (clazz.equals(SmaCrossoverStrategy.class)) {
-                    StrategieBackTest.SmaCrossoverParams params = backTest.optimiseSmaCrossoverParameters(
+                    StrategieBackTest.SmaCrossoverParams params = strategieBackTest.optimiseSmaCrossoverParameters(
                             optimSeries,
                             swingParams.smaShortMin, swingParams.smaShortMax,
                             swingParams.smaLongMin, swingParams.smaLongMax
@@ -719,7 +721,7 @@ public class BestCombinationStrategyHelper {
                     outStrategies.add(new SmaCrossoverStrategy(params.shortPeriod, params.longPeriod));
                     resultObj.outParams.put("SmaCrossover", params);
                 } else if (clazz.equals(RsiStrategy.class)) {
-                    StrategieBackTest.RsiParams params = backTest.optimiseRsiParameters(
+                    StrategieBackTest.RsiParams params = strategieBackTest.optimiseRsiParameters(
                             optimSeries,
                             swingParams.rsiPeriodMin, swingParams.rsiPeriodMax,
                             swingParams.rsiOversoldMin, swingParams.rsiOversoldMax,
@@ -730,14 +732,14 @@ public class BestCombinationStrategyHelper {
                     outStrategies.add(new RsiStrategy(params.rsiPeriod, params.oversold, params.overbought));
                     resultObj.outParams.put("Rsi", params);
                 } else if (clazz.equals(BreakoutStrategy.class)) {
-                    StrategieBackTest.BreakoutParams params = backTest.optimiseBreakoutParameters(
+                    StrategieBackTest.BreakoutParams params = strategieBackTest.optimiseBreakoutParameters(
                             optimSeries,
                             swingParams.breakoutLookbackMin, swingParams.breakoutLookbackMax
                     );
                     outStrategies.add(new BreakoutStrategy(params.lookbackPeriod));
                     resultObj.outParams.put("Breakout", params);
                 } else if (clazz.equals(MacdStrategy.class)) {
-                    StrategieBackTest.MacdParams params = backTest.optimiseMacdParameters(
+                    StrategieBackTest.MacdParams params = strategieBackTest.optimiseMacdParameters(
                             optimSeries,
                             swingParams.macdShortMin, swingParams.macdShortMax,
                             swingParams.macdLongMin, swingParams.macdLongMax,
@@ -746,7 +748,7 @@ public class BestCombinationStrategyHelper {
                     outStrategies.add(new MacdStrategy(params.shortPeriod, params.longPeriod, params.signalPeriod));
                     resultObj.outParams.put("Macd", params);
                 } else if (clazz.equals(MeanReversionStrategy.class)) {
-                    StrategieBackTest.MeanReversionParams params = backTest.optimiseMeanReversionParameters(
+                    StrategieBackTest.MeanReversionParams params = strategieBackTest.optimiseMeanReversionParameters(
                             optimSeries,
                             swingParams.meanRevSmaMin, swingParams.meanRevSmaMax,
                             swingParams.meanRevThresholdMin, swingParams.meanRevThresholdMax,
@@ -806,12 +808,25 @@ public class BestCombinationStrategyHelper {
                 public String getName() { return "CombinedStrategy"; }
             };
             // Backtest sur la partie optimisation (train)
-            RiskResult trainResult = backTest.backtestStrategy(combinedStrategyOptim, optimSeries);
+            RiskResult trainResult = strategieBackTest.backtestStrategy(combinedStrategyOptim, optimSeries);
             trainPerformances.add(trainResult.rendement);
             // Backtest sur la partie test
-            RiskResult testResult = backTest.backtestStrategy(combinedStrategyTest, testSeries);
+            RiskResult testResult = strategieBackTest.backtestStrategy(combinedStrategyTest, testSeries);
             testPerformances.add(testResult.rendement);
             foldResults.add(testResult);
+
+            double overfitRatioCombo = testResult.getRendement() / (trainResult.getRendement() == 0.0 ? 1.0 : trainResult.getRendement());
+            boolean isOverfitCombo = (overfitRatioCombo < 0.7 || overfitRatioCombo > 1.3);
+            boolean stable = TradeUtils.isStableAndSimple(testResult, filterConfig);
+            testResult.setFltredOut(!stable || isOverfitCombo);
+            ComboMixResult combo =  ComboMixResult.builder()
+                    .inStrategyNames(inStrategies.stream().map(TradeStrategy::getName).toList())
+                    .outStrategyNames(outStrategies.stream().map(TradeStrategy::getName).toList())
+                    .inParams(resultObj.inParams)
+                    .outParams(resultObj.outParams)
+                    .result(testResult)
+                    .build();
+            listeComboMixResult.add(combo);
         }
         // Agrégation des résultats des folds
         double sumRendement = 0.0, sumDrawdown = 0.0, sumWinRate = 0.0, sumProfitFactor = 0.0, sumAvgPnL = 0.0;
@@ -828,7 +843,30 @@ public class BestCombinationStrategyHelper {
             sumMaxTradeLoss += res.maxTradeLoss;
             sumScoreSwingTrade += res.scoreSwingTrade;
             sumTradeCount += res.tradeCount;
+
         }
+
+        ComboMixResult bestCombo = null;
+        List<ComboMixResult> nonOverfitResults = new ArrayList<>();
+        for(ComboMixResult cbo :listeComboMixResult){
+            // Mise à jour du meilleur combo global (fallback)
+            if (bestCombo == null || cbo.getResult().getRendement() > bestCombo.getResult().getRendement()) {
+                bestCombo = cbo;
+            }
+            if (!cbo.getResult().isFltredOut()) {
+                nonOverfitResults.add(cbo);
+            }
+        }
+        ComboMixResult bestComboNonOverfit = null;
+        double bestPerfNonOverfit = Double.NEGATIVE_INFINITY;
+        for (ComboMixResult cbo : nonOverfitResults) {
+            if (cbo.getResult().getRendement() > bestPerfNonOverfit) {
+                bestPerfNonOverfit = cbo.getResult().getRendement();
+                bestComboNonOverfit = cbo;
+            }
+        }
+        ComboMixResult finalBestCombo = bestComboNonOverfit != null ? bestComboNonOverfit : bestCombo;
+
         int n = foldResults.size();
         RiskResult aggResult = RiskResult.builder()
                 .rendement(n > 0 ? sumRendement / n : Double.NEGATIVE_INFINITY)
@@ -853,7 +891,9 @@ public class BestCombinationStrategyHelper {
             aggResult.setFltredOut(!stable || isOverfit);
         }
 
-        resultObj.backtestResult = aggResult;
+        resultObj.inParams = finalBestCombo.inParams;
+        resultObj.outParams = finalBestCombo.outParams;
+        resultObj.backtestResult = finalBestCombo.getResult();
         resultObj.inStrategyNames = inCombo.stream().map(Class::getSimpleName).toList();
         resultObj.outStrategyNames = outCombo.stream().map(Class::getSimpleName).toList();
         resultObj.contextOptim = ParamsOptim.builder()
@@ -867,8 +907,8 @@ public class BestCombinationStrategyHelper {
         //fait un check final
         BarSeries checkSeries = fullSeries.getSubSeries(fullSeries.getBarCount() - testWindow, fullSeries.getBarCount());
         RiskResult checkResult = this.checkResultat(checkSeries, resultObj);
-        resultObj.rendementSum  = checkResult.getRendement() + checkResult.getRendement();
-        resultObj.rendementDiff = checkResult.getRendement() - checkResult.getRendement();
+        resultObj.rendementSum  = resultObj.getBacktestResult().getRendement() + checkResult.getRendement();
+        resultObj.rendementDiff = resultObj.getBacktestResult().getRendement() - checkResult.getRendement();
         resultObj.rendementScore = resultObj.rendementSum - (resultObj.rendementDiff > 0 ? resultObj.rendementDiff : -resultObj.rendementDiff);
         resultObj.checkResult = checkResult;
 
