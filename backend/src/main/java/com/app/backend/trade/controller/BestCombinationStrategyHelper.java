@@ -7,16 +7,24 @@ import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
+
+import java.time.LocalDate;
 import java.util.*;
+
+import static com.app.backend.trade.util.TradeConstant.NOMBRE_TOTAL_BOUGIES_FOR_SIGNAL;
+import static com.app.backend.trade.util.TradeUtils.logger;
 
 @Service
 public class BestCombinationStrategyHelper {
 
+    private static final Logger logger = LoggerFactory.getLogger(StrategieHelper.class);
     private final SwingTradeOptimParams swingParams = new SwingTradeOptimParams();
     private final StrategieHelper strategieHelper;
     private final JdbcTemplate jdbcTemplate;
@@ -430,13 +438,69 @@ public class BestCombinationStrategyHelper {
         return result;
     }
 
-    public SignalType getSignal(String symbol) {
+
+    public SignalInfo getSingalTypeFromDB(String symbol) {
+        String sql = "SELECT signal_mix, mix_created_at FROM signal_mix WHERE symbol = ? ORDER BY mix_created_at DESC LIMIT 1";
+        try {
+            return jdbcTemplate.query(sql, ps -> ps.setString(1, symbol), rs -> {
+                if (rs.next()) {
+                    String signalStr = rs.getString("signal_mix");
+                    java.sql.Date lastDate = rs.getDate("mix_created_at");
+                    SignalType type;
+                    try {
+                        type = SignalType.valueOf(signalStr);
+                    } catch (Exception e) {
+                        logger.warn("SignalType inconnu en base: {}", signalStr);
+                        type = null;
+                    }
+
+                    java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
+                    java.time.LocalDate lastKnown = lastDate.toLocalDate();
+                    // Si la dernière date connue est le dernier jour de cotation, la base est à jour
+                    if (lastKnown.isEqual(lastTradingDay) || lastKnown.isAfter(lastTradingDay)) {
+                        return SignalInfo.builder().symbol(symbol).type(type).date(lastDate).build();
+                    }else{
+                        return null;
+                    }
+                }
+                return null;
+            });
+        } catch (Exception e) {
+            logger.warn("Erreur SQL getSingalTypeFromDB pour {}: {}", symbol, e.getMessage());
+            return null;
+        }
+    }
+
+    public LocalDate saveSignalHistory(String symbol, SignalType signal) {
+        java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
+        String insertSql = "INSERT INTO signal_mix (symbol, signal_mix, mix_created_at) VALUES (?, ?, ?)";
+        jdbcTemplate.update(insertSql,
+                symbol,
+                signal.name(),
+                java.sql.Date.valueOf(lastTradingDay));
+        return lastTradingDay;
+
+    }
+
+    public SignalInfo getSignal(String symbol) {
+
+        SignalInfo mixDB = this.getSingalTypeFromDB(symbol);
+        if(mixDB != null){
+            String dateStr = mixDB.getDate().toLocalDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"));
+            return SignalInfo.builder().symbol(symbol).type(mixDB.getType()).dateStr(dateStr).build();
+        }
+
         BestCombinationResult bestCombinationResult = getBestCombinationResult(symbol);
+        if(bestCombinationResult == null){
+            return null;
+        }
         this.strategieHelper.updateDBDailyValu(symbol);
         List<DailyValue> listeValus = strategieHelper.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_FOR_SIGNAL);
         BarSeries barSeries = TradeUtils.mapping(listeValus);
-        if (bestCombinationResult == null || barSeries.getBarCount() == 0) {
-            return SignalType.NONE;
+        java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
+        if (barSeries.getBarCount() == 0) {
+            return SignalInfo.builder().symbol(symbol).type(SignalType.NONE)
+                    .dateStr(lastTradingDay.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"))).build();
         }
         // Recréer les stratégies d'entrée
         List<TradeStrategy> inStrategies = new ArrayList<>();
@@ -497,14 +561,18 @@ public class BestCombinationStrategyHelper {
             if (exitRule == null) exitRule = strat.getExitRule(barSeries);
             else exitRule = exitRule.or(strat.getExitRule(barSeries));
         }
+        SignalType signal;
         int lastIndex = barSeries.getEndIndex();
         if (entryRule != null && entryRule.isSatisfied(lastIndex)) {
-            return SignalType.BUY;
+            signal = SignalType.BUY;
         } else if (exitRule != null && exitRule.isSatisfied(lastIndex)) {
-            return SignalType.SELL;
+            signal = SignalType.SELL;
         } else {
-            return SignalType.NONE;
+            signal = SignalType.NONE;
         }
+        LocalDate dateSaved = saveSignalHistory(symbol, signal);
+        String dateSavedStr = dateSaved.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"));
+        return SignalInfo.builder().symbol(symbol).type(signal).dateStr(dateSavedStr).build();
     }
 
 
@@ -561,31 +629,6 @@ public class BestCombinationStrategyHelper {
         TradeUtils.log("calculMixStrategies: total: "+listeDbSymbols.size()+", nbInsert: "+nbInsert.get()+", error: " + error.get());
     }
 
-
-
-    public SignalType getBestSignal(String symbol){
-        BestCombinationResult bestCombinationResult = getBestCombinationResult(symbol);
-        if(bestCombinationResult == null) {
-            return null;
-        }else{
-            return this.getSignal(symbol);
-        }
-        /*
-        BestInOutStrategy best = strategieHelper.getBestInOutStrategy(symbol);
-        if(bestCombinationResult == null && best == null){
-            return SignalType.NONE;
-        }else if(bestCombinationResult == null) {
-            return strategieHelper.getBestInOutSignal(symbol).getType();
-        }else if(best == null) {
-            return this.getSignal(symbol);
-        }else{
-            if(bestCombinationResult.backtestResult.rendement > best.getResult().getRendement()){
-                return this.getSignal(symbol);
-            }else {
-                return strategieHelper.getBestInOutSignal(symbol).getType();
-            }
-        }*/
-    }
 
 
     public void calculScoreST(){

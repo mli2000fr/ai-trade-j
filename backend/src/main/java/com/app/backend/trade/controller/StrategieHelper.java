@@ -704,6 +704,7 @@ public class StrategieHelper {
      * @return type de signal (SignalType)
      */
     public SignalInfo getBestInOutSignal(String symbol) {
+
         SignalInfo singleDB = this.getSingalTypeFromDB(symbol);
         if(singleDB != null){
             String dateStr = singleDB.getDate().toLocalDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"));

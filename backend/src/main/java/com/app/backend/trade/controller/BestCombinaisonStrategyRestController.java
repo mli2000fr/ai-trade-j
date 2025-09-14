@@ -17,7 +17,7 @@ public class BestCombinaisonStrategyRestController {
 
     @GetMapping("/best-signal")
     public SignalType getBestSignal(@RequestParam String symbol) {
-        return bestCombinationStrategyHelper.getBestSignal(symbol);
+        return bestCombinationStrategyHelper.getSignal(symbol);
     }
 
     @GetMapping("/calcul")

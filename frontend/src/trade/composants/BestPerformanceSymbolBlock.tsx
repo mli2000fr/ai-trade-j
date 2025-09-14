@@ -416,7 +416,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         <TableCell>{row.single.result.scoreSwingTrade !== undefined ? (row.single.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
                         <TableCell>{row.single.result.avgTradeBars !== undefined ? row.single.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
                         <TableCell>{row.mix.result.fltredOut ? <span style={{ color: 'red', fontWeight: 'bold' }}>Oui</span> : <span>Non</span>}</TableCell>
-                        <TableCell>tet</TableCell>
+                        <TableCell></TableCell>
                         <TableCell>{(row.mix.result.rendement * 100).toFixed(2)} %</TableCell>
                         <TableCell>{(row.mix.check.rendement * 100).toFixed(2)} %</TableCell>
                         <TableCell>{(row.mix.rendementScore * 100).toFixed(2)}</TableCell>
