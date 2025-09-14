@@ -18,8 +18,8 @@ public class BestCombinationResult {
     public List<String> outStrategyNames;
     public Map<String, Object> inParams = new HashMap<>();
     public Map<String, Object> outParams = new HashMap<>();
-    public RiskResult backtestResult;
-    public RiskResult checkResult;
+    public RiskResult result;
+    public RiskResult check;
     public double rendementSum;
     public double rendementDiff;
     public double rendementScore;

@@ -76,8 +76,57 @@ interface BestInOutStrategy {
   };
 }
 
+interface BestCombinationResult {
+  symbol: string | null;
+  inStrategyNames: string[];
+  outStrategyNames: string[];
+  inParams: Record<string, any>;
+  outParams: Record<string, any>;
+  result: {
+    rendement: number;
+    maxDrawdown: number;
+    tradeCount: number;
+    winRate: number;
+    avgPnL: number;
+    profitFactor: number;
+    avgTradeBars: number;
+    maxTradeGain: number;
+    maxTradeLoss: number;
+    scoreSwingTrade?: number;
+    fltredOut?: boolean;
+  };
+  check: {
+    rendement: number;
+    maxDrawdown: number;
+    tradeCount: number;
+    winRate: number;
+    avgPnL: number;
+    profitFactor: number;
+    avgTradeBars: number;
+    maxTradeGain: number;
+    maxTradeLoss: number;
+    scoreSwingTrade?: number;
+    fltredOut?: boolean;
+  };
+  rendementSum: number;
+  rendementDiff: number;
+  rendementScore: number;
+  contextOptim: {
+    initialCapital: number;
+    riskPerTrade: number;
+    stopLossPct: number;
+    takeProfitPct: number;
+    nbSimples: number;
+  };
+}
+
+interface MixResultat {
+  single: BestInOutStrategy;
+  mix: BestCombinationResult;
+}
+
 const BestPerformanceSymbolBlock: React.FC = () => {
-  const [data, setData] = useState<BestInOutStrategy[]>([]);
+  const [data, setData] = useState<MixResultat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -112,7 +161,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   useEffect(() => {
     if (!data || data.length === 0) return;
     const symbolsToFetch = data
-      .map((row: BestInOutStrategy) => row.symbol)
+      .map((row: MixResultat) => row.single.symbol)
       .filter((symbol: string) => symbol && !(symbol in indices));
     if (symbolsToFetch.length === 0) return;
     symbolsToFetch.forEach((symbol: string) => {
@@ -130,7 +179,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
 
   const handleCopy = () => {
     const selectedSymbols = data
-      .map((row, idx) => checkedRows[idx] ? row.symbol : null)
+      .map((row, idx) => checkedRows[idx] ? row.single.symbol : null)
       .filter(Boolean)
       .join(',');
     if (selectedSymbols) {
@@ -318,13 +367,12 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Filtrée</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0', minWidth: 100, width: 200, maxWidth: 300 }}>Indice</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie IN</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Stratégie OUT</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement check</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement Sum</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement Diff</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Score Rendement</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Rendement check</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Score Rendement</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Score Swing Trade</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Trades</TableCell>
@@ -338,30 +386,29 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                 <TableBody>
                   {data.map((row, i) => {
                     let bgColor = undefined;
-                    const indice = indices[row.symbol] as SignalInfo;
+                    const indice = indices[row.single.symbol] as SignalInfo;
                     // Vérifie que indice est un objet et non une chaîne
-                    if (indice && indice.type === 'BUY' && !row.result.fltredOut) bgColor = 'rgba(76, 175, 80, 0.5)';
+                    if (indice && indice.type === 'BUY' && !row.single.result.fltredOut) bgColor = 'rgba(76, 175, 80, 0.5)';
                     if (indice && indice.type === 'SELL') bgColor = 'rgba(244, 67, 54, 0.05)';
                     return (
                       <TableRow key={i} sx={bgColor ? { backgroundColor: bgColor } : {}}>
                         <TableCell><input type="checkbox" checked={!!checkedRows[i]} onChange={e => setCheckedRows({...checkedRows, [i]: e.target.checked})} /></TableCell>
-                        <TableCell>{row.symbol}</TableCell>
-                        <TableCell>{row.result.fltredOut ? <span style={{ color: 'red', fontWeight: 'bold' }}>Oui</span> : <span>Non</span>}</TableCell>
-                        <TableCell>{indices[row.symbol] === 'pending' ? (<CircularProgress size={16} />) : (indice && indice.type ? (indice.type + ' (' + indice.dateStr + ')') : '-')}</TableCell>
-                        <TableCell>{row.entryName}</TableCell>
-                        <TableCell>{row.exitName}</TableCell>
-                        <TableCell>{(row.result.rendement * 100).toFixed(2)} %</TableCell>
-                        <TableCell>{(row.check.rendement * 100).toFixed(2)} %</TableCell>
-                        <TableCell>{(row.rendementSum * 100).toFixed(2)} %</TableCell>
-                        <TableCell>{(row.rendementDiff * 100).toFixed(2)} %</TableCell>
-                        <TableCell>{(row.rendementScore * 100).toFixed(2)}</TableCell>
-                        <TableCell>{row.result.scoreSwingTrade !== undefined ? (row.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
-                        <TableCell>{row.result.tradeCount}</TableCell>
-                        <TableCell>{row.result.avgTradeBars !== undefined ? row.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
-                        <TableCell>{(row.result.winRate * 100).toFixed(2)} %</TableCell>
-                        <TableCell>{(row.result.maxDrawdown * 100).toFixed(2)} %</TableCell>
-                        <TableCell>{row.result.profitFactor.toFixed(2)}</TableCell>
-                        <TableCell><Button size="small" variant="outlined" onClick={() => { setSelected(row); setOpen(true); }}>Détails</Button></TableCell>
+                        <TableCell>{row.single.symbol}</TableCell>
+                        <TableCell>{row.single.result.fltredOut ? <span style={{ color: 'red', fontWeight: 'bold' }}>Oui</span> : <span>Non</span>}</TableCell>
+                        <TableCell>{indices[row.single.symbol] === 'pending' ? (<CircularProgress size={16} />) : (indice && indice.type ? (indice.type + ' (' + indice.dateStr + ')') : '-')}</TableCell>
+                        <TableCell>{(row.single.result.rendement * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.single.check.rendement * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.single.rendementScore * 100).toFixed(2)}</TableCell>
+                        <TableCell>{(row.mix.result.rendement * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.mix.check.rendement * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.mix.rendementScore * 100).toFixed(2)}</TableCell>
+                        <TableCell>{row.single.result.scoreSwingTrade !== undefined ? (row.single.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
+                        <TableCell>{row.single.result.tradeCount}</TableCell>
+                        <TableCell>{row.single.result.avgTradeBars !== undefined ? row.single.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
+                        <TableCell>{(row.single.result.winRate * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.single.result.maxDrawdown * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{row.single.result.profitFactor.toFixed(2)}</TableCell>
+                        <TableCell><Button size="small" variant="outlined" onClick={() => { setSelected(row.single); setOpen(true); }}>Détails</Button></TableCell>
                       </TableRow>
                     );
                   })}
