@@ -95,7 +95,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    let url = `/api/stra/strategies/best_performance_actions?limit=${limit}&sort=${sort}`;
+    let url = `/api/result/global?limit=${limit}&sort=${sort}`;
     if (showOnlyNonFiltered) {
       url += `&filtered=true`;
     }
