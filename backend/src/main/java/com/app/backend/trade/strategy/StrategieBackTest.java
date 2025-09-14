@@ -249,6 +249,8 @@ public class StrategieBackTest {
                 .maxTradeGain(maxTradeGain)
                 .maxTradeLoss(maxTradeLoss)
                 .scoreSwingTrade(0).build();
+        double scoreSwingTrade = TradeUtils.calculerScoreSwingTrade(optimResult);
+        optimResult.setScoreSwingTrade(scoreSwingTrade);
         return optimResult;
     }
 
