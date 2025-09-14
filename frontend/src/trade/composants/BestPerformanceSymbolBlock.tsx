@@ -440,7 +440,16 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     if (indice && indice.type === 'BUY' && !row.single.result.fltredOut) bgColor = 'rgba(76, 175, 80, 0.5)';
                     if (indice && indice.type === 'SELL') bgColor = 'rgba(244, 67, 54, 0.05)';
                     return (
-                      <TableRow key={i} sx={bgColor ? { backgroundColor: bgColor } : {}}>
+                      <TableRow
+                        key={i}
+                        sx={{
+                          ...(bgColor ? { backgroundColor: bgColor } : {}),
+                          '&:hover': {
+                            backgroundColor: 'rgba(33, 150, 243, 0.12)',
+                            transition: 'background-color 0.2s',
+                          },
+                        }}
+                      >
                         <TableCell><input type="checkbox" checked={!!checkedRows[i]} onChange={e => setCheckedRows({...checkedRows, [i]: e.target.checked})} /></TableCell>
                         <TableCell>{row.single.symbol}</TableCell>
                         <TableCell>{row.single.result.fltredOut ? <span style={{ color: 'red', fontWeight: 'bold' }}>Oui</span> : <span>Non</span>}</TableCell>
