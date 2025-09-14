@@ -359,7 +359,7 @@ public class BestCombinationStrategyHelper {
                     take_profit_pct, 
                     nb_simples,
                     check_result,
-                    created_date,
+                    create_date,
                     update_date
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""";
             jdbcTemplate.update(insertSql,
