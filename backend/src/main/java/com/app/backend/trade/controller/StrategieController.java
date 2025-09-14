@@ -57,7 +57,7 @@ public class StrategieController {
     @GetMapping("/strategies/best_performance_actions")
     public ResponseEntity<List<BestInOutStrategy>> getBestPerfActions(
             @RequestParam(value = "limit", required = false) Integer limit,
-            @RequestParam(value = "sort", required = false, defaultValue = "rendement") String sort,
+            @RequestParam(value = "sort", required = false, defaultValue = "rendement_score") String sort,
             @RequestParam(value = "filtered", required = false) Boolean filtered
     ) {
         List<BestInOutStrategy> lsiteStr = strategieHelper.getBestPerfActions(limit, sort, filtered);

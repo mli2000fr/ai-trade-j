@@ -580,14 +580,23 @@ public class BestCombinationStrategyHelper {
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
-    public List<String> getSymbolFitredFromTabSingle() {
-        String sql = "select symbol from trade_ai.best_in_out_single_strategy where fltred_out = 'false' order by rendement_score desc;";
+    public List<String> getSymbolFitredFromTabSingle(String sort) {
+        String orderBy = "rendement_score";
+        if ("score_swing_trade".equalsIgnoreCase(sort)) {
+            orderBy = "score_swing_trade";
+        }else if ("rendement_sum".equalsIgnoreCase(sort)) {
+            orderBy = "rendement_sum";
+        }else if ("rendement".equalsIgnoreCase(sort)) {
+            orderBy = "rendement";
+        }
+        String sql = "select symbol from trade_ai.best_in_out_single_strategy where fltred_out = 'false'";
+        sql += " ORDER BY " + orderBy + " DESC";
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
 
-    public void calculMixStrategies(){
-        List<String> listeDbSymbols = this.getSymbolFitredFromTabSingle();
+    public void calculMixStrategies(String sort){
+        List<String> listeDbSymbols = this.getSymbolFitredFromTabSingle(sort);
 
         int nbThreads = Math.max(2, Runtime.getRuntime().availableProcessors());
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(nbThreads);

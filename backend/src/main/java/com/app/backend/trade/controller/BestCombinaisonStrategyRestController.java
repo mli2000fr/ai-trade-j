@@ -22,8 +22,8 @@ public class BestCombinaisonStrategyRestController {
     }
 
     @GetMapping("/calcul")
-    public Boolean calculMixStrategies() {
-        bestCombinationStrategyHelper.calculMixStrategies();
+    public Boolean calculMixStrategies(@RequestParam(value = "sort", required = false, defaultValue = "rendement_score") String sort) {
+        bestCombinationStrategyHelper.calculMixStrategies(sort);
         return true;
     }
 
