@@ -488,14 +488,15 @@ public class BestCombinationStrategyHelper {
             return SignalInfo.builder().symbol(symbol).type(mixDB.getType()).dateStr(dateStr).build();
         }
 
+        java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
         BestCombinationResult bestCombinationResult = getBestCombinationResult(symbol);
         if(bestCombinationResult == null){
-            return null;
+            return SignalInfo.builder().symbol(symbol).type(SignalType.NONE)
+                    .dateStr(lastTradingDay.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"))).build();
         }
         this.strategieHelper.updateDBDailyValu(symbol);
         List<DailyValue> listeValus = strategieHelper.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_FOR_SIGNAL);
         BarSeries barSeries = TradeUtils.mapping(listeValus);
-        java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
         if (barSeries.getBarCount() == 0) {
             return SignalInfo.builder().symbol(symbol).type(SignalType.NONE)
                     .dateStr(lastTradingDay.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"))).build();
@@ -504,23 +505,23 @@ public class BestCombinationStrategyHelper {
         List<TradeStrategy> inStrategies = new ArrayList<>();
         for (String name : bestCombinationResult.inStrategyNames) {
             Object params = bestCombinationResult.inParams.get(name.replace("Strategy", ""));
-            if (name.equals("ImprovedTrendFollowingStrategy") && params instanceof StrategieBackTest.ImprovedTrendFollowingParams) {
-                StrategieBackTest.ImprovedTrendFollowingParams p = (StrategieBackTest.ImprovedTrendFollowingParams) params;
+            if (name.equals("ImprovedTrendFollowingStrategy")) {
+                StrategieBackTest.ImprovedTrendFollowingParams p = new Gson().fromJson(params.toString(), StrategieBackTest.ImprovedTrendFollowingParams.class);
                 inStrategies.add(new ImprovedTrendFollowingStrategy(p.trendPeriod, p.shortMaPeriod, p.longMaPeriod, p.breakoutThreshold, p.useRsiFilter, p.rsiPeriod));
-            } else if (name.equals("SmaCrossoverStrategy") && params instanceof StrategieBackTest.SmaCrossoverParams) {
-                StrategieBackTest.SmaCrossoverParams p = (StrategieBackTest.SmaCrossoverParams) params;
+            } else if (name.equals("SmaCrossoverStrategy")) {
+                StrategieBackTest.SmaCrossoverParams p = new Gson().fromJson(params.toString(), StrategieBackTest.SmaCrossoverParams.class);
                 inStrategies.add(new SmaCrossoverStrategy(p.shortPeriod, p.longPeriod));
-            } else if (name.equals("RsiStrategy") && params instanceof StrategieBackTest.RsiParams) {
-                StrategieBackTest.RsiParams p = (StrategieBackTest.RsiParams) params;
+            } else if (name.equals("RsiStrategy")) {
+                StrategieBackTest.RsiParams p = new Gson().fromJson(params.toString(), StrategieBackTest.RsiParams.class);
                 inStrategies.add(new RsiStrategy(p.rsiPeriod, p.oversold, p.overbought));
-            } else if (name.equals("BreakoutStrategy") && params instanceof StrategieBackTest.BreakoutParams) {
-                StrategieBackTest.BreakoutParams p = (StrategieBackTest.BreakoutParams) params;
+            } else if (name.equals("BreakoutStrategy")) {
+                StrategieBackTest.BreakoutParams p = new Gson().fromJson(params.toString(), StrategieBackTest.BreakoutParams.class);
                 inStrategies.add(new BreakoutStrategy(p.lookbackPeriod));
-            } else if (name.equals("MacdStrategy") && params instanceof StrategieBackTest.MacdParams) {
-                StrategieBackTest.MacdParams p = (StrategieBackTest.MacdParams) params;
+            } else if (name.equals("MacdStrategy")) {
+                StrategieBackTest.MacdParams p = new Gson().fromJson(params.toString(), StrategieBackTest.MacdParams.class);
                 inStrategies.add(new MacdStrategy(p.shortPeriod, p.longPeriod, p.signalPeriod));
-            } else if (name.equals("MeanReversionStrategy") && params instanceof StrategieBackTest.MeanReversionParams) {
-                StrategieBackTest.MeanReversionParams p = (StrategieBackTest.MeanReversionParams) params;
+            } else if (name.equals("MeanReversionStrategy")) {
+                StrategieBackTest.MeanReversionParams p = new Gson().fromJson(params.toString(), StrategieBackTest.MeanReversionParams.class);
                 inStrategies.add(new MeanReversionStrategy(p.smaPeriod, p.threshold));
             }
         }
@@ -528,23 +529,23 @@ public class BestCombinationStrategyHelper {
         List<TradeStrategy> outStrategies = new ArrayList<>();
         for (String name : bestCombinationResult.outStrategyNames) {
             Object params = bestCombinationResult.outParams.get(name.replace("Strategy", ""));
-            if (name.equals("ImprovedTrendFollowingStrategy") && params instanceof StrategieBackTest.ImprovedTrendFollowingParams) {
-                StrategieBackTest.ImprovedTrendFollowingParams p = (StrategieBackTest.ImprovedTrendFollowingParams) params;
+            if (name.equals("ImprovedTrendFollowingStrategy")) {
+                StrategieBackTest.ImprovedTrendFollowingParams p = new Gson().fromJson(params.toString(), StrategieBackTest.ImprovedTrendFollowingParams.class);
                 outStrategies.add(new ImprovedTrendFollowingStrategy(p.trendPeriod, p.shortMaPeriod, p.longMaPeriod, p.breakoutThreshold, p.useRsiFilter, p.rsiPeriod));
-            } else if (name.equals("SmaCrossoverStrategy") && params instanceof StrategieBackTest.SmaCrossoverParams) {
-                StrategieBackTest.SmaCrossoverParams p = (StrategieBackTest.SmaCrossoverParams) params;
+            } else if (name.equals("SmaCrossoverStrategy")) {
+                StrategieBackTest.SmaCrossoverParams p = new Gson().fromJson(params.toString(), StrategieBackTest.SmaCrossoverParams.class);
                 outStrategies.add(new SmaCrossoverStrategy(p.shortPeriod, p.longPeriod));
-            } else if (name.equals("RsiStrategy") && params instanceof StrategieBackTest.RsiParams) {
-                StrategieBackTest.RsiParams p = (StrategieBackTest.RsiParams) params;
+            } else if (name.equals("RsiStrategy")) {
+                StrategieBackTest.RsiParams p = new Gson().fromJson(params.toString(), StrategieBackTest.RsiParams.class);
                 outStrategies.add(new RsiStrategy(p.rsiPeriod, p.oversold, p.overbought));
-            } else if (name.equals("BreakoutStrategy") && params instanceof StrategieBackTest.BreakoutParams) {
-                StrategieBackTest.BreakoutParams p = (StrategieBackTest.BreakoutParams) params;
+            } else if (name.equals("BreakoutStrategy")) {
+                StrategieBackTest.BreakoutParams p = new Gson().fromJson(params.toString(), StrategieBackTest.BreakoutParams.class);
                 outStrategies.add(new BreakoutStrategy(p.lookbackPeriod));
-            } else if (name.equals("MacdStrategy") && params instanceof StrategieBackTest.MacdParams) {
-                StrategieBackTest.MacdParams p = (StrategieBackTest.MacdParams) params;
+            } else if (name.equals("MacdStrategy")) {
+                StrategieBackTest.MacdParams p = new Gson().fromJson(params.toString(), StrategieBackTest.MacdParams.class);
                 outStrategies.add(new MacdStrategy(p.shortPeriod, p.longPeriod, p.signalPeriod));
-            } else if (name.equals("MeanReversionStrategy") && params instanceof StrategieBackTest.MeanReversionParams) {
-                StrategieBackTest.MeanReversionParams p = (StrategieBackTest.MeanReversionParams) params;
+            } else if (name.equals("MeanReversionStrategy")) {
+                StrategieBackTest.MeanReversionParams p = new Gson().fromJson(params.toString(), StrategieBackTest.MeanReversionParams.class);
                 outStrategies.add(new MeanReversionStrategy(p.smaPeriod, p.threshold));
             }
         }
@@ -566,7 +567,7 @@ public class BestCombinationStrategyHelper {
         } else if (exitRule != null && exitRule.isSatisfied(lastIndex)) {
             signal = SignalType.SELL;
         } else {
-            signal = SignalType.NONE;
+            signal = SignalType.HOLD;
         }
         LocalDate dateSaved = saveSignalHistory(symbol, signal);
         String dateSavedStr = dateSaved.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"));

@@ -430,7 +430,12 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   {data.map((row, i) => {
                     let bgColor = undefined;
                     const indice = indices[row.single.symbol] as SignalInfo;
-                    const indiceMix = indicesMix[row.single.symbol] as SignalInfo;
+                    const indiceMixRaw = row.mix.symbol === null ? null : indicesMix[row.mix.symbol];
+                    let indiceMix: SignalInfo | undefined = undefined;
+                    if (indiceMixRaw && typeof indiceMixRaw === 'object' && 'type' in indiceMixRaw) {
+                      indiceMix = indiceMixRaw as SignalInfo;
+                    }
+
                     // Vérifie que indice est un objet et non une chaîne
                     if (indice && indice.type === 'BUY' && !row.single.result.fltredOut) bgColor = 'rgba(76, 175, 80, 0.5)';
                     if (indice && indice.type === 'SELL') bgColor = 'rgba(244, 67, 54, 0.05)';
@@ -446,7 +451,11 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         <TableCell>{row.single.result.scoreSwingTrade !== undefined ? (row.single.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
                         <TableCell>{row.single.result.avgTradeBars !== undefined ? row.single.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
                         <TableCell>{row.mix.result.fltredOut ? <span style={{ color: 'red', fontWeight: 'bold' }}>Oui</span> : <span>Non</span>}</TableCell>
-                        <TableCell>{indicesMix[row.mix.symbol] === 'pending' ? (<CircularProgress size={16} />) : (indiceMix && indiceMix.type ? (indiceMix.type + ' (' + indiceMix.dateStr + ')') : '-')}</TableCell>
+                        <TableCell>{
+                          indiceMixRaw === 'pending'
+                            ? (<CircularProgress size={16} />)
+                            : (indiceMix ? (indiceMix.type + ' (' + indiceMix.dateStr + ')') : '-')
+                        }</TableCell>
                         <TableCell>{(row.mix.result.rendement * 100).toFixed(2)} %</TableCell>
                         <TableCell>{(row.mix.check.rendement * 100).toFixed(2)} %</TableCell>
                         <TableCell>{(row.mix.rendementScore * 100).toFixed(2)}</TableCell>
