@@ -28,7 +28,7 @@ public class GlobalStrategyHelper {
             BestCombinationResult mix = bestCombinationStrategyHelper.getBestCombinationResult(single.getSymbol());
             results.add(MixResultat.builder()
                     .single(single)
-                    .mix(mix)
+                    .mix(mix == null ? BestCombinationResult.empty() : mix)
                     .build());
         }
         return results;
