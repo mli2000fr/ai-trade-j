@@ -23,8 +23,8 @@ public class BestCombinationStrategyHelper {
     private final StrategieBackTest strategieBackTest;
     private final Gson gson = new Gson();
 
-    private static final int NB_IN = 1;
-    private static final int NB_OUT = 1;
+    private static final int NB_IN = 2;
+    private static final int NB_OUT = 2;
     private static final boolean INSERT_ONLY = true;
 
     @Autowired
