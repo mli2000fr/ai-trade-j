@@ -2,15 +2,10 @@ package com.app.backend.trade.controller;
 
 import com.app.backend.trade.model.DailyValue;
 import com.app.backend.trade.model.SignalInfo;
-import com.app.backend.trade.model.SignalType;
-import com.app.backend.trade.model.WalkForwardResultPro;
 import com.app.backend.trade.strategy.BestInOutStrategy;
-import com.app.backend.trade.util.TradeUtils;
-import com.google.gson.Gson;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import java.util.ArrayList;
 import java.util.List;
 
 @RestController
