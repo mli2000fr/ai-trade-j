@@ -541,23 +541,28 @@ public class BestCombinationStrategyHelper {
 
 
 
-    public SignalType getBestSignal(String symbol){/*
+    public SignalType getBestSignal(String symbol){
         BestCombinationResult bestCombinationResult = getBestCombinationResult(symbol);
+        if(bestCombinationResult == null) {
+            return null;
+        }else{
+            return this.getSignal(symbol);
+        }
+        /*
         BestInOutStrategy best = strategieHelper.getBestInOutStrategy(symbol);
         if(bestCombinationResult == null && best == null){
             return SignalType.NONE;
         }else if(bestCombinationResult == null) {
-            return strategieHelper.getBestInOutSignal(symbol);
+            return strategieHelper.getBestInOutSignal(symbol).getType();
         }else if(best == null) {
             return this.getSignal(symbol);
         }else{
             if(bestCombinationResult.backtestResult.rendement > best.getResult().getRendement()){
                 return this.getSignal(symbol);
             }else {
-                return strategieHelper.getBestInOutSignal(symbol);
+                return strategieHelper.getBestInOutSignal(symbol).getType();
             }
         }*/
-        return null;//TODO
     }
 
 
