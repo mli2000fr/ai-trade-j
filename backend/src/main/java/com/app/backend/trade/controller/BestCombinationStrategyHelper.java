@@ -709,7 +709,7 @@ public class BestCombinationStrategyHelper {
                             swingParams.trendBreakoutMin, swingParams.trendBreakoutMax, swingParams.trendBreakoutStep
                     );
                     outStrategies.add(new ImprovedTrendFollowingStrategy(params.trendPeriod, params.shortMaPeriod, params.longMaPeriod, params.breakoutThreshold, params.useRsiFilter, params.rsiPeriod));
-                    resultObj.inParams.put("ImprovedTrendFollowing", params);
+                    resultObj.outParams.put("ImprovedTrendFollowing", params);
                 } else if (clazz.equals(SmaCrossoverStrategy.class)) {
                     StrategieBackTest.SmaCrossoverParams params = backTest.optimiseSmaCrossoverParameters(
                             optimSeries,
@@ -717,7 +717,7 @@ public class BestCombinationStrategyHelper {
                             swingParams.smaLongMin, swingParams.smaLongMax
                     );
                     outStrategies.add(new SmaCrossoverStrategy(params.shortPeriod, params.longPeriod));
-                    resultObj.inParams.put("SmaCrossover", params);
+                    resultObj.outParams.put("SmaCrossover", params);
                 } else if (clazz.equals(RsiStrategy.class)) {
                     StrategieBackTest.RsiParams params = backTest.optimiseRsiParameters(
                             optimSeries,
@@ -728,14 +728,14 @@ public class BestCombinationStrategyHelper {
                             swingParams.rsiStep
                     );
                     outStrategies.add(new RsiStrategy(params.rsiPeriod, params.oversold, params.overbought));
-                    resultObj.inParams.put("Rsi", params);
+                    resultObj.outParams.put("Rsi", params);
                 } else if (clazz.equals(BreakoutStrategy.class)) {
                     StrategieBackTest.BreakoutParams params = backTest.optimiseBreakoutParameters(
                             optimSeries,
                             swingParams.breakoutLookbackMin, swingParams.breakoutLookbackMax
                     );
                     outStrategies.add(new BreakoutStrategy(params.lookbackPeriod));
-                    resultObj.inParams.put("Breakout", params);
+                    resultObj.outParams.put("Breakout", params);
                 } else if (clazz.equals(MacdStrategy.class)) {
                     StrategieBackTest.MacdParams params = backTest.optimiseMacdParameters(
                             optimSeries,
@@ -744,7 +744,7 @@ public class BestCombinationStrategyHelper {
                             swingParams.macdSignalMin, swingParams.macdSignalMax
                     );
                     outStrategies.add(new MacdStrategy(params.shortPeriod, params.longPeriod, params.signalPeriod));
-                    resultObj.inParams.put("Macd", params);
+                    resultObj.outParams.put("Macd", params);
                 } else if (clazz.equals(MeanReversionStrategy.class)) {
                     StrategieBackTest.MeanReversionParams params = backTest.optimiseMeanReversionParameters(
                             optimSeries,
@@ -753,12 +753,28 @@ public class BestCombinationStrategyHelper {
                             swingParams.meanRevThresholdStep
                     );
                     outStrategies.add(new MeanReversionStrategy(params.smaPeriod, params.threshold));
-                    resultObj.inParams.put("MeanReversion", params);
+                    resultObj.outParams.put("MeanReversion", params);
                 }
             }
             // Combiner les règles d'entrée et de sortie
-            final Rule finalEntryRule;
-            final Rule finalExitRule;
+            final Rule finalEntryRuleOptim;
+            final Rule finalExitRuleOptim;
+            {
+                Rule tempEntryRule = null;
+                Rule tempExitRule = null;
+                for (TradeStrategy strat : inStrategies) {
+                    if (tempEntryRule == null) tempEntryRule = strat.getEntryRule(optimSeries);
+                    else tempEntryRule = tempEntryRule.or(strat.getEntryRule(optimSeries));
+                }
+                for (TradeStrategy strat : outStrategies) {
+                    if (tempExitRule == null) tempExitRule = strat.getExitRule(optimSeries);
+                    else tempExitRule = tempExitRule.or(strat.getExitRule(optimSeries));
+                }
+                finalEntryRuleOptim = tempEntryRule;
+                finalExitRuleOptim = tempExitRule;
+            }
+            final Rule finalEntryRuleOTest;
+            final Rule finalExitRuleOpTest;
             {
                 Rule tempEntryRule = null;
                 Rule tempExitRule = null;
@@ -770,22 +786,30 @@ public class BestCombinationStrategyHelper {
                     if (tempExitRule == null) tempExitRule = strat.getExitRule(testSeries);
                     else tempExitRule = tempExitRule.or(strat.getExitRule(testSeries));
                 }
-                finalEntryRule = tempEntryRule;
-                finalExitRule = tempExitRule;
+                finalEntryRuleOTest = tempEntryRule;
+                finalExitRuleOpTest = tempExitRule;
             }
-            TradeStrategy combinedStrategy = new TradeStrategy() {
+            TradeStrategy combinedStrategyOptim = new TradeStrategy() {
                 @Override
-                public Rule getEntryRule(BarSeries s) { return finalEntryRule; }
+                public Rule getEntryRule(BarSeries s) { return finalEntryRuleOptim; }
                 @Override
-                public Rule getExitRule(BarSeries s) { return finalExitRule; }
+                public Rule getExitRule(BarSeries s) { return finalExitRuleOptim; }
+                @Override
+                public String getName() { return "CombinedStrategy"; }
+            };
+            TradeStrategy combinedStrategyTest = new TradeStrategy() {
+                @Override
+                public Rule getEntryRule(BarSeries s) { return finalEntryRuleOTest; }
+                @Override
+                public Rule getExitRule(BarSeries s) { return finalExitRuleOpTest; }
                 @Override
                 public String getName() { return "CombinedStrategy"; }
             };
             // Backtest sur la partie optimisation (train)
-            RiskResult trainResult = backTest.backtestStrategy(combinedStrategy, optimSeries);
+            RiskResult trainResult = backTest.backtestStrategy(combinedStrategyOptim, optimSeries);
             trainPerformances.add(trainResult.rendement);
             // Backtest sur la partie test
-            RiskResult testResult = backTest.backtestStrategy(combinedStrategy, testSeries);
+            RiskResult testResult = backTest.backtestStrategy(combinedStrategyTest, testSeries);
             testPerformances.add(testResult.rendement);
             foldResults.add(testResult);
         }
