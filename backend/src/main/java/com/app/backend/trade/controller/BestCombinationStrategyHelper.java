@@ -916,6 +916,61 @@ public class BestCombinationStrategyHelper {
         return resultObj;
     }
 
+
+    public List<BestCombinationResult> getBestPerfActions(Integer limit, String sort, Boolean filtered){
+        String orderBy = "rendement_score";
+        if ("score_swing_trade".equalsIgnoreCase(sort)) {
+            orderBy = "score_swing_trade";
+        }else if ("rendement_sum".equalsIgnoreCase(sort)) {
+            orderBy = "rendement_sum";
+        }else if ("rendement".equalsIgnoreCase(sort)) {
+            orderBy = "rendement";
+        }
+        String sql = "SELECT * FROM best_in_out_mix_strategy WHERE profit_factor <> 0 AND max_drawdown <> 0 AND win_rate < 1";
+        if (filtered != null && filtered) {
+            sql += " AND fltred_out = false";
+        }
+        sql += " ORDER BY " + orderBy + " DESC";
+        if (limit != null && limit > 0) {
+            sql += " LIMIT " + limit;
+        }
+
+        List<BestCombinationResult> results = jdbcTemplate.query(sql, (rs, rowNum) -> {
+            BestCombinationResult result = new BestCombinationResult();
+            result.symbol = rs.getString("symbol");
+            result.inStrategyNames = gson.fromJson(rs.getString("in_strategy_names"), new TypeToken<List<String>>(){}.getType());
+            result.outStrategyNames = gson.fromJson(rs.getString("out_strategy_names"), new TypeToken<List<String>>(){}.getType());
+            result.inParams = gson.fromJson(rs.getString("in_params"), new TypeToken<Map<String, Object>>(){}.getType());
+            result.outParams = gson.fromJson(rs.getString("out_params"), new TypeToken<Map<String, Object>>(){}.getType());
+            result.result = RiskResult.builder()
+                    .rendement(rs.getDouble("rendement"))
+                    .maxDrawdown(rs.getDouble("max_drawdown"))
+                    .tradeCount(rs.getInt("trade_count"))
+                    .winRate(rs.getDouble("win_rate"))
+                    .avgPnL(rs.getDouble("avg_pnl"))
+                    .profitFactor(rs.getDouble("profit_factor"))
+                    .avgTradeBars(rs.getDouble("avg_trade_bars"))
+                    .maxTradeGain(rs.getDouble("max_trade_gain"))
+                    .maxTradeLoss(rs.getDouble("max_trade_loss"))
+                    .scoreSwingTrade(rs.getDouble("score_swing_trade"))
+                    .fltredOut(rs.getBoolean("fltred_out")).build();
+            result.contextOptim = ParamsOptim.builder()
+                    .initialCapital(rs.getDouble("initial_capital"))
+                    .riskPerTrade(rs.getDouble("risk_per_trade"))
+                    .stopLossPct(rs.getDouble("stop_loss_pct"))
+                    .takeProfitPct(rs.getDouble("take_profit_pct"))
+                    .nbSimples(rs.getInt("nb_simples"))
+                    .build();
+            result.check= new com.google.gson.Gson().fromJson(rs.getString("check_result"), RiskResult.class);
+            result.rendementSum = rs.getDouble("rendement_sum");
+            result.rendementDiff = rs.getDouble("rendement_diff");
+            result.rendementScore = rs.getDouble("rendement_score");
+            return result;
+        });
+        return results;
+    }
+
+
     public RiskResult checkResultat(BarSeries checkSeries, BestCombinationResult resultObj){
         List<TradeStrategy> inStrategiesCheck = new ArrayList<>();
         for (String name : resultObj.inStrategyNames) {

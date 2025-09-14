@@ -134,7 +134,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [checkedRows, setCheckedRows] = useState<{[key: number]: boolean}>({});
   const [limit, setLimit] = useState<number>(20);
   const [indices, setIndices] = useState<{ [symbol: string]: SignalInfo | string }>({});
-  const [sort, setSort] = useState<string>('rendement_score');
+  const [sort, setSort] = useState<string>('single:rendement_score');
   const [showOnlyNonFiltered, setShowOnlyNonFiltered] = useState(false);
   const [bougies, setBougies] = useState<any[]>([]);
   const [bougiesLoading, setBougiesLoading] = useState(false);
@@ -144,7 +144,10 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    let url = `/api/result/global?limit=${limit}&sort=${sort}`;
+    const type = sort.split(':')[0];
+    const tri = sort.split(':')[1];
+
+    let url = `/api/result/global?limit=${limit}&type=${type}&sort=${tri}`;
     if (showOnlyNonFiltered) {
       url += `&filtered=true`;
     }
@@ -328,10 +331,14 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               onChange={e => setSort(e.target.value)}
               style={{ padding: '4px 8px', marginRight: 16 }}
             >
-              <option value="rendement_score">Score Rendement</option>
-              <option value="rendement">Rendement</option>
-              <option value="rendement_sum">Rendement Sum</option>
-              <option value="score_swing_trade">Score Swing Trade</option>
+              <option value="single:rendement_score">Single - Score Rendement</option>
+              <option value="single:rendement">Single - Rendement</option>
+              <option value="single:rendement_sum">Single - Rendement Sum</option>
+              <option value="single:score_swing_trade">Single - Score Swing Trade</option>
+              <option value="mix:rendement_score">Mix - Score Rendement</option>
+              <option value="mix:rendement">Mix - Rendement</option>
+              <option value="mix:rendement_sum">Mix - Rendement Sum</option>
+              <option value="mix:score_swing_trade">Mix - Score Swing Trade</option>
             </select>
             <label style={{ marginLeft: 16, marginRight: 16 }}>
               <input

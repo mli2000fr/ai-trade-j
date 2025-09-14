@@ -20,9 +20,10 @@ public class GlobalStrategyController {
 
     @GetMapping("/global")
     public List<MixResultat> getBestScoreAction(@RequestParam(value = "limit", required = false) Integer limit,
+                                                @RequestParam(value = "type", required = false, defaultValue = "single") String type,
                                                 @RequestParam(value = "sort", required = false, defaultValue = "rendement_score") String sort,
                                                 @RequestParam(value = "filtered", required = false) Boolean filtered) {
-        return globalStrategyHelper.getBestScoreAction(limit, sort, filtered);
+        return globalStrategyHelper.getBestScoreAction(limit, type, sort, filtered);
     }
 
 }

@@ -20,5 +20,45 @@ public class BestInOutStrategy {
     public double rendementSum;
     public double rendementDiff;
     public double rendementScore;
+
+    public static BestInOutStrategy empty() {
+        BestInOutStrategy result = new BestInOutStrategy();
+        result.symbol = "";
+        result.entryName = "";
+        result.entryParams = null;
+        result.exitName = "";
+        result.exitParams = null;
+        result.result = RiskResult.builder()
+            .rendement(0.0)
+            .maxDrawdown(0.0)
+            .tradeCount(0)
+            .winRate(0.0)
+            .avgPnL(0.0)
+            .profitFactor(0.0)
+            .avgTradeBars(0.0)
+            .maxTradeGain(0.0)
+            .maxTradeLoss(0.0)
+            .scoreSwingTrade(0.0)
+            .fltredOut(false)
+            .build();
+        result.check = RiskResult.builder()
+            .rendement(0.0)
+            .maxDrawdown(0.0)
+            .tradeCount(0)
+            .winRate(0.0)
+            .avgPnL(0.0)
+            .profitFactor(0.0)
+            .avgTradeBars(0.0)
+            .maxTradeGain(0.0)
+            .maxTradeLoss(0.0)
+            .scoreSwingTrade(0.0)
+            .fltredOut(false)
+            .build();
+        result.paramsOptim = null;
+        result.rendementSum = 0.0;
+        result.rendementDiff = 0.0;
+        result.rendementScore = 0.0;
+        return result;
+    }
 }
 
