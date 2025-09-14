@@ -19,7 +19,6 @@ import org.springframework.stereotype.Component;
  */
 @Setter
 @Getter
-@Builder
 @Component
 public class LstmConfig {
     /**

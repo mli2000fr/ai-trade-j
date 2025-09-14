@@ -19,6 +19,10 @@ public class BestCombinationResult {
     public Map<String, Object> inParams = new HashMap<>();
     public Map<String, Object> outParams = new HashMap<>();
     public RiskResult backtestResult;
+    public RiskResult checkResult;
+    public double rendementSum;
+    public double rendementDiff;
+    public double rendementScore;
     public ParamsOptim contextOptim;
 }
 

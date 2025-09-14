@@ -271,6 +271,7 @@ public class BestCombinationStrategyHelper {
         String outStrategyNamesJson = gson.toJson(result.outStrategyNames);
         String inParamsJson = gson.toJson(result.inParams);
         String outParamsJson = gson.toJson(result.outParams);
+        String check = new com.google.gson.Gson().toJson(result.checkResult);
         // Vérifier si le symbol existe déjà
         String checkSql = "SELECT COUNT(*) FROM best_in_out_mix_strategy WHERE symbol = ?";
         int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
@@ -283,6 +284,9 @@ public class BestCombinationStrategyHelper {
                     in_params = ?, 
                     out_params = ?, 
                     rendement = ?, 
+                    rendement_sum = ?,
+                    rendement_diff = ?,
+                    rendement_score = ?,
                     trade_count = ?, 
                     win_rate = ?, 
                     max_drawdown = ?, 
@@ -298,6 +302,7 @@ public class BestCombinationStrategyHelper {
                     risk_per_trade = ?, 
                     stop_loss_pct = ?, 
                     take_profit_pct = ?, 
+                    check_result = ?
                     update_date = CURRENT_TIMESTAMP WHERE symbol = ?""";
             jdbcTemplate.update(updateSql,
                     inStrategyNamesJson,
@@ -305,6 +310,9 @@ public class BestCombinationStrategyHelper {
                     inParamsJson,
                     outParamsJson,
                     result.backtestResult.rendement,
+                    result.rendementSum,
+                    result.rendementDiff,
+                    result.rendementScore,
                     result.backtestResult.tradeCount,
                     result.backtestResult.winRate,
                     result.backtestResult.maxDrawdown,
@@ -320,6 +328,7 @@ public class BestCombinationStrategyHelper {
                     result.contextOptim.riskPerTrade,
                     result.contextOptim.stopLossPct,
                     result.contextOptim.takeProfitPct,
+                    check,
                     symbol);
         } else {
             // INSERT
@@ -331,6 +340,9 @@ public class BestCombinationStrategyHelper {
                     in_params, 
                     out_params, 
                     rendement,
+                    rendement_sum,
+                    rendement_diff,
+                    rendement_score,
                     trade_count,
                     win_rate,
                     max_drawdown,
@@ -346,9 +358,10 @@ public class BestCombinationStrategyHelper {
                     stop_loss_pct, 
                     take_profit_pct, 
                     nb_simples,
+                    check_result,
                     created_date,
                     update_date
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""";
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""";
             jdbcTemplate.update(insertSql,
                     symbol,
                     inStrategyNamesJson,
@@ -356,6 +369,9 @@ public class BestCombinationStrategyHelper {
                     inParamsJson,
                     outParamsJson,
                     result.backtestResult.rendement,
+                    result.rendementSum,
+                    result.rendementDiff,
+                    result.rendementScore,
                     result.backtestResult.tradeCount,
                     result.backtestResult.winRate,
                     result.backtestResult.maxDrawdown,
@@ -371,6 +387,7 @@ public class BestCombinationStrategyHelper {
                     result.contextOptim.stopLossPct,
                     result.contextOptim.takeProfitPct,
                     result.contextOptim.nbSimples,
+                    check,
                     java.sql.Date.valueOf(java.time.LocalDate.now()));
         }
     }
@@ -405,6 +422,10 @@ public class BestCombinationStrategyHelper {
                 .takeProfitPct(row.get("take_profit_pct") != null ? ((Number) row.get("take_profit_pct")).doubleValue() : 0.0)
                 .nbSimples(row.get("nb_simples") != null ? ((Integer) row.get("nb_simples")).intValue() : 0)
                 .build();
+        result.checkResult= new com.google.gson.Gson().fromJson((String)row.get("check_result"), RiskResult.class);
+        result.rendementSum = row.get("rendement_sum") != null ? ((Number) row.get("rendement_sum")).doubleValue() : 0.0;
+        result.rendementDiff = row.get("rendement_diff") != null ? ((Number) row.get("rendement_diff")).doubleValue() : 0.0;
+        result.rendementScore = row.get("rendement_score") != null ? ((Number) row.get("rendement_score")).doubleValue() : 0.0;
         return result;
     }
 
@@ -809,6 +830,7 @@ public class BestCombinationStrategyHelper {
         }
 
 
+
         resultObj.backtestResult = aggResult;
         resultObj.inStrategyNames = inCombo.stream().map(Class::getSimpleName).toList();
         resultObj.outStrategyNames = outCombo.stream().map(Class::getSimpleName).toList();
@@ -819,8 +841,89 @@ public class BestCombinationStrategyHelper {
                 .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
                 .nbSimples(totalCount)
                 .build();
+
+        //fait un check final
+        BarSeries checkSeries = fullSeries.getSubSeries(fullSeries.getBarCount() - testWindow, fullSeries.getBarCount());
+        RiskResult checkResult = this.checkResultat(checkSeries, resultObj);
+        resultObj.rendementSum  = checkResult.getRendement() + checkResult.getRendement();
+        resultObj.rendementDiff = checkResult.getRendement() - checkResult.getRendement();
+        resultObj.rendementScore = resultObj.rendementSum - (resultObj.rendementDiff > 0 ? resultObj.rendementDiff : -resultObj.rendementDiff);
+        resultObj.checkResult = checkResult;
+
         TradeUtils.log("BestCombinationResult (walk-forward) : " + resultObjToString(resultObj));
         return resultObj;
+    }
+
+    public RiskResult checkResultat(BarSeries checkSeries, BestCombinationResult resultObj){
+        List<TradeStrategy> inStrategiesCheck = new ArrayList<>();
+        for (String name : resultObj.inStrategyNames) {
+            Object params = resultObj.inParams.get(name.replace("Strategy", ""));
+            if (name.equals("ImprovedTrendFollowingStrategy") && params instanceof StrategieBackTest.ImprovedTrendFollowingParams) {
+                StrategieBackTest.ImprovedTrendFollowingParams p = (StrategieBackTest.ImprovedTrendFollowingParams) params;
+                inStrategiesCheck.add(new ImprovedTrendFollowingStrategy(p.trendPeriod, p.shortMaPeriod, p.longMaPeriod, p.breakoutThreshold, p.useRsiFilter, p.rsiPeriod));
+            } else if (name.equals("SmaCrossoverStrategy") && params instanceof StrategieBackTest.SmaCrossoverParams) {
+                StrategieBackTest.SmaCrossoverParams p = (StrategieBackTest.SmaCrossoverParams) params;
+                inStrategiesCheck.add(new SmaCrossoverStrategy(p.shortPeriod, p.longPeriod));
+            } else if (name.equals("RsiStrategy") && params instanceof StrategieBackTest.RsiParams) {
+                StrategieBackTest.RsiParams p = (StrategieBackTest.RsiParams) params;
+                inStrategiesCheck.add(new RsiStrategy(p.rsiPeriod, p.oversold, p.overbought));
+            } else if (name.equals("BreakoutStrategy") && params instanceof StrategieBackTest.BreakoutParams) {
+                StrategieBackTest.BreakoutParams p = (StrategieBackTest.BreakoutParams) params;
+                inStrategiesCheck.add(new BreakoutStrategy(p.lookbackPeriod));
+            } else if (name.equals("MacdStrategy") && params instanceof StrategieBackTest.MacdParams) {
+                StrategieBackTest.MacdParams p = (StrategieBackTest.MacdParams) params;
+                inStrategiesCheck.add(new MacdStrategy(p.shortPeriod, p.longPeriod, p.signalPeriod));
+            } else if (name.equals("MeanReversionStrategy") && params instanceof StrategieBackTest.MeanReversionParams) {
+                StrategieBackTest.MeanReversionParams p = (StrategieBackTest.MeanReversionParams) params;
+                inStrategiesCheck.add(new MeanReversionStrategy(p.smaPeriod, p.threshold));
+            }
+        }
+        List<TradeStrategy> outStrategiesCheck = new ArrayList<>();
+        for (String name : resultObj.outStrategyNames) {
+            Object params = resultObj.outParams.get(name.replace("Strategy", ""));
+            if (name.equals("ImprovedTrendFollowingStrategy") && params instanceof StrategieBackTest.ImprovedTrendFollowingParams) {
+                StrategieBackTest.ImprovedTrendFollowingParams p = (StrategieBackTest.ImprovedTrendFollowingParams) params;
+                outStrategiesCheck.add(new ImprovedTrendFollowingStrategy(p.trendPeriod, p.shortMaPeriod, p.longMaPeriod, p.breakoutThreshold, p.useRsiFilter, p.rsiPeriod));
+            } else if (name.equals("SmaCrossoverStrategy") && params instanceof StrategieBackTest.SmaCrossoverParams) {
+                StrategieBackTest.SmaCrossoverParams p = (StrategieBackTest.SmaCrossoverParams) params;
+                outStrategiesCheck.add(new SmaCrossoverStrategy(p.shortPeriod, p.longPeriod));
+            } else if (name.equals("RsiStrategy") && params instanceof StrategieBackTest.RsiParams) {
+                StrategieBackTest.RsiParams p = (StrategieBackTest.RsiParams) params;
+                outStrategiesCheck.add(new RsiStrategy(p.rsiPeriod, p.oversold, p.overbought));
+            } else if (name.equals("BreakoutStrategy") && params instanceof StrategieBackTest.BreakoutParams) {
+                StrategieBackTest.BreakoutParams p = (StrategieBackTest.BreakoutParams) params;
+                outStrategiesCheck.add(new BreakoutStrategy(p.lookbackPeriod));
+            } else if (name.equals("MacdStrategy") && params instanceof StrategieBackTest.MacdParams) {
+                StrategieBackTest.MacdParams p = (StrategieBackTest.MacdParams) params;
+                outStrategiesCheck.add(new MacdStrategy(p.shortPeriod, p.longPeriod, p.signalPeriod));
+            } else if (name.equals("MeanReversionStrategy") && params instanceof StrategieBackTest.MeanReversionParams) {
+                StrategieBackTest.MeanReversionParams p = (StrategieBackTest.MeanReversionParams) params;
+                outStrategiesCheck.add(new MeanReversionStrategy(p.smaPeriod, p.threshold));
+            }
+        }
+        // Combiner les règles d'entrée et de sortie pour le check
+        Rule entryRuleCheck = null;
+        Rule exitRuleCheck = null;
+        for (TradeStrategy strat : inStrategiesCheck) {
+            if (entryRuleCheck == null) entryRuleCheck = strat.getEntryRule(checkSeries);
+            else entryRuleCheck = entryRuleCheck.or(strat.getEntryRule(checkSeries));
+        }
+        for (TradeStrategy strat : outStrategiesCheck) {
+            if (exitRuleCheck == null) exitRuleCheck = strat.getExitRule(checkSeries);
+            else exitRuleCheck = exitRuleCheck.or(strat.getExitRule(checkSeries));
+        }
+        final Rule finalEntryRuleCheck = entryRuleCheck;
+        final Rule finalExitRuleCheck = exitRuleCheck;
+        TradeStrategy combinedCheckStrategy = new TradeStrategy() {
+            @Override
+            public Rule getEntryRule(BarSeries s) { return finalEntryRuleCheck; }
+            @Override
+            public Rule getExitRule(BarSeries s) { return finalExitRuleCheck; }
+            @Override
+            public String getName() { return "CombinedCheckStrategy"; }
+        };
+        StrategieBackTest backTestCheck = new StrategieBackTest();
+        return backTestCheck.backtestStrategyRisk(combinedCheckStrategy, checkSeries);
     }
 
 }

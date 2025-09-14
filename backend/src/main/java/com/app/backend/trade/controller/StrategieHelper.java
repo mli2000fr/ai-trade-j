@@ -510,7 +510,7 @@ public class StrategieHelper {
                     stop_loss_pct = ?,
                     take_profit_pct = ?,
                     nb_simples = ?,
-                    check = ?
+                    check_result = ?
                     updated_date = CURRENT_TIMESTAMP
                 WHERE symbol = ?
             """;
