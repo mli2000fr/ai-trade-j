@@ -396,34 +396,34 @@ const BestPerformanceSymbolBlock: React.FC = () => {
           ) : error ? (
             <Alert severity="error">{error}</Alert>
           ) : (
-            <TableContainer component={Paper} sx={{ mb: 2 }}>
+            <TableContainer component={Paper} sx={{ mb: 2, maxHeight: '70vh', overflow: 'auto' }}>
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ backgroundColor: '#e0e0e0' }}></TableCell>
-                    <TableCell sx={{ backgroundColor: '#e0e0e0' }}></TableCell>
-                    <TableCell colSpan={7} align="center" sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
-                    <TableCell colSpan={7} align="center" sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
-                    <TableCell sx={{ backgroundColor: '#e0e0e0' }}></TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
+                    <TableCell colSpan={7} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
+                    <TableCell colSpan={7} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Filtrée</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement check</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Score Rendement</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Score Swing Trade</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Durée moyenne trade</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Filtrée</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement check</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Rendement</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Swing Trade</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Durée moyenne trade</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Détails</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Filtrée</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement check</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Score Rendement</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Score Swing Trade</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Durée moyenne trade</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Filtrée</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement check</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Rendement</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Swing Trade</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Durée moyenne trade</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Détails</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -606,7 +606,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                             </Accordion>
               <Accordion>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie d'entrée</Typography>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie d'entrée (Single)</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
                   <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.single.entryName}</b></Typography>
@@ -615,7 +615,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               </Accordion>
               <Accordion>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie de sortie</Typography>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie de sortie (Single)</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
                   <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.single.exitName}</b></Typography>
@@ -625,7 +625,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
 
               <Accordion>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Paramètres d'optimisation</Typography>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Paramètres d'optimisation (Single)</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
                   {selected.single.paramsOptim && renderObjectTable(selected.single.paramsOptim)}
