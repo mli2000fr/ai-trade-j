@@ -57,5 +57,14 @@ public class GlobalStrategyHelper {
         return results;
     }
 
+    public MixResultat getInfos(String symbol) {
+        BestInOutStrategy single = strategieHelper.getBestInOutStrategy(symbol);
+        BestCombinationResult mix = bestCombinationStrategyHelper.getBestCombinationResult(symbol);
+        return MixResultat.builder()
+                .single(single == null ? BestInOutStrategy.empty() : single)
+                .mix(mix == null ? BestCombinationResult.empty() : mix)
+                .build();
+    }
+
 
 }

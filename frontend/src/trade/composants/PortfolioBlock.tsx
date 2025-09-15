@@ -13,6 +13,15 @@ import TableRow from '@mui/material/TableRow';
 import Paper from '@mui/material/Paper';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import BestPerformanceDialog from './BestPerformanceDialog';
 
 interface PortfolioBlockProps {
   portfolio: any;
@@ -39,6 +48,16 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
   const [indices, setIndices] = useState<{ [symbol: string]: SignalInfo | string }>({});
   const [sellError, setSellError] = useState<string | null>(null);
   const [sellSuccess, setSellSuccess] = useState<string | null>(null);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [dialogData, setDialogData] = useState<any>(null);
+  const [bougies, setBougies] = useState<any[]>([]);
+  const [bougiesLoading, setBougiesLoading] = useState(false);
+  const [bougiesError, setBougiesError] = useState<string | null>(null);
+  const [indiceSingle, setIndiceSingle] = useState<any>(null);
+  const [indiceMix, setIndiceMix] = useState<any>(null);
+  const [predict, setPredict] = useState<any>(null);
+  const [selected, setSelected] = useState<any>(null);
 
   // Réinitialisation de sellError quand resetSellErrorKey change
   useEffect(() => {
@@ -110,6 +129,61 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
     } catch (e: any) {
       setSellError(e.message || 'Erreur lors de la vente.');
     }
+  };
+
+  // Fonction pour charger les données du Dialog
+  const handleOpenDialog = async (symbol: string) => {
+    setSelectedSymbol(symbol);
+    setOpenDialog(true);
+    setBougiesLoading(true);
+    setBougiesError(null);
+    try {
+      // Bougies
+      const bougiesRes = await fetch(`/api/stra/getBougiesBySymbol?symbol=${symbol}&historique=250`);
+      const bougiesData = await bougiesRes.json();
+      // infos
+      const infosAction = await fetch(`/api/result/infosSymbol?symbol=${symbol}&historique=250`);
+      const infosActionData = await infosAction.json();
+      // Indice single
+      const indiceSingleRes = await fetch(`/api/stra/strategies/get_indice?symbol=${symbol}`);
+      const indiceSingleData = await indiceSingleRes.json();
+      // Indice mix
+      const indiceMixRes = await fetch(`/api/best-combination/get_indice?symbol=${symbol}`);
+      const indiceMixData = await indiceMixRes.json();
+      // Prédiction
+      const predictRes = await fetch(`/api/lsdm/predict?symbol=${symbol}`);
+      const predictData = await predictRes.json();
+      debugger;
+      setSelected({
+        single: infosActionData.single,
+        mix: infosActionData.mix,
+        bougies: bougiesData,
+        indiceSingle: indiceSingleData,
+        indiceMix: indiceMixData,
+        predict: predictData
+      });
+    } catch (e) {
+      setSelected(null);
+      setBougiesError('Erreur lors du chargement des données');
+    }
+    setBougiesLoading(false);
+  };
+
+  // Fonction utilitaire pour afficher un objet sous forme de tableau
+  const renderObjectTable = (obj: Record<string, any>) => {
+    if (!obj) return null;
+    return (
+      <Table size="small" sx={{ mb: 2 }}>
+        <TableBody>
+          {Object.entries(obj).map(([key, value]) => (
+            <TableRow key={key}>
+              <TableCell sx={{ fontWeight: 'bold', width: '40%' }}>{key}</TableCell>
+              <TableCell>{typeof value === 'number' ? value.toFixed(4) : String(value)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
   };
 
   return (
@@ -254,7 +328,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                           <TableCell sx={cellStyle}>{pos.unrealized_plpc !== undefined && pos.unrealized_plpc !== null ? (Number(pos.unrealized_plpc) * 100).toFixed(3) + ' %' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.unrealized_pl !== undefined && pos.unrealized_pl !== null ? Number(pos.unrealized_pl).toFixed(2) + ' $' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>
-                            <Button size="small" variant="outlined" onClick={() => {  }}>Détails</Button>
+                            <Button size="small" variant="outlined" onClick={() => handleOpenDialog(pos.symbol)}>Détails</Button>
                           </TableCell>
                         </TableRow>
                       );
@@ -268,6 +342,15 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
           </>
         )}
       </CardContent>
+      {/* Ajout du Dialog ici, à la racine du composant  open={openDialog} onClose={() => setOpenDialog(false)}*/}
+      <BestPerformanceDialog
+              open={openDialog}
+              selected={selected}
+              bougies={selected?.bougies}
+              bougiesLoading={bougiesLoading}
+              bougiesError={bougiesError}
+              onClose={() => setOpenDialog(false)}
+            />
     </Card>
   );
 };

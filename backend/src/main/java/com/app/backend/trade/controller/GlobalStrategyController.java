@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/result")
+@RequestMapping("/api/result/")
 public class GlobalStrategyController {
 
 
@@ -24,6 +24,11 @@ public class GlobalStrategyController {
                                                 @RequestParam(value = "sort", required = false, defaultValue = "rendement_score") String sort,
                                                 @RequestParam(value = "filtered", required = false) Boolean filtered) {
         return globalStrategyHelper.getBestScoreAction(limit, type, sort, filtered);
+    }
+
+    @GetMapping("/infosSymbol")
+    public MixResultat getInfosAction(@RequestParam(value = "symbol", required = true) String symbol) {
+        return globalStrategyHelper.getInfos(symbol);
     }
 
 }
