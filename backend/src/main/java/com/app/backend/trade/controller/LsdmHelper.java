@@ -64,11 +64,18 @@ public class LsdmHelper {
     // Entraînement LSTM
     public void trainLstm(String symbol) {
         BarSeries series = getBarBySymbol(symbol, null);
-        lstmTradePredictor.initWithConfig(new LstmConfig());
-        MultiLayerNetwork model = lstmTradePredictor.trainLstm(series);
-        // Sauvegarder le modèle dans la base après entraînement
+        LstmConfig config = new LstmConfig();
+        MultiLayerNetwork model = lstmTradePredictor.initModel(
+            config.getWindowSize(),
+            1,
+            config.getLstmNeurons(),
+            config.getDropoutRate(),
+            config.getLearningRate(),
+            config.getOptimizer()
+        );
+        model = lstmTradePredictor.trainLstm(series, config, model);
         try {
-            lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate);
+            lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate, config);
         } catch (Exception e) {
             logger.error("Erreur lors de la sauvegarde du modèle : {}", e.getMessage());
         }
@@ -76,24 +83,30 @@ public class LsdmHelper {
 
     // Prédiction LSTM
     public PreditLsdm getPredit(String symbol) {
-        boolean modelLoaded;
+        LstmConfig config = new LstmConfig();
+        MultiLayerNetwork model = null;
         try {
-            lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
-            modelLoaded = true;
+            model = lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate, config);
         } catch (Exception e) {
-            modelLoaded = false;
-        }
-        BarSeries series = getBarBySymbol(symbol, null);
-        if (!modelLoaded) {
-            lstmTradePredictor.initWithConfig(new LstmConfig());
-            MultiLayerNetwork model = lstmTradePredictor.trainLstm(series);
+            // Si le modèle n'existe pas, on l'entraîne
+            BarSeries series = getBarBySymbol(symbol, null);
+            model = lstmTradePredictor.initModel(
+                config.getWindowSize(),
+                1,
+                config.getLstmNeurons(),
+                config.getDropoutRate(),
+                config.getLearningRate(),
+                config.getOptimizer()
+            );
+            model = lstmTradePredictor.trainLstm(series, config, model);
             try {
-                lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate);
+                lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate, config);
             } catch (Exception ex) {
                 logger.error("Erreur lors de la sauvegarde du modèle : {}", ex.getMessage());
             }
         }
-        return lstmTradePredictor.getPredit(series);
+        BarSeries series = getBarBySymbol(symbol, null);
+        return lstmTradePredictor.getPredit(series, config, model);
     }
 
     /**
@@ -102,6 +115,16 @@ public class LsdmHelper {
      */
     public void crossValidateLstm(String symbol, int windowSize, int numEpochs, int kFolds, int lstmNeurons, double dropoutRate, int patience, double minDelta, double learningRate, String optimizer) {
         BarSeries series = getBarBySymbol(symbol, null);
-        lstmTradePredictor.crossValidateLstm(series, windowSize, numEpochs, kFolds, lstmNeurons, dropoutRate, patience, minDelta, learningRate, optimizer);
+        LstmConfig config = new LstmConfig();
+        config.setWindowSize(windowSize);
+        config.setNumEpochs(numEpochs);
+        config.setKFolds(kFolds);
+        config.setLstmNeurons(lstmNeurons);
+        config.setDropoutRate(dropoutRate);
+        config.setPatience(patience);
+        config.setMinDelta(minDelta);
+        config.setLearningRate(learningRate);
+        config.setOptimizer(optimizer);
+        lstmTradePredictor.crossValidateLstm(series, config);
     }
 }

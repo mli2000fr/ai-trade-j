@@ -40,9 +40,7 @@ import com.app.backend.trade.exception.ModelPersistenceException;
 
 @Service
 public class LstmTradePredictor {
-    private MultiLayerNetwork model;
     private static final Logger logger = LoggerFactory.getLogger(LstmTradePredictor.class);
-    private LstmConfig config;
     private int currentWindowSize = -1;
 
     /**
@@ -51,7 +49,6 @@ public class LstmTradePredictor {
      * @param config configuration des hyperparamètres LSTM
      */
     public void initWithConfig(LstmConfig config) {
-        this.config = config;
         // Initialisation automatique du modèle avec les paramètres du fichier de config
         initModel(
             config.getWindowSize(),
@@ -72,9 +69,7 @@ public class LstmTradePredictor {
      * @param learningRate taux d'apprentissage
      * @param optimizer nom de l'optimiseur ("adam", "rmsprop", "sgd")
      */
-    public void initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate, double learningRate, String optimizer) {
-        // Fixer le seed pour la reproductibilité
-        //org.nd4j.linalg.factory.Nd4j.getRandom().setSeed(1234);
+    public MultiLayerNetwork initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate, double learningRate, String optimizer) {
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
         builder.updater(
             "adam".equalsIgnoreCase(optimizer) ? new org.nd4j.linalg.learning.config.Adam(learningRate)
@@ -98,18 +93,19 @@ public class LstmTradePredictor {
                 .lossFunction(LossFunctions.LossFunction.MSE)
                 .build())
             .build();
-        model = new MultiLayerNetwork(conf);
+        MultiLayerNetwork model = new MultiLayerNetwork(conf);
         model.init();
         currentWindowSize = inputSize;
+        return model;
     }
 
     /**
      * Vérifie et réinitialise le modèle si le windowSize demandé est différent du modèle courant.
      */
-    private void ensureModelWindowSize(int windowSize) {
+    private MultiLayerNetwork ensureModelWindowSize(MultiLayerNetwork model, int windowSize, LstmConfig config) {
         if (model == null || currentWindowSize != windowSize) {
             logger.info("Réinitialisation du modèle LSTM : windowSize courant = {} | windowSize demandé = {}", currentWindowSize, windowSize);
-            initModel(
+            return initModel(
                 windowSize,
                 1,
                 config.getLstmNeurons(),
@@ -119,6 +115,7 @@ public class LstmTradePredictor {
             );
         } else {
             logger.info("Modèle LSTM déjà initialisé avec windowSize = {}", currentWindowSize);
+            return model;
         }
     }
 
@@ -219,15 +216,15 @@ public class LstmTradePredictor {
      * Arrête l'entraînement si le score MSE sur le jeu de test ne s'améliore plus selon patience/minDelta.
      * @param series Série de bougies
      */
-    public MultiLayerNetwork trainLstm(BarSeries series) {
-        ensureModelWindowSize(this.config.getWindowSize());
+    public MultiLayerNetwork trainLstm(BarSeries series, LstmConfig config, MultiLayerNetwork model) {
+        model = ensureModelWindowSize(model, config.getWindowSize(), config);
         double[] closes = extractCloseValues(series);
         double[] normalized = normalize(closes);
-        double[][][] sequences = createSequences(normalized, this.config.getWindowSize());
+        double[][][] sequences = createSequences(normalized, config.getWindowSize());
         // Labels : valeur suivante après chaque séquence
         double[][][] labelSeq = new double[sequences.length][1][1];
         for (int i = 0; i < labelSeq.length; i++) {
-            labelSeq[i][0][0] = normalized[i + this.config.getWindowSize()];
+            labelSeq[i][0][0] = normalized[i + config.getWindowSize()];
         }
         // Séparation train/test (80/20)
         int splitIdx = (int)(sequences.length * 0.8);
@@ -246,43 +243,34 @@ public class LstmTradePredictor {
         double bestScore = Double.MAX_VALUE;
         int epochsWithoutImprovement = 0;
         int actualEpochs = 0;
-        for (int i = 0; i < this.config.getNumEpochs(); i++) {
+        for (int i = 0; i < config.getNumEpochs(); i++) {
             model.fit(trainIterator);
             actualEpochs++;
             org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
             double mse = predictions.squaredDistance(testOutput) / testOutput.length();
             logger.info("Epoch {} terminé, Test MSE : {}", i + 1, mse);
-            if (bestScore - mse > this.config.getMinDelta()) {
+            if (bestScore - mse > config.getMinDelta()) {
                 bestScore = mse;
                 epochsWithoutImprovement = 0;
             } else {
                 epochsWithoutImprovement++;
-                if (epochsWithoutImprovement >= this.config.getPatience()) {
+                if (epochsWithoutImprovement >= config.getPatience()) {
                     logger.info("Early stopping déclenché à l'epoch {}. Meilleur Test MSE : {}", i + 1, bestScore);
                     break;
                 }
             }
         }
         logger.info("Entraînement terminé après {} epochs. Meilleur Test MSE : {}", actualEpochs, bestScore);
-        return this.model;
+        return model;
     }
 
     /**
      * Effectue une validation croisée k-fold sur le modèle LSTM.
      * Logge le score MSE, RMSE et MAE moyen et l'écart-type sur les k folds.
      * @param series série de bougies
-     * @param windowSize taille de la fenêtre
-     * @param numEpochs nombre maximal d'epochs
-     * @param kFolds nombre de folds pour la cross-validation
-     * @param lstmNeurons nombre de neurones LSTM
-     * @param dropoutRate taux de Dropout
-     * @param patience nombre d'epochs sans amélioration avant early stopping
-     * @param minDelta amélioration minimale pour considérer le score comme meilleur
-     * @param learningRate taux d'apprentissage
-     * @param optimizer nom de l'optimiseur
      */
-    public void crossValidateLstm(BarSeries series, int windowSize, int numEpochs, int kFolds, int lstmNeurons, double dropoutRate, int patience, double minDelta, double learningRate, String optimizer) {
-        ensureModelWindowSize(windowSize);
+    public void crossValidateLstm(BarSeries series, LstmConfig config) {
+        int windowSize = config.getWindowSize();
         double[] closes = extractCloseValues(series);
         double[] normalized = normalize(closes);
         double[][][] sequences = createSequences(normalized, windowSize);
@@ -290,18 +278,15 @@ public class LstmTradePredictor {
         for (int i = 0; i < labelSeq.length; i++) {
             labelSeq[i][0][0] = normalized[i + windowSize];
         }
-        int foldSize = sequences.length / kFolds;
-        double[] foldMSE = new double[kFolds];
-        double[] foldRMSE = new double[kFolds];
-        double[] foldMAE = new double[kFolds];
-        for (int fold = 0; fold < kFolds; fold++) {
-            // Définir les indices de test
+        int foldSize = sequences.length / config.getKFolds();
+        double[] foldMSE = new double[config.getKFolds()];
+        double[] foldRMSE = new double[config.getKFolds()];
+        double[] foldMAE = new double[config.getKFolds()];
+        for (int fold = 0; fold < config.getKFolds(); fold++) {
             int testStart = fold * foldSize;
-            int testEnd = (fold == kFolds - 1) ? sequences.length : testStart + foldSize;
-            // Split test
+            int testEnd = (fold == config.getKFolds() - 1) ? sequences.length : testStart + foldSize;
             double[][][] testSeq = java.util.Arrays.copyOfRange(sequences, testStart, testEnd);
             double[][][] testLabel = java.util.Arrays.copyOfRange(labelSeq, testStart, testEnd);
-            // Split train
             double[][][] trainSeq = new double[sequences.length - (testEnd - testStart)][windowSize][1];
             double[][][] trainLabel = new double[sequences.length - (testEnd - testStart)][1][1];
             int idx = 0;
@@ -319,14 +304,12 @@ public class LstmTradePredictor {
             org.nd4j.linalg.dataset.api.iterator.DataSetIterator trainIterator = new ListDataSetIterator<>(
                 java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput))
             );
-            // Initialiser un nouveau modèle pour ce fold avec les bons paramètres
-            initModel(windowSize, 1, lstmNeurons, dropoutRate, learningRate, optimizer);
-            // Early stopping
+            MultiLayerNetwork model = initModel(windowSize, 1, config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getOptimizer());
             double bestMSE = Double.MAX_VALUE;
             double bestRMSE = Double.MAX_VALUE;
             double bestMAE = Double.MAX_VALUE;
             int epochsWithoutImprovement = 0;
-            for (int epoch = 0; epoch < numEpochs; epoch++) {
+            for (int epoch = 0; epoch < config.getNumEpochs(); epoch++) {
                 model.fit(trainIterator);
                 org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
                 double mse = predictions.squaredDistance(testOutput) / testOutput.length();
@@ -336,14 +319,14 @@ public class LstmTradePredictor {
                     mae += Math.abs(predictions.getDouble(i) - testOutput.getDouble(i));
                 }
                 mae /= testOutput.length();
-                if (bestMSE - mse > minDelta) {
+                if (bestMSE - mse > config.getMinDelta()) {
                     bestMSE = mse;
                     bestRMSE = rmse;
                     bestMAE = mae;
                     epochsWithoutImprovement = 0;
                 } else {
                     epochsWithoutImprovement++;
-                    if (epochsWithoutImprovement >= patience) {
+                    if (epochsWithoutImprovement >= config.getPatience()) {
                         logger.info("Early stopping fold {} à l'epoch {}. Meilleur Test MSE : {}, RMSE : {}, MAE : {}", fold + 1, epoch + 1, bestMSE, bestRMSE, bestMAE);
                         break;
                     }
@@ -356,23 +339,23 @@ public class LstmTradePredictor {
         }
         // Calculer la moyenne et l'écart-type pour chaque métrique
         double meanMSE = 0.0, meanRMSE = 0.0, meanMAE = 0.0;
-        for (int i = 0; i < kFolds; i++) {
+        for (int i = 0; i < config.getKFolds(); i++) {
             meanMSE += foldMSE[i];
             meanRMSE += foldRMSE[i];
             meanMAE += foldMAE[i];
         }
-        meanMSE /= kFolds;
-        meanRMSE /= kFolds;
-        meanMAE /= kFolds;
+        meanMSE /= config.getKFolds();
+        meanRMSE /= config.getKFolds();
+        meanMAE /= config.getKFolds();
         double stdMSE = 0.0, stdRMSE = 0.0, stdMAE = 0.0;
-        for (int i = 0; i < kFolds; i++) {
+        for (int i = 0; i < config.getKFolds(); i++) {
             stdMSE += Math.pow(foldMSE[i] - meanMSE, 2);
             stdRMSE += Math.pow(foldRMSE[i] - meanRMSE, 2);
             stdMAE += Math.pow(foldMAE[i] - meanMAE, 2);
         }
-        stdMSE = Math.sqrt(stdMSE / kFolds);
-        stdRMSE = Math.sqrt(stdRMSE / kFolds);
-        stdMAE = Math.sqrt(stdMAE / kFolds);
+        stdMSE = Math.sqrt(stdMSE / config.getKFolds());
+        stdRMSE = Math.sqrt(stdRMSE / config.getKFolds());
+        stdMAE = Math.sqrt(stdMAE / config.getKFolds());
         logger.info("Validation croisée terminée. MSE moyen : {}, Ecart-type : {} | RMSE moyen : {}, Ecart-type : {} | MAE moyen : {}, Ecart-type : {}", meanMSE, stdMSE, meanRMSE, stdRMSE, meanMAE, stdMAE);
     }
 
@@ -384,20 +367,20 @@ public class LstmTradePredictor {
      * @throws InsufficientDataException si la série est trop courte
      */
     // Prédiction de la prochaine valeur de clôture
-    public double predictNextClose(BarSeries series) {
-        ensureModelWindowSize(this.config.getWindowSize());
+    public double predictNextClose(BarSeries series, LstmConfig config, MultiLayerNetwork model) {
+        model = ensureModelWindowSize(model, config.getWindowSize(), config);
         if (model == null) {
             throw new ModelNotFoundException("Le modèle LSTM n'est pas initialisé.");
         }
         double[] closes = extractCloseValues(series);
-        if (closes.length < this.config.getWindowSize()) {
-            throw new InsufficientDataException("Données insuffisantes pour la prédiction (windowSize=" + this.config.getWindowSize() + ", closes=" + closes.length + ").");
+        if (closes.length < config.getWindowSize()) {
+            throw new InsufficientDataException("Données insuffisantes pour la prédiction (windowSize=" + config.getWindowSize() + ", closes=" + closes.length + ").");
         }
         double[] normalized = normalize(closes);
         // Prendre la dernière séquence
-        double[][][] lastSequence = new double[1][this.config.getWindowSize()][1];
-        for (int j = 0; j < this.config.getWindowSize(); j++) {
-            lastSequence[0][j][0] = normalized[normalized.length - this.config.getWindowSize() + j];
+        double[][][] lastSequence = new double[1][config.getWindowSize()][1];
+        for (int j = 0; j < config.getWindowSize(); j++) {
+            lastSequence[0][j][0] = normalized[normalized.length - config.getWindowSize() + j];
         }
         org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(lastSequence);
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input);
@@ -416,9 +399,9 @@ public class LstmTradePredictor {
      * @return variation prédite
      */
     // Prédiction du delta (variation) de la prochaine clôture
-    public double predictNextDelta(BarSeries series, int windowSize) {
-        ensureModelWindowSize(windowSize);
-        double predicted = predictNextClose(series);
+    public double predictNextDelta(BarSeries series, int windowSize, LstmConfig config, MultiLayerNetwork model) {
+        model = ensureModelWindowSize(model, windowSize, config);
+        double predicted = predictNextClose(series, config, model);
         double[] closes = extractCloseValues(series);
         double lastClose = closes[closes.length - 1];
         return predicted - lastClose;
@@ -450,10 +433,10 @@ public class LstmTradePredictor {
      * @param series Série de bougies
      * @return "up" si hausse, "down" si baisse, "stable" sinon
      */
-    public PreditLsdm getPredit(BarSeries series) {
-        ensureModelWindowSize(config.getWindowSize());
+    public PreditLsdm getPredit(BarSeries series, LstmConfig config, MultiLayerNetwork model) {
+        model = ensureModelWindowSize(model, config.getWindowSize(), config);
         double th = computeSwingTradeThreshold(series);
-        double predicted = predictNextClose(series);
+        double predicted = predictNextClose(series, config, model);
         predicted = Math.round(predicted * 1000.0) / 1000.0;
         double[] closes = extractCloseValues(series);
         double lastClose = closes[closes.length - 1];
@@ -476,67 +459,6 @@ public class LstmTradePredictor {
                 .build();
     }
 
-    /**
-     * Sauvegarde le modèle LSTM dans un fichier et exporte les hyperparamètres dans un fichier JSON à côté.
-     * @param path chemin du fichier du modèle
-     * @throws ModelPersistenceException en cas d'erreur de sauvegarde
-     * @throws ModelNotFoundException si le modèle n'est pas initialisé
-     */
-    // Sauvegarde du modèle
-    public void saveModel(String path) throws ModelPersistenceException {
-        if (model != null) {
-            File file = new File(path);
-            File parent = file.getParentFile();
-            if (parent != null && !parent.exists()) {
-                parent.mkdirs();
-            }
-            try {
-                ModelSerializer.writeModel(model, file, true);
-                logger.info("Modèle sauvegardé dans le fichier : {}", path);
-                // Sauvegarde des hyperparamètres
-                LstmHyperparameters params = new LstmHyperparameters(
-                    currentWindowSize,
-                    config.getLstmNeurons(),
-                    config.getDropoutRate(),
-                    config.getLearningRate(),
-                    config.getNumEpochs(),
-                    config.getPatience(),
-                    config.getMinDelta(),
-                    config.getOptimizer()
-                );
-                String paramsPath = path + ".params.json";
-                params.saveToFile(paramsPath);
-                logger.info("Hyperparamètres sauvegardés dans le fichier : {}", paramsPath);
-            } catch (IOException e) {
-                logger.error("Erreur lors de la sauvegarde du modèle : {}", e.getMessage());
-                throw new ModelPersistenceException("Erreur lors de la sauvegarde du modèle", e);
-            }
-        } else {
-            throw new ModelNotFoundException("Impossible de sauvegarder : modèle non initialisé.");
-        }
-    }
-
-    /**
-     * Charge le modèle LSTM depuis un fichier.
-     * @param path chemin du fichier
-     * @throws ModelPersistenceException en cas d'erreur de chargement
-     * @throws ModelNotFoundException si le fichier n'existe pas
-     */
-    // Chargement du modèle
-    public void loadModel(String path) throws ModelPersistenceException {
-        File f = new File(path);
-        if (f.exists()) {
-            try {
-                model = ModelSerializer.restoreMultiLayerNetwork(f);
-                logger.info("Modèle chargé depuis le fichier : {}", path);
-            } catch (IOException e) {
-                logger.error("Erreur lors du chargement du modèle : {}", e.getMessage());
-                throw new ModelPersistenceException("Erreur lors du chargement du modèle", e);
-            }
-        } else {
-            throw new ModelNotFoundException("Modèle non trouvé dans le fichier : " + path);
-        }
-    }
 
     /**
      * Sauvegarde le modèle LSTM en base MySQL.
@@ -545,7 +467,7 @@ public class LstmTradePredictor {
      * @throws IOException en cas d'erreur d'accès à la base
      */
     // Sauvegarde du modèle dans MySQL
-    public void saveModelToDb(String symbol, MultiLayerNetwork model, JdbcTemplate jdbcTemplate) throws IOException {
+    public void saveModelToDb(String symbol, MultiLayerNetwork model, JdbcTemplate jdbcTemplate, LstmConfig config) throws IOException {
         if (model != null) {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ModelSerializer.writeModel(model, baos, true);
@@ -583,8 +505,9 @@ public class LstmTradePredictor {
      * @throws SQLException jamais levée (pour compatibilité)
      */
     // Chargement du modèle depuis MySQL
-    public void loadModelFromDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException, SQLException {
+    public MultiLayerNetwork loadModelFromDb(String symbol, JdbcTemplate jdbcTemplate, LstmConfig config) throws IOException, SQLException {
         String sql = "SELECT model_blob, hyperparams_json FROM lstm_models WHERE symbol = ?";
+        MultiLayerNetwork model = null;
         try {
             java.util.Map<String, Object> result = jdbcTemplate.queryForMap(sql, symbol);
             byte[] modelBytes = (byte[]) result.get("model_blob");
@@ -598,7 +521,6 @@ public class LstmTradePredictor {
                 try {
                     com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                     LstmHyperparameters params = mapper.readValue(hyperparamsJson, LstmHyperparameters.class);
-                    // Injection des hyperparamètres dans l'objet (à adapter selon usage)
                     currentWindowSize = params.windowSize;
                     config.setLstmNeurons(params.lstmNeurons);
                     config.setDropoutRate(params.dropoutRate);
@@ -616,6 +538,7 @@ public class LstmTradePredictor {
             logger.error("Modèle non trouvé en base pour le symbole : {}", symbol);
             throw new IOException("Modèle non trouvé en base");
         }
+        return model;
     }
 
     /**
@@ -624,26 +547,13 @@ public class LstmTradePredictor {
      * @param series série de bougies
      * @param crossValidation true pour activer la validation croisée, false pour entraînement classique
      */
-    public void trainWithConfig(BarSeries series, boolean crossValidation) {
+    public void trainWithConfig(BarSeries series, LstmConfig config, boolean crossValidation) {
         if (crossValidation) {
             logger.info("Entraînement LSTM avec validation croisée ({} folds)", config.getKFolds());
-            crossValidateLstm(
-                series,
-                config.getWindowSize(),
-                config.getNumEpochs(),
-                config.getKFolds(),
-                config.getLstmNeurons(),
-                config.getDropoutRate(),
-                config.getPatience(),
-                config.getMinDelta(),
-                config.getLearningRate(),
-                config.getOptimizer()
-            );
+            crossValidateLstm(series, config);
         } else {
             logger.info("Entraînement LSTM classique (train/test split 80/20)");
-            trainLstm(
-                series
-            );
+            trainLstm(series, config, null);
         }
     }
 }
