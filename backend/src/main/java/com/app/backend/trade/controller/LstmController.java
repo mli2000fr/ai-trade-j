@@ -48,4 +48,10 @@ public class LstmController {
             @RequestParam String symbol) {
         return lsdmHelper.getPredit(symbol);
     }
+
+    @GetMapping("/tuneAllSymbols")
+    public boolean tuneAllSymbols() {
+        lsdmHelper.tuneAllSymbols();
+        return true;
+    }
 }

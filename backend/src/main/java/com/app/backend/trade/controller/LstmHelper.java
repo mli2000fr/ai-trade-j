@@ -3,6 +3,7 @@ package com.app.backend.trade.controller;
 
 import com.app.backend.trade.lstm.LstmConfig;
 import com.app.backend.trade.lstm.LstmTradePredictor;
+import com.app.backend.trade.lstm.LstmTuningService;
 import com.app.backend.trade.model.DailyValue;
 import com.app.backend.trade.model.PreditLsdm;
 import com.app.backend.trade.util.TradeUtils;
@@ -32,7 +33,8 @@ public class LstmHelper {
         this.lstmTradePredictor = lstmTradePredictor;
     }
 
-
+    @Autowired
+    private LstmTuningService lstmTuningService;
 
     public BarSeries getBarBySymbol(String symbol, Integer limit) {
         String sql = "SELECT date, open, high, low, close, volume, number_of_trades, volume_weighted_average_price " +
@@ -130,5 +132,21 @@ public class LstmHelper {
         config.setLearningRate(learningRate);
         config.setOptimizer(optimizer);
         lstmTradePredictor.crossValidateLstm(series, config);
+    }
+
+    /**
+     * Lance le tuning automatique pour une liste de symboles.
+     * Les résultats sont loggés et la meilleure config est sauvegardée pour chaque symbole.
+     */
+    public void tuneAllSymbols() {
+        List<String> symbols = getSymbolFitredFromTabSingle("rendement_score");
+        lstmTuningService.tuneAllSymbols(symbols, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
+    }
+
+    public List<String> getSymbolFitredFromTabSingle(String sort) {
+        String orderBy = sort == null ? "rendement_score" : sort;
+        String sql = "select symbol from trade_ai.best_in_out_single_strategy where fltred_out = 'false'";
+        sql += " ORDER BY " + orderBy + " DESC";
+        return jdbcTemplate.queryForList(sql, String.class);
     }
 }

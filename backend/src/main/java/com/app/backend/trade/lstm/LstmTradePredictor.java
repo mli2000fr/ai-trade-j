@@ -230,26 +230,45 @@ public class LstmTradePredictor {
         model = ensureModelWindowSize(model, config.getWindowSize(), config);
         double[] closes = extractCloseValues(series);
         double[] normalized = normalize(closes);
+        int numSeq = normalized.length - config.getWindowSize();
+        if (numSeq <= 0) {
+            logger.error("Pas assez de données pour entraîner le modèle (windowSize={}, closes={})", config.getWindowSize(), closes.length);
+            throw new IllegalArgumentException("Pas assez de données pour entraîner le modèle");
+        }
         double[][][] sequences = createSequences(normalized, config.getWindowSize());
-        // Labels : valeur suivante après chaque séquence
-        double[][][] labelSeq = new double[sequences.length][1][1];
-        for (int i = 0; i < labelSeq.length; i++) {
+        double[][][] labelSeq = new double[numSeq][1][1];
+        for (int i = 0; i < numSeq; i++) {
             labelSeq[i][0][0] = normalized[i + config.getWindowSize()];
         }
-        // Séparation train/test (80/20)
-        int splitIdx = (int)(sequences.length * 0.8);
+        int splitIdx = (int)(numSeq * 0.8);
+        if (splitIdx == numSeq) splitIdx = numSeq - 1;
         double[][][] trainSeq = java.util.Arrays.copyOfRange(sequences, 0, splitIdx);
-        double[][][] testSeq = java.util.Arrays.copyOfRange(sequences, splitIdx, sequences.length);
+        double[][][] testSeq = java.util.Arrays.copyOfRange(sequences, splitIdx, numSeq);
         double[][][] trainLabel = java.util.Arrays.copyOfRange(labelSeq, 0, splitIdx);
-        double[][][] testLabel = java.util.Arrays.copyOfRange(labelSeq, splitIdx, labelSeq.length);
+        double[][][] testLabel = java.util.Arrays.copyOfRange(labelSeq, splitIdx, numSeq);
+        if (trainSeq.length == 0 || trainLabel.length == 0) {
+            logger.error("Jeu d'entraînement vide, impossible d'entraîner le modèle");
+            throw new IllegalArgumentException("Jeu d'entraînement vide");
+        }
+        if (testSeq.length == 0 || testLabel.length == 0) {
+            logger.error("Jeu de test vide, impossible d'évaluer le modèle");
+            throw new IllegalArgumentException("Jeu de test vide");
+        }
         org.nd4j.linalg.api.ndarray.INDArray trainInput = toINDArray(trainSeq);
         org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabel);
         org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(testSeq);
         org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel);
+        if (containsNaN(trainOutput)) {
+            logger.error("TrainOutput contient des NaN, impossible d'entraîner le modèle");
+            throw new IllegalArgumentException("TrainOutput contient des NaN");
+        }
+        if (containsNaN(testOutput)) {
+            logger.error("TestOutput contient des NaN, impossible d'évaluer le modèle");
+            throw new IllegalArgumentException("TestOutput contient des NaN");
+        }
         org.nd4j.linalg.dataset.api.iterator.DataSetIterator trainIterator = new ListDataSetIterator<>(
             java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput))
         );
-        // Early stopping
         double bestScore = Double.MAX_VALUE;
         int epochsWithoutImprovement = 0;
         int actualEpochs = 0;
@@ -257,7 +276,20 @@ public class LstmTradePredictor {
             model.fit(trainIterator);
             actualEpochs++;
             org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
-            double mse = predictions.squaredDistance(testOutput) / testOutput.length();
+            if (containsNaN(predictions)) {
+                logger.error("Prédictions contiennent des NaN à l'epoch {}", i + 1);
+                break;
+            }
+            double mse = Double.POSITIVE_INFINITY;
+            try {
+                mse = predictions.squaredDistance(testOutput) / testOutput.length();
+            } catch (Exception e) {
+                logger.error("Erreur lors du calcul du MSE à l'epoch {} : {}", i + 1, e.getMessage());
+            }
+            if (Double.isInfinite(mse) || Double.isNaN(mse)) {
+                logger.error("MSE infini ou NaN à l'epoch {}", i + 1);
+                break;
+            }
             logger.info("Epoch {} terminé, Test MSE : {}", i + 1, mse);
             if (bestScore - mse > config.getMinDelta()) {
                 bestScore = mse;
@@ -555,5 +587,15 @@ public class LstmTradePredictor {
             logger.info("Entraînement LSTM classique (train/test split 80/20)");
             trainLstm(series, config, null);
         }
+    }
+
+    /**
+     * Vérifie si un INDArray contient au moins un NaN.
+     */
+    public boolean containsNaN(org.nd4j.linalg.api.ndarray.INDArray array) {
+        for (int i = 0; i < array.length(); i++) {
+            if (Double.isNaN(array.getDouble(i))) return true;
+        }
+        return false;
     }
 }
