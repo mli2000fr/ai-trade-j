@@ -138,7 +138,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<MixResultat | null>(null);
   const [checkedRows, setCheckedRows] = useState<{[key: number]: boolean}>({});
-  const [limit, setLimit] = useState<number>(20);
+  const [limit, setLimit] = useState<number>(10);
   const [indices, setIndices] = useState<{ [symbol: string]: SignalInfo | string }>({});
   const [indicesMix, setIndicesMix] = useState<{ [symbol: string]: SignalInfo | string }>({});
   const [sort, setSort] = useState<string>('single:rendement_score');
@@ -346,6 +346,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               onChange={e => setLimit(Number(e.target.value))}
               style={{ padding: '4px 8px', marginRight: 16 }}
             >
+              <option value={3}>3</option>
               <option value={20}>20</option>
               <option value={30}>30</option>
               <option value={50}>50</option>

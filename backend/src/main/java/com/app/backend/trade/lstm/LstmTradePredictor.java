@@ -73,8 +73,8 @@ public class LstmTradePredictor {
      * @param optimizer nom de l'optimiseur ("adam", "rmsprop", "sgd")
      */
     public void initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate, double learningRate, String optimizer) {
-
-        LstmConfig cfg = this.config;
+        // Fixer le seed pour la reproductibilité
+        //org.nd4j.linalg.factory.Nd4j.getRandom().setSeed(1234);
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
         builder.updater(
             "adam".equalsIgnoreCase(optimizer) ? new org.nd4j.linalg.learning.config.Adam(learningRate)

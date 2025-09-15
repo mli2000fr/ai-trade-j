@@ -84,8 +84,8 @@ public class LsdmHelper {
             modelLoaded = false;
         }
         BarSeries series = getBarBySymbol(symbol, null);
-        lstmTradePredictor.initWithConfig(new LstmConfig());
         if (!modelLoaded) {
+            lstmTradePredictor.initWithConfig(new LstmConfig());
             MultiLayerNetwork model = lstmTradePredictor.trainLstm(series);
             try {
                 lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate);
