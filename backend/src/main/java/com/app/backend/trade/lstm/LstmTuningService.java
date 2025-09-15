@@ -181,7 +181,7 @@ public class LstmTuningService {
      * @param jdbcTemplate accès base
      * @param seriesProvider fonction pour obtenir BarSeries par symbole
      */
-    public void tuneAllSymbols(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
+    public void tuneAllSymbols_bis(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         List<LstmConfig> grid = generateSwingTradeGrid();
         int numThreads = Math.min(symbols.size(), Runtime.getRuntime().availableProcessors());
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
@@ -216,6 +216,20 @@ public class LstmTuningService {
         } catch (InterruptedException e) {
             executor.shutdownNow();
             logger.error("Interruption lors de l'arrêt du pool de threads tuning : {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Lance le tuning automatique pour une liste de symboles.
+     * @param symbols liste des symboles à tuner
+     * @param jdbcTemplate accès base
+     * @param seriesProvider fonction pour obtenir BarSeries par symbole
+     */
+    public void tuneAllSymbols(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
+        List<LstmConfig> grid = generateSwingTradeGrid();
+        for (String symbol : symbols) {
+            BarSeries series = seriesProvider.apply(symbol);
+            tuneSymbol(symbol, grid, series, jdbcTemplate);
         }
     }
 }
