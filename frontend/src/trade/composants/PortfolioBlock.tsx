@@ -211,6 +211,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Total</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>P & L pc</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>P & L</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -252,6 +253,9 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                           <TableCell sx={cellStyle}>{pos.current_price !== undefined && pos.current_price !== null ? (Number(pos.qty) * Number(pos.current_price)).toFixed(2) + ' $' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.unrealized_plpc !== undefined && pos.unrealized_plpc !== null ? (Number(pos.unrealized_plpc) * 100).toFixed(3) + ' %' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.unrealized_pl !== undefined && pos.unrealized_pl !== null ? Number(pos.unrealized_pl).toFixed(2) + ' $' : '-'}</TableCell>
+                          <TableCell sx={cellStyle}>
+                            <Button size="small" variant="outlined" onClick={() => {  }}>Détails</Button>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
