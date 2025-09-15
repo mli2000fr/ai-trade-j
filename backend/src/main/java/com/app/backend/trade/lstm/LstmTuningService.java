@@ -29,6 +29,11 @@ public class LstmTuningService {
      */
     public LstmConfig tuneSymbol(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
         double bestScore = Double.MAX_VALUE;
+        LstmConfig conf = hyperparamsRepository.loadHyperparams(symbol);
+        if(conf != null){
+            logger.info("Hyperparamètres existants trouvés pour {}. Ignorer le tuning.", symbol);
+            return conf;
+        }
         LstmConfig bestConfig = null;
         MultiLayerNetwork bestModel = null;
         for (LstmConfig config : grid) {
@@ -178,9 +183,39 @@ public class LstmTuningService {
      */
     public void tuneAllSymbols(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         List<LstmConfig> grid = generateSwingTradeGrid();
+        int numThreads = Math.min(symbols.size(), Runtime.getRuntime().availableProcessors());
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
+        java.util.concurrent.CompletionService<Void> completionService = new java.util.concurrent.ExecutorCompletionService<>(executor);
+        int submitted = 0;
         for (String symbol : symbols) {
-            BarSeries series = seriesProvider.apply(symbol);
-            tuneSymbol(symbol, grid, series, jdbcTemplate);
+            completionService.submit(() -> {
+                try {
+                    BarSeries series = seriesProvider.apply(symbol);
+                    tuneSymbol(symbol, grid, series, jdbcTemplate);
+                } catch (Exception e) {
+                    logger.error("Erreur dans le tuning du symbole {} : {}", symbol, e.getMessage());
+                }
+                return null;
+            });
+            submitted++;
+        }
+        // Consommer les résultats au fur et à mesure qu'ils terminent
+        for (int i = 0; i < submitted; i++) {
+            try {
+                completionService.take(); // attends qu'une tâche se termine
+            } catch (Exception e) {
+                logger.error("Erreur lors de la récupération d'une tâche de tuning : {}", e.getMessage());
+            }
+        }
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(10, java.util.concurrent.TimeUnit.MINUTES)) {
+                executor.shutdownNow();
+                logger.warn("Arrêt forcé du pool de threads tuning");
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            logger.error("Interruption lors de l'arrêt du pool de threads tuning : {}", e.getMessage());
         }
     }
 }
