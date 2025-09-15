@@ -232,6 +232,7 @@ const DashboardPage: React.FC = () => {
             loading={portfolioLoading}
             compteId={selectedCompteId ? String(selectedCompteId) : null}
             resetSellErrorKey={resetSellErrorKey}
+            onRefreshPortfolio={loadPortfolio}
           />
         </Paper>
         <Paper elevation={3} sx={{ mb: 3, p: 2, borderRadius: 3 }}>

@@ -20,6 +20,7 @@ interface PortfolioBlockProps {
   loading: boolean;
   compteId?: string | null;
   resetSellErrorKey?: string | number;
+  onRefreshPortfolio?: () => void;
 }
 interface SignalInfo {
     symbol: string;
@@ -28,7 +29,7 @@ interface SignalInfo {
     dateStr?: string;
 }
 
-const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, loading, compteId, resetSellErrorKey }) => {
+const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, loading, compteId, resetSellErrorKey, onRefreshPortfolio }) => {
   const initialDeposit = portfolio && portfolio.initialDeposit !== undefined ? Number(portfolio.initialDeposit) : undefined;
   const equity = portfolio && portfolio.account?.equity !== undefined ? Number(portfolio.account.equity) : undefined;
   const plTotal = initialDeposit !== undefined && initialDeposit !== 0 && !isNaN(initialDeposit) && equity !== undefined && !isNaN(equity) ? equity - initialDeposit : undefined;
@@ -37,11 +38,26 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
   // Ajout d'un cache local pour les indices
   const [indices, setIndices] = useState<{ [symbol: string]: SignalInfo | string }>({});
   const [sellError, setSellError] = useState<string | null>(null);
+  const [sellSuccess, setSellSuccess] = useState<string | null>(null);
 
   // Réinitialisation de sellError quand resetSellErrorKey change
   useEffect(() => {
     setSellError(null);
   }, [resetSellErrorKey]);
+
+  // Masquer la notification de succès après 5 secondes
+  useEffect(() => {
+    if (sellSuccess) {
+      const timer = setTimeout(() => setSellSuccess(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [sellSuccess]);
+  useEffect(() => {
+    if (sellError) {
+      const timer = setTimeout(() => setSellError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [sellError]);
 
   useEffect(() => {
     if (!portfolio || !portfolio.positions) return;
@@ -84,6 +100,12 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
         setSellError(errorMsg);
       } else {
         setSellError(null);
+        setSellSuccess("Vente effectuée avec succès !");
+        // Rafraîchir le tableau via le callback passé en props
+        if (onRefreshPortfolio) {
+             const timer = setTimeout(() =>  onRefreshPortfolio(), 5000);
+                  return () => clearTimeout(timer);
+        }
       }
     } catch (e: any) {
       setSellError(e.message || 'Erreur lors de la vente.');
@@ -237,6 +259,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                 </Table>
               </TableContainer>
             )}
+            {sellSuccess && <Alert severity="success" sx={{ mb: 2 }}>{sellSuccess}</Alert>}
             {sellError && <Alert severity="error" sx={{ mb: 2 }}>{sellError}</Alert>}
           </>
         )}
