@@ -11,7 +11,6 @@ package com.app.backend.trade.lstm;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.time.format.DateTimeFormatter;
@@ -36,12 +35,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.app.backend.trade.exception.InsufficientDataException;
 import com.app.backend.trade.exception.ModelNotFoundException;
-import com.app.backend.trade.exception.ModelPersistenceException;
 
 @Service
 public class LstmTradePredictor {
     private static final Logger logger = LoggerFactory.getLogger(LstmTradePredictor.class);
     private int currentWindowSize = -1;
+
+    private final LstmHyperparamsRepository hyperparamsRepository;
+
+    public LstmTradePredictor(LstmHyperparamsRepository hyperparamsRepository) {
+        this.hyperparamsRepository = hyperparamsRepository;
+    }
 
     /**
      * Constructeur principal.
@@ -391,8 +395,8 @@ public class LstmTradePredictor {
         org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(lastSequence);
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input);
         // Dénormaliser la prédiction
-        double min = java.util.Arrays.stream(closes).min().getAsDouble();
-        double max = java.util.Arrays.stream(closes).max().getAsDouble();
+        double min = java.util.Arrays.stream(closes).min().orElse(0.0);
+        double max = java.util.Arrays.stream(closes).max().orElse(0.0);
         double predictedNorm = output.getDouble(0);
         double predicted = predictedNorm * (max - min) + min;
         return predicted;
@@ -478,9 +482,11 @@ public class LstmTradePredictor {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ModelSerializer.writeModel(model, baos, true);
             byte[] modelBytes = baos.toByteArray();
-            // Création des hyperparamètres
+            // Sauvegarde des hyperparamètres dans la table dédiée
+            hyperparamsRepository.saveHyperparams(symbol, config);
+            // Création des hyperparamètres pour la sérialisation JSON
             LstmHyperparameters params = new LstmHyperparameters(
-                currentWindowSize,
+                config.getWindowSize(),
                 config.getLstmNeurons(),
                 config.getDropoutRate(),
                 config.getLearningRate(),
@@ -513,36 +519,20 @@ public class LstmTradePredictor {
      * @throws SQLException jamais levée (pour compatibilité)
      */
     // Chargement du modèle depuis MySQL
-    public MultiLayerNetwork loadModelFromDb(String symbol, JdbcTemplate jdbcTemplate, LstmConfig config) throws IOException, SQLException {
-        String sql = "SELECT model_blob, hyperparams_json FROM lstm_models WHERE symbol = ?";
+    public MultiLayerNetwork loadModelFromDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException {
+        LstmConfig config = hyperparamsRepository.loadHyperparams(symbol);
+        if (config == null) {
+            throw new IOException("Aucun hyperparamètre trouvé pour le symbole " + symbol);
+        }
+        String sql = "SELECT model_blob FROM lstm_models WHERE symbol = ?";
         MultiLayerNetwork model = null;
         try {
             java.util.Map<String, Object> result = jdbcTemplate.queryForMap(sql, symbol);
             byte[] modelBytes = (byte[]) result.get("model_blob");
-            String hyperparamsJson = (String) result.get("hyperparams_json");
             if (modelBytes != null) {
                 ByteArrayInputStream bais = new ByteArrayInputStream(modelBytes);
                 model = ModelSerializer.restoreMultiLayerNetwork(bais);
                 logger.info("Modèle chargé depuis la base pour le symbole : {}", symbol);
-            }
-            if (hyperparamsJson != null) {
-                try {
-                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                    LstmHyperparameters params = mapper.readValue(hyperparamsJson, LstmHyperparameters.class);
-                    currentWindowSize = params.windowSize;
-                    config.setLstmNeurons(params.lstmNeurons);
-                    config.setDropoutRate(params.dropoutRate);
-                    config.setLearningRate(params.learningRate);
-                    config.setNumEpochs(params.numEpochs);
-                    config.setPatience(params.patience);
-                    config.setMinDelta(params.minDelta);
-                    config.setOptimizer(params.optimizer);
-                    config.setL1(params.l1);
-                    config.setL2(params.l2);
-                    logger.info("Hyperparamètres chargés depuis la base pour le symbole : {}", symbol);
-                } catch (Exception e) {
-                    logger.error("Erreur de désérialisation des hyperparamètres : {}", e.getMessage());
-                }
             }
         } catch (EmptyResultDataAccessException e) {
             logger.error("Modèle non trouvé en base pour le symbole : {}", symbol);

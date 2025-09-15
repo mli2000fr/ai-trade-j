@@ -151,7 +151,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
       const indiceMixRes = await fetch(`/api/best-combination/get_indice?symbol=${symbol}`);
       const indiceMixData = await indiceMixRes.json();
       // Prédiction
-      const predictRes = await fetch(`/api/lsdm/predict?symbol=${symbol}`);
+      const predictRes = await fetch(`/api/lstm/predict?symbol=${symbol}`);
       const predictData = await predictRes.json();
       setSelected({
         single: infosActionData.single,

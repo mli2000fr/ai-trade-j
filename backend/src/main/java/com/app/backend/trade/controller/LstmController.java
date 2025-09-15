@@ -11,11 +11,11 @@ import org.springframework.web.bind.annotation.*;
  * </p>
  */
 @RestController
-@RequestMapping("/api/lsdm")
-public class LsdmController {
+@RequestMapping("/api/lstm")
+public class LstmController {
 
     @Autowired
-    private LsdmHelper lsdmHelper;
+    private LstmHelper lsdmHelper;
 
     /**
      * Lance l'entraînement du modèle LSTM pour un symbole donné.

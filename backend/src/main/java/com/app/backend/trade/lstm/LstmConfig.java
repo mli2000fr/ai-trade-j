@@ -2,6 +2,8 @@ package com.app.backend.trade.lstm;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Properties;
 
 import lombok.Builder;
@@ -114,4 +116,22 @@ public class LstmConfig {
         }
     }
 
+    /**
+     * Constructeur. Initialise les hyperparamètres à partir d'un ResultSet.
+     * @param rs ResultSet contenant les valeurs des hyperparamètres
+     * @throws SQLException si une erreur se produit lors de l'accès aux données du ResultSet
+     */
+    public LstmConfig(ResultSet rs) throws SQLException {
+        windowSize = rs.getInt("window_size");
+        lstmNeurons = rs.getInt("lstm_neurons");
+        dropoutRate = rs.getDouble("dropout_rate");
+        learningRate = rs.getDouble("learning_rate");
+        numEpochs = rs.getInt("num_epochs");
+        patience = rs.getInt("patience");
+        minDelta = rs.getDouble("min_delta");
+        kFolds = rs.getInt("k_folds");
+        optimizer = rs.getString("optimizer");
+        l1 = rs.getDouble("l1");
+        l2 = rs.getDouble("l2");
+    }
 }

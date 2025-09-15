@@ -18,16 +18,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Controller
-public class LsdmHelper {
+public class LstmHelper {
 
 
     private JdbcTemplate jdbcTemplate;
     private LstmTradePredictor lstmTradePredictor;
 
-    private static final Logger logger = LoggerFactory.getLogger(LsdmHelper.class);
+    private static final Logger logger = LoggerFactory.getLogger(LstmHelper.class);
 
     @Autowired
-    public LsdmHelper(JdbcTemplate jdbcTemplate, LstmTradePredictor lstmTradePredictor) {
+    public LstmHelper(JdbcTemplate jdbcTemplate, LstmTradePredictor lstmTradePredictor) {
         this.jdbcTemplate = jdbcTemplate;
         this.lstmTradePredictor = lstmTradePredictor;
     }
@@ -88,7 +88,7 @@ public class LsdmHelper {
         LstmConfig config = new LstmConfig();
         MultiLayerNetwork model = null;
         try {
-            model = lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate, config);
+            model = lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
         } catch (Exception e) {
             // Si le modèle n'existe pas, on l'entraîne
             BarSeries series = getBarBySymbol(symbol, null);
@@ -99,8 +99,8 @@ public class LsdmHelper {
                 config.getDropoutRate(),
                 config.getLearningRate(),
                 config.getOptimizer(),
-                    config.getL1(),
-                    config.getL2()
+                config.getL1(),
+                config.getL2()
             );
             model = lstmTradePredictor.trainLstm(series, config, model);
             try {

@@ -21,7 +21,7 @@ import ReactApexChart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
 import BestPerformanceDialog from './BestPerformanceDialog';
 
-interface PreditLsdm {
+interface PreditLstm {
     lastClose: number;
     predictedClose: number;
     lastDate?: string | null;
@@ -143,7 +143,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [bougies, setBougies] = useState<any[]>([]);
   const [bougiesLoading, setBougiesLoading] = useState(false);
   const [bougiesError, setBougiesError] = useState<string | null>(null);
-  const [lsdmResults, setLsdmResults] = useState<{ [symbol: string]: PreditLsdm | string}>({});
+  const [lstmResults, setLstmResults] = useState<{ [symbol: string]: PreditLstm | string}>({});
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -192,14 +192,14 @@ const BestPerformanceSymbolBlock: React.FC = () => {
           setIndicesMix(prev => ({ ...prev, [symbol]: '-' }));
         });
       // Ajout fetch LSDM
-      setLsdmResults(prev => ({ ...prev, [symbol]: 'pending' }));
-      fetch(`/api/lsdm/predict?symbol=${encodeURIComponent(symbol)}`)
+      setLstmResults(prev => ({ ...prev, [symbol]: 'pending' }));
+      fetch(`/api/lstm/predict?symbol=${encodeURIComponent(symbol)}`)
         .then(res => res.json())
         .then((data: any) => {
-          setLsdmResults(prev => ({ ...prev, [symbol]: data ?? '-' }));
+          setLstmResults(prev => ({ ...prev, [symbol]: data ?? '-' }));
         })
         .catch(() => {
-          setLsdmResults(prev => ({ ...prev, [symbol]: '-' }));
+          setLstmResults(prev => ({ ...prev, [symbol]: '-' }));
         });
     });
   }, [data]);
@@ -361,7 +361,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   {data.map((row, i) => {
                     let bgColor = undefined;
                     const indice = indices[row.single.symbol] as SignalInfo;
-                    const lsdmResult = lsdmResults[row.single.symbol] as PreditLsdm;
+                    const lstmResult = lstmResults[row.single.symbol] as PreditLstm;
                     const indiceMixRaw = row.mix.symbol === null ? null : indicesMix[row.mix.symbol];
                     let indiceMix: SignalInfo | undefined = undefined;
                     if (indiceMixRaw && typeof indiceMixRaw === 'object' && 'type' in indiceMixRaw) {
@@ -385,24 +385,24 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         <TableCell><input type="checkbox" checked={!!checkedRows[i]} onChange={e => setCheckedRows({...checkedRows, [i]: e.target.checked})} /></TableCell>
                         <TableCell>{row.single.symbol}</TableCell>
                         <TableCell>{
-                            lsdmResults[row.single.symbol] === 'pending'
+                            lstmResults[row.single.symbol] === 'pending'
                               ? (<CircularProgress size={16} />)
-                              : (lsdmResult && lsdmResult.lastClose
-                                  ? (lsdmResult.lastClose)
+                              : (lstmResult && lstmResult.lastClose
+                                  ? (lstmResult.lastClose)
                                   : '-')
                           }</TableCell>
                           <TableCell>{
-                             lsdmResults[row.single.symbol] === 'pending'
+                             lstmResults[row.single.symbol] === 'pending'
                                ? (<CircularProgress size={16} />)
-                               : (lsdmResult && lsdmResult.predictedClose
-                                  ? (lsdmResult.predictedClose)
+                               : (lstmResult && lstmResult.predictedClose
+                                  ? (lstmResult.predictedClose)
                                   : '-')
                            }</TableCell>
                         <TableCell>{
-                          lsdmResults[row.single.symbol] === 'pending'
+                          lstmResults[row.single.symbol] === 'pending'
                             ? (<CircularProgress size={16} />)
-                            : (lsdmResult && lsdmResult.signal
-                                ? (lsdmResult.signal + ' (' + lsdmResult.lastDate + ')')
+                            : (lstmResult && lstmResult.signal
+                                ? (lstmResult.signal + ' (' + lstmResult.lastDate + ')')
                                 : '-')
                         }</TableCell>
                         <TableCell>{
