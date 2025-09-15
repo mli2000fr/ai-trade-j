@@ -454,9 +454,11 @@ public class BestCombinationStrategyHelper {
 
                     java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
                     java.time.LocalDate lastKnown = lastDate.toLocalDate();
+
                     // Si la dernière date connue est le dernier jour de cotation, la base est à jour
                     if (lastKnown.isEqual(lastTradingDay) || lastKnown.isAfter(lastTradingDay)) {
-                        return SignalInfo.builder().symbol(symbol).type(type).date(lastDate).build();
+                        String dateSavedStr = lastKnown.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"));
+                        return SignalInfo.builder().symbol(symbol).type(type).date(lastDate).dateStr(dateSavedStr).build();
                     }else{
                         return null;
                     }
@@ -492,7 +494,7 @@ public class BestCombinationStrategyHelper {
         BestCombinationResult bestCombinationResult = getBestCombinationResult(symbol);
         if(bestCombinationResult == null){
             return SignalInfo.builder().symbol(symbol).type(SignalType.NONE)
-                    .dateStr(lastTradingDay.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"))).build();
+                    .dateStr(lastTradingDay.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"))).build();
         }
         this.strategieHelper.updateDBDailyValu(symbol);
         List<DailyValue> listeValus = strategieHelper.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_FOR_SIGNAL);

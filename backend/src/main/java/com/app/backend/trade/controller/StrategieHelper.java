@@ -715,7 +715,7 @@ public class StrategieHelper {
 
         BestInOutStrategy best = getBestInOutStrategy(symbol);
         if (best == null) return SignalInfo.builder().symbol(symbol).type(SignalType.NONE)
-                .dateStr(lastTradingDay.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"))).build();
+                .dateStr(lastTradingDay.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"))).build();
         updateDBDailyValu(symbol);
         List<DailyValue> listeValus = this.getDailyValuesFromDb(symbol, NOMBRE_TOTAL_BOUGIES_FOR_SIGNAL);
         BarSeries series = TradeUtils.mapping(listeValus);
@@ -729,7 +729,7 @@ public class StrategieHelper {
         if (entrySignal) signal =  SignalType.BUY;
         if (exitSignal) signal = SignalType.SELL;
         LocalDate dateSaved = saveSignalHistory(symbol, signal);
-        String dateSavedStr = dateSaved.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"));
+        String dateSavedStr = dateSaved.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"));
         return SignalInfo.builder().symbol(symbol).type(signal).dateStr(dateSavedStr).build();
     }
 
@@ -757,7 +757,8 @@ public class StrategieHelper {
                     java.time.LocalDate lastKnown = lastDate.toLocalDate();
                     // Si la dernière date connue est le dernier jour de cotation, la base est à jour
                     if (lastKnown.isEqual(lastTradingDay) || lastKnown.isAfter(lastTradingDay)) {
-                        return SignalInfo.builder().symbol(symbol).type(type).date(lastDate).build();
+                        String dateSavedStr = lastKnown.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"));
+                        return SignalInfo.builder().symbol(symbol).type(type).date(lastDate).dateStr(dateSavedStr).build();
                     }else{
                         return null;
                     }
