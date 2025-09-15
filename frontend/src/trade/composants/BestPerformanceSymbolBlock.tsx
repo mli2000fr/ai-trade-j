@@ -20,7 +20,6 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ReactApexChart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
 import BestPerformanceDialog from './BestPerformanceDialog';
-import BougiesChart from './BougiesChart';
 
 interface PreditLsdm {
     lastClose: number;
@@ -215,27 +214,6 @@ const BestPerformanceSymbolBlock: React.FC = () => {
     }
   };
 
-  // Fonction utilitaire pour afficher un objet sous forme de tableau
-  const renderObjectTable = (obj: any) => (
-    <Table size="small" sx={{ mb: 2, backgroundColor: '#f9f9f9' }}>
-      <TableBody>
-        {Object.entries(obj).map(([key, value]) => (
-          <TableRow key={key}>
-            <TableCell sx={{ fontWeight: 'bold', width: '40%' }}>{key}</TableCell>
-            <TableCell>
-              {typeof value === 'number'
-                ? (Math.abs(value) > 1
-                    ? value.toFixed(2)
-                    : (value * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
-                : typeof value === 'boolean'
-                  ? value ? 'Oui' : 'Non'
-                  : String(value)}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
 
   useEffect(() => {
     if (open && selected?.single.symbol) {
@@ -473,8 +451,6 @@ const BestPerformanceSymbolBlock: React.FC = () => {
         bougiesLoading={bougiesLoading}
         bougiesError={bougiesError}
         onClose={() => setOpen(false)}
-        renderObjectTable={renderObjectTable}
-        BougiesChart={BougiesChart}
       />
     </>
   );

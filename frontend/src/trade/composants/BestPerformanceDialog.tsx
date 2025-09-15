@@ -16,6 +16,7 @@ import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import BougiesChart from './BougiesChart';
 
 interface BestPerformanceDialogProps {
   open: boolean;
@@ -24,9 +25,29 @@ interface BestPerformanceDialogProps {
   bougiesLoading: boolean;
   bougiesError: string | null;
   onClose: () => void;
-  renderObjectTable: (obj: any) => React.ReactNode;
-  BougiesChart: React.FC<{ bougies: any[] }>;
 }
+
+  // Fonction utilitaire pour afficher un objet sous forme de tableau
+  const renderObjectTable = (obj: any) => (
+    <Table size="small" sx={{ mb: 2, backgroundColor: '#f9f9f9' }}>
+      <TableBody>
+        {Object.entries(obj).map(([key, value]) => (
+          <TableRow key={key}>
+            <TableCell sx={{ fontWeight: 'bold', width: '40%' }}>{key}</TableCell>
+            <TableCell>
+              {typeof value === 'number'
+                ? (Math.abs(value) > 1
+                    ? value.toFixed(2)
+                    : (value * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
+                : typeof value === 'boolean'
+                  ? value ? 'Oui' : 'Non'
+                  : String(value)}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
 
 const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
   open,
@@ -35,8 +56,6 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
   bougiesLoading,
   bougiesError,
   onClose,
-  renderObjectTable,
-  BougiesChart,
 }) => (
   <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth PaperProps={{ sx: { maxWidth: '60vw' } }}>
     <DialogTitle>Détails de la performance</DialogTitle>
