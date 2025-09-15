@@ -1,9 +1,12 @@
 package com.app.backend.trade.controller;
 
 
+import com.app.backend.trade.lstm.LstmConfig;
 import com.app.backend.trade.lstm.LstmTradePredictor;
 import com.app.backend.trade.model.DailyValue;
+import com.app.backend.trade.model.PreditLsdm;
 import com.app.backend.trade.util.TradeUtils;
+import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
@@ -59,30 +62,20 @@ public class LsdmHelper {
     }
 
     // Entraînement LSTM
-    public void trainLstm(String symbol, int windowSize, int numEpochs, double learningRate, String optimizer) {
+    public void trainLstm(String symbol) {
         BarSeries series = getBarBySymbol(symbol, null);
-        int lstmNeurons = 64;
-        double dropoutRate = 0.2;
-        int patience = 10;
-        double minDelta = 0.0001;
-        lstmTradePredictor.initModel(windowSize, 1, lstmNeurons, dropoutRate, learningRate, optimizer);
-        lstmTradePredictor.trainLstm(series, windowSize, numEpochs, patience, minDelta);
+        lstmTradePredictor.initWithConfig(new LstmConfig());
+        MultiLayerNetwork model = lstmTradePredictor.trainLstm(series);
         // Sauvegarder le modèle dans la base après entraînement
         try {
-            lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate);
+            lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate);
         } catch (Exception e) {
             logger.error("Erreur lors de la sauvegarde du modèle : {}", e.getMessage());
         }
     }
-/*LstmConfig
-    windowSize=10
-    lstmNeurons=64
-    dropoutRate=0.25
-    learningRate=0.001
-    optimizer=adam
-*/
+
     // Prédiction LSTM
-    public double predictNextClose(String symbol, int windowSize, double learningRate, String optimizer) {
+    public PreditLsdm getPredit(String symbol) {
         boolean modelLoaded;
         try {
             lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
@@ -91,20 +84,16 @@ public class LsdmHelper {
             modelLoaded = false;
         }
         BarSeries series = getBarBySymbol(symbol, null);
+        lstmTradePredictor.initWithConfig(new LstmConfig());
         if (!modelLoaded) {
-            int lstmNeurons = 64;
-            double dropoutRate = 0.2;
-            int patience = 10;
-            double minDelta = 0.0001;
-            lstmTradePredictor.initModel(windowSize, 1, lstmNeurons, dropoutRate, learningRate, optimizer);
-            lstmTradePredictor.trainLstm(series, windowSize, 10, patience, minDelta); // 10 epochs par défaut
+            MultiLayerNetwork model = lstmTradePredictor.trainLstm(series);
             try {
-                lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate);
+                lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate);
             } catch (Exception ex) {
                 logger.error("Erreur lors de la sauvegarde du modèle : {}", ex.getMessage());
             }
         }
-        return lstmTradePredictor.predictNextClose(series, windowSize);
+        return lstmTradePredictor.getPredit(series);
     }
 
     /**

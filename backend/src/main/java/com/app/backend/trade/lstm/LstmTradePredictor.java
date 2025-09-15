@@ -14,6 +14,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.sql.SQLException;
+
+import com.app.backend.trade.model.PreditLsdm;
+import com.app.backend.trade.model.SignalType;
 import org.deeplearning4j.datasets.iterator.utilty.ListDataSetIterator;
 import org.deeplearning4j.nn.conf.MultiLayerConfiguration;
 import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
@@ -46,7 +49,7 @@ public class LstmTradePredictor {
      * Initialise le modèle LSTM avec les paramètres du fichier de configuration.
      * @param config configuration des hyperparamètres LSTM
      */
-    public LstmTradePredictor(LstmConfig config) {
+    public void initWithConfig(LstmConfig config) {
         this.config = config;
         // Initialisation automatique du modèle avec les paramètres du fichier de config
         initModel(
@@ -69,6 +72,8 @@ public class LstmTradePredictor {
      * @param optimizer nom de l'optimiseur ("adam", "rmsprop", "sgd")
      */
     public void initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate, double learningRate, String optimizer) {
+
+        LstmConfig cfg = this.config;
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
         builder.updater(
             "adam".equalsIgnoreCase(optimizer) ? new org.nd4j.linalg.learning.config.Adam(learningRate)
@@ -116,31 +121,6 @@ public class LstmTradePredictor {
         }
     }
 
-    // Ancienne version conservée pour compatibilité
-    /**
-     * @deprecated Utiliser initModel avec tous les paramètres
-     * Initialise le modèle avec des paramètres par défaut.
-     */
-    @Deprecated
-    public void initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate) {
-        initModel(inputSize, outputSize, lstmNeurons, dropoutRate, 0.001, "adam");
-    }
-    /**
-     * @deprecated Utiliser initModel avec tous les paramètres
-     * Initialise le modèle avec des paramètres par défaut.
-     */
-    @Deprecated
-    public void initModel(int inputSize, int outputSize, int lstmNeurons) {
-        initModel(inputSize, outputSize, lstmNeurons, 0.2, 0.001, "adam");
-    }
-    /**
-     * @deprecated Utiliser initModel avec tous les paramètres
-     * Initialise le modèle avec des paramètres par défaut.
-     */
-    @Deprecated
-    public void initModel(int inputSize, int outputSize) {
-        initModel(inputSize, outputSize, 50, 0.2, 0.001, "adam");
-    }
 
     /**
      * Extrait les valeurs de clôture d'une série de bougies.
@@ -237,20 +217,16 @@ public class LstmTradePredictor {
      * Entraîne le modèle LSTM avec séparation train/test (80/20) et early stopping.
      * Arrête l'entraînement si le score MSE sur le jeu de test ne s'améliore plus selon patience/minDelta.
      * @param series Série de bougies
-     * @param windowSize Taille de la fenêtre
-     * @param numEpochs Nombre maximal d'epochs
-     * @param patience Nombre d'epochs sans amélioration avant arrêt
-     * @param minDelta Amélioration minimale pour considérer le score comme meilleur
      */
-    public void trainLstm(BarSeries series, int windowSize, int numEpochs, int patience, double minDelta) {
-        ensureModelWindowSize(windowSize);
+    public MultiLayerNetwork trainLstm(BarSeries series) {
+        ensureModelWindowSize(this.config.getWindowSize());
         double[] closes = extractCloseValues(series);
         double[] normalized = normalize(closes);
-        double[][][] sequences = createSequences(normalized, windowSize);
+        double[][][] sequences = createSequences(normalized, this.config.getWindowSize());
         // Labels : valeur suivante après chaque séquence
         double[][][] labelSeq = new double[sequences.length][1][1];
         for (int i = 0; i < labelSeq.length; i++) {
-            labelSeq[i][0][0] = normalized[i + windowSize];
+            labelSeq[i][0][0] = normalized[i + this.config.getWindowSize()];
         }
         // Séparation train/test (80/20)
         int splitIdx = (int)(sequences.length * 0.8);
@@ -269,24 +245,25 @@ public class LstmTradePredictor {
         double bestScore = Double.MAX_VALUE;
         int epochsWithoutImprovement = 0;
         int actualEpochs = 0;
-        for (int i = 0; i < numEpochs; i++) {
+        for (int i = 0; i < this.config.getNumEpochs(); i++) {
             model.fit(trainIterator);
             actualEpochs++;
             org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
             double mse = predictions.squaredDistance(testOutput) / testOutput.length();
             logger.info("Epoch {} terminé, Test MSE : {}", i + 1, mse);
-            if (bestScore - mse > minDelta) {
+            if (bestScore - mse > this.config.getMinDelta()) {
                 bestScore = mse;
                 epochsWithoutImprovement = 0;
             } else {
                 epochsWithoutImprovement++;
-                if (epochsWithoutImprovement >= patience) {
+                if (epochsWithoutImprovement >= this.config.getPatience()) {
                     logger.info("Early stopping déclenché à l'epoch {}. Meilleur Test MSE : {}", i + 1, bestScore);
                     break;
                 }
             }
         }
         logger.info("Entraînement terminé après {} epochs. Meilleur Test MSE : {}", actualEpochs, bestScore);
+        return this.model;
     }
 
     /**
@@ -401,26 +378,25 @@ public class LstmTradePredictor {
     /**
      * Prédit la prochaine valeur de clôture à partir de la série et du windowSize.
      * @param series série de bougies
-     * @param windowSize taille de la fenêtre
      * @return valeur de clôture prédite
      * @throws ModelNotFoundException si le modèle n'est pas initialisé
      * @throws InsufficientDataException si la série est trop courte
      */
     // Prédiction de la prochaine valeur de clôture
-    public double predictNextClose(BarSeries series, int windowSize) {
-        ensureModelWindowSize(windowSize);
+    public double predictNextClose(BarSeries series) {
+        ensureModelWindowSize(this.config.getWindowSize());
         if (model == null) {
             throw new ModelNotFoundException("Le modèle LSTM n'est pas initialisé.");
         }
         double[] closes = extractCloseValues(series);
-        if (closes.length < windowSize) {
-            throw new InsufficientDataException("Données insuffisantes pour la prédiction (windowSize=" + windowSize + ", closes=" + closes.length + ").");
+        if (closes.length < this.config.getWindowSize()) {
+            throw new InsufficientDataException("Données insuffisantes pour la prédiction (windowSize=" + this.config.getWindowSize() + ", closes=" + closes.length + ").");
         }
         double[] normalized = normalize(closes);
         // Prendre la dernière séquence
-        double[][][] lastSequence = new double[1][windowSize][1];
-        for (int j = 0; j < windowSize; j++) {
-            lastSequence[0][j][0] = normalized[normalized.length - windowSize + j];
+        double[][][] lastSequence = new double[1][this.config.getWindowSize()][1];
+        for (int j = 0; j < this.config.getWindowSize(); j++) {
+            lastSequence[0][j][0] = normalized[normalized.length - this.config.getWindowSize() + j];
         }
         org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(lastSequence);
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input);
@@ -441,36 +417,59 @@ public class LstmTradePredictor {
     // Prédiction du delta (variation) de la prochaine clôture
     public double predictNextDelta(BarSeries series, int windowSize) {
         ensureModelWindowSize(windowSize);
-        double predicted = predictNextClose(series, windowSize);
+        double predicted = predictNextClose(series);
         double[] closes = extractCloseValues(series);
         double lastClose = closes[closes.length - 1];
         return predicted - lastClose;
     }
 
+
     /**
-     * Prédit la classe (hausse/baisse/stable) pour la prochaine clôture.
-     * @param series série de bougies
-     * @param windowSize taille de la fenêtre
-     * @param threshold seuil pour considérer une variation comme stable
-     * @return "up" si hausse, "down" si baisse, "stable" sinon
-     */
-    /**
-     * Prédiction de la classe (hausse/baisse/stable) pour la prochaine clôture.
+     * Calcule automatiquement un threshold adapté pour le swing trade.
+     * Utilise la volatilité moyenne ou un pourcentage du prix moyen.
      * @param series Série de bougies
-     * @param windowSize Taille de la fenêtre
-     * @param threshold Seuil pour considérer une variation comme stable
+     * @return threshold adapté
+     */
+    public double computeSwingTradeThreshold(BarSeries series) {
+        double[] closes = extractCloseValues(series);
+        if (closes.length < 2) return 0.0;
+        double avgPrice = java.util.Arrays.stream(closes).average().orElse(0.0);
+        double volatility = 0.0;
+        for (int i = 1; i < closes.length; i++) {
+            volatility += Math.abs(closes[i] - closes[i-1]);
+        }
+        volatility /= (closes.length - 1);
+        // On prend le max entre 1% du prix moyen et la volatilité moyenne
+        double threshold = Math.max(avgPrice * 0.01, volatility);
+        return threshold;
+    }
+
+    /**
+     * Prédit la classe (hausse/baisse/stable) pour la prochaine clôture, avec threshold automatique pour swing trade.
+     * @param series Série de bougies
      * @return "up" si hausse, "down" si baisse, "stable" sinon
      */
-    public String predictNextClass(BarSeries series, int windowSize, double threshold) {
-        ensureModelWindowSize(windowSize);
-        double delta = predictNextDelta(series, windowSize);
-        if (delta > threshold) {
-            return "up";
-        } else if (delta < -threshold) {
-            return "down";
+    public PreditLsdm getPredit(BarSeries series) {
+        ensureModelWindowSize(config.getWindowSize());
+        double th = computeSwingTradeThreshold(series);
+        double predicted = predictNextClose(series);
+        double[] closes = extractCloseValues(series);
+        double lastClose = closes[closes.length - 1];
+        double delta =  predicted - lastClose;
+        SignalType signal;
+        if (delta > th) {
+            signal = SignalType.BUY;
+        } else if (delta < -th) {
+            signal = SignalType.SELL;
         } else {
-            return "stable";
+            signal = SignalType.HOLD;
         }
+
+        return PreditLsdm.builder()
+                .lastClose(lastClose)
+                .predictedClose(predicted)
+                .signal(signal)
+                .build();
     }
 
     /**
@@ -542,7 +541,7 @@ public class LstmTradePredictor {
      * @throws IOException en cas d'erreur d'accès à la base
      */
     // Sauvegarde du modèle dans MySQL
-    public void saveModelToDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException {
+    public void saveModelToDb(String symbol, MultiLayerNetwork model, JdbcTemplate jdbcTemplate) throws IOException {
         if (model != null) {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ModelSerializer.writeModel(model, baos, true);
@@ -639,11 +638,7 @@ public class LstmTradePredictor {
         } else {
             logger.info("Entraînement LSTM classique (train/test split 80/20)");
             trainLstm(
-                series,
-                config.getWindowSize(),
-                config.getNumEpochs(),
-                config.getPatience(),
-                config.getMinDelta()
+                series
             );
         }
     }

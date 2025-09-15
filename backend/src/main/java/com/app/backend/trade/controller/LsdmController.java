@@ -1,5 +1,6 @@
 package com.app.backend.trade.controller;
 
+import com.app.backend.trade.model.PreditLsdm;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,7 +33,7 @@ public class LsdmController {
             @RequestParam int numEpochs,
             @RequestParam double learningRate,
             @RequestParam String optimizer) {
-        lsdmHelper.trainLstm(symbol, windowSize, numEpochs, learningRate, optimizer);
+        lsdmHelper.trainLstm(symbol);
         return "Entraînement LSTM terminé pour " + symbol;
     }
 
@@ -40,17 +41,11 @@ public class LsdmController {
      * Prédit la prochaine valeur de clôture pour un symbole donné.
      * http://localhost:8080/api/lsdm/predict?symbol=CELUW&windowSize=20&learningRate=0.001&optimizer=adam
      * @param symbol le symbole à prédire (ex : "BTCUSDT")
-     * @param windowSize la taille de la fenêtre pour le LSTM
-     * @param learningRate le taux d'apprentissage
-     * @param optimizer le nom de l'optimiseur (ex : "adam")
      * @return la valeur de clôture prédite
      */
     @GetMapping("/predict")
-    public double predictNextClose(
-            @RequestParam String symbol,
-            @RequestParam int windowSize,
-            @RequestParam double learningRate,
-            @RequestParam String optimizer) {
-        return lsdmHelper.predictNextClose(symbol, windowSize, learningRate, optimizer);
+    public PreditLsdm predictNextClose(
+            @RequestParam String symbol) {
+        return lsdmHelper.getPredit(symbol);
     }
 }
