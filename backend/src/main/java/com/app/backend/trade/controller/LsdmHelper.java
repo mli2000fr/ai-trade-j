@@ -71,7 +71,9 @@ public class LsdmHelper {
             config.getLstmNeurons(),
             config.getDropoutRate(),
             config.getLearningRate(),
-            config.getOptimizer()
+            config.getOptimizer(),
+                config.getL1(),
+                config.getL2()
         );
         model = lstmTradePredictor.trainLstm(series, config, model);
         try {
@@ -96,7 +98,9 @@ public class LsdmHelper {
                 config.getLstmNeurons(),
                 config.getDropoutRate(),
                 config.getLearningRate(),
-                config.getOptimizer()
+                config.getOptimizer(),
+                    config.getL1(),
+                    config.getL2()
             );
             model = lstmTradePredictor.trainLstm(series, config, model);
             try {

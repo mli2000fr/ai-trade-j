@@ -13,10 +13,12 @@ public class LstmHyperparameters {
     public int patience;
     public double minDelta;
     public String optimizer;
+    public double l1;
+    public double l2;
 
     public LstmHyperparameters() {}
 
-    public LstmHyperparameters(int windowSize, int lstmNeurons, double dropoutRate, double learningRate, int numEpochs, int patience, double minDelta, String optimizer) {
+    public LstmHyperparameters(int windowSize, int lstmNeurons, double dropoutRate, double learningRate, int numEpochs, int patience, double minDelta, String optimizer, double l1, double l2) {
         this.windowSize = windowSize;
         this.lstmNeurons = lstmNeurons;
         this.dropoutRate = dropoutRate;
@@ -25,6 +27,8 @@ public class LstmHyperparameters {
         this.patience = patience;
         this.minDelta = minDelta;
         this.optimizer = optimizer;
+        this.l1 = l1;
+        this.l2 = l2;
     }
 
     public void saveToFile(String path) throws IOException {
@@ -37,4 +41,3 @@ public class LstmHyperparameters {
         return mapper.readValue(new File(path), LstmHyperparameters.class);
     }
 }
-

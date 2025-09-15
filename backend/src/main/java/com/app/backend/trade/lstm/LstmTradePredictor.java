@@ -56,7 +56,9 @@ public class LstmTradePredictor {
             config.getLstmNeurons(),
             config.getDropoutRate(),
             config.getLearningRate(),
-            config.getOptimizer()
+            config.getOptimizer(),
+            config.getL1(),
+            config.getL2()
         );
     }
 
@@ -69,13 +71,15 @@ public class LstmTradePredictor {
      * @param learningRate taux d'apprentissage
      * @param optimizer nom de l'optimiseur ("adam", "rmsprop", "sgd")
      */
-    public MultiLayerNetwork initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate, double learningRate, String optimizer) {
+    public MultiLayerNetwork initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate, double learningRate, String optimizer, double l1, double l2) {
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
         builder.updater(
             "adam".equalsIgnoreCase(optimizer) ? new org.nd4j.linalg.learning.config.Adam(learningRate)
             : "rmsprop".equalsIgnoreCase(optimizer) ? new org.nd4j.linalg.learning.config.RmsProp(learningRate)
             : new org.nd4j.linalg.learning.config.Sgd(learningRate)
         );
+        builder.l1(l1);
+        builder.l2(l2);
         MultiLayerConfiguration conf = builder
             .list()
             .layer(new LSTM.Builder()
@@ -111,7 +115,9 @@ public class LstmTradePredictor {
                 config.getLstmNeurons(),
                 config.getDropoutRate(),
                 config.getLearningRate(),
-                config.getOptimizer()
+                config.getOptimizer(),
+                config.getL1(),
+                config.getL2()
             );
         } else {
             logger.info("Modèle LSTM déjà initialisé avec windowSize = {}", currentWindowSize);
@@ -304,7 +310,7 @@ public class LstmTradePredictor {
             org.nd4j.linalg.dataset.api.iterator.DataSetIterator trainIterator = new ListDataSetIterator<>(
                 java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput))
             );
-            MultiLayerNetwork model = initModel(windowSize, 1, config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getOptimizer());
+            MultiLayerNetwork model = initModel(windowSize, 1, config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getOptimizer(), config.getL1(), config.getL2());
             double bestMSE = Double.MAX_VALUE;
             double bestRMSE = Double.MAX_VALUE;
             double bestMAE = Double.MAX_VALUE;
@@ -481,7 +487,9 @@ public class LstmTradePredictor {
                 config.getNumEpochs(),
                 config.getPatience(),
                 config.getMinDelta(),
-                config.getOptimizer()
+                config.getOptimizer(),
+                config.getL1(),
+                config.getL2()
             );
             // Sérialisation JSON
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
@@ -529,6 +537,8 @@ public class LstmTradePredictor {
                     config.setPatience(params.patience);
                     config.setMinDelta(params.minDelta);
                     config.setOptimizer(params.optimizer);
+                    config.setL1(params.l1);
+                    config.setL2(params.l2);
                     logger.info("Hyperparamètres chargés depuis la base pour le symbole : {}", symbol);
                 } catch (Exception e) {
                     logger.error("Erreur de désérialisation des hyperparamètres : {}", e.getMessage());

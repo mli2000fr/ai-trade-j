@@ -76,6 +76,18 @@ public class LstmConfig {
     private String optimizer;
 
     /**
+     * Coefficient de régularisation L1.
+     * Contrôle la pénalité appliquée aux poids pour éviter le sur-apprentissage.
+     */
+    private double l1;
+
+    /**
+     * Coefficient de régularisation L2.
+     * Contrôle la pénalité appliquée aux poids pour éviter le sur-apprentissage.
+     */
+    private double l2;
+
+    /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
      * @throws RuntimeException si le fichier de configuration ne peut pas être chargé
      */
@@ -93,6 +105,8 @@ public class LstmConfig {
                 minDelta = Double.parseDouble(props.getProperty("minDelta", "0.0001"));
                 optimizer = props.getProperty("optimizer", "adam");
                 kFolds = Integer.parseInt(props.getProperty("kFolds", "5"));
+                l1 = Double.parseDouble(props.getProperty("l1", "0.0"));
+                l2 = Double.parseDouble(props.getProperty("l2", "0.0"));
             }
             optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
