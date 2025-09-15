@@ -136,7 +136,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [indices, setIndices] = useState<{ [symbol: string]: SignalInfo | string }>({});
   const [indicesMix, setIndicesMix] = useState<{ [symbol: string]: SignalInfo | string }>({});
   const [sort, setSort] = useState<string>('single:rendement_score');
-  const [showOnlyNonFiltered, setShowOnlyNonFiltered] = useState(false);
+  const [showOnlyNonFiltered, setShowOnlyNonFiltered] = useState(true);
   const [bougies, setBougies] = useState<any[]>([]);
   const [bougiesLoading, setBougiesLoading] = useState(false);
   const [bougiesError, setBougiesError] = useState<string | null>(null);
