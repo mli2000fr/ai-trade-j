@@ -9,5 +9,6 @@ public class PreditLsdm {
     private double lastClose;
     private double predictedClose;
     private SignalType signal;
+    private String lastDate;
 
 }

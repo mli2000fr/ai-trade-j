@@ -24,6 +24,12 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ReactApexChart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
 
+interface PreditLsdm {
+    lastClose: number;
+    predictedClose: number;
+    lastDate?: string | null;
+    signal?: SignalInfo;
+}
 
 interface SignalInfo {
     symbol: string;
@@ -140,6 +146,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [bougies, setBougies] = useState<any[]>([]);
   const [bougiesLoading, setBougiesLoading] = useState(false);
   const [bougiesError, setBougiesError] = useState<string | null>(null);
+  const [lsdmResults, setLsdmResults] = useState<{ [symbol: string]: PreditLsdm | string}>({});
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -178,25 +185,6 @@ const BestPerformanceSymbolBlock: React.FC = () => {
         .catch(() => {
           setIndices(prev => ({ ...prev, [symbol]: '-' }));
         });
-    setIndicesMix(prev => ({ ...prev, [symbol]: 'pending' }));
-          fetch(`/api/best-combination/get_indice?symbol=${encodeURIComponent(symbol)}`)
-            .then(res => res.json())
-            .then((data: SignalInfo) => {
-              setIndicesMix(prev => ({ ...prev, [symbol]: data ?? '-' }));
-            })
-            .catch(() => {
-              setIndicesMix(prev => ({ ...prev, [symbol]: '-' }));
-            });
-    });
-  }, [data]);
-/*
-  useEffect(() => {
-    if (!data || data.length === 0) return;
-    const symbolsToFetchMix = data
-      .map((row: MixResultat) => row.mix.symbol)
-      .filter((symbol: string) => symbol && !(symbol in indicesMix));
-    if (symbolsToFetchMix.length === 0) return;
-    symbolsToFetchMix.forEach((symbol: string) => {
       setIndicesMix(prev => ({ ...prev, [symbol]: 'pending' }));
       fetch(`/api/best-combination/get_indice?symbol=${encodeURIComponent(symbol)}`)
         .then(res => res.json())
@@ -206,9 +194,19 @@ const BestPerformanceSymbolBlock: React.FC = () => {
         .catch(() => {
           setIndicesMix(prev => ({ ...prev, [symbol]: '-' }));
         });
+      // Ajout fetch LSDM
+      setLsdmResults(prev => ({ ...prev, [symbol]: 'pending' }));
+      fetch(`/api/lsdm/predict?symbol=${encodeURIComponent(symbol)}`)
+        .then(res => res.json())
+        .then((data: any) => {
+          setLsdmResults(prev => ({ ...prev, [symbol]: data ?? '-' }));
+        })
+        .catch(() => {
+          setLsdmResults(prev => ({ ...prev, [symbol]: '-' }));
+        });
     });
   }, [data]);
-*/
+
   const handleCopy = () => {
     const selectedSymbols = data
       .map((row, idx) => checkedRows[idx] ? row.single.symbol : null)
@@ -402,6 +400,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <TableRow>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
+                    <TableCell colSpan={3} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', fontSize: '1rem' }}>LSDM</TableCell>
                     <TableCell colSpan={6} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
                     <TableCell colSpan={6} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
@@ -409,6 +408,9 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <TableRow>
                     <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
                     <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Last Price</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Prédit Price</TableCell>
+                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Prédit Indice</TableCell>
                     <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
                     <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement</TableCell>
                     <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement check</TableCell>
@@ -428,6 +430,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   {data.map((row, i) => {
                     let bgColor = undefined;
                     const indice = indices[row.single.symbol] as SignalInfo;
+                    const lsdmResult = lsdmResults[row.single.symbol] as PreditLsdm;
                     const indiceMixRaw = row.mix.symbol === null ? null : indicesMix[row.mix.symbol];
                     let indiceMix: SignalInfo | undefined = undefined;
                     if (indiceMixRaw && typeof indiceMixRaw === 'object' && 'type' in indiceMixRaw) {
@@ -450,6 +453,27 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                       >
                         <TableCell><input type="checkbox" checked={!!checkedRows[i]} onChange={e => setCheckedRows({...checkedRows, [i]: e.target.checked})} /></TableCell>
                         <TableCell>{row.single.symbol}</TableCell>
+                        <TableCell>{
+                            lsdmResults[row.single.symbol] === 'pending'
+                              ? (<CircularProgress size={16} />)
+                              : (lsdmResult && lsdmResult.lastClose
+                                  ? (lsdmResult.lastClose)
+                                  : '-')
+                          }</TableCell>
+                          <TableCell>{
+                             lsdmResults[row.single.symbol] === 'pending'
+                               ? (<CircularProgress size={16} />)
+                               : (lsdmResult && lsdmResult.predictedClose
+                                  ? (lsdmResult.predictedClose)
+                                  : '-')
+                           }</TableCell>
+                        <TableCell>{
+                          lsdmResults[row.single.symbol] === 'pending'
+                            ? (<CircularProgress size={16} />)
+                            : (lsdmResult && lsdmResult.signal
+                                ? (lsdmResult.signal + ' (' + lsdmResult.lastDate + ')')
+                                : '-')
+                        }</TableCell>
                         <TableCell>{
                           indices[row.single.symbol] === 'pending'
                             ? (<CircularProgress size={16} />)

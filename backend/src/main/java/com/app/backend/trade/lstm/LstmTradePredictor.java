@@ -14,6 +14,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.sql.SQLException;
+import java.time.format.DateTimeFormatter;
 
 import com.app.backend.trade.model.PreditLsdm;
 import com.app.backend.trade.model.SignalType;
@@ -453,6 +454,7 @@ public class LstmTradePredictor {
         ensureModelWindowSize(config.getWindowSize());
         double th = computeSwingTradeThreshold(series);
         double predicted = predictNextClose(series);
+        predicted = Math.round(predicted * 1000.0) / 1000.0;
         double[] closes = extractCloseValues(series);
         double lastClose = closes[closes.length - 1];
         double delta =  predicted - lastClose;
@@ -464,11 +466,13 @@ public class LstmTradePredictor {
         } else {
             signal = SignalType.HOLD;
         }
-
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM");
+        String formattedDate = series.getLastBar().getEndTime().format(formatter);
         return PreditLsdm.builder()
                 .lastClose(lastClose)
                 .predictedClose(predicted)
                 .signal(signal)
+                .lastDate(formattedDate)
                 .build();
     }
 
