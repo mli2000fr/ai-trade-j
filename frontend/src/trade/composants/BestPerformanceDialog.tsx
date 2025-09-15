@@ -81,7 +81,41 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
               )}
             </AccordionDetails>
           </Accordion>
-          <Accordion defaultExpanded>
+          { selected?.indiceSingle && selected?.indiceMix && selected?.predict && (
+              <Accordion defaultExpanded>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Données Indices & Prédiction</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                  <Table size="small" sx={{ mt: 2, backgroundColor: '#f1f8e9' }}>
+                     <TableHead>
+                       <TableRow>
+                         <TableCell sx={{ backgroundColor: '#e0e0e0' }}></TableCell>
+                         <TableCell align="center" sx={{ fontWeight: 'bold', backgroundColor: '#cff6c9', fontSize: '1rem' }}>LSDM</TableCell>
+                         <TableCell align="center" sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
+                         <TableCell align="center" sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
+                       </TableRow>
+                     </TableHead>
+                     <TableBody>
+                       <TableRow>
+                         <TableCell sx={{ fontWeight: 'bold' }}>Single</TableCell>
+                         <TableCell align="center" >{selected.predict?.signal} ({selected.predict?.lastClose} / {selected.predict?.predictedClose})</TableCell>
+                         <TableCell align="center" >{selected.indiceSingle?.type}</TableCell>
+                         <TableCell align="center" >{selected.indiceMix?.type}</TableCell>
+                       </TableRow>
+                       <TableRow>
+                         <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
+                         <TableCell align="center" >{selected.predict?.lastDate}</TableCell>
+                         <TableCell align="center" >{selected.indiceSingle?.dateStr}</TableCell>
+                         <TableCell align="center" >{selected.indiceMix?.dateStr}</TableCell>
+                       </TableRow>
+                     </TableBody>
+                   </Table>
+                  </AccordionDetails>
+                </Accordion>
+              )}
+
+          <Accordion defaultExpanded={!selected?.indiceSingle && !selected?.indiceMix && !selected?.predict}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Résultats & Vérification</Typography>
             </AccordionSummary>
@@ -181,6 +215,7 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
               </Table>
             </AccordionDetails>
           </Accordion>
+
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie d'entrée (Single)</Typography>

@@ -153,7 +153,6 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
       // Prédiction
       const predictRes = await fetch(`/api/lsdm/predict?symbol=${symbol}`);
       const predictData = await predictRes.json();
-      debugger;
       setSelected({
         single: infosActionData.single,
         mix: infosActionData.mix,

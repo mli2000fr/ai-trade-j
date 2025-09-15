@@ -570,7 +570,7 @@ public class BestCombinationStrategyHelper {
             signal = SignalType.HOLD;
         }
         LocalDate dateSaved = saveSignalHistory(symbol, signal);
-        String dateSavedStr = dateSaved.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"));
+        String dateSavedStr = dateSaved.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"));
         return SignalInfo.builder().symbol(symbol).type(signal).dateStr(dateSavedStr).build();
     }
 
