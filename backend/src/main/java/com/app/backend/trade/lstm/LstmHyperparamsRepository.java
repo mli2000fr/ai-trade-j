@@ -65,7 +65,7 @@ public class LstmHyperparamsRepository {
         config.setNormalizationScope(rs.getString("normalization_scope"));
         config.setNormalizationMethod(rs.getString("normalization_method") != null ? rs.getString("normalization_method") : "auto");
         config.setSwingTradeType(rs.getString("swing_trade_type") != null ? rs.getString("swing_trade_type") : "range");
-        config.setSwingTradeType(rs.getString("features") != null ? new Gson().fromJson(rs.getString("features"),new TypeToken<List<String>>() {}.getType()) : null);
+        config.setFeatures(rs.getString("features") != null ? new Gson().fromJson(rs.getString("features"),new TypeToken<List<String>>() {}.getType()) : null);
         return config;
     }
 

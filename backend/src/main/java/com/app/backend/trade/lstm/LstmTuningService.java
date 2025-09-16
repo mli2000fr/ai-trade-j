@@ -54,7 +54,8 @@ public class LstmTuningService {
                     config.getL2()
                 );
                 model = lstmTradePredictor.trainLstm(series, config, model);
-                double score = evaluateModel(model, series, config);
+                //double score = evaluateModel(model, series, config);
+                double score = lstmTradePredictor.crossValidateLstm(series, config);
                 double rmse = Math.sqrt(score);
                 double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model);
                 double[] closes = lstmTradePredictor.extractCloseValues(series);

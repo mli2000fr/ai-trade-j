@@ -338,7 +338,7 @@ public class LstmTradePredictor {
             }
             double mse = Double.POSITIVE_INFINITY;
             try {
-                mse = predictions.squaredDistance(testOutput) / testOutput.length();
+                mse = org.nd4j.linalg.ops.transforms.Transforms.pow(predictions.sub(testOutput), 2).meanNumber().doubleValue();
             } catch (Exception e) {
                 logger.error("Erreur lors du calcul du MSE à l'epoch {} : {}", i + 1, e.getMessage());
             }
@@ -385,14 +385,31 @@ public class LstmTradePredictor {
                 }
             }
         }
+        logger.info("[CV] min={}, max={}, closes.length={}, windowSize={}, kFolds={}", min, max, closes.length, windowSize, config.getKFolds());
         double[] normalized = normalizeByConfig(closes, min, max, config);
+        if (java.util.Arrays.stream(normalized).anyMatch(Double::isNaN)) {
+            logger.error("[CV] Données normalisées contiennent des NaN ! Abandon du fold.");
+            return Double.POSITIVE_INFINITY;
+        }
         double[][][] sequences = createSequences(normalized, windowSize);
+        logger.info("[CV] Nombre de séquences générées : {}", sequences.length);
+        // Correction : normaliser les labels avec la même méthode que les inputs
+        double[] labelValues = new double[sequences.length];
+        for (int i = 0; i < labelValues.length; i++) {
+            labelValues[i] = closes[i + windowSize];
+        }
+        double[] normalizedLabels = normalizeByConfig(labelValues, min, max, config);
+        if (java.util.Arrays.stream(normalizedLabels).anyMatch(Double::isNaN)) {
+            logger.error("[CV] Labels normalisés contiennent des NaN ! Abandon du fold.");
+            return Double.POSITIVE_INFINITY;
+        }
         double[][][] labelSeq = new double[sequences.length][1][1];
         for (int i = 0; i < labelSeq.length; i++) {
-            labelSeq[i][0][0] = normalized[i + windowSize];
+            labelSeq[i][0][0] = normalizedLabels[i];
         }
         int foldSize = sequences.length / config.getKFolds();
         double[] foldMSE = new double[config.getKFolds()];
+        int validFolds = 0;
         for (int fold = 0; fold < config.getKFolds(); fold++) {
             int testStart = fold * foldSize;
             int testEnd = (fold == config.getKFolds() - 1) ? sequences.length : testStart + foldSize;
@@ -408,20 +425,60 @@ public class LstmTradePredictor {
                     idx++;
                 }
             }
+            logger.info("[CV] Fold {} : trainSeq={}, testSeq={}, trainLabel={}, testLabel={}", fold, trainSeq.length, testSeq.length, trainLabel.length, testLabel.length);
+            if (trainSeq.length == 0 || testSeq.length == 0) {
+                logger.warn("Fold {} ignoré : trainSeq ou testSeq vide (train={}, test={})", fold, trainSeq.length, testSeq.length);
+                foldMSE[fold] = Double.POSITIVE_INFINITY;
+                continue;
+            }
             org.nd4j.linalg.api.ndarray.INDArray trainInput = toINDArray(trainSeq);
             org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabel);
             org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(testSeq);
             org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel);
-            org.nd4j.linalg.dataset.api.iterator.DataSetIterator trainIterator = new ListDataSetIterator<>(
-                java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput))
-            );
+            if (containsNaN(trainOutput) || containsNaN(testOutput)) {
+                logger.warn("Fold {} ignoré : NaN dans trainOutput ou testOutput", fold);
+                foldMSE[fold] = Double.POSITIVE_INFINITY;
+                continue;
+            }
+            logger.info("[CV] Fold {} : trainInput shape={}, testInput shape={}", fold, java.util.Arrays.toString(trainInput.shape()), java.util.Arrays.toString(testInput.shape()));
+            logger.info("[CV] Fold {} : testLabel min={}, max={}", fold, java.util.Arrays.stream(testLabel).mapToDouble(arr -> arr[0][0]).min().orElse(Double.NaN), java.util.Arrays.stream(testLabel).mapToDouble(arr -> arr[0][0]).max().orElse(Double.NaN));
             MultiLayerNetwork model = initModel(windowSize, 1, config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getOptimizer(), config.getL1(), config.getL2());
             double bestMSE = Double.MAX_VALUE;
             int epochsWithoutImprovement = 0;
             for (int epoch = 0; epoch < config.getNumEpochs(); epoch++) {
-                model.fit(trainIterator);
+                model.fit(new ListDataSetIterator<>(java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput))));
                 org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
-                double mse = predictions.squaredDistance(testOutput) / testOutput.length();
+                if (!java.util.Arrays.equals(predictions.shape(), testOutput.shape())) {
+                    logger.warn("[CV] Fold {} epoch {} : Reshape predictions {} -> {}", fold, epoch, java.util.Arrays.toString(predictions.shape()), java.util.Arrays.toString(testOutput.shape()));
+                    try {
+                        predictions = predictions.reshape(testOutput.shape());
+                    } catch (Exception e) {
+                        logger.error("[CV] Fold {} epoch {} : Erreur reshape predictions : {}", fold, epoch, e.getMessage());
+                        bestMSE = Double.POSITIVE_INFINITY;
+                        break;
+                    }
+                }
+                if (containsNaN(predictions)) {
+                    logger.error("Fold {} epoch {} : Prédictions contiennent des NaN !", fold, epoch);
+                    bestMSE = Double.POSITIVE_INFINITY;
+                    break;
+                }
+                // Correction : calcul du MSE robuste
+                double mse = Double.POSITIVE_INFINITY;
+                try {
+                    mse = org.nd4j.linalg.ops.transforms.Transforms.pow(predictions.sub(testOutput), 2).meanNumber().doubleValue();
+                } catch (Exception e) {
+                    logger.error("[CV] Fold {} epoch {} : Erreur calcul MSE : {}", fold, epoch, e.getMessage());
+                    bestMSE = Double.POSITIVE_INFINITY;
+                    break;
+                }
+                if (Double.isNaN(mse) || Double.isInfinite(mse)) {
+                    logger.warn("Fold {} epoch {} : MSE NaN ou Inf (mse={}, lr={}, neurons={}, dropout={})", fold, epoch, mse, config.getLearningRate(), config.getLstmNeurons(), config.getDropoutRate());
+                    logger.warn("[CV] Fold {} epoch {} : predictions min={}, max={}, testOutput min={}, max={}", fold, epoch,
+                        predictions.minNumber(), predictions.maxNumber(), testOutput.minNumber(), testOutput.maxNumber());
+                    bestMSE = Double.POSITIVE_INFINITY;
+                    break;
+                }
                 if (bestMSE - mse > config.getMinDelta()) {
                     bestMSE = mse;
                     epochsWithoutImprovement = 0;
@@ -432,14 +489,29 @@ public class LstmTradePredictor {
                     }
                 }
             }
-            foldMSE[fold] = bestMSE;
+            if (Double.isNaN(bestMSE) || Double.isInfinite(bestMSE)) {
+                logger.warn("Fold {} ignoré : bestMSE NaN ou Inf", fold);
+                foldMSE[fold] = Double.POSITIVE_INFINITY;
+            } else {
+                foldMSE[fold] = bestMSE;
+                validFolds++;
+                logger.info("Fold {} terminé : bestMSE={}", fold, bestMSE);
+            }
         }
         double meanMSE = 0.0;
+        int count = 0;
         for (int i = 0; i < config.getKFolds(); i++) {
-            meanMSE += foldMSE[i];
+            if (!Double.isNaN(foldMSE[i]) && !Double.isInfinite(foldMSE[i])) {
+                meanMSE += foldMSE[i];
+                count++;
+            }
         }
-        meanMSE /= config.getKFolds();
-        logger.info("Validation croisée terminée. MSE moyen : {}", meanMSE);
+        if (count == 0) {
+            logger.error("Validation croisée impossible : aucun fold valide (données insuffisantes ou problème de séquences)");
+            return Double.POSITIVE_INFINITY;
+        }
+        meanMSE /= count;
+        logger.info("Validation croisée terminée. MSE moyen ({} folds valides) : {}", count, meanMSE);
         return meanMSE;
     }
 
