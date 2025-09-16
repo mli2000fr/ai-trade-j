@@ -111,14 +111,13 @@ public class LstmTradePredictor {
     }
 
     /**
-     * Vérifie et réinitialise le modèle si le windowSize demandé est différent du modèle courant.
+     * Vérifie et réinitialise le modèle si le nombre de features demandé est différent du modèle courant.
      */
-    private MultiLayerNetwork ensureModelWindowSize(MultiLayerNetwork model, int windowSize, LstmConfig config) {
-        // On ne vérifie plus currentWindowSize, on vérifie uniquement le modèle
+    private MultiLayerNetwork ensureModelWindowSize(MultiLayerNetwork model, int numFeatures, LstmConfig config) {
         if (model == null) {
-            logger.info("Réinitialisation du modèle LSTM : windowSize demandé = {}", windowSize);
+            logger.info("Réinitialisation du modèle LSTM : numFeatures demandé = {}", numFeatures);
             return initModel(
-                windowSize,
+                numFeatures, // Correction ici : nombre de features
                 1,
                 config.getLstmNeurons(),
                 config.getDropoutRate(),
@@ -279,17 +278,27 @@ public class LstmTradePredictor {
             throw new IllegalArgumentException("Pas assez de données pour entraîner le modèle");
         }
         double[][][] sequences = createSequencesMulti(normMatrix, config.getWindowSize());
-        // Label = prochaine valeur de clôture (normalisée)
+        // Correction : transposer les séquences pour DL4J [batch, numFeatures, windowSize]
+        double[][][] sequencesTransposed = transposeSequencesMulti(sequences);
+        // Correction : extraire la dernière valeur de chaque séquence pour input [batch, numFeatures, 1]
+        double[][][] lastStepSeq = new double[numSeq][numFeatures][1];
+        for (int i = 0; i < numSeq; i++) {
+            for (int f = 0; f < numFeatures; f++) {
+                lastStepSeq[i][f][0] = sequencesTransposed[i][f][config.getWindowSize() - 1];
+            }
+        }
+        // Utiliser lastStepSeq pour l'input (et non sequencesTransposed)
         double[] closes = extractCloseValues(series);
         double[] normCloses = normalize(closes);
+        // Correction: labels sous forme [numSeq, 1, 1] pour DL4J
         double[][][] labelSeq = new double[numSeq][1][1];
         for (int i = 0; i < numSeq; i++) {
             labelSeq[i][0][0] = normCloses[i + config.getWindowSize()];
         }
         int splitIdx = (int)(numSeq * 0.8);
         if (splitIdx == numSeq) splitIdx = numSeq - 1;
-        double[][][] trainSeq = java.util.Arrays.copyOfRange(sequences, 0, splitIdx);
-        double[][][] testSeq = java.util.Arrays.copyOfRange(sequences, splitIdx, numSeq);
+        double[][][] trainSeq = java.util.Arrays.copyOfRange(lastStepSeq, 0, splitIdx);
+        double[][][] testSeq = java.util.Arrays.copyOfRange(lastStepSeq, splitIdx, numSeq);
         double[][][] trainLabel = java.util.Arrays.copyOfRange(labelSeq, 0, splitIdx);
         double[][][] testLabel = java.util.Arrays.copyOfRange(labelSeq, splitIdx, numSeq);
         if (trainSeq.length == 0 || trainLabel.length == 0) {
@@ -300,10 +309,12 @@ public class LstmTradePredictor {
             logger.error("Jeu de test vide, impossible d'évaluer le modèle");
             throw new IllegalArgumentException("Jeu de test vide");
         }
-        org.nd4j.linalg.api.ndarray.INDArray trainInput = toINDArray(trainSeq);
-        org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabel);
+        org.nd4j.linalg.api.ndarray.INDArray trainInput = toINDArray(trainSeq); // [minibatch, numFeatures, 1]
+        org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabel); // [minibatch, 1, 1]
         org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(testSeq);
-        org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel);
+        org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel); // [minibatch, 1, 1]
+        // Ajout log debug shapes
+        logger.info("Shape trainInput: {} | trainOutput: {} | testInput: {} | testOutput: {}", java.util.Arrays.toString(trainInput.shape()), java.util.Arrays.toString(trainOutput.shape()), java.util.Arrays.toString(testInput.shape()), java.util.Arrays.toString(testOutput.shape()));
         if (containsNaN(trainOutput)) {
             logger.error("TrainOutput contient des NaN, impossible d'entraîner le modèle");
             throw new IllegalArgumentException("TrainOutput contient des NaN");
@@ -377,6 +388,7 @@ public class LstmTradePredictor {
         }
         double[] normalized = normalizeByConfig(closes, min, max, config);
         double[][][] sequences = createSequences(normalized, windowSize);
+        // Correction : labels rank 3 [batch, 1, 1]
         double[][][] labelSeq = new double[sequences.length][1][1];
         for (int i = 0; i < labelSeq.length; i++) {
             labelSeq[i][0][0] = normalized[i + windowSize];
@@ -401,9 +413,9 @@ public class LstmTradePredictor {
                 }
             }
             org.nd4j.linalg.api.ndarray.INDArray trainInput = toINDArray(trainSeq);
-            org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabel);
+            org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabel); // [batch, 1, 1]
             org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(testSeq);
-            org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel);
+            org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel); // [batch, 1, 1]
             org.nd4j.linalg.dataset.api.iterator.DataSetIterator trainIterator = new ListDataSetIterator<>(
                 java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput))
             );
@@ -866,5 +878,23 @@ public class LstmTradePredictor {
             }
         }
         return sequences;
+    }
+
+    /**
+     * Transpose les séquences multi-features pour DL4J : [numSeq][windowSize][numFeatures] -> [numSeq][numFeatures][windowSize]
+     */
+    public double[][][] transposeSequencesMulti(double[][][] sequences) {
+        int numSeq = sequences.length;
+        int windowSize = sequences[0].length;
+        int numFeatures = sequences[0][0].length;
+        double[][][] transposed = new double[numSeq][numFeatures][windowSize];
+        for (int i = 0; i < numSeq; i++) {
+            for (int j = 0; j < windowSize; j++) {
+                for (int f = 0; f < numFeatures; f++) {
+                    transposed[i][f][j] = sequences[i][j][f];
+                }
+            }
+        }
+        return transposed;
     }
 }

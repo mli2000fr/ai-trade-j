@@ -37,8 +37,9 @@ public class LstmTuningService {
         LstmConfig bestConfig = null;
         MultiLayerNetwork bestModel = null;
         for (LstmConfig config : grid) {
+            int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
             MultiLayerNetwork model = lstmTradePredictor.initModel(
-                config.getWindowSize(),
+                numFeatures, // Correction ici : nombre de features
                 1,
                 config.getLstmNeurons(),
                 config.getDropoutRate(),
@@ -111,6 +112,7 @@ public class LstmTuningService {
             return Double.POSITIVE_INFINITY;
         }
         double[][][] sequences = lstmTradePredictor.createSequences(normalized, config.getWindowSize());
+        // Correction : labels rank 3 [batch, 1, 1]
         double[][][] labelSeq = new double[numSeq][1][1];
         for (int i = 0; i < numSeq; i++) {
             labelSeq[i][0][0] = normalized[i + config.getWindowSize()];
@@ -124,7 +126,7 @@ public class LstmTuningService {
             return Double.POSITIVE_INFINITY;
         }
         org.nd4j.linalg.api.ndarray.INDArray testInput = lstmTradePredictor.toINDArray(testSeq);
-        org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel);
+        org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel); // [batch, 1, 1]
         if (lstmTradePredictor.containsNaN(testOutput)) {
             logger.warn("TestOutput contient des NaN pour l'évaluation du modèle");
             return Double.POSITIVE_INFINITY;

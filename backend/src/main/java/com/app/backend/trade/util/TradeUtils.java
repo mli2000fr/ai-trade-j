@@ -166,6 +166,8 @@ public class TradeUtils {
      */
     public static org.ta4j.core.BarSeries mapping(java.util.List<com.app.backend.trade.model.DailyValue> listeValues) {
         org.ta4j.core.BarSeries series = new org.ta4j.core.BaseBarSeries();
+        java.time.ZonedDateTime lastDate = null;
+        java.util.Set<java.time.ZonedDateTime> seenDates = new java.util.HashSet<>();
         for (com.app.backend.trade.model.DailyValue dailyValue : listeValues) {
             try {
                 java.time.ZonedDateTime dateTime;
@@ -175,6 +177,13 @@ public class TradeUtils {
                 } else {
                     dateTime = java.time.ZonedDateTime.parse(dailyValue.getDate());
                 }
+                // Filtrer les doublons et dates non strictement croissantes
+                if (lastDate != null && (dateTime.isEqual(lastDate) || dateTime.isBefore(lastDate))) {
+                    continue;
+                }
+                if (seenDates.contains(dateTime)) {
+                    continue;
+                }
                 series.addBar(
                         dateTime,
                         Double.parseDouble(dailyValue.getOpen()),
@@ -183,6 +192,8 @@ public class TradeUtils {
                         Double.parseDouble(dailyValue.getClose()),
                         Double.parseDouble(dailyValue.getVolume())
                 );
+                lastDate = dateTime;
+                seenDates.add(dateTime);
             } catch (Exception e) {
                 log("Erreur conversion DailyValue en BarSeries pour la date " + dailyValue.getDate() + ": " + e.getMessage());
             }
