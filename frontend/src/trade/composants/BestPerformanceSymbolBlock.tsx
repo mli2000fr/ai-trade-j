@@ -26,6 +26,7 @@ interface PreditLstm {
     predictedClose: number;
     lastDate?: string | null;
     signal?: SignalInfo;
+    position?: string | null;
 }
 
 interface SignalInfo {
@@ -409,8 +410,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         <TableCell>{
                            lstmResults[row.single.symbol] === 'pending'
                              ? (<CircularProgress size={16} />)
-                             : (lstmResult && lstmResult.position
-                                ? (lstmResult.position)
+                             : (lstmResult && lstmResult?.position
+                                ? (lstmResult?.position)
                                 : '-')
                          }</TableCell>
                         <TableCell>{
