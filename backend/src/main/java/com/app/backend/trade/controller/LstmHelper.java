@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import org.slf4j.Logger;
@@ -86,31 +87,10 @@ public class LstmHelper {
     }
 
     // Prédiction LSTM
-    public PreditLsdm getPredit(String symbol) {
-        LstmConfig config = new LstmConfig();
-        MultiLayerNetwork model = null;
-        try {
-            model = lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
-        } catch (Exception e) {
-            // Si le modèle n'existe pas, on l'entraîne
-            BarSeries series = getBarBySymbol(symbol, null);
-            model = lstmTradePredictor.initModel(
-                config.getWindowSize(),
-                1,
-                config.getLstmNeurons(),
-                config.getDropoutRate(),
-                config.getLearningRate(),
-                config.getOptimizer(),
-                config.getL1(),
-                config.getL2()
-            );
-            model = lstmTradePredictor.trainLstm(series, config, model);
-            try {
-                lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate, config);
-            } catch (Exception ex) {
-                logger.error("Erreur lors de la sauvegarde du modèle : {}", ex.getMessage());
-            }
-        }
+    public PreditLsdm getPredit(String symbol) throws IOException {
+        LstmConfig config = lstmTuningService.tuneSymbol(symbol, lstmTuningService.generateSwingTradeGrid(), getBarBySymbol(symbol, null), jdbcTemplate);
+        MultiLayerNetwork model = lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
+
         BarSeries series = getBarBySymbol(symbol, null);
         return lstmTradePredictor.getPredit(series, config, model);
     }

@@ -181,7 +181,7 @@ public class LstmTuningService {
      * @param jdbcTemplate accès base
      * @param seriesProvider fonction pour obtenir BarSeries par symbole
      */
-    public void tuneAllSymbols_bis(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
+    public void tuneAllSymbols(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         List<LstmConfig> grid = generateSwingTradeGrid();
         int numThreads = Math.min(symbols.size(), Runtime.getRuntime().availableProcessors());
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
@@ -225,11 +225,19 @@ public class LstmTuningService {
      * @param jdbcTemplate accès base
      * @param seriesProvider fonction pour obtenir BarSeries par symbole
      */
-    public void tuneAllSymbols(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
+    public void tuneAllSymbolssss(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         List<LstmConfig> grid = generateSwingTradeGrid();
         for (String symbol : symbols) {
             BarSeries series = seriesProvider.apply(symbol);
             tuneSymbol(symbol, grid, series, jdbcTemplate);
+            // Libération mémoire ND4J/DL4J et reset workspace
+            try {
+                org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
+                org.nd4j.linalg.api.memory.MemoryWorkspaceManager wsManager = org.nd4j.linalg.factory.Nd4j.getWorkspaceManager();
+                wsManager.destroyAllWorkspacesForCurrentThread();
+            } catch (Exception e) {
+                logger.warn("Erreur lors du nettoyage ND4J/DL4J après le tuning du symbole {} : {}", symbol, e.getMessage());
+            }
         }
     }
 }

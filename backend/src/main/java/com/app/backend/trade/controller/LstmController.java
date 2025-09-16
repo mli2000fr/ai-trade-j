@@ -4,6 +4,8 @@ import com.app.backend.trade.model.PreditLsdm;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+
 /**
  * Contrôleur REST pour la gestion des opérations LSTM (entraînement et prédiction).
  * <p>
@@ -45,7 +47,7 @@ public class LstmController {
      */
     @GetMapping("/predict")
     public PreditLsdm predictNextClose(
-            @RequestParam String symbol) {
+            @RequestParam String symbol) throws IOException {
         return lsdmHelper.getPredit(symbol);
     }
 

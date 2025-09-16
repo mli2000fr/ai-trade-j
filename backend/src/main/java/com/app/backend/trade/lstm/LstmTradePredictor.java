@@ -39,7 +39,6 @@ import com.app.backend.trade.exception.ModelNotFoundException;
 @Service
 public class LstmTradePredictor {
     private static final Logger logger = LoggerFactory.getLogger(LstmTradePredictor.class);
-    private int currentWindowSize = -1;
 
     private final LstmHyperparamsRepository hyperparamsRepository;
 
@@ -67,7 +66,7 @@ public class LstmTradePredictor {
     }
 
     /**
-     * Initialise le modèle LSTM avec les hyperparamètres fournis et mémorise le windowSize courant.
+     * Initialise le modèle LSTM avec les hyperparamètres fournis.
      * @param inputSize taille de l'entrée (doit être égal au windowSize utilisé)
      * @param outputSize taille de la sortie
      * @param lstmNeurons nombre de neurones dans la couche LSTM
@@ -103,7 +102,6 @@ public class LstmTradePredictor {
             .build();
         MultiLayerNetwork model = new MultiLayerNetwork(conf);
         model.init();
-        currentWindowSize = inputSize;
         return model;
     }
 
@@ -111,8 +109,9 @@ public class LstmTradePredictor {
      * Vérifie et réinitialise le modèle si le windowSize demandé est différent du modèle courant.
      */
     private MultiLayerNetwork ensureModelWindowSize(MultiLayerNetwork model, int windowSize, LstmConfig config) {
-        if (model == null || currentWindowSize != windowSize) {
-            logger.info("Réinitialisation du modèle LSTM : windowSize courant = {} | windowSize demandé = {}", currentWindowSize, windowSize);
+        // On ne vérifie plus currentWindowSize, on vérifie uniquement le modèle
+        if (model == null) {
+            logger.info("Réinitialisation du modèle LSTM : windowSize demandé = {}", windowSize);
             return initModel(
                 windowSize,
                 1,
@@ -124,7 +123,7 @@ public class LstmTradePredictor {
                 config.getL2()
             );
         } else {
-            logger.info("Modèle LSTM déjà initialisé avec windowSize = {}", currentWindowSize);
+            logger.info("Modèle LSTM déjà initialisé");
             return model;
         }
     }
