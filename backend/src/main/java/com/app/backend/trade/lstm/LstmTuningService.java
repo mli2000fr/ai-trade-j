@@ -90,37 +90,72 @@ public class LstmTuningService {
 
     // Évalue le modèle sur le jeu de test (MSE)
     private double evaluateModel(MultiLayerNetwork model, BarSeries series, LstmConfig config) {
-        double[] closes = lstmTradePredictor.extractCloseValues(series);
-        double min, max;
-        if ("global".equalsIgnoreCase(config.getNormalizationScope())) {
-            min = java.util.Arrays.stream(closes).min().orElse(0.0);
-            max = java.util.Arrays.stream(closes).max().orElse(0.0);
-        } else {
-            min = Double.MAX_VALUE;
-            max = -Double.MAX_VALUE;
-            for (int i = closes.length - config.getWindowSize(); i < closes.length; i++) {
-                if (i >= 0) {
-                    if (closes[i] < min) min = closes[i];
-                    if (closes[i] > max) max = closes[i];
+        int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
+        int windowSize = config.getWindowSize();
+        int numSeq;
+        double[][][] testSeq;
+        double[][][] testLabel;
+        if (numFeatures > 1) {
+            // Multi-features
+            double[][] matrix = lstmTradePredictor.extractFeatureMatrix(series, config.getFeatures());
+            double[][] normMatrix = lstmTradePredictor.normalizeMatrix(matrix);
+            numSeq = normMatrix.length - windowSize;
+            if (numSeq <= 0) {
+                logger.warn("Pas assez de données pour évaluer le modèle (windowSize={}, closes={})", windowSize, normMatrix.length);
+                return Double.POSITIVE_INFINITY;
+            }
+            double[][][] sequences = lstmTradePredictor.createSequencesMulti(normMatrix, windowSize);
+            double[][][] sequencesTransposed = lstmTradePredictor.transposeSequencesMulti(sequences);
+            // Extraire la dernière étape de chaque séquence pour input [batch, numFeatures, 1]
+            double[][][] lastStepSeq = new double[numSeq][numFeatures][1];
+            for (int i = 0; i < numSeq; i++) {
+                for (int f = 0; f < numFeatures; f++) {
+                    lastStepSeq[i][f][0] = sequencesTransposed[i][f][windowSize - 1];
                 }
             }
+            double[] closes = lstmTradePredictor.extractCloseValues(series);
+            double[] normCloses = lstmTradePredictor.normalize(closes);
+            double[][][] labelSeq = new double[numSeq][1][1];
+            for (int i = 0; i < numSeq; i++) {
+                labelSeq[i][0][0] = normCloses[i + windowSize];
+            }
+            int splitIdx = (int)(numSeq * 0.8);
+            if (splitIdx == numSeq) splitIdx = numSeq - 1;
+            testSeq = java.util.Arrays.copyOfRange(lastStepSeq, splitIdx, numSeq);
+            testLabel = java.util.Arrays.copyOfRange(labelSeq, splitIdx, numSeq);
+        } else {
+            // Univarié
+            double[] closes = lstmTradePredictor.extractCloseValues(series);
+            double min, max;
+            if ("global".equalsIgnoreCase(config.getNormalizationScope())) {
+                min = java.util.Arrays.stream(closes).min().orElse(0.0);
+                max = java.util.Arrays.stream(closes).max().orElse(0.0);
+            } else {
+                min = Double.MAX_VALUE;
+                max = -Double.MAX_VALUE;
+                for (int i = closes.length - windowSize; i < closes.length; i++) {
+                    if (i >= 0) {
+                        if (closes[i] < min) min = closes[i];
+                        if (closes[i] > max) max = closes[i];
+                    }
+                }
+            }
+            double[] normalized = lstmTradePredictor.normalize(closes, min, max);
+            numSeq = normalized.length - windowSize;
+            if (numSeq <= 0) {
+                logger.warn("Pas assez de données pour évaluer le modèle (windowSize={}, closes={})", windowSize, closes.length);
+                return Double.POSITIVE_INFINITY;
+            }
+            double[][][] sequences = lstmTradePredictor.createSequences(normalized, windowSize);
+            double[][][] labelSeq = new double[numSeq][1][1];
+            for (int i = 0; i < numSeq; i++) {
+                labelSeq[i][0][0] = normalized[i + windowSize];
+            }
+            int splitIdx = (int)(numSeq * 0.8);
+            if (splitIdx == numSeq) splitIdx = numSeq - 1;
+            testSeq = java.util.Arrays.copyOfRange(sequences, splitIdx, numSeq);
+            testLabel = java.util.Arrays.copyOfRange(labelSeq, splitIdx, numSeq);
         }
-        double[] normalized = lstmTradePredictor.normalize(closes, min, max);
-        int numSeq = normalized.length - config.getWindowSize();
-        if (numSeq <= 0) {
-            logger.warn("Pas assez de données pour évaluer le modèle (windowSize={}, closes={})", config.getWindowSize(), closes.length);
-            return Double.POSITIVE_INFINITY;
-        }
-        double[][][] sequences = lstmTradePredictor.createSequences(normalized, config.getWindowSize());
-        // Correction : labels rank 3 [batch, 1, 1]
-        double[][][] labelSeq = new double[numSeq][1][1];
-        for (int i = 0; i < numSeq; i++) {
-            labelSeq[i][0][0] = normalized[i + config.getWindowSize()];
-        }
-        int splitIdx = (int)(numSeq * 0.8);
-        if (splitIdx == numSeq) splitIdx = numSeq - 1;
-        double[][][] testSeq = java.util.Arrays.copyOfRange(sequences, splitIdx, numSeq);
-        double[][][] testLabel = java.util.Arrays.copyOfRange(labelSeq, splitIdx, numSeq);
         if (testSeq.length == 0 || testLabel.length == 0) {
             logger.warn("Jeu de test vide pour l'évaluation du modèle");
             return Double.POSITIVE_INFINITY;
