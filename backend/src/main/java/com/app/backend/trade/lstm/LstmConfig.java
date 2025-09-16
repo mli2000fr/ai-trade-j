@@ -105,6 +105,11 @@ public class LstmConfig {
     private String swingTradeType = "range";
 
     /**
+     * Liste des features à inclure dans la séquence d'entrée (ex : close, volume, rsi, sma, ema, macd).
+     */
+    private java.util.List<String> features = java.util.Arrays.asList("close", "volume", "rsi", "sma", "ema", "macd");
+
+    /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
      * @throws RuntimeException si le fichier de configuration ne peut pas être chargé
      */

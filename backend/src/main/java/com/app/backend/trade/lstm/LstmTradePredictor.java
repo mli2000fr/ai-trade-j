@@ -241,6 +241,20 @@ public class LstmTradePredictor {
     }
 
     /**
+     * Prépare l'entrée LSTM complète à partir d'une série de bougies et d'une liste de features.
+     * @param series série de bougies
+     * @param windowSize taille de la fenêtre
+     * @param features liste des features à inclure
+     * @return INDArray prêt pour le modèle LSTM
+     */
+    public org.nd4j.linalg.api.ndarray.INDArray prepareLstmInputMulti(BarSeries series, int windowSize, java.util.List<String> features) {
+        double[][] matrix = extractFeatureMatrix(series, features);
+        double[][] normMatrix = normalizeMatrix(matrix);
+        double[][][] sequences = createSequencesMulti(normMatrix, windowSize);
+        return toINDArray(sequences);
+    }
+
+    /**
      * Entraîne le modèle LSTM avec early stopping et séparation train/test.
      * @param series série de bougies
      * @param windowSize taille de la fenêtre
@@ -254,32 +268,23 @@ public class LstmTradePredictor {
      * @param series Série de bougies
      */
     public MultiLayerNetwork trainLstm(BarSeries series, LstmConfig config, MultiLayerNetwork model) {
-        model = ensureModelWindowSize(model, config.getWindowSize(), config);
-        double[] closes = extractCloseValues(series);
-        double minTrain, maxTrain;
-        if ("global".equalsIgnoreCase(config.getNormalizationScope())) {
-            minTrain = java.util.Arrays.stream(closes).min().orElse(0.0);
-            maxTrain = java.util.Arrays.stream(closes).max().orElse(0.0);
-        } else {
-            minTrain = Double.MAX_VALUE;
-            maxTrain = -Double.MAX_VALUE;
-            for (int i = closes.length - config.getWindowSize(); i < closes.length; i++) {
-                if (i >= 0) {
-                    if (closes[i] < minTrain) minTrain = closes[i];
-                    if (closes[i] > maxTrain) maxTrain = closes[i];
-                }
-            }
-        }
-        double[] normalized = normalizeByConfig(closes, minTrain, maxTrain, config);
-        int numSeq = normalized.length - config.getWindowSize();
+        java.util.List<String> features = config.getFeatures();
+        int numFeatures = features.size();
+        model = ensureModelWindowSize(model, numFeatures, config);
+        double[][] matrix = extractFeatureMatrix(series, features);
+        double[][] normMatrix = normalizeMatrix(matrix);
+        int numSeq = normMatrix.length - config.getWindowSize();
         if (numSeq <= 0) {
-            logger.error("Pas assez de données pour entraîner le modèle (windowSize={}, closes={})", config.getWindowSize(), closes.length);
+            logger.error("Pas assez de données pour entraîner le modèle (windowSize={}, barCount={})", config.getWindowSize(), normMatrix.length);
             throw new IllegalArgumentException("Pas assez de données pour entraîner le modèle");
         }
-        double[][][] sequences = createSequences(normalized, config.getWindowSize());
+        double[][][] sequences = createSequencesMulti(normMatrix, config.getWindowSize());
+        // Label = prochaine valeur de clôture (normalisée)
+        double[] closes = extractCloseValues(series);
+        double[] normCloses = normalize(closes);
         double[][][] labelSeq = new double[numSeq][1][1];
         for (int i = 0; i < numSeq; i++) {
-            labelSeq[i][0][0] = normalized[i + config.getWindowSize()];
+            labelSeq[i][0][0] = normCloses[i + config.getWindowSize()];
         }
         int splitIdx = (int)(numSeq * 0.8);
         if (splitIdx == numSeq) splitIdx = numSeq - 1;
@@ -466,36 +471,45 @@ public class LstmTradePredictor {
      */
     // Prédiction de la prochaine valeur de clôture
     public double predictNextClose(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model) {
-        model = ensureModelWindowSize(model, config.getWindowSize(), config);
-        if (model == null) {
-            throw new ModelNotFoundException("Le modèle LSTM n'est pas initialisé.");
+        java.util.List<String> features = config.getFeatures();
+        int numFeatures = features.size();
+        model = ensureModelWindowSize(model, numFeatures, config);
+        double[][] matrix = extractFeatureMatrix(series, features);
+        double[][] normMatrix = normalizeMatrix(matrix);
+        int barCount = normMatrix.length;
+        if (barCount < config.getWindowSize()) {
+            throw new InsufficientDataException("Données insuffisantes pour la prédiction (windowSize=" + config.getWindowSize() + ", barCount=" + barCount + ").");
         }
-        double[] closes = extractCloseValues(series);
-        if (closes.length < config.getWindowSize()) {
-            throw new InsufficientDataException("Données insuffisantes pour la prédiction (windowSize=" + config.getWindowSize() + ", closes=" + closes.length + ").");
+        double[][] lastWindow = new double[config.getWindowSize()][numFeatures];
+        for (int i = 0; i < config.getWindowSize(); i++) {
+            for (int f = 0; f < numFeatures; f++) {
+                lastWindow[i][f] = normMatrix[barCount - config.getWindowSize() + i][f];
+            }
         }
-        double[] lastWindow = new double[config.getWindowSize()];
-        System.arraycopy(closes, closes.length - config.getWindowSize(), lastWindow, 0, config.getWindowSize());
-        double min = "global".equalsIgnoreCase(config.getNormalizationScope()) ? java.util.Arrays.stream(closes).min().orElse(0.0) : java.util.Arrays.stream(lastWindow).min().orElse(0.0);
-        double max = "global".equalsIgnoreCase(config.getNormalizationScope()) ? java.util.Arrays.stream(closes).max().orElse(0.0) : java.util.Arrays.stream(lastWindow).max().orElse(0.0);
-        double[] normalized = normalizeByConfig(lastWindow, min, max, config);
-        double[][][] lastSequence = new double[1][config.getWindowSize()][1];
+        double[][][] lastSequence = new double[1][config.getWindowSize()][numFeatures];
         for (int j = 0; j < config.getWindowSize(); j++) {
-            lastSequence[0][j][0] = normalized[j];
+            for (int f = 0; f < numFeatures; f++) {
+                lastSequence[0][j][f] = lastWindow[j][f];
+            }
         }
         org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(lastSequence);
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input);
         double predictedNorm = output.getDouble(0);
+        // Dénormalisation sur la clôture uniquement
+        double[] closes = extractCloseValues(series);
+        double[] lastCloseWindow = new double[config.getWindowSize()];
+        System.arraycopy(closes, closes.length - config.getWindowSize(), lastCloseWindow, 0, config.getWindowSize());
+        double min = "global".equalsIgnoreCase(config.getNormalizationScope()) ? java.util.Arrays.stream(closes).min().orElse(0.0) : java.util.Arrays.stream(lastCloseWindow).min().orElse(0.0);
+        double max = "global".equalsIgnoreCase(config.getNormalizationScope()) ? java.util.Arrays.stream(closes).max().orElse(0.0) : java.util.Arrays.stream(lastCloseWindow).max().orElse(0.0);
         double predicted;
         if ("zscore".equalsIgnoreCase(config.getNormalizationMethod())) {
-            double mean = java.util.Arrays.stream(lastWindow).average().orElse(0.0);
-            double std = Math.sqrt(java.util.Arrays.stream(lastWindow).map(v -> (v - mean) * (v - mean)).average().orElse(0.0));
+            double mean = java.util.Arrays.stream(lastCloseWindow).average().orElse(0.0);
+            double std = Math.sqrt(java.util.Arrays.stream(lastCloseWindow).map(v -> (v - mean) * (v - mean)).average().orElse(0.0));
             predicted = predictedNorm * std + mean;
         } else {
             predicted = predictedNorm * (max - min) + min;
         }
-        String position = analyzePredictionPosition(lastWindow, predicted);
-        // Test si la prédiction sort de la plage locale
+        String position = analyzePredictionPosition(lastCloseWindow, predicted);
         if (predicted < min || predicted > max) {
             if (series.getBarCount() > 0) {
                 logger.warn("[LSTM WARNING] La prédiction ({}) sort de la plage locale [{}, {}] pour le symbole {}.", predicted, min, max, symbol);
@@ -504,7 +518,7 @@ public class LstmTradePredictor {
             }
         }
         logger.info("[PREDICT-NORM] windowSize={}, lastWindow={}, min={}, max={}, predictedNorm={}, predicted={}, normalizationScope={}, position={}",
-            config.getWindowSize(), java.util.Arrays.toString(lastWindow), min, max, predictedNorm, predicted, config.getNormalizationScope(), position);
+            config.getWindowSize(), java.util.Arrays.toString(lastCloseWindow), min, max, predictedNorm, predicted, config.getNormalizationScope(), position);
         return predicted;
     }
 
@@ -755,5 +769,102 @@ public class LstmTradePredictor {
             }
             return normalized;
         }
+    }
+
+    /**
+     * Extrait une matrice de features (close, volume, indicateurs techniques) d'une série de bougies.
+     * @param series série de bougies TA4J
+     * @param features liste des features à inclure (ex: "close", "volume", "rsi", "macd", "sma", "ema")
+     * @return matrice [barCount][numFeatures]
+     */
+    public double[][] extractFeatureMatrix(BarSeries series, java.util.List<String> features) {
+        int barCount = series.getBarCount();
+        int numFeatures = features.size();
+        double[][] matrix = new double[barCount][numFeatures];
+        for (int i = 0; i < barCount; i++) {
+            int f = 0;
+            for (String feat : features) {
+                switch (feat.toLowerCase()) {
+                    case "close":
+                        matrix[i][f] = series.getBar(i).getClosePrice().doubleValue();
+                        break;
+                    case "volume":
+                        matrix[i][f] = series.getBar(i).getVolume().doubleValue();
+                        break;
+                    case "open":
+                        matrix[i][f] = series.getBar(i).getOpenPrice().doubleValue();
+                        break;
+                    case "high":
+                        matrix[i][f] = series.getBar(i).getHighPrice().doubleValue();
+                        break;
+                    case "low":
+                        matrix[i][f] = series.getBar(i).getLowPrice().doubleValue();
+                        break;
+                    case "sma":
+                        org.ta4j.core.indicators.SMAIndicator sma = new org.ta4j.core.indicators.SMAIndicator(new org.ta4j.core.indicators.helpers.ClosePriceIndicator(series), 14);
+                        matrix[i][f] = i >= 13 ? sma.getValue(i).doubleValue() : 0.0;
+                        break;
+                    case "ema":
+                        org.ta4j.core.indicators.EMAIndicator ema = new org.ta4j.core.indicators.EMAIndicator(new org.ta4j.core.indicators.helpers.ClosePriceIndicator(series), 14);
+                        matrix[i][f] = i >= 13 ? ema.getValue(i).doubleValue() : 0.0;
+                        break;
+                    case "rsi":
+                        org.ta4j.core.indicators.RSIIndicator rsi = new org.ta4j.core.indicators.RSIIndicator(new org.ta4j.core.indicators.helpers.ClosePriceIndicator(series), 14);
+                        matrix[i][f] = i >= 13 ? rsi.getValue(i).doubleValue() : 0.0;
+                        break;
+                    case "macd":
+                        org.ta4j.core.indicators.MACDIndicator macd = new org.ta4j.core.indicators.MACDIndicator(new org.ta4j.core.indicators.helpers.ClosePriceIndicator(series), 12, 26);
+                        matrix[i][f] = i >= 25 ? macd.getValue(i).doubleValue() : 0.0;
+                        break;
+                    default:
+                        matrix[i][f] = 0.0;
+                }
+                f++;
+            }
+        }
+        return matrix;
+    }
+
+    /**
+     * Normalise une matrice de features (MinMax par colonne).
+     * @param matrix matrice [barCount][numFeatures]
+     * @return matrice normalisée
+     */
+    public double[][] normalizeMatrix(double[][] matrix) {
+        int barCount = matrix.length;
+        int numFeatures = matrix[0].length;
+        double[][] norm = new double[barCount][numFeatures];
+        for (int f = 0; f < numFeatures; f++) {
+            double min = Double.MAX_VALUE;
+            double max = -Double.MAX_VALUE;
+            for (int i = 0; i < barCount; i++) {
+                if (matrix[i][f] < min) min = matrix[i][f];
+                if (matrix[i][f] > max) max = matrix[i][f];
+            }
+            for (int i = 0; i < barCount; i++) {
+                norm[i][f] = (min == max) ? 0.5 : (matrix[i][f] - min) / (max - min);
+            }
+        }
+        return norm;
+    }
+
+    /**
+     * Crée les séquences d'entrée pour le LSTM à partir d'une matrice de features normalisées.
+     * @param matrix matrice [barCount][numFeatures]
+     * @param windowSize taille de la fenêtre
+     * @return séquences 3D [numSeq][windowSize][numFeatures]
+     */
+    public double[][][] createSequencesMulti(double[][] matrix, int windowSize) {
+        int numSeq = matrix.length - windowSize;
+        int numFeatures = matrix[0].length;
+        double[][][] sequences = new double[numSeq][windowSize][numFeatures];
+        for (int i = 0; i < numSeq; i++) {
+            for (int j = 0; j < windowSize; j++) {
+                for (int f = 0; f < numFeatures; f++) {
+                    sequences[i][j][f] = matrix[i + j][f];
+                }
+            }
+        }
+        return sequences;
     }
 }
