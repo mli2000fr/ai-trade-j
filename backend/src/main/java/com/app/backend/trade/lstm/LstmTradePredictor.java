@@ -539,15 +539,21 @@ public class LstmTradePredictor {
                 lastWindow[i][f] = normMatrix[barCount - config.getWindowSize() + i][f];
             }
         }
+        // Vérification des features (zéros ou NaN)
+        for (int i = 0; i < config.getWindowSize(); i++) {
+            for (int f = 0; f < numFeatures; f++) {
+                if (Double.isNaN(lastWindow[i][f]) || lastWindow[i][f] == 0.0) {
+                    logger.warn("[LSTM WARNING] Feature anormale dans la fenêtre : i={}, f={}, value={}", i, f, lastWindow[i][f]);
+                }
+            }
+        }
         double[][][] lastSequence = new double[1][config.getWindowSize()][numFeatures];
         for (int j = 0; j < config.getWindowSize(); j++) {
             for (int f = 0; f < numFeatures; f++) {
                 lastSequence[0][j][f] = lastWindow[j][f];
             }
         }
-        // Correction : transposer la séquence pour obtenir [1, numFeatures, windowSize]
         double[][][] transposed = transposeSequencesMulti(lastSequence);
-        // Correction : extraire la dernière étape pour chaque feature [1, numFeatures, 1]
         double[][][] inputSeq = new double[1][numFeatures][1];
         for (int f = 0; f < numFeatures; f++) {
             inputSeq[0][f][0] = transposed[0][f][config.getWindowSize() - 1];
@@ -555,31 +561,50 @@ public class LstmTradePredictor {
         org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(inputSeq);
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input);
         double predictedNorm = output.getDouble(0);
-        // Dénormalisation sur la clôture uniquement
         double[] closes = extractCloseValues(series);
         double[] lastCloseWindow = new double[config.getWindowSize()];
         System.arraycopy(closes, closes.length - config.getWindowSize(), lastCloseWindow, 0, config.getWindowSize());
-        double min = "global".equalsIgnoreCase(config.getNormalizationScope()) ? java.util.Arrays.stream(closes).min().orElse(0.0) : java.util.Arrays.stream(lastCloseWindow).min().orElse(0.0);
-        double max = "global".equalsIgnoreCase(config.getNormalizationScope()) ? java.util.Arrays.stream(closes).max().orElse(0.0) : java.util.Arrays.stream(lastCloseWindow).max().orElse(0.0);
+        // Cohérence de la normalisation : scope et méthode
+        String normScope = config.getNormalizationScope();
+        String normMethod = config.getNormalizationMethod();
+        double min, max;
+        if ("global".equalsIgnoreCase(normScope)) {
+            min = java.util.Arrays.stream(closes).min().orElse(0.0);
+            max = java.util.Arrays.stream(closes).max().orElse(0.0);
+        } else {
+            min = java.util.Arrays.stream(lastCloseWindow).min().orElse(0.0);
+            max = java.util.Arrays.stream(lastCloseWindow).max().orElse(0.0);
+        }
+        // Log d'alerte si min/max trop éloignés du dernier close
+        double lastClose = closes[closes.length - 1];
+        if (Math.abs(lastClose - min) / lastClose > 0.2 || Math.abs(lastClose - max) / lastClose > 0.2) {
+            logger.warn("[LSTM WARNING] min/max trop éloignés du dernier close : min={}, max={}, lastClose={}", min, max, lastClose);
+        }
         double predicted;
-        if ("zscore".equalsIgnoreCase(config.getNormalizationMethod())) {
+        if ("zscore".equalsIgnoreCase(normMethod)) {
             double mean = java.util.Arrays.stream(lastCloseWindow).average().orElse(0.0);
             double std = Math.sqrt(java.util.Arrays.stream(lastCloseWindow).map(v -> (v - mean) * (v - mean)).average().orElse(0.0));
             predicted = predictedNorm * std + mean;
         } else {
             predicted = predictedNorm * (max - min) + min;
         }
-        String position = analyzePredictionPosition(lastCloseWindow, predicted);
+        // Log de contrôle sur la dénormalisation
+        logger.info("[LSTM DEBUG] predictedNorm={}, min={}, max={}, predicted={}, normScope={}, normMethod={}", predictedNorm, min, max, predicted, normScope, normMethod);
+        // Si la prédiction est hors de la plage min/max, log d'alerte
         if (predicted < min || predicted > max) {
-            if (series.getBarCount() > 0) {
-                logger.warn("[LSTM WARNING] La prédiction ({}) sort de la plage locale [{}, {}] pour le symbole {}.", predicted, min, max, symbol);
-            } else {
-                logger.warn("[LSTM WARNING] La série est vide, impossible d'obtenir le symbole.");
-            }
+            logger.warn("[LSTM WARNING] Prédiction hors plage min/max : predicted={}, min={}, max={}", predicted, min, max);
         }
-        logger.info("[PREDICT-NORM] windowSize={}, lastWindow={}, min={}, max={}, predictedNorm={}, predicted={}, normalizationScope={}, position={}",
-            config.getWindowSize(), java.util.Arrays.toString(lastCloseWindow), min, max, predictedNorm, predicted, config.getNormalizationScope(), position);
-        return predicted;
+        // Limitation de la prédiction à ±10% autour du dernier close (sécurité, mais log si utilisé)
+        double lowerBound = lastClose * 0.9;
+        double upperBound = lastClose * 1.1;
+        double predictedLimited = Math.max(lowerBound, Math.min(predicted, upperBound));
+        if (predicted != predictedLimited) {
+            logger.warn("[LSTM WARNING] Prédiction limitée : predicted={} -> limited=[{}, {}]", predicted, lowerBound, upperBound);
+        }
+        String position = analyzePredictionPosition(lastCloseWindow, predictedLimited);
+        logger.info("[PREDICT-NORM] windowSize={}, lastWindow={}, min={}, max={}, predictedNorm={}, predicted={}, predictedLimited={}, normalizationScope={}, position={}",
+            config.getWindowSize(), java.util.Arrays.toString(lastCloseWindow), min, max, predictedNorm, predicted, predictedLimited, config.getNormalizationScope(), position);
+        return predictedLimited;
     }
 
     /**
