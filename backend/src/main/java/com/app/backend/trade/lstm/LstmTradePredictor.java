@@ -313,8 +313,7 @@ public class LstmTradePredictor {
         org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabel); // [minibatch, 1, 1]
         org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(testSeq);
         org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel); // [minibatch, 1, 1]
-        // Ajout log debug shapes
-        logger.info("Shape trainInput: {} | trainOutput: {} | testInput: {} | testOutput: {}", java.util.Arrays.toString(trainInput.shape()), java.util.Arrays.toString(trainOutput.shape()), java.util.Arrays.toString(testInput.shape()), java.util.Arrays.toString(testOutput.shape()));
+        // Ajout log debug shapeslogger.info("Shape trainInput: {} | trainOutput: {} | testInput: {} | testOutput: {}", java.util.Arrays.toString(trainInput.shape()), java.util.Arrays.toString(trainOutput.shape()), java.util.Arrays.toString(testInput.shape()), java.util.Arrays.toString(testOutput.shape()));
         if (containsNaN(trainOutput)) {
             logger.error("TrainOutput contient des NaN, impossible d'entraîner le modèle");
             throw new IllegalArgumentException("TrainOutput contient des NaN");
@@ -504,7 +503,14 @@ public class LstmTradePredictor {
                 lastSequence[0][j][f] = lastWindow[j][f];
             }
         }
-        org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(lastSequence);
+        // Correction : transposer la séquence pour obtenir [1, numFeatures, windowSize]
+        double[][][] transposed = transposeSequencesMulti(lastSequence);
+        // Correction : extraire la dernière étape pour chaque feature [1, numFeatures, 1]
+        double[][][] inputSeq = new double[1][numFeatures][1];
+        for (int f = 0; f < numFeatures; f++) {
+            inputSeq[0][f][0] = transposed[0][f][config.getWindowSize() - 1];
+        }
+        org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(inputSeq);
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input);
         double predictedNorm = output.getDouble(0);
         // Dénormalisation sur la clôture uniquement
