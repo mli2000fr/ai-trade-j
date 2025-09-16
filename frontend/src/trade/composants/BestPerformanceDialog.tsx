@@ -104,7 +104,7 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
                        <TableBody>
                          <TableRow>
                            <TableCell sx={{ fontWeight: 'bold' }}>Single</TableCell>
-                           <TableCell align="center" >{selected.predict?.signal} ({selected.predict?.lastClose} / {selected.predict?.predictedClose})</TableCell>
+                           <TableCell align="center" >{selected.predict?.signal} ({selected.predict?.lastClose} / {selected.predict?.predictedClose} {selected.predict?.position})</TableCell>
                            <TableCell align="center" >{selected.indiceSingle?.type}</TableCell>
                            <TableCell align="center" >{selected.indiceMix?.type}</TableCell>
                          </TableRow>
