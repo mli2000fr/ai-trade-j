@@ -45,19 +45,30 @@ const callApi = async (endpoint: string, label: string) => {
     } finally {
     }
   };
-  if (!progress) return (
-    <Box p={4} textAlign="center">
-      <Typography variant="h6" gutterBottom>Aucun calcul en cours</Typography>
-      <Button
-        variant="contained"
-        color="info"
-        onClick={() => callApi('/api/best-combination/calcul', 'Calcule mix strategies')}
-        sx={{ mt: 2 }}
-      >
-        {loading === 'Calcule mix strategies' ? <CircularProgress size={24} /> : 'Lancer le calcul mix strategies'}
-      </Button>
-    </Box>
-  );
+  if (!progress) {
+      if(loading){
+              return (
+                  <Box p={4} textAlign="center">
+                      <CircularProgress size={40} />
+                  </Box>
+              );
+          }else{
+              return (
+                 <Box p={4} textAlign="center">
+                       <Typography variant="h6" gutterBottom>Aucun calcul en cours</Typography>
+                       <Button
+                         variant="contained"
+                         color="info"
+                         onClick={() => callApi('/api/best-combination/calcul', 'Calcule mix strategies')}
+                         sx={{ mt: 2 }}
+                       >
+                         {loading === 'Calcule mix strategies' ? <CircularProgress size={24} /> : 'Lancer le calcul mix strategies'}
+                       </Button>
+                     </Box>
+              );
+          }
+
+  }
 
   const percent = progress.totalSymbols > 0 ? Math.round(100 * progress.processedSymbols / progress.totalSymbols) : 0;
   const statusColor = progress.status === 'termine' ? 'success' : progress.status === 'erreur' ? 'error' : 'info';
