@@ -15,6 +15,8 @@ import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
 
 import java.io.IOException;
+import java.lang.reflect.Array;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import org.slf4j.Logger;
@@ -67,24 +69,14 @@ public class LstmHelper {
 
     // Entraînement LSTM
     public void trainLstm(String symbol) {
-        BarSeries series = getBarBySymbol(symbol, null);
-        LstmConfig config = new LstmConfig();
-        MultiLayerNetwork model = lstmTradePredictor.initModel(
-            config.getWindowSize(),
-            1,
-            config.getLstmNeurons(),
-            config.getDropoutRate(),
-            config.getLearningRate(),
-            config.getOptimizer(),
-                config.getL1(),
-                config.getL2()
-        );
-        model = lstmTradePredictor.trainLstm(series, config, model);
-        try {
-            lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate, config);
-        } catch (Exception e) {
-            logger.error("Erreur lors de la sauvegarde du modèle : {}", e.getMessage());
+        boolean useRandomGrid = true;
+        List<LstmConfig> grid;
+        if (useRandomGrid) {
+            grid = lstmTuningService.generateRandomSwingTradeGrid(10);
+        } else {
+            grid = lstmTuningService.generateSwingTradeGrid();
         }
+        lstmTuningService.tuneAllSymbols(Arrays.asList(symbol), grid, jdbcTemplate, sym -> getBarBySymbol(sym, null));
     }
 
     // Prédiction LSTM

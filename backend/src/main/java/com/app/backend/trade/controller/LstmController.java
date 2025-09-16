@@ -30,11 +30,7 @@ public class LstmController {
      */
     @GetMapping("/train")
     public String trainLstm(
-            @RequestParam String symbol,
-            @RequestParam int windowSize,
-            @RequestParam int numEpochs,
-            @RequestParam double learningRate,
-            @RequestParam String optimizer) {
+            @RequestParam String symbol) {
         lsdmHelper.trainLstm(symbol);
         return "Entraînement LSTM terminé pour " + symbol;
     }

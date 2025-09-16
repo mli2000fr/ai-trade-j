@@ -11,7 +11,7 @@ import java.util.List;
 @Service
 public class LstmTuningService {
     private static final Logger logger = LoggerFactory.getLogger(LstmTuningService.class);
-    private final LstmTradePredictor lstmTradePredictor;
+    public final LstmTradePredictor lstmTradePredictor;
     public final LstmHyperparamsRepository hyperparamsRepository;
 
     public LstmTuningService(LstmTradePredictor lstmTradePredictor, LstmHyperparamsRepository hyperparamsRepository) {
