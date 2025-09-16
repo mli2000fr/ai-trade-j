@@ -136,14 +136,14 @@ public class LstmTuningService {
      */
     public List<LstmConfig> generateSwingTradeGrid() {
         List<LstmConfig> grid = new java.util.ArrayList<>();
-        int[] windowSizes = {20, 30, 40};
-        int[] lstmNeurons = {64, 100, 128};
+        int[] windowSizes = {10, 20, 30, 40, 60}; // Ajout de plus petits et plus grands windowSize
+        int[] lstmNeurons = {64, 100, 128, 256, 512}; // Ajout de plus de neurones
         double[] dropoutRates = {0.2, 0.3, 0.4};
-        double[] learningRates = {0.0005, 0.001};
+        double[] learningRates = {0.0005, 0.001, 0.002}; // Ajout d'un learning rate plus élevé
         double[] l1s = {0.0, 0.0001};
         double[] l2s = {0.0001, 0.001, 0.01};
-        int numEpochs = 150;
-        int patience = 15;
+        int numEpochs = 300; // Augmentation du nombre d'epochs
+        int patience = 20; // Patience plus élevée
         double minDelta = 0.0002;
         int kFolds = 5;
         String optimizer = "adam";

@@ -93,8 +93,13 @@ public class LstmTradePredictor {
             .layer(new DropoutLayer.Builder()
                 .dropOut(dropoutRate)
                 .build())
-            .layer(new RnnOutputLayer.Builder()
+            .layer(new org.deeplearning4j.nn.conf.layers.DenseLayer.Builder()
                 .nIn(lstmNeurons)
+                .nOut(Math.max(16, lstmNeurons / 4))
+                .activation(Activation.RELU)
+                .build())
+            .layer(new RnnOutputLayer.Builder()
+                .nIn(Math.max(16, lstmNeurons / 4))
                 .nOut(outputSize)
                 .activation(Activation.IDENTITY)
                 .lossFunction(LossFunctions.LossFunction.MSE)
@@ -417,19 +422,30 @@ public class LstmTradePredictor {
         if (closes.length < config.getWindowSize()) {
             throw new InsufficientDataException("Données insuffisantes pour la prédiction (windowSize=" + config.getWindowSize() + ", closes=" + closes.length + ").");
         }
-        double[] normalized = normalize(closes);
-        // Prendre la dernière séquence
+        // Utiliser la dernière séquence pour normaliser et dénormaliser
+        double[] lastWindow = new double[config.getWindowSize()];
+        System.arraycopy(closes, closes.length - config.getWindowSize(), lastWindow, 0, config.getWindowSize());
+        double moyenneWindow = java.util.Arrays.stream(lastWindow).average().orElse(0.0);
+        logger.info("[PREDICT-NORM] Moyenne de la fenêtre = {}", moyenneWindow);
+        double min = java.util.Arrays.stream(lastWindow).min().orElse(0.0);
+        double max = java.util.Arrays.stream(lastWindow).max().orElse(0.0);
+        double[] normalized = new double[config.getWindowSize()];
+        if (min == max) {
+            for (int i = 0; i < config.getWindowSize(); i++) normalized[i] = 0.5;
+        } else {
+            for (int i = 0; i < config.getWindowSize(); i++) normalized[i] = (lastWindow[i] - min) / (max - min);
+        }
         double[][][] lastSequence = new double[1][config.getWindowSize()][1];
         for (int j = 0; j < config.getWindowSize(); j++) {
-            lastSequence[0][j][0] = normalized[normalized.length - config.getWindowSize() + j];
+            lastSequence[0][j][0] = normalized[j];
         }
         org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(lastSequence);
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input);
-        // Dénormaliser la prédiction
-        double min = java.util.Arrays.stream(closes).min().orElse(0.0);
-        double max = java.util.Arrays.stream(closes).max().orElse(0.0);
         double predictedNorm = output.getDouble(0);
         double predicted = predictedNorm * (max - min) + min;
+        // Log détaillé pour analyse
+        logger.info("[PREDICT-NORM] windowSize={}, lastWindow={}, min={}, max={}, predictedNorm={}, predicted={}",
+            config.getWindowSize(), java.util.Arrays.toString(lastWindow), min, max, predictedNorm, predicted);
         return predicted;
     }
 
@@ -492,6 +508,9 @@ public class LstmTradePredictor {
         }
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM");
         String formattedDate = series.getLastBar().getEndTime().format(formatter);
+        // Ajout de logs détaillés pour analyse
+        logger.info("------------PREDICT {} | lastClose={}, predictedClose={}, delta={}, threshold={}, signal={}",
+            config.getWindowSize(), lastClose, predicted, delta, th, signal);
         return PreditLsdm.builder()
                 .lastClose(lastClose)
                 .predictedClose(predicted)
