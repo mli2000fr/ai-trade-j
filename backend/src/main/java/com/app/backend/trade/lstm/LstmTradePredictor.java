@@ -176,6 +176,27 @@ public class LstmTradePredictor {
     }
 
     /**
+     * Normalise un tableau de valeurs selon la méthode MinMax, avec choix du scope.
+     * @param values tableau de valeurs à normaliser
+     * @param min valeur minimale de référence
+     * @param max valeur maximale de référence
+     * @return tableau normalisé entre 0 et 1
+     */
+    public double[] normalize(double[] values, double min, double max) {
+        double[] normalized = new double[values.length];
+        if (min == max) {
+            for (int i = 0; i < values.length; i++) {
+                normalized[i] = 0.5;
+            }
+        } else {
+            for (int i = 0; i < values.length; i++) {
+                normalized[i] = (values[i] - min) / (max - min);
+            }
+        }
+        return normalized;
+    }
+
+    /**
      * Crée les séquences d'entrée pour le LSTM à partir des valeurs normalisées.
      * @param values tableau de valeurs normalisées
      * @param windowSize taille de la fenêtre
@@ -233,7 +254,21 @@ public class LstmTradePredictor {
     public MultiLayerNetwork trainLstm(BarSeries series, LstmConfig config, MultiLayerNetwork model) {
         model = ensureModelWindowSize(model, config.getWindowSize(), config);
         double[] closes = extractCloseValues(series);
-        double[] normalized = normalize(closes);
+        double minTrain, maxTrain;
+        if ("global".equalsIgnoreCase(config.getNormalizationScope())) {
+            minTrain = java.util.Arrays.stream(closes).min().orElse(0.0);
+            maxTrain = java.util.Arrays.stream(closes).max().orElse(0.0);
+        } else {
+            minTrain = Double.MAX_VALUE;
+            maxTrain = -Double.MAX_VALUE;
+            for (int i = closes.length - config.getWindowSize(); i < closes.length; i++) {
+                if (i >= 0) {
+                    if (closes[i] < minTrain) minTrain = closes[i];
+                    if (closes[i] > maxTrain) maxTrain = closes[i];
+                }
+            }
+        }
+        double[] normalized = normalize(closes, minTrain, maxTrain);
         int numSeq = normalized.length - config.getWindowSize();
         if (numSeq <= 0) {
             logger.error("Pas assez de données pour entraîner le modèle (windowSize={}, closes={})", config.getWindowSize(), closes.length);
@@ -318,7 +353,22 @@ public class LstmTradePredictor {
     public void crossValidateLstm(BarSeries series, LstmConfig config) {
         int windowSize = config.getWindowSize();
         double[] closes = extractCloseValues(series);
-        double[] normalized = normalize(closes);
+        double min, max;
+        if ("global".equalsIgnoreCase(config.getNormalizationScope())) {
+            min = java.util.Arrays.stream(closes).min().orElse(0.0);
+            max = java.util.Arrays.stream(closes).max().orElse(0.0);
+        } else {
+            // min/max sur la dernière fenêtre
+            min = Double.MAX_VALUE;
+            max = -Double.MAX_VALUE;
+            for (int i = closes.length - windowSize; i < closes.length; i++) {
+                if (i >= 0) {
+                    if (closes[i] < min) min = closes[i];
+                    if (closes[i] > max) max = closes[i];
+                }
+            }
+        }
+        double[] normalized = normalize(closes, min, max);
         double[][][] sequences = createSequences(normalized, windowSize);
         double[][][] labelSeq = new double[sequences.length][1][1];
         for (int i = 0; i < labelSeq.length; i++) {
@@ -422,19 +472,17 @@ public class LstmTradePredictor {
         if (closes.length < config.getWindowSize()) {
             throw new InsufficientDataException("Données insuffisantes pour la prédiction (windowSize=" + config.getWindowSize() + ", closes=" + closes.length + ").");
         }
-        // Utiliser la dernière séquence pour normaliser et dénormaliser
         double[] lastWindow = new double[config.getWindowSize()];
         System.arraycopy(closes, closes.length - config.getWindowSize(), lastWindow, 0, config.getWindowSize());
-        double moyenneWindow = java.util.Arrays.stream(lastWindow).average().orElse(0.0);
-        logger.info("[PREDICT-NORM] Moyenne de la fenêtre = {}", moyenneWindow);
-        double min = java.util.Arrays.stream(lastWindow).min().orElse(0.0);
-        double max = java.util.Arrays.stream(lastWindow).max().orElse(0.0);
-        double[] normalized = new double[config.getWindowSize()];
-        if (min == max) {
-            for (int i = 0; i < config.getWindowSize(); i++) normalized[i] = 0.5;
+        double min, max;
+        if ("global".equalsIgnoreCase(config.getNormalizationScope())) {
+            min = java.util.Arrays.stream(closes).min().orElse(0.0);
+            max = java.util.Arrays.stream(closes).max().orElse(0.0);
         } else {
-            for (int i = 0; i < config.getWindowSize(); i++) normalized[i] = (lastWindow[i] - min) / (max - min);
+            min = java.util.Arrays.stream(lastWindow).min().orElse(0.0);
+            max = java.util.Arrays.stream(lastWindow).max().orElse(0.0);
         }
+        double[] normalized = normalize(lastWindow, min, max);
         double[][][] lastSequence = new double[1][config.getWindowSize()][1];
         for (int j = 0; j < config.getWindowSize(); j++) {
             lastSequence[0][j][0] = normalized[j];
@@ -443,9 +491,8 @@ public class LstmTradePredictor {
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input);
         double predictedNorm = output.getDouble(0);
         double predicted = predictedNorm * (max - min) + min;
-        // Log détaillé pour analyse
-        logger.info("[PREDICT-NORM] windowSize={}, lastWindow={}, min={}, max={}, predictedNorm={}, predicted={}",
-            config.getWindowSize(), java.util.Arrays.toString(lastWindow), min, max, predictedNorm, predicted);
+        logger.info("[PREDICT-NORM] windowSize={}, lastWindow={}, min={}, max={}, predictedNorm={}, predicted={}, normalizationScope={}",
+            config.getWindowSize(), java.util.Arrays.toString(lastWindow), min, max, predictedNorm, predicted, config.getNormalizationScope());
         return predicted;
     }
 
@@ -545,15 +592,16 @@ public class LstmTradePredictor {
                 config.getMinDelta(),
                 config.getOptimizer(),
                 config.getL1(),
-                config.getL2()
+                config.getL2(),
+                config.getNormalizationScope()
             );
             // Sérialisation JSON
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             String hyperparamsJson = mapper.writeValueAsString(params);
-            String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, updated_date) VALUES (?, ?, ?, CURRENT_TIMESTAMP)";
+            String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, updated_date) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)";
             try {
-                jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson);
-                logger.info("Modèle et hyperparamètres sauvegardés en base pour le symbole : {}", symbol);
+                jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson, config.getNormalizationScope());
+                logger.info("Modèle et hyperparamètres sauvegardés en base pour le symbole : {} (scope={})", symbol, config.getNormalizationScope());
             } catch (Exception e) {
                 logger.error("Erreur lors de la sauvegarde du modèle en base : {}", e.getMessage());
                 throw e;
@@ -574,15 +622,36 @@ public class LstmTradePredictor {
         if (config == null) {
             throw new IOException("Aucun hyperparamètre trouvé pour le symbole " + symbol);
         }
-        String sql = "SELECT model_blob FROM lstm_models WHERE symbol = ?";
+        String sql = "SELECT model_blob, normalization_scope, hyperparams_json FROM lstm_models WHERE symbol = ?";
         MultiLayerNetwork model = null;
         try {
             java.util.Map<String, Object> result = jdbcTemplate.queryForMap(sql, symbol);
             byte[] modelBytes = (byte[]) result.get("model_blob");
+            String normalizationScope = (String) result.get("normalization_scope");
+            String hyperparamsJson = result.containsKey("hyperparams_json") ? (String) result.get("hyperparams_json") : null;
+            boolean normalizationSet = false;
+            if (normalizationScope != null && !normalizationScope.isEmpty()) {
+                config.setNormalizationScope(normalizationScope);
+                normalizationSet = true;
+            }
+            // Fallback : si normalization_scope absent, essayer de lire du JSON
+            if (!normalizationSet && hyperparamsJson != null && !hyperparamsJson.isEmpty()) {
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    java.util.Map<?,?> jsonMap = mapper.readValue(hyperparamsJson, java.util.Map.class);
+                    Object normScopeObj = jsonMap.get("normalizationScope");
+                    if (normScopeObj != null && normScopeObj instanceof String && !((String)normScopeObj).isEmpty()) {
+                        config.setNormalizationScope((String)normScopeObj);
+                        normalizationSet = true;
+                    }
+                } catch (Exception e) {
+                    logger.warn("Impossible de parser hyperparams_json pour normalizationScope : {}", e.getMessage());
+                }
+            }
             if (modelBytes != null) {
                 ByteArrayInputStream bais = new ByteArrayInputStream(modelBytes);
                 model = ModelSerializer.restoreMultiLayerNetwork(bais);
-                logger.info("Modèle chargé depuis la base pour le symbole : {}", symbol);
+                logger.info("Modèle chargé depuis la base pour le symbole : {} (scope={})", symbol, config.getNormalizationScope());
             }
         } catch (EmptyResultDataAccessException e) {
             logger.error("Modèle non trouvé en base pour le symbole : {}", symbol);

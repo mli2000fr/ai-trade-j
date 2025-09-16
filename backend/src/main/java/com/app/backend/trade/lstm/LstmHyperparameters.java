@@ -15,10 +15,11 @@ public class LstmHyperparameters {
     public String optimizer;
     public double l1;
     public double l2;
+    public String normalizationScope;
 
     public LstmHyperparameters() {}
 
-    public LstmHyperparameters(int windowSize, int lstmNeurons, double dropoutRate, double learningRate, int numEpochs, int patience, double minDelta, String optimizer, double l1, double l2) {
+    public LstmHyperparameters(int windowSize, int lstmNeurons, double dropoutRate, double learningRate, int numEpochs, int patience, double minDelta, String optimizer, double l1, double l2, String normalizationScope) {
         this.windowSize = windowSize;
         this.lstmNeurons = lstmNeurons;
         this.dropoutRate = dropoutRate;
@@ -29,6 +30,7 @@ public class LstmHyperparameters {
         this.optimizer = optimizer;
         this.l1 = l1;
         this.l2 = l2;
+        this.normalizationScope = normalizationScope;
     }
 
     public void saveToFile(String path) throws IOException {

@@ -14,7 +14,7 @@ public class LstmHyperparamsRepository {
     }
 
     public void saveHyperparams(String symbol, LstmConfig config) {
-        String sql = "REPLACE INTO lstm_hyperparams (symbol, window_size, lstm_neurons, dropout_rate, learning_rate, num_epochs, patience, min_delta, k_folds, optimizer, l1, l2, updated_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+        String sql = "REPLACE INTO lstm_hyperparams (symbol, window_size, lstm_neurons, dropout_rate, learning_rate, num_epochs, patience, min_delta, k_folds, optimizer, l1, l2, normalization_scope, updated_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
         jdbcTemplate.update(sql,
             symbol,
             config.getWindowSize(),
@@ -27,7 +27,8 @@ public class LstmHyperparamsRepository {
             config.getKFolds(),
             config.getOptimizer(),
             config.getL1(),
-            config.getL2()
+            config.getL2(),
+            config.getNormalizationScope()
         );
     }
 
@@ -55,7 +56,7 @@ public class LstmHyperparamsRepository {
         config.setOptimizer(rs.getString("optimizer"));
         config.setL1(rs.getDouble("l1"));
         config.setL2(rs.getDouble("l2"));
+        config.setNormalizationScope(rs.getString("normalization_scope"));
         return config;
     }
 }
-

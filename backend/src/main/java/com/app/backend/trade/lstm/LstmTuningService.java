@@ -73,7 +73,21 @@ public class LstmTuningService {
     // Évalue le modèle sur le jeu de test (MSE)
     private double evaluateModel(MultiLayerNetwork model, BarSeries series, LstmConfig config) {
         double[] closes = lstmTradePredictor.extractCloseValues(series);
-        double[] normalized = lstmTradePredictor.normalize(closes);
+        double min, max;
+        if ("global".equalsIgnoreCase(config.getNormalizationScope())) {
+            min = java.util.Arrays.stream(closes).min().orElse(0.0);
+            max = java.util.Arrays.stream(closes).max().orElse(0.0);
+        } else {
+            min = Double.MAX_VALUE;
+            max = -Double.MAX_VALUE;
+            for (int i = closes.length - config.getWindowSize(); i < closes.length; i++) {
+                if (i >= 0) {
+                    if (closes[i] < min) min = closes[i];
+                    if (closes[i] > max) max = closes[i];
+                }
+            }
+        }
+        double[] normalized = lstmTradePredictor.normalize(closes, min, max);
         int numSeq = normalized.length - config.getWindowSize();
         if (numSeq <= 0) {
             logger.warn("Pas assez de données pour évaluer le modèle (windowSize={}, closes={})", config.getWindowSize(), closes.length);
@@ -116,7 +130,6 @@ public class LstmTuningService {
         }
         double mse = Double.POSITIVE_INFINITY;
         try {
-            // Calcul alternatif du MSE si squaredDistance échoue
             org.nd4j.linalg.api.ndarray.INDArray diff = predictions.sub(testOutput);
             org.nd4j.linalg.api.ndarray.INDArray squared = diff.mul(diff);
             mse = squared.meanNumber().doubleValue();
@@ -136,36 +149,40 @@ public class LstmTuningService {
      */
     public List<LstmConfig> generateSwingTradeGrid() {
         List<LstmConfig> grid = new java.util.ArrayList<>();
-        int[] windowSizes = {10, 20, 30, 40, 60}; // Ajout de plus petits et plus grands windowSize
-        int[] lstmNeurons = {64, 100, 128, 256, 512}; // Ajout de plus de neurones
+        int[] windowSizes = {10, 20, 30, 40, 60};
+        int[] lstmNeurons = {64, 100, 128, 256, 512};
         double[] dropoutRates = {0.2, 0.3, 0.4};
-        double[] learningRates = {0.0005, 0.001, 0.002}; // Ajout d'un learning rate plus élevé
+        double[] learningRates = {0.0005, 0.001, 0.002};
         double[] l1s = {0.0, 0.0001};
         double[] l2s = {0.0001, 0.001, 0.01};
-        int numEpochs = 300; // Augmentation du nombre d'epochs
-        int patience = 20; // Patience plus élevée
+        int numEpochs = 300;
+        int patience = 20;
         double minDelta = 0.0002;
         int kFolds = 5;
         String optimizer = "adam";
-        for (int windowSize : windowSizes) {
-            for (int neurons : lstmNeurons) {
-                for (double dropout : dropoutRates) {
-                    for (double lr : learningRates) {
-                        for (double l1 : l1s) {
-                            for (double l2 : l2s) {
-                                LstmConfig config = new LstmConfig();
-                                config.setWindowSize(windowSize);
-                                config.setLstmNeurons(neurons);
-                                config.setDropoutRate(dropout);
-                                config.setLearningRate(lr);
-                                config.setNumEpochs(numEpochs);
-                                config.setPatience(patience);
-                                config.setMinDelta(minDelta);
-                                config.setKFolds(kFolds);
-                                config.setOptimizer(optimizer);
-                                config.setL1(l1);
-                                config.setL2(l2);
-                                grid.add(config);
+        String[] scopes = {"window", "global"};
+        for (String scope : scopes) {
+            for (int windowSize : windowSizes) {
+                for (int neurons : lstmNeurons) {
+                    for (double dropout : dropoutRates) {
+                        for (double lr : learningRates) {
+                            for (double l1 : l1s) {
+                                for (double l2 : l2s) {
+                                    LstmConfig config = new LstmConfig();
+                                    config.setWindowSize(windowSize);
+                                    config.setLstmNeurons(neurons);
+                                    config.setDropoutRate(dropout);
+                                    config.setLearningRate(lr);
+                                    config.setNumEpochs(numEpochs);
+                                    config.setPatience(patience);
+                                    config.setMinDelta(minDelta);
+                                    config.setKFolds(kFolds);
+                                    config.setOptimizer(optimizer);
+                                    config.setL1(l1);
+                                    config.setL2(l2);
+                                    config.setNormalizationScope(scope);
+                                    grid.add(config);
+                                }
                             }
                         }
                     }

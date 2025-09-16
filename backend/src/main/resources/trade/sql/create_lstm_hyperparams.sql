@@ -1,4 +1,4 @@
-CREATE TABLE lstm_hyperparams (
+CREATE TABLE trade_ai.lstm_hyperparams (
     symbol VARCHAR(32) PRIMARY KEY,
     window_size INT,
     lstm_neurons INT,
@@ -11,5 +11,6 @@ CREATE TABLE lstm_hyperparams (
     optimizer VARCHAR(16),
     l1 DOUBLE,
     l2 DOUBLE,
+    normalization_scope VARCHAR(16) DEFAULT 'window',
     updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

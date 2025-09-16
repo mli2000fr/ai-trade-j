@@ -90,6 +90,11 @@ public class LstmConfig {
     private double l2;
 
     /**
+     * Portée de la normalisation : "window" (fenêtre locale) ou "global" (toute la série).
+     */
+    private String normalizationScope = "window";
+
+    /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
      * @throws RuntimeException si le fichier de configuration ne peut pas être chargé
      */
@@ -109,6 +114,7 @@ public class LstmConfig {
                 kFolds = Integer.parseInt(props.getProperty("kFolds", "5"));
                 l1 = Double.parseDouble(props.getProperty("l1", "0.0"));
                 l2 = Double.parseDouble(props.getProperty("l2", "0.0"));
+                normalizationScope = props.getProperty("normalizationScope", "window");
             }
             optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
@@ -133,5 +139,6 @@ public class LstmConfig {
         optimizer = rs.getString("optimizer");
         l1 = rs.getDouble("l1");
         l2 = rs.getDouble("l2");
+        normalizationScope = rs.getString("normalization_scope");
     }
 }
