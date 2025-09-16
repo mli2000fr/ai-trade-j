@@ -145,17 +145,23 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [bougiesLoading, setBougiesLoading] = useState(false);
   const [bougiesError, setBougiesError] = useState<string | null>(null);
   const [lstmResults, setLstmResults] = useState<{ [symbol: string]: PreditLstm | string}>({});
+  const [searchValue, setSearchValue] = useState('');
+  const [searchMode, setSearchMode] = useState(false);
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const fetchData = (searchModeParam = false, searchValueParam = '') => {
     setLoading(true);
     setError(null);
-    const type = sort.split(':')[0];
-    const tri = sort.split(':')[1];
-
-    let url = `/api/result/global?limit=${limit}&type=${type}&sort=${tri}`;
-    if (showOnlyNonFiltered) {
-      url += `&filtered=true`;
+    let url = `/api/result/global?limit=${limit}`;
+    if (searchModeParam && searchValueParam.trim()) {
+      url += `&search=${encodeURIComponent(searchValueParam.trim())}`;
+    } else {
+      const type = sort.split(':')[0];
+      const tri = sort.split(':')[1];
+      url += `&type=${type}&sort=${tri}`;
+      if (showOnlyNonFiltered) {
+        url += `&filtered=true`;
+      }
     }
     fetch(url)
       .then(res => {
@@ -165,6 +171,11 @@ const BestPerformanceSymbolBlock: React.FC = () => {
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchData(false, '');
+    // eslint-disable-next-line
   }, [limit, sort, showOnlyNonFiltered]);
 
   useEffect(() => {
@@ -270,13 +281,14 @@ const BestPerformanceSymbolBlock: React.FC = () => {
             Best Performance-Symbol
           </Typography>
           {/* Liste déroulante au-dessus du tableau */}
-          <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
             <label htmlFor="limit-select" style={{ marginRight: 8 }}>Afficher :</label>
             <select
               id="limit-select"
               value={limit}
               onChange={e => setLimit(Number(e.target.value))}
               style={{ padding: '4px 8px', marginRight: 16 }}
+              disabled={searchMode}
             >
               <option value={20}>20</option>
               <option value={30}>30</option>
@@ -289,6 +301,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               value={sort}
               onChange={e => setSort(e.target.value)}
               style={{ padding: '4px 8px', marginRight: 16 }}
+              disabled={searchMode}
             >
               <option value="single:rendement_score">Single - Score Rendement</option>
               <option value="single:rendement">Single - Rendement</option>
@@ -305,21 +318,63 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                 checked={showOnlyNonFiltered}
                 onChange={e => setShowOnlyNonFiltered(e.target.checked)}
                 style={{ marginRight: 8 }}
+                disabled={searchMode}
               />
               Stratégies non filtrées
             </label>
-            {/* Bouton copier */}
+             {/* Bouton copier */}
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          size="small"
+                          startIcon={<ContentCopyIcon />}
+                          style={{ marginLeft: 16 }}
+                          onClick={handleCopy}
+                          disabled={Object.values(checkedRows).every(v => !v)}
+                        >
+                          Copier
+                        </Button>
+          </div>
+          {/* Bloc recherche sur une nouvelle ligne */}
+          <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              placeholder="Rechercher..."
+              value={searchValue}
+              onChange={e => setSearchValue(e.target.value)}
+              style={{ marginLeft: 0, marginRight: 8, padding: '4px 8px', minWidth: 120 }}
+              disabled={searchMode && loading}
+            />
             <Button
               variant="contained"
-              color="primary"
+              color="secondary"
               size="small"
-              startIcon={<ContentCopyIcon />}
-              style={{ marginLeft: 16 }}
-              onClick={handleCopy}
-              disabled={Object.values(checkedRows).every(v => !v)}
+              style={{ marginRight: 8 }}
+              onClick={() => {
+                if (searchValue.trim()) {
+                  setSearchMode(true);
+                  fetchData(true, searchValue);
+                }
+              }}
+              disabled={!searchValue.trim()}
             >
-              Copier
+              Chercher
             </Button>
+            <Button
+              variant="outlined"
+              color="inherit"
+              size="small"
+              style={{ marginRight: 8 }}
+              onClick={() => {
+                setSearchValue('');
+                setSearchMode(false);
+                fetchData(false, '');
+              }}
+              disabled={!searchMode}
+            >
+              Réinitialiser
+            </Button>
+
           </div>
           {loading ? (
             <CircularProgress />

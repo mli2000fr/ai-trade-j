@@ -1,5 +1,6 @@
-Personnalisation des features : Actuellement, la grille utilise les features par défaut. Il serait pertinent d’ajouter la possibilité de personnaliser les features selon le symbole ou le type de swing trade.
 Gestion des exceptions : Le code gère déjà les erreurs, mais il pourrait être amélioré pour loguer plus d’informations sur les cas d’échec (données insuffisantes, NaN, etc.).
-Optimisation du grid search : La grille est très large, ce qui peut être coûteux en temps de calcul. On pourrait ajouter une étape de pré-filtrage ou utiliser des algorithmes de recherche plus intelligents (Bayesian optimization, random search).
-Sauvegarde des résultats : Les résultats sont sauvegardés en base, mais il pourrait être utile d’ajouter une exportation des meilleurs modèles/configs pour analyse externe.
 Monitoring : Ajouter un monitoring du tuning (progression, temps par symbole, logs détaillés).
+
+Personnalisation des features : Actuellement, la grille utilise les features par défaut. Il serait pertinent d’ajouter la possibilité de personnaliser les features selon le symbole ou le type de swing trade.
+--- Sauvegarde des résultats : Les résultats sont sauvegardés en base, mais il pourrait être utile d’ajouter une exportation des meilleurs modèles/configs pour analyse externe.
+Optimisation du grid search : La grille est très large, ce qui peut être coûteux en temps de calcul. On pourrait ajouter une étape de pré-filtrage ou utiliser des algorithmes de recherche plus intelligents (Bayesian optimization, random search).

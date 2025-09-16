@@ -640,7 +640,7 @@ public class StrategieHelper {
      * @param sort critère de tri (par défaut rendement)
      * @return liste des meilleures stratégies BestInOutStrategy
      */
-    public List<BestInOutStrategy> getBestPerfActions(Integer limit, String sort, Boolean filtered){
+    public List<BestInOutStrategy> getBestPerfActions(Integer limit, String sort, String search, Boolean filtered){
         String orderBy = "rendement_score";
         if ("score_swing_trade".equalsIgnoreCase(sort)) {
             orderBy = "score_swing_trade";
@@ -649,7 +649,11 @@ public class StrategieHelper {
         }else if ("rendement".equalsIgnoreCase(sort)) {
             orderBy = "rendement";
         }
-        String sql = "SELECT * FROM best_in_out_single_strategy WHERE profit_factor <> 0 AND max_drawdown <> 0 AND win_rate < 1";
+        String searchSQL = "";
+        if(search != null && !search.isEmpty()){
+            searchSQL = "symbol in ("+"'"+search.replaceAll(" ", "").replaceAll(",", "','")+"'"+") and";
+        }
+        String sql = "SELECT * FROM best_in_out_single_strategy WHERE "+ searchSQL +" profit_factor <> 0 AND win_rate < 1";
         if (filtered != null && filtered) {
             sql += " AND fltred_out = false";
         }

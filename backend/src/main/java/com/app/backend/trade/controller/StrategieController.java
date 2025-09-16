@@ -60,7 +60,7 @@ public class StrategieController {
             @RequestParam(value = "sort", required = false, defaultValue = "rendement_score") String sort,
             @RequestParam(value = "filtered", required = false) Boolean filtered
     ) {
-        List<BestInOutStrategy> lsiteStr = strategieHelper.getBestPerfActions(limit, sort, filtered);
+        List<BestInOutStrategy> lsiteStr = strategieHelper.getBestPerfActions(limit, sort, null, filtered);
         return ResponseEntity.ok(lsiteStr);
     }
 

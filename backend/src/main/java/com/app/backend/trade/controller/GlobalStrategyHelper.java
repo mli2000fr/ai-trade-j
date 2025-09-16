@@ -20,17 +20,20 @@ public class GlobalStrategyHelper {
     @Autowired
     private BestCombinationStrategyHelper bestCombinationStrategyHelper;
 
-    public List<MixResultat> getBestScoreAction(Integer limit, String type, String sort, Boolean filtered) {
-        if(type != null && type.equals("mix")) {
+    public List<MixResultat> getBestScoreAction(Integer limit, String type, String sort, String search, Boolean filtered) {
+
+        if(search != null && !search.isEmpty()) {
+            return getBestScoreActionSingle(limit, sort, search, filtered);
+        }else if(type != null && type.equals("mix")) {
             return getBestScoreActionMix(limit, sort, filtered);
         } else {
-            return getBestScoreActionSingle(limit, sort, filtered);
+            return getBestScoreActionSingle(limit, sort, null, filtered);
         }
     }
 
-    public List<MixResultat> getBestScoreActionSingle(Integer limit, String sort, Boolean filtered) {
+    public List<MixResultat> getBestScoreActionSingle(Integer limit, String sort, String search, Boolean filtered) {
 
-        List<BestInOutStrategy> listeSingle = strategieHelper.getBestPerfActions(limit, sort, filtered);
+        List<BestInOutStrategy> listeSingle = strategieHelper.getBestPerfActions(limit, sort, search, filtered);
         List<MixResultat> results = new ArrayList<>();
         for(BestInOutStrategy single : listeSingle) {
             BestCombinationResult mix = bestCombinationStrategyHelper.getBestCombinationResult(single.getSymbol());
