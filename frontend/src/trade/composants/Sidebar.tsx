@@ -10,8 +10,7 @@ import GroupWorkIcon from '@mui/icons-material/GroupWork';
 const menuItems = [
   { label: 'Dashboard', path: '/trade/dashboard', icon: <DashboardIcon /> },
   { label: 'Stratégies', path: '/trade/strategies', icon: <AutoGraphIcon /> },
-  { label: 'Monitoring Stratégies Mixtes', path: '/trade/mix-strategies-monitor', icon: <GroupWorkIcon /> },
-  { label: 'Monitoring Tuning', path: '/trade/tuning-monitor', icon: <MonitorHeartIcon /> },
+  { label: 'Monitoring', path: '/trade/monitoring', icon: <MonitorHeartIcon /> },
   { label: 'Paramètres', path: '/trade/settings', icon: <SettingsIcon /> },
 ];
 
@@ -20,7 +19,7 @@ const Sidebar: React.FC = () => {
   return (
     <Box sx={{
       width: 240,
-      bgcolor: 'linear-gradient(180deg, #f8fafc 0%, #e3eafc 100%)', // fond clair dégradé
+      bgcolor: 'linear-gradient(180deg, #f8fafc 0%, #e3eafc 100%)', // fond clair dégrad��
       color: '#223',
       height: '100vh',
       boxShadow: 3,

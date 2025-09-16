@@ -59,18 +59,24 @@ const TuningMonitorPage: React.FC = () => {
   // Vérifie si un tuning est en cours
   const isTuningEnCours = progress.some((row: any) => row.status === 'en_cours');
 
+  if(!isTuningEnCours){
+
+      return( <Box p={4} textAlign="center">
+         <Typography variant="h6" gutterBottom>Aucun calcul en cours</Typography>
+         <Button
+              variant="contained"
+              color="info"
+              onClick={() => callApi('/api/lstm/tuneAllSymbols', 'Calcule hyper params LSTM')}
+              disabled={isTuningEnCours || loading === 'Calcule hyper params LSTM'}
+            >
+              {loading === 'Calcule hyper params LSTM' ? <CircularProgress size={24} /> : 'Calcule hyper params LSTM'}
+            </Button>
+       </Box>);
+  }
+
   return (
     <Box sx={{ p: 4 }}>
       <Typography variant="h4" gutterBottom>Monitoring du tuning LSTM</Typography>
-
-          <Button
-            variant="contained"
-            color="info"
-            onClick={() => callApi('/api/lstm/tuneAllSymbols', 'Calcule hyper params LSTM')}
-            disabled={isTuningEnCours || loading === 'Calcule hyper params LSTM'}
-          >
-            {loading === 'Calcule hyper params LSTM' ? <CircularProgress size={24} /> : 'Calcule hyper params LSTM'}
-          </Button>
       <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Progression en temps réel</Typography>
       <Table sx={{ mb: 4 }}>
                 <TableHead>
