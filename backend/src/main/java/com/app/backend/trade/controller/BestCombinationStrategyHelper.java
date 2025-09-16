@@ -590,13 +590,41 @@ public class BestCombinationStrategyHelper {
     }
 
 
+    // Structure de suivi pour le monitoring du calcul mix strategies
+    public static class MixStrategiesProgress {
+        public int totalSymbols;
+        public int processedSymbols;
+        public int nbInsert;
+        public int error;
+        public String status; // en_cours, termine, erreur
+        public String lastSymbol;
+        public long startTime;
+        public long endTime;
+        public long lastUpdate;
+    }
+
+    private volatile MixStrategiesProgress mixStrategiesProgress = null;
+
+    public MixStrategiesProgress getMixStrategiesProgress() {
+        return mixStrategiesProgress;
+    }
+
     public void calculMixStrategies(String sort){
         List<String> listeDbSymbols = this.getSymbolFitredFromTabSingle(sort);
-
+        mixStrategiesProgress = new MixStrategiesProgress();
+        mixStrategiesProgress.totalSymbols = listeDbSymbols.size();
+        mixStrategiesProgress.processedSymbols = 0;
+        mixStrategiesProgress.nbInsert = 0;
+        mixStrategiesProgress.error = 0;
+        mixStrategiesProgress.status = "en_cours";
+        mixStrategiesProgress.startTime = System.currentTimeMillis();
+        mixStrategiesProgress.lastUpdate = System.currentTimeMillis();
+        // ...existing code...
         int nbThreads = Math.max(2, Runtime.getRuntime().availableProcessors());
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(nbThreads);
         java.util.concurrent.atomic.AtomicInteger error = new java.util.concurrent.atomic.AtomicInteger(0);
         java.util.concurrent.atomic.AtomicInteger nbInsert = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger processed = new java.util.concurrent.atomic.AtomicInteger(0);
         List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
         for(String symbol : listeDbSymbols){
             futures.add(executor.submit(() -> {
@@ -616,11 +644,17 @@ public class BestCombinationStrategyHelper {
                         result.result.setScoreSwingTrade(scoreST);
                         this.saveBestCombinationResult(symbol, result);
                         nbInsert.incrementAndGet();
-                        try { Thread.sleep(200); } catch(Exception ignored) {}
                     }
                 }catch(Exception e){
                     error.incrementAndGet();
                     TradeUtils.log("Erreur calcul("+symbol+") : " + e.getMessage());
+                } finally {
+                    int proc = processed.incrementAndGet();
+                    mixStrategiesProgress.processedSymbols = proc;
+                    mixStrategiesProgress.nbInsert = nbInsert.get();
+                    mixStrategiesProgress.error = error.get();
+                    mixStrategiesProgress.lastSymbol = symbol;
+                    mixStrategiesProgress.lastUpdate = System.currentTimeMillis();
                 }
             }));
         }
@@ -629,6 +663,8 @@ public class BestCombinationStrategyHelper {
             try { f.get(); } catch(Exception ignored) {}
         }
         executor.shutdown();
+        mixStrategiesProgress.status = "termine";
+        mixStrategiesProgress.endTime = System.currentTimeMillis();
         TradeUtils.log("calculMixStrategies: total: "+listeDbSymbols.size()+", nbInsert: "+nbInsert.get()+", error: " + error.get());
     }
 

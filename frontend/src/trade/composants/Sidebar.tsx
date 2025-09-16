@@ -5,10 +5,12 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import AutoGraphIcon from '@mui/icons-material/AutoGraph';
 import SettingsIcon from '@mui/icons-material/Settings';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import GroupWorkIcon from '@mui/icons-material/GroupWork';
 
 const menuItems = [
   { label: 'Dashboard', path: '/trade/dashboard', icon: <DashboardIcon /> },
   { label: 'Stratégies', path: '/trade/strategies', icon: <AutoGraphIcon /> },
+  { label: 'Monitoring Stratégies Mixtes', path: '/trade/mix-strategies-monitor', icon: <GroupWorkIcon /> },
   { label: 'Monitoring Tuning', path: '/trade/tuning-monitor', icon: <MonitorHeartIcon /> },
   { label: 'Paramètres', path: '/trade/settings', icon: <SettingsIcon /> },
 ];

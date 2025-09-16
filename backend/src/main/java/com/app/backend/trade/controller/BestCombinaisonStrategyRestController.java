@@ -33,4 +33,10 @@ public class BestCombinaisonStrategyRestController {
         return ResponseEntity.ok(true);
     }
 
+    // Monitoring du calcul mix strategies
+    @GetMapping("/monitor")
+    public ResponseEntity<?> getMixStrategiesProgress() {
+        return ResponseEntity.ok(bestCombinationStrategyHelper.getMixStrategiesProgress());
+    }
+
 }

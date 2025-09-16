@@ -58,14 +58,6 @@ const StrategyManagerBlock: React.FC = () => {
           >
             {loading === 'Calcule croised strategies' ? <CircularProgress size={24} /> : 'Calcule croised strategies'}
           </Button>
-          <Button
-            variant="contained"
-            color="info"
-            onClick={() => callApi('/api/best-combination/calcul', 'Calcule mix strategies')}
-            disabled={loading !== null}
-          >
-            {loading === 'Calcule mix strategies' ? <CircularProgress size={24} /> : 'Calcule mix strategies'}
-          </Button>
         </Stack>
         {success && <Alert severity="success" sx={{ mt: 2 }}>{success}</Alert>}
         {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
