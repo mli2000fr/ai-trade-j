@@ -659,11 +659,11 @@ public class LstmTradePredictor {
         double delta =  predicted - lastClose;
         SignalType signal;
         if (delta > th) {
-            signal = SignalType.BUY;
+            signal = SignalType.UP;
         } else if (delta < -th) {
-            signal = SignalType.SELL;
+            signal = SignalType.DOWN;
         } else {
-            signal = SignalType.HOLD;
+            signal = SignalType.STABLE;
         }
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM");
         String formattedDate = series.getLastBar().getEndTime().format(formatter);

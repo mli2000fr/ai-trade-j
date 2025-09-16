@@ -20,6 +20,18 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ReactApexChart from 'react-apexcharts';
 import type { ApexOptions } from 'apexcharts';
 import BestPerformanceDialog from './BestPerformanceDialog';
+import {
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Checkbox,
+  FormControlLabel,
+  TextField,
+  InputAdornment,
+  Stack,
+} from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
 
 interface PreditLstm {
     lastClose: number;
@@ -280,101 +292,118 @@ const BestPerformanceSymbolBlock: React.FC = () => {
           <Typography variant="h6" gutterBottom>
             Best Performance-Symbol
           </Typography>
-          {/* Liste déroulante au-dessus du tableau */}
-          <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-            <label htmlFor="limit-select" style={{ marginRight: 8 }}>Afficher :</label>
-            <select
-              id="limit-select"
-              value={limit}
-              onChange={e => setLimit(Number(e.target.value))}
-              style={{ padding: '4px 8px', marginRight: 16 }}
-              disabled={searchMode}
-            >
-              <option value={20}>20</option>
-              <option value={30}>30</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-            </select>
-            <label htmlFor="sort-select" style={{ marginRight: 8 }}>Trié par :</label>
-            <select
-              id="sort-select"
-              value={sort}
-              onChange={e => setSort(e.target.value)}
-              style={{ padding: '4px 8px', marginRight: 16 }}
-              disabled={searchMode}
-            >
-              <option value="single:rendement_score">Single - Score Rendement</option>
-              <option value="single:rendement">Single - Rendement</option>
-              <option value="single:rendement_sum">Single - Rendement Sum</option>
-              <option value="single:score_swing_trade">Single - Score Swing Trade</option>
-              <option value="mix:rendement_score">Mix - Score Rendement</option>
-              <option value="mix:rendement">Mix - Rendement</option>
-              <option value="mix:rendement_sum">Mix - Rendement Sum</option>
-              <option value="mix:score_swing_trade">Mix - Score Swing Trade</option>
-            </select>
-            <label style={{ marginLeft: 16, marginRight: 16 }}>
-              <input
-                type="checkbox"
-                checked={showOnlyNonFiltered}
-                onChange={e => setShowOnlyNonFiltered(e.target.checked)}
-                style={{ marginRight: 8 }}
-                disabled={searchMode}
+          {/* Section moderne des contrôles */}
+          <div style={{ marginBottom: 16 }}>
+            <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+              <FormControl size="small" sx={{ minWidth: 100 }}>
+                <InputLabel id="limit-select-label">Afficher</InputLabel>
+                <Select
+                  labelId="limit-select-label"
+                  id="limit-select"
+                  value={limit}
+                  label="Afficher"
+                  onChange={e => setLimit(Number(e.target.value))}
+                  disabled={searchMode}
+                >
+                  <MenuItem value={20}>20</MenuItem>
+                  <MenuItem value={30}>30</MenuItem>
+                  <MenuItem value={50}>50</MenuItem>
+                  <MenuItem value={100}>100</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 180 }}>
+                <InputLabel id="sort-select-label">Trié par</InputLabel>
+                <Select
+                  labelId="sort-select-label"
+                  id="sort-select"
+                  value={sort}
+                  label="Trié par"
+                  onChange={e => setSort(e.target.value)}
+                  disabled={searchMode}
+                >
+                  <MenuItem value="single:rendement_score">Single - Score Rendement</MenuItem>
+                  <MenuItem value="single:rendement">Single - Rendement</MenuItem>
+                  <MenuItem value="single:rendement_sum">Single - Rendement Sum</MenuItem>
+                  <MenuItem value="single:score_swing_trade">Single - Score Swing Trade</MenuItem>
+                  <MenuItem value="mix:rendement_score">Mix - Score Rendement</MenuItem>
+                  <MenuItem value="mix:rendement">Mix - Rendement</MenuItem>
+                  <MenuItem value="mix:rendement_sum">Mix - Rendement Sum</MenuItem>
+                  <MenuItem value="mix:score_swing_trade">Mix - Score Swing Trade</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={showOnlyNonFiltered}
+                    onChange={e => setShowOnlyNonFiltered(e.target.checked)}
+                    disabled={searchMode}
+                    size="small"
+                  />
+                }
+                label="Fiable"
+                sx={{ ml: 2 }}
               />
-              Stratégies non filtrées
-            </label>
-             {/* Bouton copier */}
-                        <Button
-                          variant="contained"
-                          color="primary"
-                          size="small"
-                          startIcon={<ContentCopyIcon />}
-                          style={{ marginLeft: 16 }}
-                          onClick={handleCopy}
-                          disabled={Object.values(checkedRows).every(v => !v)}
-                        >
-                          Copier
-                        </Button>
+              <Button
+                variant="contained"
+                color="primary"
+                size="small"
+                startIcon={<ContentCopyIcon />}
+                onClick={handleCopy}
+                disabled={Object.values(checkedRows).every(v => !v)}
+                sx={{ borderRadius: 2, boxShadow: 1 }}
+              >
+                Copier
+              </Button>
+              <TextField
+                size="small"
+                variant="outlined"
+                placeholder="Rechercher..."
+                value={searchValue}
+                onChange={e => setSearchValue(e.target.value)}
+                disabled={searchMode && loading}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                  ),
+                  sx: { borderRadius: 2 }
+                }}
+                sx={{ minWidth: 160 }}
+              />
+              <Button
+                variant="contained"
+                color="secondary"
+                size="small"
+                onClick={() => {
+                  if (searchValue.trim()) {
+                    setSearchMode(true);
+                    fetchData(true, searchValue);
+                  }
+                }}
+                disabled={!searchValue.trim()}
+                sx={{ borderRadius: 2, boxShadow: 1 }}
+              >
+                Chercher
+              </Button>
+              <Button
+                variant="outlined"
+                color="inherit"
+                size="small"
+                onClick={() => {
+                  setSearchValue('');
+                  setSearchMode(false);
+                  fetchData(false, '');
+                }}
+                sx={{ borderRadius: 2, boxShadow: 1 }}
+                disabled={!searchMode && !searchValue}
+              >
+                Réinitier
+              </Button>
+            </Stack>
           </div>
           {/* Bloc recherche sur une nouvelle ligne */}
           <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              type="text"
-              placeholder="Rechercher..."
-              value={searchValue}
-              onChange={e => setSearchValue(e.target.value)}
-              style={{ marginLeft: 0, marginRight: 8, padding: '4px 8px', minWidth: 120 }}
-              disabled={searchMode && loading}
-            />
-            <Button
-              variant="contained"
-              color="secondary"
-              size="small"
-              style={{ marginRight: 8 }}
-              onClick={() => {
-                if (searchValue.trim()) {
-                  setSearchMode(true);
-                  fetchData(true, searchValue);
-                }
-              }}
-              disabled={!searchValue.trim()}
-            >
-              Chercher
-            </Button>
-            <Button
-              variant="outlined"
-              color="inherit"
-              size="small"
-              style={{ marginRight: 8 }}
-              onClick={() => {
-                setSearchValue('');
-                setSearchMode(false);
-                fetchData(false, '');
-              }}
-              disabled={!searchMode}
-            >
-              Réinitialiser
-            </Button>
-
           </div>
           {loading ? (
             <CircularProgress />
@@ -393,25 +422,25 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Last Price</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Prédit Price</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 100, width: 100, maxWidth: 300  }}>Prédit Indice</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Position</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement check</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Score Rendement</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Score Swing Trade</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Durée moyenne trade</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement check</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Rendement</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Swing Trade</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Durée moyenne trade</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Détails</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Last Price</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Prédit Price</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 120, width: 130, maxWidth: 300  }}>Prédit Indice</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 180, width: 180, maxWidth: 300  }}>Position</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement check</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Score Rendement</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Score Swing Trade</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Durée moyenne trade</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement check</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Rendement</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Swing Trade</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Durée moyenne trade</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Détails</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
