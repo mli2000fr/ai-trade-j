@@ -14,5 +14,6 @@ CREATE TABLE trade_ai.lstm_hyperparams (
     normalization_scope VARCHAR(32) DEFAULT 'window',
     normalization_method VARCHAR(32) DEFAULT 'minmax',
     swing_trade_type VARCHAR(32) DEFAULT 'minmax',
+    features VARCHAR(255),
     updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

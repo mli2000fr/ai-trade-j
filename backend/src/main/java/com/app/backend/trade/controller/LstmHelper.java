@@ -95,6 +95,42 @@ public class LstmHelper {
         return lstmTradePredictor.getPredit(symbol, series, config, model);
     }
 
+    // Entraînement LSTM avec personnalisation des features
+    public void trainLstm(String symbol, List<String> features) {
+        BarSeries series = getBarBySymbol(symbol, null);
+        LstmConfig config = new LstmConfig();
+        if (features != null && !features.isEmpty()) {
+            config.setFeatures(features);
+        }
+        MultiLayerNetwork model = lstmTradePredictor.initModel(
+            config.getWindowSize(),
+            1,
+            config.getLstmNeurons(),
+            config.getDropoutRate(),
+            config.getLearningRate(),
+            config.getOptimizer(),
+            config.getL1(),
+            config.getL2()
+        );
+        model = lstmTradePredictor.trainLstm(series, config, model);
+        try {
+            lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate, config);
+        } catch (Exception e) {
+            logger.error("Erreur lors de la sauvegarde du modèle : {}", e.getMessage());
+        }
+    }
+
+    // Prédiction LSTM avec personnalisation des features
+    public PreditLsdm getPredit(String symbol, List<String> features) throws IOException {
+        LstmConfig config = lstmTuningService.tuneSymbol(symbol, lstmTuningService.generateSwingTradeGrid(), getBarBySymbol(symbol, null), jdbcTemplate);
+        if (features != null && !features.isEmpty()) {
+            config.setFeatures(features);
+        }
+        MultiLayerNetwork model = lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
+        BarSeries series = getBarBySymbol(symbol, null);
+        return lstmTradePredictor.getPredit(symbol, series, config, model);
+    }
+
     /**
      * Lance une validation croisée k-fold sur le modèle LSTM pour un symbole donné.
      * Les résultats sont loggés (voir app.log).
