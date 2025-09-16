@@ -474,14 +474,8 @@ public class LstmTradePredictor {
         }
         double[] lastWindow = new double[config.getWindowSize()];
         System.arraycopy(closes, closes.length - config.getWindowSize(), lastWindow, 0, config.getWindowSize());
-        double min, max;
-        if ("global".equalsIgnoreCase(config.getNormalizationScope())) {
-            min = java.util.Arrays.stream(closes).min().orElse(0.0);
-            max = java.util.Arrays.stream(closes).max().orElse(0.0);
-        } else {
-            min = java.util.Arrays.stream(lastWindow).min().orElse(0.0);
-            max = java.util.Arrays.stream(lastWindow).max().orElse(0.0);
-        }
+        double min = "global".equalsIgnoreCase(config.getNormalizationScope()) ? java.util.Arrays.stream(closes).min().orElse(0.0) : java.util.Arrays.stream(lastWindow).min().orElse(0.0);
+        double max = "global".equalsIgnoreCase(config.getNormalizationScope()) ? java.util.Arrays.stream(closes).max().orElse(0.0) : java.util.Arrays.stream(lastWindow).max().orElse(0.0);
         double[] normalized = normalize(lastWindow, min, max);
         double[][][] lastSequence = new double[1][config.getWindowSize()][1];
         for (int j = 0; j < config.getWindowSize(); j++) {
@@ -491,9 +485,48 @@ public class LstmTradePredictor {
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input);
         double predictedNorm = output.getDouble(0);
         double predicted = predictedNorm * (max - min) + min;
-        logger.info("[PREDICT-NORM] windowSize={}, lastWindow={}, min={}, max={}, predictedNorm={}, predicted={}, normalizationScope={}",
-            config.getWindowSize(), java.util.Arrays.toString(lastWindow), min, max, predictedNorm, predicted, config.getNormalizationScope());
+        String position = analyzePredictionPosition(lastWindow, predicted);
+        logger.info("[PREDICT-NORM] windowSize={}, lastWindow={}, min={}, max={}, predictedNorm={}, predicted={}, normalizationScope={}, position={}",
+            config.getWindowSize(), java.util.Arrays.toString(lastWindow), min, max, predictedNorm, predicted, config.getNormalizationScope(), position);
         return predicted;
+    }
+
+    /**
+     * Analyse la position de la prédiction par rapport à la tendance de la fenêtre.
+     * @param window tableau des clôtures de la fenêtre
+     * @param predicted valeur prédite
+     * @return description de la position (cassure, rebond, range, etc.)
+     */
+    public String analyzePredictionPosition(double[] window, double predicted) {
+        double lastClose = window[window.length - 1];
+        double firstClose = window[0];
+        double meanWindow = java.util.Arrays.stream(window).average().orElse(0.0);
+        double min = java.util.Arrays.stream(window).min().orElse(0.0);
+        double max = java.util.Arrays.stream(window).max().orElse(0.0);
+        double trend = lastClose - firstClose;
+        double range = max - min;
+        // Surachat/survente simple
+        boolean isOverbought = predicted > max * 1.01;
+        boolean isOversold = predicted < min * 0.99;
+        if (trend > 0 && predicted > max) {
+            return "Cassure haussière";
+        } else if (trend < 0 && predicted < min) {
+            return "Cassure baissière";
+        } else if (trend > 0 && predicted < meanWindow) {
+            return "Rebond baissier";
+        } else if (trend < 0 && predicted > meanWindow) {
+            return "Rebond haussier";
+        } else if (range < meanWindow * 0.05) {
+            return "Range / faible volatilité";
+        } else if (isOverbought) {
+            return "Surachat (overbought)";
+        } else if (isOversold) {
+            return "Survente (oversold)";
+        } else if (Math.abs(predicted - meanWindow) < range * 0.1) {
+            return "Retour à la moyenne";
+        } else {
+            return "Continuation ou indéterminé";
+        }
     }
 
     /**
@@ -544,6 +577,9 @@ public class LstmTradePredictor {
         predicted = Math.round(predicted * 1000.0) / 1000.0;
         double[] closes = extractCloseValues(series);
         double lastClose = closes[closes.length - 1];
+        double[] lastWindow = new double[config.getWindowSize()];
+        System.arraycopy(closes, closes.length - config.getWindowSize(), lastWindow, 0, config.getWindowSize());
+        String position = analyzePredictionPosition(lastWindow, predicted);
         double delta =  predicted - lastClose;
         SignalType signal;
         if (delta > th) {
@@ -555,14 +591,14 @@ public class LstmTradePredictor {
         }
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM");
         String formattedDate = series.getLastBar().getEndTime().format(formatter);
-        // Ajout de logs détaillés pour analyse
-        logger.info("------------PREDICT {} | lastClose={}, predictedClose={}, delta={}, threshold={}, signal={}",
-            config.getWindowSize(), lastClose, predicted, delta, th, signal);
+        logger.info("------------PREDICT {} | lastClose={}, predictedClose={}, delta={}, threshold={}, signal={}, position={}",
+            config.getWindowSize(), lastClose, predicted, delta, th, signal, position);
         return PreditLsdm.builder()
                 .lastClose(lastClose)
                 .predictedClose(predicted)
                 .signal(signal)
                 .lastDate(formattedDate)
+                .position(position)
                 .build();
     }
 
