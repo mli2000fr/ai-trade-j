@@ -6,6 +6,7 @@ import com.app.backend.trade.lstm.LstmTradePredictor;
 import com.app.backend.trade.lstm.LstmTuningService;
 import com.app.backend.trade.model.DailyValue;
 import com.app.backend.trade.model.PreditLsdm;
+import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.util.TradeUtils;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -88,7 +89,11 @@ public class LstmHelper {
 
     // Prédiction LSTM
     public PreditLsdm getPredit(String symbol) throws IOException {
-        LstmConfig config = lstmTuningService.tuneSymbol(symbol, lstmTuningService.generateSwingTradeGrid(), getBarBySymbol(symbol, null), jdbcTemplate);
+        LstmConfig config = lstmTuningService.hyperparamsRepository.loadHyperparams(symbol);
+        if(config == null){
+            logger.info("Hyperparamètres existants trouvés pour {}. Ignorer le tuning.", symbol);
+            return PreditLsdm.builder().lastClose(0).predictedClose(0).signal(SignalType.NONE).position("").lastDate("").build();
+        }
         MultiLayerNetwork model = lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
 
         BarSeries series = getBarBySymbol(symbol, null);

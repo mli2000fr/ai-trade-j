@@ -12,7 +12,7 @@ import java.util.List;
 public class LstmTuningService {
     private static final Logger logger = LoggerFactory.getLogger(LstmTuningService.class);
     private final LstmTradePredictor lstmTradePredictor;
-    private final LstmHyperparamsRepository hyperparamsRepository;
+    public final LstmHyperparamsRepository hyperparamsRepository;
 
     public LstmTuningService(LstmTradePredictor lstmTradePredictor, LstmHyperparamsRepository hyperparamsRepository) {
         this.lstmTradePredictor = lstmTradePredictor;
