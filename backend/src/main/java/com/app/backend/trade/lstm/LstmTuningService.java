@@ -111,10 +111,16 @@ public class LstmTuningService {
         }
         LstmConfig bestConfig = null;
         MultiLayerNetwork bestModel = null;
+        int numThreads = Math.min(grid.size(), Runtime.getRuntime().availableProcessors());
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
+        List<java.util.concurrent.Future<TuningResult>> futures = new java.util.ArrayList<>();
         for (LstmConfig config : grid) {
-            int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
-            MultiLayerNetwork model = lstmTradePredictor.initModel(
-                    numFeatures, // Correction ici : nombre de features
+            futures.add(executor.submit(() -> {
+                double score = lstmTradePredictor.crossValidateLstm(series, config);
+                // On entraîne le modèle final sur tout le dataset avec la config (pour sauvegarde)
+                int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
+                MultiLayerNetwork model = lstmTradePredictor.initModel(
+                    numFeatures,
                     1,
                     config.getLstmNeurons(),
                     config.getDropoutRate(),
@@ -122,35 +128,40 @@ public class LstmTuningService {
                     config.getOptimizer(),
                     config.getL1(),
                     config.getL2()
-            );
-            model = lstmTradePredictor.trainLstm(series, config, model);
-            // Évaluation sur le jeu de test
-            double score = evaluateModel(model, series, config);
-            double rmse = Math.sqrt(score);
-            // Calcul direction
-            double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model);
-            double[] closes = lstmTradePredictor.extractCloseValues(series);
-            double lastClose = closes[closes.length - 1];
-            double delta = predicted - lastClose;
-            double th = lstmTradePredictor.computeSwingTradeThreshold(series);
-            String direction;
-            if (delta > th) {
-                direction = "up";
-            } else if (delta < -th) {
-                direction = "down";
-            } else {
-                direction = "stable";
-            }
-            // Sauvegarde des métriques de tuning
-            hyperparamsRepository.saveTuningMetrics(symbol, config, score, rmse, direction);
-            logger.info("Tuning {} | Config: windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={} | Test MSE={}, RMSE={}, direction={}", symbol, config.getWindowSize(), config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getL1(), config.getL2(), score, rmse, direction);
-            if (score < bestScore) {
-                bestScore = score;
-                bestConfig = config;
-                bestModel = model;
+                );
+                model = lstmTradePredictor.trainLstm(series, config, model);
+                double rmse = Math.sqrt(score);
+                double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model);
+                double[] closes = lstmTradePredictor.extractCloseValues(series);
+                double lastClose = closes[closes.length - 1];
+                double delta = predicted - lastClose;
+                double th = lstmTradePredictor.computeSwingTradeThreshold(series);
+                String direction;
+                if (delta > th) {
+                    direction = "up";
+                } else if (delta < -th) {
+                    direction = "down";
+                } else {
+                    direction = "stable";
+                }
+                hyperparamsRepository.saveTuningMetrics(symbol, config, score, rmse, direction);
+                logger.info("Tuning {} | Config: windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={} | CV MSE={}, RMSE={}, direction={}", symbol, config.getWindowSize(), config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getL1(), config.getL2(), score, rmse, direction);
+                return new TuningResult(config, model, score);
+            }));
+        }
+        executor.shutdown();
+        for (java.util.concurrent.Future<TuningResult> future : futures) {
+            try {
+                TuningResult result = future.get();
+                if (result.score < bestScore) {
+                    bestScore = result.score;
+                    bestConfig = result.config;
+                    bestModel = result.model;
+                }
+            } catch (Exception e) {
+                logger.error("Erreur lors de la récupération du résultat de tuning : {}", e.getMessage());
             }
         }
-        // Sauvegarde la meilleure config et le modèle
         if (bestConfig != null && bestModel != null) {
             hyperparamsRepository.saveHyperparams(symbol, bestConfig);
             try {
@@ -158,7 +169,7 @@ public class LstmTuningService {
             } catch (Exception e) {
                 logger.error("Erreur lors de la sauvegarde du meilleur modèle : {}", e.getMessage());
             }
-            logger.info("Meilleure config pour {} : windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={}, Test MSE={}", symbol, bestConfig.getWindowSize(), bestConfig.getLstmNeurons(), bestConfig.getDropoutRate(), bestConfig.getLearningRate(), bestConfig.getL1(), bestConfig.getL2(), bestScore);
+            logger.info("Meilleure config pour {} : windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={}, CV MSE={}", symbol, bestConfig.getWindowSize(), bestConfig.getLstmNeurons(), bestConfig.getDropoutRate(), bestConfig.getLearningRate(), bestConfig.getL1(), bestConfig.getL2(), bestScore);
         }
         return bestConfig;
     }

@@ -364,10 +364,11 @@ public class LstmTradePredictor {
 
     /**
      * Effectue une validation croisée k-fold sur le modèle LSTM.
-     * Logge le score MSE, RMSE et MAE moyen et l'écart-type sur les k folds.
+     * Retourne le score MSE moyen sur les k folds.
      * @param series série de bougies
+     * @return MSE moyen
      */
-    public void crossValidateLstm(BarSeries series, LstmConfig config) {
+    public double crossValidateLstm(BarSeries series, LstmConfig config) {
         int windowSize = config.getWindowSize();
         double[] closes = extractCloseValues(series);
         double min, max;
@@ -375,7 +376,6 @@ public class LstmTradePredictor {
             min = java.util.Arrays.stream(closes).min().orElse(0.0);
             max = java.util.Arrays.stream(closes).max().orElse(0.0);
         } else {
-            // min/max sur la dernière fenêtre
             min = Double.MAX_VALUE;
             max = -Double.MAX_VALUE;
             for (int i = closes.length - windowSize; i < closes.length; i++) {
@@ -387,15 +387,12 @@ public class LstmTradePredictor {
         }
         double[] normalized = normalizeByConfig(closes, min, max, config);
         double[][][] sequences = createSequences(normalized, windowSize);
-        // Correction : labels rank 3 [batch, 1, 1]
         double[][][] labelSeq = new double[sequences.length][1][1];
         for (int i = 0; i < labelSeq.length; i++) {
             labelSeq[i][0][0] = normalized[i + windowSize];
         }
         int foldSize = sequences.length / config.getKFolds();
         double[] foldMSE = new double[config.getKFolds()];
-        double[] foldRMSE = new double[config.getKFolds()];
-        double[] foldMAE = new double[config.getKFolds()];
         for (int fold = 0; fold < config.getKFolds(); fold++) {
             int testStart = fold * foldSize;
             int testEnd = (fold == config.getKFolds() - 1) ? sequences.length : testStart + foldSize;
@@ -412,65 +409,38 @@ public class LstmTradePredictor {
                 }
             }
             org.nd4j.linalg.api.ndarray.INDArray trainInput = toINDArray(trainSeq);
-            org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabel); // [batch, 1, 1]
+            org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabel);
             org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(testSeq);
-            org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel); // [batch, 1, 1]
+            org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel);
             org.nd4j.linalg.dataset.api.iterator.DataSetIterator trainIterator = new ListDataSetIterator<>(
                 java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput))
             );
             MultiLayerNetwork model = initModel(windowSize, 1, config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getOptimizer(), config.getL1(), config.getL2());
             double bestMSE = Double.MAX_VALUE;
-            double bestRMSE = Double.MAX_VALUE;
-            double bestMAE = Double.MAX_VALUE;
             int epochsWithoutImprovement = 0;
             for (int epoch = 0; epoch < config.getNumEpochs(); epoch++) {
                 model.fit(trainIterator);
                 org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
                 double mse = predictions.squaredDistance(testOutput) / testOutput.length();
-                double rmse = Math.sqrt(mse);
-                double mae = 0.0;
-                for (int i = 0; i < testOutput.length(); i++) {
-                    mae += Math.abs(predictions.getDouble(i) - testOutput.getDouble(i));
-                }
-                mae /= testOutput.length();
                 if (bestMSE - mse > config.getMinDelta()) {
                     bestMSE = mse;
-                    bestRMSE = rmse;
-                    bestMAE = mae;
                     epochsWithoutImprovement = 0;
                 } else {
                     epochsWithoutImprovement++;
                     if (epochsWithoutImprovement >= config.getPatience()) {
-                        logger.info("Early stopping fold {} à l'epoch {}. Meilleur Test MSE : {}, RMSE : {}, MAE : {}", fold + 1, epoch + 1, bestMSE, bestRMSE, bestMAE);
                         break;
                     }
                 }
             }
             foldMSE[fold] = bestMSE;
-            foldRMSE[fold] = bestRMSE;
-            foldMAE[fold] = bestMAE;
-            logger.info("Fold {} terminé. Meilleur Test MSE : {}, RMSE : {}, MAE : {}", fold + 1, bestMSE, bestRMSE, bestMAE);
         }
-        // Calculer la moyenne et l'écart-type pour chaque métrique
-        double meanMSE = 0.0, meanRMSE = 0.0, meanMAE = 0.0;
+        double meanMSE = 0.0;
         for (int i = 0; i < config.getKFolds(); i++) {
             meanMSE += foldMSE[i];
-            meanRMSE += foldRMSE[i];
-            meanMAE += foldMAE[i];
         }
         meanMSE /= config.getKFolds();
-        meanRMSE /= config.getKFolds();
-        meanMAE /= config.getKFolds();
-        double stdMSE = 0.0, stdRMSE = 0.0, stdMAE = 0.0;
-        for (int i = 0; i < config.getKFolds(); i++) {
-            stdMSE += Math.pow(foldMSE[i] - meanMSE, 2);
-            stdRMSE += Math.pow(foldRMSE[i] - meanRMSE, 2);
-            stdMAE += Math.pow(foldMAE[i] - meanMAE, 2);
-        }
-        stdMSE = Math.sqrt(stdMSE / config.getKFolds());
-        stdRMSE = Math.sqrt(stdRMSE / config.getKFolds());
-        stdMAE = Math.sqrt(stdMAE / config.getKFolds());
-        logger.info("Validation croisée terminée. MSE moyen : {}, Ecart-type : {} | RMSE moyen : {}, Ecart-type : {} | MAE moyen : {}, Ecart-type : {}", meanMSE, stdMSE, meanRMSE, stdRMSE, meanMAE, stdMAE);
+        logger.info("Validation croisée terminée. MSE moyen : {}", meanMSE);
+        return meanMSE;
     }
 
     /**
