@@ -82,7 +82,7 @@ public class LstmHelper {
     // Prédiction LSTM
     public PreditLsdm getPredit(String symbol) throws IOException {
         LstmConfig config = lstmTuningService.hyperparamsRepository.loadHyperparams(symbol);
-        if(config == null){
+        if (config == null) {
             logger.info("Hyperparamètres existants trouvés pour {}. Ignorer le tuning.", symbol);
             return PreditLsdm.builder().lastClose(0).predictedClose(0).signal(SignalType.NONE).position("").lastDate("").build();
         }
@@ -100,14 +100,14 @@ public class LstmHelper {
             config.setFeatures(features);
         }
         MultiLayerNetwork model = lstmTradePredictor.initModel(
-            config.getWindowSize(),
-            1,
-            config.getLstmNeurons(),
-            config.getDropoutRate(),
-            config.getLearningRate(),
-            config.getOptimizer(),
-            config.getL1(),
-            config.getL2()
+                config.getWindowSize(),
+                1,
+                config.getLstmNeurons(),
+                config.getDropoutRate(),
+                config.getLearningRate(),
+                config.getOptimizer(),
+                config.getL1(),
+                config.getL2()
         );
         model = lstmTradePredictor.trainLstm(series, config, model);
         try {
@@ -150,7 +150,8 @@ public class LstmHelper {
     /**
      * Lance le tuning automatique pour une liste de symboles.
      * Les résultats sont loggés et la meilleure config est sauvegardée pour chaque symbole.
-     * @param useRandomGrid true pour utiliser une grille aléatoire (random search), false pour grid search complet
+     *
+     * @param useRandomGrid  true pour utiliser une grille aléatoire (random search), false pour grid search complet
      * @param randomGridSize nombre de configurations aléatoires à tester (si useRandomGrid=true)
      */
     public void tuneAllSymbols(boolean useRandomGrid, int randomGridSize) {
@@ -174,5 +175,16 @@ public class LstmHelper {
         String sql = "select symbol from trade_ai.best_in_out_single_strategy where fltred_out = 'false'";
         sql += " ORDER BY " + orderBy + " DESC";
         return jdbcTemplate.queryForList(sql, String.class);
+    }
+
+    /**
+     * Exporte les métriques tuning LSTM au format CSV pour un symbole ou tous les symboles.
+     *
+     * @param symbol     symbole à exporter (null pour tous)
+     * @param outputPath chemin du fichier CSV à générer
+     * @return chemin du fichier généré ou null si aucun résultat
+     */
+    public String exportTuningMetricsToCsv(String symbol, String outputPath) {
+        return lstmTuningService.hyperparamsRepository.exportTuningMetricsToCsv(symbol, outputPath);
     }
 }

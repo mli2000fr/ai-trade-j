@@ -6,6 +6,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import DashboardPage from './routes/DashboardPage';
 import StrategiesPage from './routes/StrategiesPage';
 import SettingsPage from './routes/SettingsPage';
+import TuningMonitorPage from './routes/TuningMonitorPage';
 import { SelectedCompteProvider } from './SelectedCompteContext';
 
 const TradePage: React.FC = () => {
@@ -18,6 +19,7 @@ const TradePage: React.FC = () => {
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="strategies" element={<StrategiesPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="tuning-monitor" element={<TuningMonitorPage />} />
             <Route path="*" element={<Navigate to="dashboard" replace />} />
           </Routes>
         </Box>

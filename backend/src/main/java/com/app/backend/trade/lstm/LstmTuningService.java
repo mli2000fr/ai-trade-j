@@ -7,16 +7,38 @@ import org.ta4j.core.BarSeries;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Service de tuning des hyperparamètres LSTM pour le trading.
+ */
 @Service
 public class LstmTuningService {
     private static final Logger logger = LoggerFactory.getLogger(LstmTuningService.class);
     public final LstmTradePredictor lstmTradePredictor;
     public final LstmHyperparamsRepository hyperparamsRepository;
 
+    // Structure de suivi d'avancement
+    public static class TuningProgress {
+        public String symbol;
+        public int totalConfigs;
+        public AtomicInteger testedConfigs = new AtomicInteger(0);
+        public String status = "en_cours";
+        public long startTime;
+        public long endTime;
+        public long lastUpdate;
+    }
+
+    private final ConcurrentHashMap<String, TuningProgress> tuningProgressMap = new ConcurrentHashMap<>();
+
     public LstmTuningService(LstmTradePredictor lstmTradePredictor, LstmHyperparamsRepository hyperparamsRepository) {
         this.lstmTradePredictor = lstmTradePredictor;
         this.hyperparamsRepository = hyperparamsRepository;
+    }
+
+    public ConcurrentHashMap<String, TuningProgress> getTuningProgressMap() {
+        return tuningProgressMap;
     }
 
     /**
@@ -29,6 +51,15 @@ public class LstmTuningService {
      */
     public LstmConfig tuneSymbolMultiThread(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
         long startSymbol = System.currentTimeMillis();
+        // Suivi d'avancement
+        TuningProgress progress = new TuningProgress();
+        progress.symbol = symbol;
+        progress.totalConfigs = grid.size();
+        progress.testedConfigs.set(0);
+        progress.status = "en_cours";
+        progress.startTime = startSymbol;
+        progress.lastUpdate = startSymbol;
+        tuningProgressMap.put(symbol, progress);
         logger.info("[TUNING] Début du tuning pour le symbole {} ({} configs)", symbol, grid.size());
         double bestScore = Double.MAX_VALUE;
         LstmConfig conf = hyperparamsRepository.loadHyperparams(symbol);
@@ -77,6 +108,12 @@ public class LstmTuningService {
                 hyperparamsRepository.saveTuningMetrics(symbol, config, score, rmse, direction);
                 long endConfig = System.currentTimeMillis();
                 logger.info("[TUNING] [{}] Fin config {}/{} | MSE={}, RMSE={}, direction={}, durée={} ms", symbol, configIndex, grid.size(), score, rmse, direction, (endConfig - startConfig));
+                // Mise à jour du suivi d'avancement
+                TuningProgress p = tuningProgressMap.get(symbol);
+                if (p != null) {
+                    p.testedConfigs.incrementAndGet();
+                    p.lastUpdate = System.currentTimeMillis();
+                }
                 return new TuningResult(config, model, score);
             }));
         }
@@ -91,10 +128,15 @@ public class LstmTuningService {
                     bestModel = result.model;
                 }
             } catch (Exception e) {
+                progress.status = "erreur";
+                progress.lastUpdate = System.currentTimeMillis();
                 logger.error("Erreur lors de la récupération du résultat de tuning : {}", e.getMessage());
             }
         }
         long endSymbol = System.currentTimeMillis();
+        progress.status = "termine";
+        progress.endTime = endSymbol;
+        progress.lastUpdate = endSymbol;
         if (bestConfig != null && bestModel != null) {
             hyperparamsRepository.saveHyperparams(symbol, bestConfig);
             try {

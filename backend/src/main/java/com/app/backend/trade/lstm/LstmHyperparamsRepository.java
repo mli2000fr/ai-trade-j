@@ -93,4 +93,31 @@ public class LstmHyperparamsRepository {
             direction
         );
     }
+
+    // Export des métriques tuning au format CSV
+    public String exportTuningMetricsToCsv(String symbol, String outputPath) {
+        String sql = symbol == null ?
+            "SELECT * FROM lstm_tuning_metrics ORDER BY tested_date DESC" :
+            "SELECT * FROM lstm_tuning_metrics WHERE symbol = ? ORDER BY tested_date DESC";
+        List<java.util.Map<String, Object>> rows = symbol == null ?
+            jdbcTemplate.queryForList(sql) :
+            jdbcTemplate.queryForList(sql, symbol);
+        if (rows.isEmpty()) return null;
+        try (java.io.FileWriter writer = new java.io.FileWriter(outputPath)) {
+            // En-tête CSV
+            java.util.Set<String> columns = rows.get(0).keySet();
+            writer.write(String.join(",", columns) + "\n");
+            for (java.util.Map<String, Object> row : rows) {
+                java.util.List<String> values = new java.util.ArrayList<>();
+                for (String col : columns) {
+                    Object val = row.get(col);
+                    values.add(val == null ? "" : val.toString().replace(",", "."));
+                }
+                writer.write(String.join(",", values) + "\n");
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Erreur export CSV tuning metrics : " + e.getMessage(), e);
+        }
+        return outputPath;
+    }
 }

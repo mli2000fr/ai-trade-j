@@ -66,15 +66,6 @@ const StrategyManagerBlock: React.FC = () => {
           >
             {loading === 'Calcule mix strategies' ? <CircularProgress size={24} /> : 'Calcule mix strategies'}
           </Button>
-
-          <Button
-            variant="contained"
-            color="info"
-            onClick={() => callApi('/api/lstm/tuneAllSymbols', 'Calcule hyper params LSTM')}
-            disabled={loading !== null}
-          >
-            {loading === 'Calcule hyper params LSTM' ? <CircularProgress size={24} /> : 'Calcule hyper params LSTM'}
-          </Button>
         </Stack>
         {success && <Alert severity="success" sx={{ mt: 2 }}>{success}</Alert>}
         {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
