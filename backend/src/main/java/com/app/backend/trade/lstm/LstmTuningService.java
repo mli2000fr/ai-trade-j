@@ -161,27 +161,32 @@ public class LstmTuningService {
         int kFolds = 5;
         String optimizer = "adam";
         String[] scopes = {"window", "global"};
-        for (String scope : scopes) {
-            for (int windowSize : windowSizes) {
-                for (int neurons : lstmNeurons) {
-                    for (double dropout : dropoutRates) {
-                        for (double lr : learningRates) {
-                            for (double l1 : l1s) {
-                                for (double l2 : l2s) {
-                                    LstmConfig config = new LstmConfig();
-                                    config.setWindowSize(windowSize);
-                                    config.setLstmNeurons(neurons);
-                                    config.setDropoutRate(dropout);
-                                    config.setLearningRate(lr);
-                                    config.setNumEpochs(numEpochs);
-                                    config.setPatience(patience);
-                                    config.setMinDelta(minDelta);
-                                    config.setKFolds(kFolds);
-                                    config.setOptimizer(optimizer);
-                                    config.setL1(l1);
-                                    config.setL2(l2);
-                                    config.setNormalizationScope(scope);
-                                    grid.add(config);
+        String[] swingTypes = {"range", "breakout", "mean_reversion"};
+        for (String swingType : swingTypes) {
+            for (String scope : scopes) {
+                for (int windowSize : windowSizes) {
+                    for (int neurons : lstmNeurons) {
+                        for (double dropout : dropoutRates) {
+                            for (double lr : learningRates) {
+                                for (double l1 : l1s) {
+                                    for (double l2 : l2s) {
+                                        LstmConfig config = new LstmConfig();
+                                        config.setWindowSize(windowSize);
+                                        config.setLstmNeurons(neurons);
+                                        config.setDropoutRate(dropout);
+                                        config.setLearningRate(lr);
+                                        config.setNumEpochs(numEpochs);
+                                        config.setPatience(patience);
+                                        config.setMinDelta(minDelta);
+                                        config.setKFolds(kFolds);
+                                        config.setOptimizer(optimizer);
+                                        config.setL1(l1);
+                                        config.setL2(l2);
+                                        config.setNormalizationScope(scope);
+                                        config.setNormalizationMethod("auto");
+                                        config.setSwingTradeType(swingType);
+                                        grid.add(config);
+                                    }
                                 }
                             }
                         }

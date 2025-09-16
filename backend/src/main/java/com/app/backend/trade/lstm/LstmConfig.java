@@ -95,6 +95,16 @@ public class LstmConfig {
     private String normalizationScope = "window";
 
     /**
+     * Méthode de normalisation utilisée : "minmax", "zscore", etc.
+     */
+    private String normalizationMethod = "minmax";
+
+    /**
+     * Type de swing trade : "range", "breakout", "mean_reversion", etc.
+     */
+    private String swingTradeType = "range";
+
+    /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
      * @throws RuntimeException si le fichier de configuration ne peut pas être chargé
      */
@@ -115,6 +125,8 @@ public class LstmConfig {
                 l1 = Double.parseDouble(props.getProperty("l1", "0.0"));
                 l2 = Double.parseDouble(props.getProperty("l2", "0.0"));
                 normalizationScope = props.getProperty("normalizationScope", "window");
+                normalizationMethod = props.getProperty("normalizationMethod", "auto");
+                swingTradeType = props.getProperty("swingTradeType", "range");
             }
             optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
@@ -140,5 +152,22 @@ public class LstmConfig {
         l1 = rs.getDouble("l1");
         l2 = rs.getDouble("l2");
         normalizationScope = rs.getString("normalization_scope");
+        normalizationMethod = rs.getString("normalization_method") != null ? rs.getString("normalization_method") : "auto";
+        swingTradeType = rs.getString("swing_trade_type") != null ? rs.getString("swing_trade_type") : "range";
+    }
+
+    /**
+     * Retourne la méthode de normalisation adaptée selon le type de swing trade si "auto".
+     */
+    public String getNormalizationMethod() {
+        if ("auto".equalsIgnoreCase(normalizationMethod)) {
+            if ("mean_reversion".equalsIgnoreCase(swingTradeType)) {
+                return "zscore";
+            } else {
+                // Par défaut : range, breakout, etc.
+                return "minmax";
+            }
+        }
+        return normalizationMethod;
     }
 }

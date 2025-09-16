@@ -231,9 +231,11 @@ public class LstmTradePredictor {
      * @return INDArray prêt pour le modèle LSTM
      */
     // Préparation complète des données pour LSTM
-    public org.nd4j.linalg.api.ndarray.INDArray prepareLstmInput(BarSeries series, int windowSize) {
+    public org.nd4j.linalg.api.ndarray.INDArray prepareLstmInput(BarSeries series, int windowSize, LstmConfig config) {
         double[] closes = extractCloseValues(series);
-        double[] normalized = normalize(closes);
+        double min = java.util.Arrays.stream(closes).min().orElse(0.0);
+        double max = java.util.Arrays.stream(closes).max().orElse(0.0);
+        double[] normalized = normalizeByConfig(closes, min, max, config);
         double[][][] sequences = createSequences(normalized, windowSize);
         return toINDArray(sequences);
     }
@@ -268,7 +270,7 @@ public class LstmTradePredictor {
                 }
             }
         }
-        double[] normalized = normalize(closes, minTrain, maxTrain);
+        double[] normalized = normalizeByConfig(closes, minTrain, maxTrain, config);
         int numSeq = normalized.length - config.getWindowSize();
         if (numSeq <= 0) {
             logger.error("Pas assez de données pour entraîner le modèle (windowSize={}, closes={})", config.getWindowSize(), closes.length);
@@ -368,7 +370,7 @@ public class LstmTradePredictor {
                 }
             }
         }
-        double[] normalized = normalize(closes, min, max);
+        double[] normalized = normalizeByConfig(closes, min, max, config);
         double[][][] sequences = createSequences(normalized, windowSize);
         double[][][] labelSeq = new double[sequences.length][1][1];
         for (int i = 0; i < labelSeq.length; i++) {
@@ -476,7 +478,7 @@ public class LstmTradePredictor {
         System.arraycopy(closes, closes.length - config.getWindowSize(), lastWindow, 0, config.getWindowSize());
         double min = "global".equalsIgnoreCase(config.getNormalizationScope()) ? java.util.Arrays.stream(closes).min().orElse(0.0) : java.util.Arrays.stream(lastWindow).min().orElse(0.0);
         double max = "global".equalsIgnoreCase(config.getNormalizationScope()) ? java.util.Arrays.stream(closes).max().orElse(0.0) : java.util.Arrays.stream(lastWindow).max().orElse(0.0);
-        double[] normalized = normalize(lastWindow, min, max);
+        double[] normalized = normalizeByConfig(lastWindow, min, max, config);
         double[][][] lastSequence = new double[1][config.getWindowSize()][1];
         for (int j = 0; j < config.getWindowSize(); j++) {
             lastSequence[0][j][0] = normalized[j];
@@ -484,7 +486,14 @@ public class LstmTradePredictor {
         org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(lastSequence);
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input);
         double predictedNorm = output.getDouble(0);
-        double predicted = predictedNorm * (max - min) + min;
+        double predicted;
+        if ("zscore".equalsIgnoreCase(config.getNormalizationMethod())) {
+            double mean = java.util.Arrays.stream(lastWindow).average().orElse(0.0);
+            double std = Math.sqrt(java.util.Arrays.stream(lastWindow).map(v -> (v - mean) * (v - mean)).average().orElse(0.0));
+            predicted = predictedNorm * std + mean;
+        } else {
+            predicted = predictedNorm * (max - min) + min;
+        }
         String position = analyzePredictionPosition(lastWindow, predicted);
         // Test si la prédiction sort de la plage locale
         if (predicted < min || predicted > max) {
@@ -622,7 +631,8 @@ public class LstmTradePredictor {
                 config.getOptimizer(),
                 config.getL1(),
                 config.getL2(),
-                config.getNormalizationScope()
+                config.getNormalizationScope(),
+                config.getNormalizationMethod()
             );
             // Sérialisation JSON
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
@@ -713,5 +723,37 @@ public class LstmTradePredictor {
             if (Double.isNaN(array.getDouble(i))) return true;
         }
         return false;
+    }
+
+    /**
+     * Normalise un tableau de valeurs selon la méthode choisie dans la config (MinMax, z-score, etc.).
+     * @param values tableau de valeurs à normaliser
+     * @param min valeur minimale (pour MinMax)
+     * @param max valeur maximale (pour MinMax)
+     * @param config configuration LSTM
+     * @return tableau normalisé
+     */
+    public double[] normalizeByConfig(double[] values, double min, double max, LstmConfig config) {
+        String method = config.getNormalizationMethod();
+        if ("zscore".equalsIgnoreCase(method)) {
+            double mean = java.util.Arrays.stream(values).average().orElse(0.0);
+            double std = Math.sqrt(java.util.Arrays.stream(values).map(v -> (v - mean) * (v - mean)).average().orElse(0.0));
+            double[] normalized = new double[values.length];
+            if (std == 0.0) {
+                for (int i = 0; i < values.length; i++) normalized[i] = 0.0;
+            } else {
+                for (int i = 0; i < values.length; i++) normalized[i] = (values[i] - mean) / std;
+            }
+            return normalized;
+        } else {
+            // MinMax par défaut
+            double[] normalized = new double[values.length];
+            if (min == max) {
+                for (int i = 0; i < values.length; i++) normalized[i] = 0.5;
+            } else {
+                for (int i = 0; i < values.length; i++) normalized[i] = (values[i] - min) / (max - min);
+            }
+            return normalized;
+        }
     }
 }
