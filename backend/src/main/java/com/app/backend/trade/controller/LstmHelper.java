@@ -158,10 +158,23 @@ public class LstmHelper {
     /**
      * Lance le tuning automatique pour une liste de symboles.
      * Les résultats sont loggés et la meilleure config est sauvegardée pour chaque symbole.
+     * @param useRandomGrid true pour utiliser une grille aléatoire (random search), false pour grid search complet
+     * @param randomGridSize nombre de configurations aléatoires à tester (si useRandomGrid=true)
      */
-    public void tuneAllSymbols() {
+    public void tuneAllSymbols(boolean useRandomGrid, int randomGridSize) {
         List<String> symbols = getSymbolFitredFromTabSingle("rendement_score");
-        lstmTuningService.tuneAllSymbols(symbols, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
+        List<LstmConfig> grid;
+        if (useRandomGrid) {
+            grid = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize);
+        } else {
+            grid = lstmTuningService.generateSwingTradeGrid();
+        }
+        lstmTuningService.tuneAllSymbols(symbols, grid, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
+    }
+
+    // Méthode existante conservée pour compatibilité
+    public void tuneAllSymbols() {
+        tuneAllSymbols(false, 0);
     }
 
     public List<String> getSymbolFitredFromTabSingle(String sort) {

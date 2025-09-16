@@ -340,6 +340,48 @@ public class LstmTuningService {
     }
 
     /**
+     * Génère une grille aléatoire de configurations adaptée au swing trade.
+     * @param n nombre de configurations à générer
+     * @return liste de LstmConfig aléatoires
+     */
+    public List<LstmConfig> generateRandomSwingTradeGrid(int n) {
+        java.util.Random rand = new java.util.Random();
+        int[] windowSizes = {10, 20, 30, 40, 60};
+        int[] lstmNeurons = {64, 100, 128, 256, 512};
+        double[] dropoutRates = {0.2, 0.3, 0.4};
+        double[] learningRates = {0.0005, 0.001, 0.002};
+        double[] l1s = {0.0, 0.0001};
+        double[] l2s = {0.0001, 0.001, 0.01};
+        int numEpochs = 300;
+        int patience = 20;
+        double minDelta = 0.0002;
+        int kFolds = 5;
+        String optimizer = "adam";
+        String[] scopes = {"window", "global"};
+        String[] swingTypes = {"range", "breakout", "mean_reversion"};
+        List<LstmConfig> grid = new java.util.ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            LstmConfig config = new LstmConfig();
+            config.setWindowSize(windowSizes[rand.nextInt(windowSizes.length)]);
+            config.setLstmNeurons(lstmNeurons[rand.nextInt(lstmNeurons.length)]);
+            config.setDropoutRate(dropoutRates[rand.nextInt(dropoutRates.length)]);
+            config.setLearningRate(learningRates[rand.nextInt(learningRates.length)]);
+            config.setNumEpochs(numEpochs);
+            config.setPatience(patience);
+            config.setMinDelta(minDelta);
+            config.setKFolds(kFolds);
+            config.setOptimizer(optimizer);
+            config.setL1(l1s[rand.nextInt(l1s.length)]);
+            config.setL2(l2s[rand.nextInt(l2s.length)]);
+            config.setNormalizationScope(scopes[rand.nextInt(scopes.length)]);
+            config.setNormalizationMethod("auto");
+            config.setSwingTradeType(swingTypes[rand.nextInt(swingTypes.length)]);
+            grid.add(config);
+        }
+        return grid;
+    }
+
+    /**
      * Lance le tuning automatique pour une liste de symboles.
      * @param symbols liste des symboles à tuner
      * @param jdbcTemplate accès base
@@ -389,8 +431,7 @@ public class LstmTuningService {
      * @param jdbcTemplate accès base
      * @param seriesProvider fonction pour obtenir BarSeries par symbole
      */
-    public void tuneAllSymbols(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
-        List<LstmConfig> grid = generateSwingTradeGrid();
+    public void tuneAllSymbols(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         for (String symbol : symbols) {
             BarSeries series = seriesProvider.apply(symbol);
             tuneSymbolMultiThread(symbol, grid, series, jdbcTemplate);
