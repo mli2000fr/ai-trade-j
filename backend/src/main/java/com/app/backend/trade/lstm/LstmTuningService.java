@@ -50,7 +50,24 @@ public class LstmTuningService {
             model = lstmTradePredictor.trainLstm(series, config, model);
             // Évaluation sur le jeu de test
             double score = evaluateModel(model, series, config);
-            logger.info("Tuning {} | Config: windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={} | Test MSE={}", symbol, config.getWindowSize(), config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getL1(), config.getL2(), score);
+            double rmse = Math.sqrt(score);
+            // Calcul direction
+            double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model);
+            double[] closes = lstmTradePredictor.extractCloseValues(series);
+            double lastClose = closes[closes.length - 1];
+            double delta = predicted - lastClose;
+            double th = lstmTradePredictor.computeSwingTradeThreshold(series);
+            String direction;
+            if (delta > th) {
+                direction = "up";
+            } else if (delta < -th) {
+                direction = "down";
+            } else {
+                direction = "stable";
+            }
+            // Sauvegarde des métriques de tuning
+            hyperparamsRepository.saveTuningMetrics(symbol, config, score, rmse, direction);
+            logger.info("Tuning {} | Config: windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={} | Test MSE={}, RMSE={}, direction={}", symbol, config.getWindowSize(), config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getL1(), config.getL2(), score, rmse, direction);
             if (score < bestScore) {
                 bestScore = score;
                 bestConfig = config;

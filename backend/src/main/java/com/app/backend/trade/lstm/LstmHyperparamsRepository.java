@@ -68,4 +68,29 @@ public class LstmHyperparamsRepository {
         config.setSwingTradeType(rs.getString("features") != null ? new Gson().fromJson(rs.getString("features"),new TypeToken<List<String>>() {}.getType()) : null);
         return config;
     }
+
+    // Sauvegarde des métriques de tuning pour chaque config testée
+    public void saveTuningMetrics(String symbol, LstmConfig config, double mse, double rmse, String direction) {
+        String sql = "INSERT INTO lstm_tuning_metrics (symbol, window_size, lstm_neurons, dropout_rate, learning_rate, l1, l2, num_epochs, patience, min_delta, optimizer, normalization_scope, normalization_method, swing_trade_type, features, mse, rmse, direction, tested_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+        jdbcTemplate.update(sql,
+            symbol,
+            config.getWindowSize(),
+            config.getLstmNeurons(),
+            config.getDropoutRate(),
+            config.getLearningRate(),
+            config.getL1(),
+            config.getL2(),
+            config.getNumEpochs(),
+            config.getPatience(),
+            config.getMinDelta(),
+            config.getOptimizer(),
+            config.getNormalizationScope(),
+            config.getNormalizationMethod(),
+            config.getSwingTradeType(),
+            new com.google.gson.Gson().toJson(config.getFeatures()),
+            mse,
+            rmse,
+            direction
+        );
+    }
 }
