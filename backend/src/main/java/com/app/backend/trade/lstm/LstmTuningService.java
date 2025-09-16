@@ -27,6 +27,81 @@ public class LstmTuningService {
      * @param jdbcTemplate accès base
      * @return la meilleure configuration trouvée
      */
+    public LstmConfig tuneSymbolMultiThread(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
+        double bestScore = Double.MAX_VALUE;
+        LstmConfig conf = hyperparamsRepository.loadHyperparams(symbol);
+        if(conf != null){
+            logger.info("Hyperparamètres existants trouvés pour {}. Ignorer le tuning.", symbol);
+            return conf;
+        }
+        LstmConfig bestConfig = null;
+        MultiLayerNetwork bestModel = null;
+        // Parallélisation du tuning sur la grille
+        int numThreads = Math.min(grid.size(), Runtime.getRuntime().availableProcessors());
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
+        List<java.util.concurrent.Future<TuningResult>> futures = new java.util.ArrayList<>();
+        for (LstmConfig config : grid) {
+            futures.add(executor.submit(() -> {
+                int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
+                MultiLayerNetwork model = lstmTradePredictor.initModel(
+                    numFeatures,
+                    1,
+                    config.getLstmNeurons(),
+                    config.getDropoutRate(),
+                    config.getLearningRate(),
+                    config.getOptimizer(),
+                    config.getL1(),
+                    config.getL2()
+                );
+                model = lstmTradePredictor.trainLstm(series, config, model);
+                double score = evaluateModel(model, series, config);
+                double rmse = Math.sqrt(score);
+                double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model);
+                double[] closes = lstmTradePredictor.extractCloseValues(series);
+                double lastClose = closes[closes.length - 1];
+                double delta = predicted - lastClose;
+                double th = lstmTradePredictor.computeSwingTradeThreshold(series);
+                String direction;
+                if (delta > th) {
+                    direction = "up";
+                } else if (delta < -th) {
+                    direction = "down";
+                } else {
+                    direction = "stable";
+                }
+                // Sauvegarde des métriques de tuning
+                hyperparamsRepository.saveTuningMetrics(symbol, config, score, rmse, direction);
+                logger.info("Tuning {} | Config: windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={} | Test MSE={}, RMSE={}, direction={}", symbol, config.getWindowSize(), config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getL1(), config.getL2(), score, rmse, direction);
+                return new TuningResult(config, model, score);
+            }));
+        }
+        executor.shutdown();
+        // Sélection du meilleur résultat
+        for (java.util.concurrent.Future<TuningResult> future : futures) {
+            try {
+                TuningResult result = future.get();
+                if (result.score < bestScore) {
+                    bestScore = result.score;
+                    bestConfig = result.config;
+                    bestModel = result.model;
+                }
+            } catch (Exception e) {
+                logger.error("Erreur lors de la récupération du résultat de tuning : {}", e.getMessage());
+            }
+        }
+        // Sauvegarde la meilleure config et le modèle
+        if (bestConfig != null && bestModel != null) {
+            hyperparamsRepository.saveHyperparams(symbol, bestConfig);
+            try {
+                lstmTradePredictor.saveModelToDb(symbol, bestModel, jdbcTemplate, bestConfig);
+            } catch (Exception e) {
+                logger.error("Erreur lors de la sauvegarde du meilleur modèle : {}", e.getMessage());
+            }
+            logger.info("Meilleure config pour {} : windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={}, Test MSE={}", symbol, bestConfig.getWindowSize(), bestConfig.getLstmNeurons(), bestConfig.getDropoutRate(), bestConfig.getLearningRate(), bestConfig.getL1(), bestConfig.getL2(), bestScore);
+        }
+        return bestConfig;
+    }
+
     public LstmConfig tuneSymbol(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
         double bestScore = Double.MAX_VALUE;
         LstmConfig conf = hyperparamsRepository.loadHyperparams(symbol);
@@ -39,14 +114,14 @@ public class LstmTuningService {
         for (LstmConfig config : grid) {
             int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
             MultiLayerNetwork model = lstmTradePredictor.initModel(
-                numFeatures, // Correction ici : nombre de features
-                1,
-                config.getLstmNeurons(),
-                config.getDropoutRate(),
-                config.getLearningRate(),
-                config.getOptimizer(),
-                config.getL1(),
-                config.getL2()
+                    numFeatures, // Correction ici : nombre de features
+                    1,
+                    config.getLstmNeurons(),
+                    config.getDropoutRate(),
+                    config.getLearningRate(),
+                    config.getOptimizer(),
+                    config.getL1(),
+                    config.getL2()
             );
             model = lstmTradePredictor.trainLstm(series, config, model);
             // Évaluation sur le jeu de test
@@ -87,6 +162,7 @@ public class LstmTuningService {
         }
         return bestConfig;
     }
+
 
     // Évalue le modèle sur le jeu de test (MSE)
     private double evaluateModel(MultiLayerNetwork model, BarSeries series, LstmConfig config) {
@@ -257,7 +333,7 @@ public class LstmTuningService {
      * @param jdbcTemplate accès base
      * @param seriesProvider fonction pour obtenir BarSeries par symbole
      */
-    public void tuneAllSymbols(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
+    public void tuneAllSymbolsMultiThread(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         List<LstmConfig> grid = generateSwingTradeGrid();
         int numThreads = Math.min(symbols.size(), Runtime.getRuntime().availableProcessors());
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
@@ -301,11 +377,11 @@ public class LstmTuningService {
      * @param jdbcTemplate accès base
      * @param seriesProvider fonction pour obtenir BarSeries par symbole
      */
-    public void tuneAllSymbolssss(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
+    public void tuneAllSymbols(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         List<LstmConfig> grid = generateSwingTradeGrid();
         for (String symbol : symbols) {
             BarSeries series = seriesProvider.apply(symbol);
-            tuneSymbol(symbol, grid, series, jdbcTemplate);
+            tuneSymbolMultiThread(symbol, grid, series, jdbcTemplate);
             // Libération mémoire ND4J/DL4J et reset workspace
             try {
                 org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
@@ -314,6 +390,18 @@ public class LstmTuningService {
             } catch (Exception e) {
                 logger.warn("Erreur lors du nettoyage ND4J/DL4J après le tuning du symbole {} : {}", symbol, e.getMessage());
             }
+        }
+    }
+
+    // Classe interne pour stocker le résultat du tuning
+    private static class TuningResult {
+        LstmConfig config;
+        MultiLayerNetwork model;
+        double score;
+        TuningResult(LstmConfig config, MultiLayerNetwork model, double score) {
+            this.config = config;
+            this.model = model;
+            this.score = score;
         }
     }
 }
