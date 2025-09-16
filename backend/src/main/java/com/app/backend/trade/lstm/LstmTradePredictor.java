@@ -463,7 +463,7 @@ public class LstmTradePredictor {
      * @throws InsufficientDataException si la série est trop courte
      */
     // Prédiction de la prochaine valeur de clôture
-    public double predictNextClose(BarSeries series, LstmConfig config, MultiLayerNetwork model) {
+    public double predictNextClose(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model) {
         model = ensureModelWindowSize(model, config.getWindowSize(), config);
         if (model == null) {
             throw new ModelNotFoundException("Le modèle LSTM n'est pas initialisé.");
@@ -486,6 +486,14 @@ public class LstmTradePredictor {
         double predictedNorm = output.getDouble(0);
         double predicted = predictedNorm * (max - min) + min;
         String position = analyzePredictionPosition(lastWindow, predicted);
+        // Test si la prédiction sort de la plage locale
+        if (predicted < min || predicted > max) {
+            if (series.getBarCount() > 0) {
+                logger.warn("[LSTM WARNING] La prédiction ({}) sort de la plage locale [{}, {}] pour le symbole {}.", predicted, min, max, symbol);
+            } else {
+                logger.warn("[LSTM WARNING] La série est vide, impossible d'obtenir le symbole.");
+            }
+        }
         logger.info("[PREDICT-NORM] windowSize={}, lastWindow={}, min={}, max={}, predictedNorm={}, predicted={}, normalizationScope={}, position={}",
             config.getWindowSize(), java.util.Arrays.toString(lastWindow), min, max, predictedNorm, predicted, config.getNormalizationScope(), position);
         return predicted;
@@ -529,21 +537,6 @@ public class LstmTradePredictor {
         }
     }
 
-    /**
-     * Prédit le delta (variation) entre la dernière clôture et la prédiction.
-     * @param series série de bougies
-     * @param windowSize taille de la fenêtre
-     * @return variation prédite
-     */
-    // Prédiction du delta (variation) de la prochaine clôture
-    public double predictNextDelta(BarSeries series, int windowSize, LstmConfig config, MultiLayerNetwork model) {
-        model = ensureModelWindowSize(model, windowSize, config);
-        double predicted = predictNextClose(series, config, model);
-        double[] closes = extractCloseValues(series);
-        double lastClose = closes[closes.length - 1];
-        return predicted - lastClose;
-    }
-
 
     /**
      * Calcule automatiquement un threshold adapté pour le swing trade.
@@ -570,10 +563,10 @@ public class LstmTradePredictor {
      * @param series Série de bougies
      * @return "up" si hausse, "down" si baisse, "stable" sinon
      */
-    public PreditLsdm getPredit(BarSeries series, LstmConfig config, MultiLayerNetwork model) {
+    public PreditLsdm getPredit(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model) {
         model = ensureModelWindowSize(model, config.getWindowSize(), config);
         double th = computeSwingTradeThreshold(series);
-        double predicted = predictNextClose(series, config, model);
+        double predicted = predictNextClose(symbol, series, config, model);
         predicted = Math.round(predicted * 1000.0) / 1000.0;
         double[] closes = extractCloseValues(series);
         double lastClose = closes[closes.length - 1];

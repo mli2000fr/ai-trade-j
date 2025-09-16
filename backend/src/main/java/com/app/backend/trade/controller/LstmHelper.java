@@ -92,7 +92,7 @@ public class LstmHelper {
         MultiLayerNetwork model = lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
 
         BarSeries series = getBarBySymbol(symbol, null);
-        return lstmTradePredictor.getPredit(series, config, model);
+        return lstmTradePredictor.getPredit(symbol, series, config, model);
     }
 
     /**
