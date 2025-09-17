@@ -9,6 +9,7 @@ import lombok.*;
 @AllArgsConstructor
 @NoArgsConstructor
 public class BestInOutStrategy {
+    public String name;
     public String symbol;
     public String entryName;
     public Object entryParams;

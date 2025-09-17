@@ -7,7 +7,7 @@ import lombok.Data;
 @Builder
 @Data
 public class MixResultat {
-
+    String name;
     BestInOutStrategy single;
     BestCombinationResult mix;
 }

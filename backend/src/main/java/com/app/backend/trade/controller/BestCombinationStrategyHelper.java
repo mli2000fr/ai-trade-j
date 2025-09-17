@@ -1010,11 +1010,11 @@ public class BestCombinationStrategyHelper {
     public List<BestCombinationResult> getBestPerfActions(Integer limit, String sort, Boolean filtered){
         String orderBy = (sort == null || sort.isBlank()) ? "rendement_score" : sort;
 
-        String sql = "SELECT * FROM best_in_out_mix_strategy WHERE profit_factor <> 0 AND max_drawdown <> 0 AND win_rate < 1";
+        String sql = "SELECT s.*, a.name FROM best_in_out_mix_strategy s JOIN alpaca_asset a ON s.symbol = a.symbol WHERE s.profit_factor <> 0 AND s.max_drawdown <> 0 AND s.win_rate < 1";
         if (filtered != null && filtered) {
             sql += " AND fltred_out = false";
         }
-        sql += " ORDER BY " + orderBy + " DESC";
+        sql += " ORDER BY s." + orderBy + " DESC";
         if (limit != null && limit > 0) {
             sql += " LIMIT " + limit;
         }
@@ -1022,6 +1022,7 @@ public class BestCombinationStrategyHelper {
         List<BestCombinationResult> results = jdbcTemplate.query(sql, (rs, rowNum) -> {
             BestCombinationResult result = new BestCombinationResult();
             result.symbol = rs.getString("symbol");
+            result.name = rs.getString("name");
             result.inStrategyNames = gson.fromJson(rs.getString("in_strategy_names"), new TypeToken<List<String>>(){}.getType());
             result.outStrategyNames = gson.fromJson(rs.getString("out_strategy_names"), new TypeToken<List<String>>(){}.getType());
             result.inParams = gson.fromJson(rs.getString("in_params"), new TypeToken<Map<String, Object>>(){}.getType());

@@ -714,12 +714,12 @@ public class StrategieHelper {
         String orderBy = (sort == null || sort.isBlank()) ? "rendement_score" : sort;
         String searchSQL = "";
         if(search != null && !search.isEmpty()){
-            orderBy = "symbol ASC"; // en cas de recherche, on trie par symbole
-            searchSQL = "symbol in ("+"'"+search.replaceAll(" ", "").replaceAll(",", "','")+"'"+") and";
+            orderBy = "s.symbol ASC"; // en cas de recherche, on trie par symbole
+            searchSQL = "s.symbol in ("+"'"+search.replaceAll(" ", "").replaceAll(",", "','")+"'"+") and";
         }else{
-            orderBy += " DESC";
+            orderBy = "s." + orderBy + " DESC";
         }
-        String sql = "SELECT * FROM best_in_out_single_strategy WHERE "+ searchSQL +" profit_factor <> 0 AND win_rate < 1";
+        String sql = "SELECT s.*, a.name FROM best_in_out_single_strategy s JOIN alpaca_asset a ON s.symbol = a.symbol WHERE "+ searchSQL +" s.profit_factor <> 0 AND s.win_rate < 1";
         if (filtered != null && filtered) {
             sql += " AND fltred_out = false";
         }
@@ -735,6 +735,7 @@ public class StrategieHelper {
             Object entryParams = TradeUtils.parseStrategyParams(entryName, entryParamsJson);
             Object exitParams = TradeUtils.parseStrategyParams(exitName, exitParamsJson);
             return BestInOutStrategy.builder()
+                    .name(rs.getString("name"))
                     .symbol(rs.getString("symbol"))
                     .entryName(entryName)
                     .exitName(exitName)

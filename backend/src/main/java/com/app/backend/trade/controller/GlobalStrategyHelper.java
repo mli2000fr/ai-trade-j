@@ -43,6 +43,7 @@ public class GlobalStrategyHelper {
         for(BestInOutStrategy single : listeSingle) {
             BestCombinationResult mix = bestCombinationStrategyHelper.getBestCombinationResult(single.getSymbol());
             results.add(MixResultat.builder()
+                     .name(single.getName())
                     .single(single)
                     .mix(mix == null ? BestCombinationResult.empty() : mix)
                     .build());
@@ -58,6 +59,7 @@ public class GlobalStrategyHelper {
         for(BestCombinationResult mix : listeMix) {
             BestInOutStrategy single = strategieHelper.getBestInOutStrategy(mix.getSymbol());
             results.add(MixResultat.builder()
+                    .name(mix.getName())
                     .single(single == null ? BestInOutStrategy.empty() : single)
                     .mix(mix)
                     .build());

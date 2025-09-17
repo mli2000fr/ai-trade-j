@@ -13,6 +13,7 @@ import java.util.HashMap;
 @AllArgsConstructor
 @NoArgsConstructor
 public class BestCombinationResult {
+    public String name;
     public String symbol;
     public List<String> inStrategyNames;
     public List<String> outStrategyNames;
