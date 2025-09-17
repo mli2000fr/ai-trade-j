@@ -56,15 +56,25 @@ const UpdateDailyValueMonitorPage: React.FC = () => {
       {!isUpdateEnCours && (
         <Box p={4} textAlign="center">
           <Typography variant="h6" gutterBottom>Aucune mise à jour en cours</Typography>
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={() => callApi('/api/stra/strategies/db/update-daily-valu', 'Update Daily Value')}
-            sx={{ mt: 2 }}
-            disabled={loading !== true && loading !== false}
-          >
-            {loading === 'Update Daily Value' ? <CircularProgress size={24} /> : 'Lancer la mise à jour Daily Value'}
-          </Button>
+          <Box display="flex" justifyContent="center" gap={2}>
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={true}
+              onClick={() => callApi('/api/stra/strategies/db/update-assets', 'Update Assets')}
+            >
+              {loading === 'Update Assets' ? <CircularProgress size={24} /> : 'Update Assets'}
+            </Button>
+            <Button
+              variant="contained"
+              color="secondary"
+              disabled={true}
+              onClick={() => callApi('/api/stra/strategies/db/update-daily-valu', 'Update Daily Value')}
+              disabled={loading !== true && loading !== false}
+            >
+              {loading === 'Update Daily Value' ? <CircularProgress size={24} /> : 'Lancer la mise à jour Daily Value'}
+            </Button>
+          </Box>
         </Box>
       )}
       <Box p={4}>
