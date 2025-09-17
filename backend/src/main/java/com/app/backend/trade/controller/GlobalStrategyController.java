@@ -2,6 +2,7 @@ package com.app.backend.trade.controller;
 
 
 import com.app.backend.trade.model.MixResultat;
+import com.app.backend.trade.model.SymbolPerso;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,9 +36,8 @@ public class GlobalStrategyController {
 
 
     @GetMapping("/symbol_pero")
-    public ResponseEntity<Boolean> getSymbolsPerso() {
-        globalStrategyHelper.getSymbolsPerso();
-        return ResponseEntity.ok(true);
+    public ResponseEntity<List<SymbolPerso>> getSymbolsPerso() {
+        return ResponseEntity.ok(globalStrategyHelper.getSymbolsPerso());
     }
 
 

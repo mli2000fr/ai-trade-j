@@ -159,6 +159,9 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [lstmResults, setLstmResults] = useState<{ [symbol: string]: PreditLstm | string}>({});
   const [searchValue, setSearchValue] = useState('');
   const [searchMode, setSearchMode] = useState(false);
+  const [symbolsPerso, setSymbolsPerso] = useState<{id: string, name: string, symbols: string}[]>([]);
+  const [selectedSymbolPerso, setSelectedSymbolPerso] = useState<string>('');
+  const [symbolPersoData, setSymbolPersoData] = useState<{symbols: string[]} | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const fetchData = (searchModeParam = false, searchValueParam = '') => {
@@ -285,6 +288,13 @@ const BestPerformanceSymbolBlock: React.FC = () => {
     setCheckedRows({});
   }, [sort, showOnlyNonFiltered]);
 
+  useEffect(() => {
+    fetch('/api/result/symbol_pero')
+      .then(res => res.json())
+      .then(data => setSymbolsPerso(Array.isArray(data) ? data : []))
+      .catch(() => setSymbolsPerso([]));
+  }, []);
+
   return (
     <>
       <Card sx={{ mb: 2 }}>
@@ -335,6 +345,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <MenuItem value="mix:score_swing_trade_check">Mix - Score Swing Trade Check</MenuItem>
                 </Select>
               </FormControl>
+
               <FormControlLabel
                 control={
                   <Checkbox
@@ -358,6 +369,25 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               >
                 Copier
               </Button>
+              <FormControl size="small" sx={{ minWidth: 180 }}>
+                              <InputLabel id="symbol-perso-select-label">Symbols personnalisés</InputLabel>
+                              <Select
+                                labelId="symbol-perso-select-label"
+                                id="symbol-perso-select"
+                                value={selectedSymbolPerso}
+                                label="Symbols personnalisés"
+                                onChange={e => {
+                                    setSearchValue('');
+                                  setSelectedSymbolPerso(e.target.value);
+                                  setSearchMode(true);
+                                  fetchData(true, e.target.value);
+                                }}
+                              >
+                                {symbolsPerso.map(sym => (
+                                  <MenuItem key={sym.id} value={sym.symbols}>{sym.name}</MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
               <TextField
                 size="small"
                 variant="outlined"
@@ -382,6 +412,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                 onClick={() => {
                   if (searchValue.trim()) {
                     setSearchMode(true);
+                    setSelectedSymbolPerso('');
                     fetchData(true, searchValue);
                   }
                 }}
@@ -397,10 +428,11 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                 onClick={() => {
                   setSearchValue('');
                   setSearchMode(false);
+                  setSelectedSymbolPerso('');
                   fetchData(false, '');
                 }}
                 sx={{ borderRadius: 2, boxShadow: 1 }}
-                disabled={!searchMode && !searchValue}
+                disabled={!searchMode && !searchValue && !selectedSymbolPerso}
               >
                 Réinitier
               </Button>

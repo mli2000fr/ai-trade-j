@@ -75,7 +75,7 @@ public class GlobalStrategyHelper {
     }
 
     public List<SymbolPerso> getSymbolsPerso() {
-        String sql = "SELECT symbol, name FROM trade_ai.assets_perso ORDER BY symbol;";
+        String sql = "SELECT * FROM trade_ai.symbol_perso;";
         return jdbcTemplate.query(sql, (rs, rowNum) -> SymbolPerso.builder()
                         .symbols(rs.getString("symbols"))
                 .name(rs.getString("name"))
