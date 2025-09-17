@@ -54,30 +54,46 @@ const CroisedStrategiesMonitorPage: React.FC = () => {
   // Vérifie si un calcul croisé est en cours
   const isCroisedEnCours = progress.status === 'en_cours';
 
-  if (!isCroisedEnCours) {
-    if(loading){
-        return (
-            <Box p={4} textAlign="center">
-                <CircularProgress size={40} />
-            </Box>
-        );
-    }else{
-        return (
-            <Box p={4} textAlign="center">
-                <Typography variant="h6" gutterBottom>Aucun calcul croisé en cours</Typography>
-                <Button
-                    variant="contained"
-                    color="info"
-                    onClick={() => callApi('/api/stra/strategies/calcul_croised_strategies', 'Calcule croised strategies')}
-                    disabled={loading === 'Calcule croised strategies'}
-                    sx={{ mt: 2 }}
-                >
-                    {loading === 'Calcule croised strategies' ? <CircularProgress size={24} /> : 'Lancer le calcul croisé'}
-                </Button>
-            </Box>
-        );
-    }
-  }
+  return (<>
+             {!isCroisedEnCours && (<Box p={4} textAlign="center">
+                  <Typography variant="h6" gutterBottom>Aucun calcul croisé en cours</Typography>
+                  <Button
+                      variant="contained"
+                      color="info"
+                      onClick={() => callApi('/api/stra/strategies/calcul_croised_strategies', 'Calcule croised strategies')}
+                      sx={{ mt: 2 }}
+                  >
+                      {loading === 'Calcule croised strategies' ? <CircularProgress size={24} /> : 'Lancer le calcul croisé'}
+                  </Button>
+              </Box>)}
+              <Box p={4}>
+                    <Paper elevation={3} sx={{ p: 3, maxWidth: 700, margin: '0 auto' }}>
+                      <Box display="flex" alignItems="center" gap={1} mb={2}>
+                        {progress.status === 'termine' ? <CheckCircleIcon color="success" /> : progress.status === 'erreur' ? <ErrorIcon color="error" /> : <HourglassTopIcon color="info" />}
+                        <Typography variant="h5" gutterBottom>Suivi du calcul croisé des stratégies</Typography>
+                      </Box>
+                      <Divider sx={{ mb: 2 }} />
+                      <Box mb={3}>
+                        <Typography variant="subtitle1" gutterBottom><b>{progress.symbol || progress.name || 'Tâche'}</b></Typography>
+                        <LinearProgress variant="determinate" value={progress.totalConfigs > 0 ? Math.round(100 * progress.testedConfigs / progress.totalConfigs) : 0} sx={{ height: 10, borderRadius: 5 }} />
+                        <Typography align="center" mt={1}>{progress.totalConfigs > 0 ? Math.round(100 * progress.testedConfigs / progress.totalConfigs) : 0}%</Typography>
+                        <Box display="flex" justifyContent="space-between" mt={2} mb={1}>
+                          <Typography>Avancement :</Typography>
+                          <Typography><b>{progress.testedConfigs} / {progress.totalConfigs}</b></Typography>
+                        </Box>
+                        <Box display="flex" justifyContent="space-between" mb={1}>
+                          <Typography>Statut :</Typography>
+                          <Chip label={progress.status === 'en_cours' ? 'En cours' : progress.status === 'termine' ? 'Terminé' : ''} color={progress.status === 'termine' ? 'success' : progress.status === 'erreur' ? 'error' : 'info'} size="small" />
+                        </Box>
+                        <Box display="flex" justifyContent="space-between" mb={1}>
+                          <Typography>Durée :</Typography>
+                          <Typography>{formatDuration(progress.startTime, progress.status === 'termine' ? progress.endTime : progress.lastUpdate)}</Typography>
+                        </Box>
+                      </Box>
+                    </Paper>
+                  </Box>
+                  </>
+          );
 
   return (
     <Box p={4}>
