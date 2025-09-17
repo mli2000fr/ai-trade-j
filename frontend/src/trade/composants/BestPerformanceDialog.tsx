@@ -17,6 +17,8 @@ import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import BougiesChart from './BougiesChart';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 
 interface BestPerformanceDialogProps {
   open: boolean;
@@ -25,29 +27,31 @@ interface BestPerformanceDialogProps {
   bougiesLoading: boolean;
   bougiesError: string | null;
   onClose: () => void;
+  isToday: boolean;
+  setIsToday: (v: boolean) => void;
 }
 
-  // Fonction utilitaire pour afficher un objet sous forme de tableau
-  const renderObjectTable = (obj: any) => (
-    <Table size="small" sx={{ mb: 2, backgroundColor: '#f9f9f9' }}>
-      <TableBody>
-        {Object.entries(obj).map(([key, value]) => (
-          <TableRow key={key}>
-            <TableCell sx={{ fontWeight: 'bold', width: '40%' }}>{key}</TableCell>
-            <TableCell>
-              {typeof value === 'number'
-                ? (Math.abs(value) > 1
-                    ? value.toFixed(2)
-                    : (value * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
-                : typeof value === 'boolean'
-                  ? value ? 'Oui' : 'Non'
-                  : String(value)}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
+// Fonction utilitaire pour afficher un objet sous forme de tableau
+const renderObjectTable = (obj: any) => (
+  <Table size="small" sx={{ mb: 2, backgroundColor: '#f9f9f9' }}>
+    <TableBody>
+      {Object.entries(obj).map(([key, value]) => (
+        <TableRow key={key}>
+          <TableCell sx={{ fontWeight: 'bold', width: '40%' }}>{key}</TableCell>
+          <TableCell>
+            {typeof value === 'number'
+              ? (Math.abs(value) > 1
+                  ? value.toFixed(2)
+                  : (value * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
+              : typeof value === 'boolean'
+                ? value ? 'Oui' : 'Non'
+                : String(value)}
+          </TableCell>
+        </TableRow>
+      ))}
+    </TableBody>
+  </Table>
+);
 
 const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
   open,
@@ -56,6 +60,8 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
   bougiesLoading,
   bougiesError,
   onClose,
+  isToday,
+  setIsToday
 }) => (
   <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth PaperProps={{ sx: { maxWidth: '60vw' } }}>
     <DialogActions>
@@ -72,20 +78,25 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
             <Typography variant="h6" sx={{ mb: 2, color: '#1976d2' }}>Symbole : {selected.single.symbol}</Typography>
             <Accordion defaultExpanded>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Graphique des 250 dernières bougies</Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Graphique des bougies</Typography>
               </AccordionSummary>
               <AccordionDetails>
+                <FormControlLabel
+                   control={<Checkbox checked={isToday} onChange={e => setIsToday(e.target.checked)} />}
+                   label="Today"
+                   sx={{ ml: 2 }}
+                 />
                 {bougiesLoading ? (
                   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
                     <CircularProgress />
                   </div>
                 ) : bougiesError ? (
                   <Alert severity="error">{bougiesError}</Alert>
-                ) : bougies && bougies.length > 0 ? (
+                ) : (Array.isArray(bougies) && bougies.length > 0 ? (
                   <BougiesChart bougies={bougies} />
                 ) : (
                   <Typography variant="body2">Aucune donnée de bougie disponible.</Typography>
-                )}
+                ))}
               </AccordionDetails>
             </Accordion>
             { selected?.indiceSingle && selected?.indiceMix && selected?.predict && (
@@ -257,4 +268,3 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
 );
 
 export default BestPerformanceDialog;
-

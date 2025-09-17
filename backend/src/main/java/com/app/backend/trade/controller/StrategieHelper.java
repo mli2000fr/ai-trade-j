@@ -254,6 +254,10 @@ public class StrategieHelper {
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
+    public List<DailyValue> getBougiesTodayBySymbol(String symbol){
+        return this.alpacaService.getHistoricalBarsJsonDaysMin(symbol);
+    }
+
     /**
      * Récupère les valeurs journalières d'un symbole depuis la base, avec limite.
      * @param symbol symbole

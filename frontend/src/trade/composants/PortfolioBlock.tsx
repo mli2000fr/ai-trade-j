@@ -58,6 +58,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
   const [indiceMix, setIndiceMix] = useState<any>(null);
   const [predict, setPredict] = useState<any>(null);
   const [selected, setSelected] = useState<any>(null);
+  const [isToday, setIsToday] = useState(false);
 
   // Réinitialisation de sellError quand resetSellErrorKey change
   useEffect(() => {
@@ -349,6 +350,8 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
               bougiesLoading={bougiesLoading}
               bougiesError={bougiesError}
               onClose={() => setOpenDialog(false)}
+              isToday={isToday}
+              setIsToday={setIsToday}
             />
     </Card>
   );

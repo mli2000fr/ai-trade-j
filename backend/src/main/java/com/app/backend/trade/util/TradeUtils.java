@@ -37,6 +37,12 @@ public class TradeUtils {
     public static String getDateToDay() {
         return LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
     }
+    public static String getDateToDayStart() {
+        return LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + "T00:00:00Z";
+    }
+    public static String getDateToDayEnd() {
+        return LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + "T23:59:59Z";
+    }
 
     /**
      * Lit le contenu d'un fichier de ressources et le retourne sous forme de String.

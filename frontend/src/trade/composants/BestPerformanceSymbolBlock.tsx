@@ -164,6 +164,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [symbolsPerso, setSymbolsPerso] = useState<{id: string, name: string, symbols: string}[]>([]);
   const [selectedSymbolPerso, setSelectedSymbolPerso] = useState<string>('');
   const [symbolPersoData, setSymbolPersoData] = useState<{symbols: string[]} | null>(null);
+  const [isToday, setIsToday] = useState(false);
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const fetchData = (searchModeParam = false, searchValueParam = '') => {
@@ -246,9 +247,15 @@ const BestPerformanceSymbolBlock: React.FC = () => {
 
   useEffect(() => {
     if (open && selected?.single.symbol) {
-      setBougiesLoading(true);
+      //setBougiesLoading(true);
       setBougiesError(null);
-      fetch(`/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.single.symbol)}&historique=250`)
+      let url;
+      if (isToday) {
+        url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.single.symbol)}&isToday=true`;
+      } else {
+        url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.single.symbol)}&historique=250`;
+      }
+      fetch(url)
         .then(res => {
           if (!res.ok) throw new Error('Erreur API bougies');
           return res.json();
@@ -263,7 +270,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
       setBougiesError(null);
       setBougiesLoading(false);
     }
-  }, [open, selected]);
+  }, [open, selected, isToday]);
 
   // ErrorBoundary pour capturer les erreurs de rendu
   class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
@@ -583,6 +590,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
         bougiesLoading={bougiesLoading}
         bougiesError={bougiesError}
         onClose={() => setOpen(false)}
+        isToday={isToday}
+        setIsToday={setIsToday}
       />
     </>
   );

@@ -84,8 +84,16 @@ public class StrategieController {
 
 
     @GetMapping("/getBougiesBySymbol")
-    public ResponseEntity<List<DailyValue>> getBougiesBySymbol(@RequestParam String symbol, @RequestParam int historique) {
-        return ResponseEntity.ok(strategieHelper.getDailyValuesFromDb(symbol, historique));
+    public ResponseEntity<List<DailyValue>> getBougiesBySymbol(
+        @RequestParam String symbol,
+        @RequestParam(required = false, defaultValue = "false") boolean isToday,
+        @RequestParam(required = false, defaultValue = "250") Integer historique
+    ) {
+        if(isToday){
+            return ResponseEntity.ok(strategieHelper.getBougiesTodayBySymbol(symbol));
+        }else{
+            return ResponseEntity.ok(strategieHelper.getDailyValuesFromDb(symbol, historique != null ? historique : 250));
+        }
     }
 
     /**
