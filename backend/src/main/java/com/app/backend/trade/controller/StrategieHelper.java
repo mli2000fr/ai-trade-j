@@ -556,6 +556,7 @@ public class StrategieHelper {
                     exit_strategy_name = ?,
                     exit_strategy_params = ?,
                     rendement = ?,
+                    rendement_check = ?,
                     rendement_sum = ?,
                     rendement_diff = ?,
                     rendement_score = ?,
@@ -568,6 +569,7 @@ public class StrategieHelper {
                     max_trade_gain = ?,
                     max_trade_loss = ?,
                     score_swing_trade = ?,
+                    score_swing_trade_check = ?,
                     fltred_out = ?,
                     initial_capital = ?,
                     risk_per_trade = ?,
@@ -584,6 +586,7 @@ public class StrategieHelper {
                 best.exitName,
                 exitParamsJson,
                 best.result.rendement,
+                    best.check.rendement,
                     best.rendementSum,
                     best.rendementDiff,
                     best.rendementScore,
@@ -596,6 +599,7 @@ public class StrategieHelper {
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
                 best.result.scoreSwingTrade,
+                best.check.scoreSwingTrade,
                 best.result.fltredOut,
                 best.paramsOptim.initialCapital,
                 best.paramsOptim.riskPerTrade,
@@ -611,10 +615,10 @@ public class StrategieHelper {
                 INSERT INTO best_in_out_single_strategy (
                     symbol, entry_strategy_name, entry_strategy_params,
                     exit_strategy_name, exit_strategy_params,
-                    rendement, rendement_sum, rendement_diff, rendement_score, trade_count, win_rate, max_drawdown, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss,
-                    score_swing_trade, fltred_out, initial_capital, risk_per_trade, stop_loss_pct, 
+                    rendement, rendement_check, rendement_sum, rendement_diff, rendement_score, trade_count, win_rate, max_drawdown, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss,
+                    score_swing_trade, score_swing_trade_check, fltred_out, initial_capital, risk_per_trade, stop_loss_pct, 
                     take_profit_pct, nb_simples, check_result, created_date, updated_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """;
             jdbcTemplate.update(insertSql,
                 symbol,
@@ -623,6 +627,7 @@ public class StrategieHelper {
                 best.exitName,
                 exitParamsJson,
                 best.result.rendement,
+                best.check.rendement,
                 best.rendementSum,
                 best.rendementDiff,
                     best.rendementScore,
@@ -635,6 +640,7 @@ public class StrategieHelper {
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
                 best.result.scoreSwingTrade,
+                best.check.scoreSwingTrade,
                 best.result.fltredOut,
                 best.paramsOptim.initialCapital,
                 best.paramsOptim.riskPerTrade,
@@ -705,14 +711,7 @@ public class StrategieHelper {
      * @return liste des meilleures stratégies BestInOutStrategy
      */
     public List<BestInOutStrategy> getBestPerfActions(Integer limit, String sort, String search, Boolean filtered){
-        String orderBy = "rendement_score";
-        if ("score_swing_trade".equalsIgnoreCase(sort)) {
-            orderBy = "score_swing_trade";
-        }else if ("rendement_sum".equalsIgnoreCase(sort)) {
-            orderBy = "rendement_sum";
-        }else if ("rendement".equalsIgnoreCase(sort)) {
-            orderBy = "rendement";
-        }
+        String orderBy = (sort == null || sort.isBlank()) ? "rendement_score" : sort;
         String searchSQL = "";
         if(search != null && !search.isEmpty()){
             searchSQL = "symbol in ("+"'"+search.replaceAll(" ", "").replaceAll(",", "','")+"'"+") and";

@@ -290,6 +290,7 @@ public class BestCombinationStrategyHelper {
                     in_params = ?, 
                     out_params = ?, 
                     rendement = ?, 
+                    rendement_check = ?,
                     rendement_sum = ?,
                     rendement_diff = ?,
                     rendement_score = ?,
@@ -302,6 +303,7 @@ public class BestCombinationStrategyHelper {
                     max_trade_gain = ?, 
                     max_trade_loss = ?, 
                     score_swing_trade = ?, 
+                    score_swing_trade_check = ?,
                     fltred_out = ?,
                     nb_simples = ?,
                     initial_capital = ?, 
@@ -316,6 +318,7 @@ public class BestCombinationStrategyHelper {
                     inParamsJson,
                     outParamsJson,
                     result.result.rendement,
+                    result.check.rendement,
                     result.rendementSum,
                     result.rendementDiff,
                     result.rendementScore,
@@ -328,6 +331,7 @@ public class BestCombinationStrategyHelper {
                     result.result.maxTradeGain,
                     result.result.maxTradeLoss,
                     result.result.scoreSwingTrade,
+                    result.check.scoreSwingTrade,
                     result.result.fltredOut,
                     result.contextOptim.nbSimples,
                     result.contextOptim.initialCapital,
@@ -346,6 +350,7 @@ public class BestCombinationStrategyHelper {
                     in_params, 
                     out_params, 
                     rendement,
+                    rendement_check,
                     rendement_sum,
                     rendement_diff,
                     rendement_score,
@@ -358,6 +363,7 @@ public class BestCombinationStrategyHelper {
                     max_trade_gain,
                     max_trade_loss,
                     score_swing_trade, 
+                    score_swing_trade_check,
                     fltred_out,
                     initial_capital, 
                     risk_per_trade, 
@@ -367,7 +373,7 @@ public class BestCombinationStrategyHelper {
                     check_result,
                     create_date,
                     update_date
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""";
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""";
             jdbcTemplate.update(insertSql,
                     symbol,
                     inStrategyNamesJson,
@@ -375,6 +381,7 @@ public class BestCombinationStrategyHelper {
                     inParamsJson,
                     outParamsJson,
                     result.result.rendement,
+                    result.check.rendement,
                     result.rendementSum,
                     result.rendementDiff,
                     result.rendementScore,
@@ -387,6 +394,7 @@ public class BestCombinationStrategyHelper {
                     result.result.maxTradeGain,
                     result.result.maxTradeLoss,
                     result.result.scoreSwingTrade,
+                    result.check.scoreSwingTrade,
                     result.result.fltredOut,
                     result.contextOptim.initialCapital,
                     result.contextOptim.riskPerTrade,
@@ -1000,14 +1008,8 @@ public class BestCombinationStrategyHelper {
 
 
     public List<BestCombinationResult> getBestPerfActions(Integer limit, String sort, Boolean filtered){
-        String orderBy = "rendement_score";
-        if ("score_swing_trade".equalsIgnoreCase(sort)) {
-            orderBy = "score_swing_trade";
-        }else if ("rendement_sum".equalsIgnoreCase(sort)) {
-            orderBy = "rendement_sum";
-        }else if ("rendement".equalsIgnoreCase(sort)) {
-            orderBy = "rendement";
-        }
+        String orderBy = (sort == null || sort.isBlank()) ? "rendement_score" : sort;
+
         String sql = "SELECT * FROM best_in_out_mix_strategy WHERE profit_factor <> 0 AND max_drawdown <> 0 AND win_rate < 1";
         if (filtered != null && filtered) {
             sql += " AND fltred_out = false";
