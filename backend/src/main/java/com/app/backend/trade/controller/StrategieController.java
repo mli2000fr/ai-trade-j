@@ -88,4 +88,11 @@ public class StrategieController {
         return ResponseEntity.ok(strategieHelper.getDailyValuesFromDb(symbol, historique));
     }
 
+    /**
+     * Monitoring du calcul croisé des stratégies
+     */
+    @GetMapping("/strategies/croised/progress")
+    public ResponseEntity<StrategieHelper.CroisedProgress> getCroisedProgress() {
+        return ResponseEntity.ok(strategieHelper.getCroisedProgress());
+    }
 }

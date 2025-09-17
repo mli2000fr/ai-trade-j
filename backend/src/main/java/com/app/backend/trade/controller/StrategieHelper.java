@@ -319,46 +319,79 @@ public class StrategieHelper {
     }
 
 
+    // Structure de suivi du calcul croisé
+    public static class CroisedProgress {
+        public String status = "";
+        public int testedConfigs = 0;
+        public int totalConfigs = 0;
+        public long startTime = 0;
+        public long endTime = 0;
+        public long lastUpdate = 0;
+    }
+
+    private CroisedProgress croisedProgress = new CroisedProgress();
+
+    public CroisedProgress getCroisedProgress() {
+        return croisedProgress;
+    }
+
     /**
      * Calcule les stratégies croisées pour tous les symboles éligibles.
      */
     public void calculCroisedStrategies(){
-        List<String> listeDbSymbols = this.getAllAssetSymbolsEligibleFromDb();
-        int nbThreads = Math.max(2, Runtime.getRuntime().availableProcessors());
-        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(nbThreads);
+        croisedProgress = new CroisedProgress();
+        croisedProgress.status = "en_cours";
+        croisedProgress.startTime = System.currentTimeMillis();
+        croisedProgress.lastUpdate = croisedProgress.startTime;
         java.util.concurrent.atomic.AtomicInteger error = new java.util.concurrent.atomic.AtomicInteger(0);
         java.util.concurrent.atomic.AtomicInteger nbInsert = new java.util.concurrent.atomic.AtomicInteger(0);
-        List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
-        for(String symbol : listeDbSymbols){
-            futures.add(executor.submit(() -> {
-                boolean isCalcul = true;
-                try{
-                    if(INSERT_ONLY){
-                        String checkSql = "SELECT COUNT(*) FROM best_in_out_single_strategy WHERE symbol = ?";
-                        int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
-                        if(count > 0){
-                            isCalcul = false;
-                            TradeUtils.log("calculCroisedStrategies: symbole "+symbol+" déjà en base, on passe");
+        try {
+            List<String> listeDbSymbols = this.getAllAssetSymbolsEligibleFromDb();
+            croisedProgress.totalConfigs = listeDbSymbols.size();
+            int nbThreads = Math.max(2, Runtime.getRuntime().availableProcessors());
+            java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(nbThreads);
+            List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+            for(String symbol : listeDbSymbols){
+                futures.add(executor.submit(() -> {
+                    boolean isCalcul = true;
+                    try{
+                        if(INSERT_ONLY){
+                            String checkSql = "SELECT COUNT(*) FROM best_in_out_single_strategy WHERE symbol = ?";
+                            int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
+                            if(count > 0){
+                                isCalcul = false;
+                                TradeUtils.log("calculCroisedStrategies: symbole "+symbol+" déjà en base, on passe");
+                            }
                         }
-                    }
-                    if(isCalcul){
-                        BestInOutStrategy result = optimseStrategy(symbol);
-                        this.saveBestInOutStrategy(symbol, result);
-                        nbInsert.incrementAndGet();
+                        if(isCalcul){
+                            BestInOutStrategy result = optimseStrategy(symbol);
+                            this.saveBestInOutStrategy(symbol, result);
+                            nbInsert.incrementAndGet();
+                        }
+                        // Incrémenter la progression à chaque symbole, calculé ou ignoré
+                        synchronized (croisedProgress) {
+                            croisedProgress.testedConfigs++;
+                            croisedProgress.lastUpdate = System.currentTimeMillis();
+                        }
                         try { Thread.sleep(200); } catch(Exception ignored) {}
+                    }catch(Exception e){
+                        error.incrementAndGet();
+                        TradeUtils.log("Erreur calcul("+symbol+") : " + e.getMessage());
                     }
-                }catch(Exception e){
-                    error.incrementAndGet();
-                    TradeUtils.log("Erreur calcul("+symbol+") : " + e.getMessage());
-                }
-            }));
+                }));
+            }
+            // Attendre la fin de tous les threads
+            for (java.util.concurrent.Future<?> f : futures) {
+                try { f.get(); } catch(Exception ignored) {}
+            }
+            executor.shutdown();
+            croisedProgress.status = "termine";
+            croisedProgress.endTime = System.currentTimeMillis();
+        } catch (Exception e) {
+            croisedProgress.status = "erreur";
+            croisedProgress.endTime = System.currentTimeMillis();
         }
-        // Attendre la fin de tous les threads
-        for (java.util.concurrent.Future<?> f : futures) {
-            try { f.get(); } catch(Exception ignored) {}
-        }
-        executor.shutdown();
-        TradeUtils.log("calculCroisedStrategies: total: "+listeDbSymbols.size()+", nbInsert: "+nbInsert.get()+", error: " + error.get());
+        TradeUtils.log("calculCroisedStrategies: total: "+getCroisedProgress().totalConfigs+", nbInsert: "+nbInsert.get()+", error: " + error.get());
     }
 
     /**

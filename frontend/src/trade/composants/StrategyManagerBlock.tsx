@@ -50,14 +50,6 @@ const StrategyManagerBlock: React.FC = () => {
           >
             {loading === 'Update Daily Value' ? <CircularProgress size={24} /> : 'Update Daily Value'}
           </Button>
-          <Button
-            variant="contained"
-            color="success"
-            onClick={() => callApi('/api/stra/strategies/calcul_croised_strategies', 'Calcule croised strategies')}
-            disabled={loading !== null}
-          >
-            {loading === 'Calcule croised strategies' ? <CircularProgress size={24} /> : 'Calcule croised strategies'}
-          </Button>
         </Stack>
         {success && <Alert severity="success" sx={{ mt: 2 }}>{success}</Alert>}
         {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
