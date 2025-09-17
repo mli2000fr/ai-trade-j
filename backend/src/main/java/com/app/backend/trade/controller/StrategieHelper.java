@@ -255,7 +255,7 @@ public class StrategieHelper {
     }
 
     public List<DailyValue> getBougiesTodayBySymbol(String symbol){
-        return this.alpacaService.getHistoricalBarsJsonDaysMin(symbol);
+        return this.alpacaService.getHistoricalBarsJsonDaysMin(symbol, TradeUtils.getDateToDayStart());
     }
 
     /**
