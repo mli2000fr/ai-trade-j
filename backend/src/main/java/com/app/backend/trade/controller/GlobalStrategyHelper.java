@@ -77,7 +77,7 @@ public class GlobalStrategyHelper {
     public List<SymbolPerso> getSymbolsPerso() {
         String sql = "SELECT * FROM trade_ai.symbol_perso;";
         return jdbcTemplate.query(sql, (rs, rowNum) -> SymbolPerso.builder()
-                        .symbols(rs.getString("symbols"))
+                        .symbols(rs.getString("symbols").replaceAll(" ", ""))
                 .name(rs.getString("name"))
                 .id(rs.getString("id"))
                 .build()

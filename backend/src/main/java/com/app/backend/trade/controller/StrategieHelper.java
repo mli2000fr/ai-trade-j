@@ -714,13 +714,16 @@ public class StrategieHelper {
         String orderBy = (sort == null || sort.isBlank()) ? "rendement_score" : sort;
         String searchSQL = "";
         if(search != null && !search.isEmpty()){
+            orderBy = "symbol ASC"; // en cas de recherche, on trie par symbole
             searchSQL = "symbol in ("+"'"+search.replaceAll(" ", "").replaceAll(",", "','")+"'"+") and";
+        }else{
+            orderBy += " DESC";
         }
         String sql = "SELECT * FROM best_in_out_single_strategy WHERE "+ searchSQL +" profit_factor <> 0 AND win_rate < 1";
         if (filtered != null && filtered) {
             sql += " AND fltred_out = false";
         }
-        sql += " ORDER BY " + orderBy + " DESC";
+        sql += " ORDER BY " + orderBy;
         if (limit != null && limit > 0) {
             sql += " LIMIT " + limit;
         }
