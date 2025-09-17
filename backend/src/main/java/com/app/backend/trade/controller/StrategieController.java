@@ -95,4 +95,12 @@ public class StrategieController {
     public ResponseEntity<StrategieHelper.CroisedProgress> getCroisedProgress() {
         return ResponseEntity.ok(strategieHelper.getCroisedProgress());
     }
+
+    /**
+     * Suivi du progrès de la mise à jour Daily Value
+     */
+    @GetMapping("/strategies/daily_value/progress")
+    public ResponseEntity<StrategieHelper.DailyValueUpdateProgress> getDailyValueProgress() {
+        return ResponseEntity.ok(strategieHelper.getDailyValueProgress());
+    }
 }

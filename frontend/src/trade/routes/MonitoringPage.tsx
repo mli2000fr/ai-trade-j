@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Box, Tabs, Tab } from '@mui/material';
 import CroisedStrategiesMonitorPage from './CroisedStrategiesMonitorPage';
 import MixStrategiesMonitorPage from './MixStrategiesMonitorPage';
+import UpdateDailyValueMonitorPage from './UpdateDailyValueMonitorPage';
 import TuningMonitorPage from './TuningMonitorPage';
 
 const MonitoringPage: React.FC = () => {
@@ -13,11 +14,13 @@ const MonitoringPage: React.FC = () => {
         <Tab label="Single Strategies" />
         <Tab label="Mix Strategies" />
         <Tab label="Tuning LSTM" />
+        <Tab label="Value Daily" />
       </Tabs>
       <Box sx={{ mt: 4 }}>
         {tab === 0 && <CroisedStrategiesMonitorPage />}
         {tab === 1 && <MixStrategiesMonitorPage />}
         {tab === 2 && <TuningMonitorPage />}
+        {tab === 3 && <UpdateDailyValueMonitorPage />}
       </Box>
     </Box>
   );

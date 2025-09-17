@@ -72,6 +72,23 @@ public class StrategieHelper {
     }
 
 
+    // Suivi du progrès de la mise à jour Daily Value
+    public static class DailyValueUpdateProgress {
+        public String status = ""; // en_cours, termine, erreur
+        public int updatedItems = 0;
+        public int totalItems = 0;
+        public long startTime = 0;
+        public long endTime = 0;
+        public long lastUpdate = 0;
+        public String name = "Update Daily Value";
+        public String symbol = "";
+    }
+    private DailyValueUpdateProgress dailyValueProgress = new DailyValueUpdateProgress();
+
+    public DailyValueUpdateProgress getDailyValueProgress() {
+        return dailyValueProgress;
+    }
+
     /**
      * Met à jour les valeurs journalières pour tous les symboles actifs en base.
      */
@@ -79,6 +96,14 @@ public class StrategieHelper {
         List<String> listeDbSymbols = this.getAllAssetSymbolsFromDb();
         int error = 0;
         int compteur = 0;
+        dailyValueProgress.status = "en_cours";
+        dailyValueProgress.updatedItems = 0;
+        dailyValueProgress.totalItems = listeDbSymbols.size();
+        dailyValueProgress.startTime = System.currentTimeMillis();
+        dailyValueProgress.endTime = 0;
+        dailyValueProgress.lastUpdate = dailyValueProgress.startTime;
+        dailyValueProgress.name = "Update Daily Value";
+        dailyValueProgress.symbol = "";
         for(String symbol : listeDbSymbols){
             try{
                 List<DailyValue> listeValues = this.updateDailyValue(symbol);
@@ -89,10 +114,16 @@ public class StrategieHelper {
             }catch(Exception e){
                 error++;
                 TradeUtils.log("Erreur updateDailyValue("+symbol+") : " + e.getMessage());
+                dailyValueProgress.status = "erreur";
             }
             compteur++;
+            dailyValueProgress.updatedItems = compteur;
+            dailyValueProgress.lastUpdate = System.currentTimeMillis();
+            dailyValueProgress.symbol = symbol;
             TradeUtils.log("updateDBDailyValuAllSymbols: compteur "+compteur);
         }
+        dailyValueProgress.status = error > 0 ? "erreur" : "termine";
+        dailyValueProgress.endTime = System.currentTimeMillis();
         TradeUtils.log("updateDBDailyValuAllSymbols: total "+listeDbSymbols.size()+", error" + error);
     }
 
