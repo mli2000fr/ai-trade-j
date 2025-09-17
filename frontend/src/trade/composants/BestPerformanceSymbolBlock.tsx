@@ -32,6 +32,7 @@ import {
   Stack,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import Tooltip from '@mui/material/Tooltip';
 
 interface PreditLstm {
     lastClose: number;
@@ -137,6 +138,7 @@ interface BestCombinationResult {
 }
 
 interface MixResultat {
+  name: string,
   single: BestInOutStrategy;
   mix: BestCombinationResult;
 }
@@ -503,7 +505,12 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         }}
                       >
                         <TableCell><input type="checkbox" checked={!!checkedRows[i]} onChange={e => setCheckedRows({...checkedRows, [i]: e.target.checked})} /></TableCell>
-                        <TableCell>{row.single.symbol}</TableCell>
+                        <TableCell>
+                          <Tooltip title={row?.name || row.single.symbol} arrow placement="top" enterDelay={200} leaveDelay={100}
+                            slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
+                            <span>{row.single.symbol}</span>
+                          </Tooltip>
+                        </TableCell>
                         <TableCell>{
                             lstmResults[row.single.symbol] === 'pending'
                               ? (<CircularProgress size={16} />)
