@@ -140,7 +140,13 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
     setBougiesError(null);
     try {
       // Bougies
-      const bougiesRes = await fetch(`/api/stra/getBougiesBySymbol?symbol=${symbol}&historique=250`);
+      let url;
+      if (isToday) {
+         url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(symbol)}&isToday=true`;
+       } else {
+         url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(symbol)}&historique=250`;
+       }
+      const bougiesRes = await fetch(url);
       const bougiesData = await bougiesRes.json();
       // infos
       const infosAction = await fetch(`/api/result/infosSymbol?symbol=${symbol}&historique=250`);
@@ -184,6 +190,33 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
         </TableBody>
       </Table>
     );
+  };
+
+  // Nouvelle fonction pour gérer le clic sur Today et appeler le backend
+  const handleSetIsToday = async (value: boolean) => {
+    setIsToday(value);
+    if (selectedSymbol) {
+      setBougiesError(null);
+      try {
+          let url;
+          if (value) {
+           url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.single.symbol)}&isToday=true`;
+         } else {
+           url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.single.symbol)}&historique=250`;
+         }
+        // Bougies : on ajoute le paramètre today si nécessaire
+        const bougiesRes = await fetch(url);
+        const bougiesData = await bougiesRes.json();
+        setSelected((prev: any) => ({
+          ...prev,
+          bougies: bougiesData
+        }));
+      } catch (e) {
+        setSelected(null);
+        setBougiesError('Erreur lors du chargement des données');
+      }
+      setBougiesLoading(false);
+    }
   };
 
   return (
@@ -351,7 +384,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
               bougiesError={bougiesError}
               onClose={() => setOpenDialog(false)}
               isToday={isToday}
-              setIsToday={setIsToday}
+              setIsToday={handleSetIsToday}
             />
     </Card>
   );
