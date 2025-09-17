@@ -45,16 +45,25 @@ const callApi = async (endpoint: string, label: string) => {
     } finally {
     }
   };
-  if (!progress) {
-      if(loading){
-              return (
-                  <Box p={4} textAlign="center">
-                      <CircularProgress size={40} />
-                  </Box>
-              );
-          }else{
-              return (
-                 <Box p={4} textAlign="center">
+
+  let percent = 0;
+  let statusColor: "info" | "success" | "error" | "primary" | "secondary" | "warning" | "default" = 'info';
+  let statusIcon = <HourglassTopIcon color="info" />;
+  let timeSinceUpdate = null;
+  let estimatedTotal = null;
+  let estimatedRemaining = null;
+
+    if(progress?.status !== undefined && progress?.status !== undefined){
+      percent = progress?.totalSymbols > 0 ? Math.round(100 * progress?.processedSymbols / progress?.totalSymbols) : 0;
+      statusColor = progress?.status === 'termine' ? 'success' : progress.status === 'erreur' ? 'error' : 'info';
+      statusIcon = progress?.status === 'termine' ? <CheckCircleIcon color="success" /> : progress?.status === 'erreur' ? <ErrorIcon color="error" /> : <HourglassTopIcon color="info" />;
+      timeSinceUpdate = progress?.lastUpdate ? Math.round((Date.now() - progress?.lastUpdate) / 1000) : null;
+      estimatedTotal = progress?.processedSymbols > 0 ? Math.round((Date.now() - progress?.startTime) / progress?.processedSymbols * progress?.totalSymbols) : null;
+      estimatedRemaining = estimatedTotal ? estimatedTotal - (Date.now() - progress.startTime) : null;
+    }
+
+return (<>
+                 {!progress && (<Box p={4} textAlign="center">
                        <Typography variant="h6" gutterBottom>Aucun calcul en cours</Typography>
                        <Button
                          variant="contained"
@@ -64,82 +73,75 @@ const callApi = async (endpoint: string, label: string) => {
                        >
                          {loading === 'Calcule mix strategies' ? <CircularProgress size={24} /> : 'Lancer le calcul mix strategies'}
                        </Button>
-                     </Box>
+                     </Box>)}
+               <Box p={4}>
+                    <Paper elevation={3} sx={{ p: 3, maxWidth: 600, margin: '0 auto' }}>
+                      <Box display="flex" alignItems="center" gap={1} mb={2}>
+                        {statusIcon}
+                        <Typography variant="h5" gutterBottom>Suivi du calcul des stratégies mixtes</Typography>
+                        {progress && progress.status !== undefined && (
+                          <Chip label={progress.status} color={statusColor} size="small" sx={{ ml: 2 }} />
+                        )}
+                      </Box>
+                      <Divider sx={{ mb: 2 }} />
+                      <Box mb={2}>
+                        <LinearProgress variant="determinate" value={percent} sx={{ height: 10, borderRadius: 5 }} />
+                        <Typography align="center" mt={1}>{percent}%</Typography>
+                      </Box>
+                      <Box display="flex" justifyContent="space-between" mb={2}>
+                        <Typography>Progression :</Typography>
+                         {progress && progress.processedSymbols !== undefined && (
+                             <Typography><b>{progress.processedSymbols} / {progress.totalSymbols}</b></Typography>
+                         )}
+                        </Box>
+                      <Box display="flex" justifyContent="space-between" mb={2}>
+                        <Typography>Inserts réussis :</Typography>
+                        {progress && progress.nbInsert !== undefined && (
+                            <Typography color="success.main"><b>{progress.nbInsert}</b></Typography>
+                        )}
+                      </Box>
+                      <Box display="flex" justifyContent="space-between" mb={2}>
+                        <Typography>Erreurs :</Typography>
+                        {progress && progress.error !== undefined && (
+                          <Chip label={progress.error} color={progress.error > 0 ? 'error' : 'default'} size="small" />
+                        )}
+                      </Box>
+                      <Box display="flex" justifyContent="space-between" mb={2}>
+                        <Typography>Dernier symbole traité :</Typography>
+                        {progress && progress.lastSymbol !== undefined && (
+                          <Typography><b>{progress.lastSymbol || '-'}</b></Typography>
+                        )}
+                      </Box>
+                      <Box display="flex" justifyContent="space-between" mb={2}>
+                        <Typography>Début :</Typography>
+                        {progress && progress.lastSymbol !== undefined && (
+                          <Typography>{progress.lastSymbol ? new Date(progress.startTime).toLocaleString() : '-'}</Typography>
+                        )}
+                      </Box>
+                      <Box display="flex" justifyContent="space-between" mb={2}>
+                        <Typography>Fin :</Typography>
+                        {progress && progress.endTime !== undefined && (
+                          <Typography>{progress.endTime ? new Date(progress.endTime).toLocaleString() : '-'}</Typography>
+                        )}
+                      </Box>
+                      <Box display="flex" justifyContent="space-between" mb={2}>
+                        <Typography>Durée :</Typography>
+                        {progress && progress.startTime !== undefined && (
+                          <Typography>{formatDuration(progress.startTime, progress.endTime)}</Typography>
+                        )}
+                      </Box>
+                      <Box display="flex" justifyContent="space-between" mb={2}>
+                        <Typography>Dernière mise à jour :</Typography>
+                        <Typography>{timeSinceUpdate !== null ? `${timeSinceUpdate}s` : '-'}</Typography>
+                      </Box>
+                      <Box display="flex" justifyContent="space-between" mb={2}>
+                        <Typography>Estimation temps restant :</Typography>
+                        <Typography>{estimatedRemaining && estimatedRemaining > 0 ? formatDuration(0, estimatedRemaining) : '-'}</Typography>
+                      </Box>
+                    </Paper>
+                  </Box>
+                 </>
               );
-          }
-
-  }
-
-  const percent = progress.totalSymbols > 0 ? Math.round(100 * progress.processedSymbols / progress.totalSymbols) : 0;
-  const statusColor = progress.status === 'termine' ? 'success' : progress.status === 'erreur' ? 'error' : 'info';
-  const statusIcon = progress.status === 'termine' ? <CheckCircleIcon color="success" /> : progress.status === 'erreur' ? <ErrorIcon color="error" /> : <HourglassTopIcon color="info" />;
-  const timeSinceUpdate = progress.lastUpdate ? Math.round((Date.now() - progress.lastUpdate) / 1000) : null;
-  const estimatedTotal = progress.processedSymbols > 0 ? Math.round((Date.now() - progress.startTime) / progress.processedSymbols * progress.totalSymbols) : null;
-  const estimatedRemaining = estimatedTotal ? estimatedTotal - (Date.now() - progress.startTime) : null;
-
-  return (
-    <Box p={4}>
-      <Paper elevation={3} sx={{ p: 3, maxWidth: 600, margin: '0 auto' }}>
-        <Box display="flex" alignItems="center" gap={1} mb={2}>
-          {statusIcon}
-          <Typography variant="h5" gutterBottom>Suivi du calcul des stratégies mixtes</Typography>
-          <Chip label={progress.status} color={statusColor} size="small" sx={{ ml: 2 }} />
-        </Box>
-        <Divider sx={{ mb: 2 }} />
-        <Box mb={2}>
-          <LinearProgress variant="determinate" value={percent} sx={{ height: 10, borderRadius: 5 }} />
-          <Typography align="center" mt={1}>{percent}%</Typography>
-        </Box>
-        <Box display="flex" justifyContent="space-between" mb={2}>
-          <Typography>Progression :</Typography>
-          <Typography><b>{progress.processedSymbols} / {progress.totalSymbols}</b></Typography>
-        </Box>
-        <Box display="flex" justifyContent="space-between" mb={2}>
-          <Typography>Inserts réussis :</Typography>
-          <Typography color="success.main"><b>{progress.nbInsert}</b></Typography>
-        </Box>
-        <Box display="flex" justifyContent="space-between" mb={2}>
-          <Typography>Erreurs :</Typography>
-          <Chip label={progress.error} color={progress.error > 0 ? 'error' : 'default'} size="small" />
-        </Box>
-        <Box display="flex" justifyContent="space-between" mb={2}>
-          <Typography>Dernier symbole traité :</Typography>
-          <Typography><b>{progress.lastSymbol || '-'}</b></Typography>
-        </Box>
-        <Box display="flex" justifyContent="space-between" mb={2}>
-          <Typography>Début :</Typography>
-          <Typography>{progress.startTime ? new Date(progress.startTime).toLocaleString() : '-'}</Typography>
-        </Box>
-        <Box display="flex" justifyContent="space-between" mb={2}>
-          <Typography>Fin :</Typography>
-          <Typography>{progress.endTime ? new Date(progress.endTime).toLocaleString() : '-'}</Typography>
-        </Box>
-        <Box display="flex" justifyContent="space-between" mb={2}>
-          <Typography>Durée :</Typography>
-          <Typography>{formatDuration(progress.startTime, progress.endTime)}</Typography>
-        </Box>
-        <Box display="flex" justifyContent="space-between" mb={2}>
-          <Typography>Dernière mise à jour :</Typography>
-          <Typography>{timeSinceUpdate !== null ? `${timeSinceUpdate}s` : '-'}</Typography>
-        </Box>
-        <Box display="flex" justifyContent="space-between" mb={2}>
-          <Typography>Estimation temps restant :</Typography>
-          <Typography>{estimatedRemaining && estimatedRemaining > 0 ? formatDuration(0, estimatedRemaining) : '-'}</Typography>
-        </Box>
-        {(progress.status === 'termine' || progress.status === 'erreur') && (
-          <Button
-            variant="contained"
-            color="info"
-            onClick={() => callApi('/api/best-combination/calcul', 'Relancer le calcul')}
-            sx={{ mt: 2 }}
-          >
-            {loading === 'Relancer le calcul' ? <CircularProgress size={24} /> : 'Relancer le calcul'}
-          </Button>
-        )}
-      </Paper>
-    </Box>
-  );
 };
 
 export default MixStrategiesMonitorPage;
-
