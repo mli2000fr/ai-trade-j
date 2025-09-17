@@ -105,6 +105,10 @@ public class DayTradeHelper {
             if (lastBatchDateTime.toLocalDate().isEqual(lastTradingDay) || lastBatchDateTime.toLocalDate().isAfter(lastTradingDay)) {
                 break;
             }
+            if(compteur > 15000) {
+                logger.warn("Trop de bougies insérées pour {}: {}, arrêt du processus pour éviter surcharge", symbol, compteur);
+                break;
+            }
             currentStart = lastBatchDateTime.plusMinutes(1).toString().replace("T", "T") + ":00Z";
             try {
                 Thread.sleep(200); // Pause pour éviter de surcharger l'API
