@@ -61,7 +61,6 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
     <DialogActions>
       <Button onClick={onClose}>Fermer</Button>
     </DialogActions>
-    <DialogTitle>Détails de la performance</DialogTitle>
     {bougiesLoading ? (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
         <CircularProgress size={60} />

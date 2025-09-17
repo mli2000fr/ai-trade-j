@@ -3,6 +3,7 @@ package com.app.backend.trade.controller;
 
 import com.app.backend.trade.model.BestCombinationResult;
 import com.app.backend.trade.model.MixResultat;
+import com.app.backend.trade.model.SymbolPerso;
 import com.app.backend.trade.strategy.BestInOutStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -71,6 +72,16 @@ public class GlobalStrategyHelper {
                 .single(single == null ? BestInOutStrategy.empty() : single)
                 .mix(mix == null ? BestCombinationResult.empty() : mix)
                 .build();
+    }
+
+    public List<SymbolPerso> getSymbolsPerso() {
+        String sql = "SELECT symbol, name FROM trade_ai.assets_perso ORDER BY symbol;";
+        return jdbcTemplate.query(sql, (rs, rowNum) -> SymbolPerso.builder()
+                        .symbols(rs.getString("symbols"))
+                .name(rs.getString("name"))
+                .id(rs.getString("id"))
+                .build()
+        );
     }
 
 

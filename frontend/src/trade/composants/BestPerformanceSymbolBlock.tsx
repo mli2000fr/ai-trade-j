@@ -164,13 +164,13 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const fetchData = (searchModeParam = false, searchValueParam = '') => {
     setLoading(true);
     setError(null);
-    let url = `/api/result/global?limit=${limit}`;
+    let url = `/api/result/global?`;
     if (searchModeParam && searchValueParam.trim()) {
       url += `&search=${encodeURIComponent(searchValueParam.trim())}`;
     } else {
       const type = sort.split(':')[0];
       const tri = sort.split(':')[1];
-      url += `&type=${type}&sort=${tri}`;
+      url += `limit=${limit}&type=${type}&sort=${tri}`;
       if (showOnlyNonFiltered) {
         url += `&filtered=true`;
       }

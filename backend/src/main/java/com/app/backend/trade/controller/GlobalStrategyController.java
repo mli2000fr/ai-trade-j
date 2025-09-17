@@ -34,6 +34,11 @@ public class GlobalStrategyController {
     }
 
 
+    @GetMapping("/symbol_pero")
+    public ResponseEntity<Boolean> getSymbolsPerso() {
+        globalStrategyHelper.getSymbolsPerso();
+        return ResponseEntity.ok(true);
+    }
 
 
 
