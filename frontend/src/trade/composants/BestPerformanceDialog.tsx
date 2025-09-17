@@ -58,6 +58,9 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
   onClose,
 }) => (
   <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth PaperProps={{ sx: { maxWidth: '60vw' } }}>
+    <DialogActions>
+      <Button onClick={onClose}>Fermer</Button>
+    </DialogActions>
     <DialogTitle>Détails de la performance</DialogTitle>
     {bougiesLoading ? (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
@@ -251,9 +254,6 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
         )}
       </DialogContent>
     )}
-    <DialogActions>
-      <Button onClick={onClose}>Fermer</Button>
-    </DialogActions>
   </Dialog>
 );
 

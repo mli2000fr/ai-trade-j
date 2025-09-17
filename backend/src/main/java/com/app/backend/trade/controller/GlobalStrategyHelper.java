@@ -5,6 +5,7 @@ import com.app.backend.trade.model.BestCombinationResult;
 import com.app.backend.trade.model.MixResultat;
 import com.app.backend.trade.strategy.BestInOutStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 
 import java.util.ArrayList;
@@ -16,6 +17,9 @@ public class GlobalStrategyHelper {
 
     @Autowired
     private StrategieHelper strategieHelper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private BestCombinationStrategyHelper bestCombinationStrategyHelper;
@@ -70,4 +74,40 @@ public class GlobalStrategyHelper {
     }
 
 
+    public void rattrapage(){
+        String sql = "SELECT symbol FROM trade_ai.best_in_out_single_strategy;";
+        List<String> listSymbol =  jdbcTemplate.queryForList(sql, String.class);
+
+        for(String symbol : listSymbol) {
+            BestInOutStrategy best = strategieHelper.getBestInOutStrategy(symbol);
+            String updateSql = """
+                        UPDATE best_in_out_single_strategy SET
+                            rendement_check = ?,
+                            score_swing_trade_check = ?
+                        WHERE symbol = ?
+                    """;
+            jdbcTemplate.update(updateSql,
+                    best.check.rendement,
+                    best.check.scoreSwingTrade,
+                    symbol
+            );
+        }
+
+        String sqlM = "SELECT symbol FROM trade_ai.best_in_out_mix_strategy;";
+        List<String> listSymbolM =  jdbcTemplate.queryForList(sqlM, String.class);
+        for(String symbol : listSymbolM) {
+            BestCombinationResult mix = bestCombinationStrategyHelper.getBestCombinationResult(symbol);
+            String updateSqlM = """
+                        UPDATE best_in_out_mix_strategy SET
+                            rendement_check = ?,
+                            score_swing_trade_check = ?
+                        WHERE symbol = ?
+                    """;
+            jdbcTemplate.update(updateSqlM,
+                    mix.check.rendement,
+                    mix.check.scoreSwingTrade,
+                    symbol
+            );
+        }
+    }
 }

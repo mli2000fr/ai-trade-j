@@ -3,6 +3,7 @@ package com.app.backend.trade.controller;
 
 import com.app.backend.trade.model.MixResultat;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -30,6 +31,16 @@ public class GlobalStrategyController {
     @GetMapping("/infosSymbol")
     public MixResultat getInfosAction(@RequestParam(value = "symbol", required = true) String symbol) {
         return globalStrategyHelper.getInfos(symbol);
+    }
+
+
+
+
+
+    @GetMapping("/db/ratrapage")
+    public ResponseEntity<Boolean> rattrapage() {
+        globalStrategyHelper.rattrapage();
+        return ResponseEntity.ok(true);
     }
 
 }

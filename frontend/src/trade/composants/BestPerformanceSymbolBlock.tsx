@@ -323,12 +323,16 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                 >
                   <MenuItem value="single:rendement_score">Single - Score Rendement</MenuItem>
                   <MenuItem value="single:rendement">Single - Rendement</MenuItem>
+                  <MenuItem value="single:rendement_check">Single - Rendement Check</MenuItem>
                   <MenuItem value="single:rendement_sum">Single - Rendement Sum</MenuItem>
                   <MenuItem value="single:score_swing_trade">Single - Score Swing Trade</MenuItem>
+                  <MenuItem value="single:score_swing_trade_check">Single - Score Swing Trade Check</MenuItem>
                   <MenuItem value="mix:rendement_score">Mix - Score Rendement</MenuItem>
                   <MenuItem value="mix:rendement">Mix - Rendement</MenuItem>
+                  <MenuItem value="mix:rendement_check">Mix - Rendement Check</MenuItem>
                   <MenuItem value="mix:rendement_sum">Mix - Rendement Sum</MenuItem>
                   <MenuItem value="mix:score_swing_trade">Mix - Score Swing Trade</MenuItem>
+                  <MenuItem value="mix:score_swing_trade_check">Mix - Score Swing Trade Check</MenuItem>
                 </Select>
               </FormControl>
               <FormControlLabel
@@ -417,8 +421,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                     <TableCell colSpan={4} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', fontSize: '1rem' }}>LSDM</TableCell>
-                    <TableCell colSpan={6} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
-                    <TableCell colSpan={6} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
+                    <TableCell colSpan={5} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
+                    <TableCell colSpan={5} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                   </TableRow>
                   <TableRow>
@@ -429,16 +433,14 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 120, width: 130, maxWidth: 300  }}>Prédit Indice</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 180, width: 180, maxWidth: 300  }}>Position</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement check</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 130, maxWidth: 300 }}>Rendement (model|check)</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Score Rendement</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Score Swing Trade</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 130, maxWidth: 300 }}>Score Swing Trade (model|check)</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Durée moyenne trade</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement check</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300  }}>Rendement</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Rendement</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Swing Trade</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300  }}>Score Swing Trade</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Durée moyenne trade</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Détails</TableCell>
                   </TableRow>
@@ -507,10 +509,9 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                                     : indice.type + ' (' + indice.dateStr + ')')
                                 : '-')
                         }</TableCell>
-                        <TableCell>{(row.single.result.rendement * 100).toFixed(2)} %</TableCell>
-                        <TableCell>{(row.single.check.rendement * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.single.result.rendement * 100).toFixed(2)}% | {(row.single.check.rendement * 100).toFixed(2)}%</TableCell>
                         <TableCell>{(row.single.rendementScore * 100).toFixed(2)}</TableCell>
-                        <TableCell>{row.single.result.scoreSwingTrade !== undefined ? (row.single.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
+                        <TableCell>{row.single.result.scoreSwingTrade !== undefined ? (row.single.result.scoreSwingTrade).toFixed(2) : '-'} | {row.single.check.scoreSwingTrade !== undefined ? (row.single.check.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
                         <TableCell>{row.single.result.avgTradeBars !== undefined ? row.single.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
                         <TableCell>{
                           indiceMixRaw === 'pending'
@@ -521,10 +522,9 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                                   : indiceMix.type + ' (' + indiceMix.dateStr + ')')
                               : '-'
                         }</TableCell>
-                        <TableCell>{(row.mix.result.rendement * 100).toFixed(2)} %</TableCell>
-                        <TableCell>{(row.mix.check.rendement * 100).toFixed(2)} %</TableCell>
+                        <TableCell>{(row.mix.result.rendement * 100).toFixed(2)}% | {(row.mix.check.rendement * 100).toFixed(2)}%</TableCell>
                         <TableCell>{(row.mix.rendementScore * 100).toFixed(2)}</TableCell>
-                        <TableCell>{row.mix.result.scoreSwingTrade !== undefined ? (row.mix.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
+                        <TableCell>{row.mix.result.scoreSwingTrade !== undefined ? (row.mix.result.scoreSwingTrade).toFixed(2) : '-'} | {row.mix.check.scoreSwingTrade !== undefined ? (row.mix.check.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
                         <TableCell>{row.mix.result.avgTradeBars !== undefined ? row.mix.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
                         <TableCell><Button size="small" variant="outlined" onClick={() => { setSelected(row); setOpen(true); }}>Détails</Button></TableCell>
                       </TableRow>
