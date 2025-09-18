@@ -2,6 +2,7 @@ package com.app.backend.trade.strategy;
 
 import com.app.backend.trade.controller.StrategieHelper;
 import com.app.backend.trade.model.ComboResult;
+import com.app.backend.trade.model.MarketPhase;
 import com.app.backend.trade.model.RiskResult;
 import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
@@ -1399,6 +1400,46 @@ public class StrategieBackTest {
                     ", rsiPeriod=" + rsiPeriod +
                     ", performance=" + performance +
                     '}';
+        }
+    }
+
+    //Entre 40 et 80 bougies, on capte les mouvements moyens et les cassures typiques du swing trade.
+    public MarketPhase detectMarketPhase(BarSeries series) {
+        if (series == null || series.getBarCount() < 20) return MarketPhase.RANGE;
+        int n = series.getBarCount();
+        double[] closes = new double[n];
+        for (int i = 0; i < n; i++) closes[i] = series.getBar(i).getClosePrice().doubleValue();
+        double min = closes[0], max = closes[0], sum = 0.0;
+        for (double v : closes) {
+            if (v < min) min = v;
+            if (v > max) max = v;
+            sum += v;
+        }
+        double mean = sum / n;
+        double range = max - min;
+        double std = 0.0;
+        for (double v : closes) std += (v - mean) * (v - mean);
+        std = Math.sqrt(std / n);
+        double lastClose = closes[n-1];
+        double firstClose = closes[0];
+        double trend = lastClose - firstClose;
+        // Ratio range/mean pour détecter la volatilité
+        double rangeRatio = range / mean;
+        // Ratio trend/range pour détecter la direction
+        double trendRatio = Math.abs(trend) / (range == 0 ? 1.0 : range);
+        // Critères
+        if (rangeRatio < 0.03 || std < mean * 0.02) {
+            // Faible volatilité, marché en range
+            return MarketPhase.RANGE;
+        } else if (trendRatio > 0.7 && Math.abs(trend) > std * 1.5) {
+            // Tendance forte
+            return MarketPhase.TENDANCE;
+        } else if (Math.abs(lastClose - max) < std * 0.5 || Math.abs(lastClose - min) < std * 0.5) {
+            // Cassure récente (breakout)
+            return MarketPhase.BREAKOUT;
+        } else {
+            // Par défaut, range si volatilité faible, tendance sinon
+            return (trendRatio > 0.4) ? MarketPhase.TENDANCE : MarketPhase.RANGE;
         }
     }
 
