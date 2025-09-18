@@ -586,7 +586,7 @@ public class BestCombinationStrategyHelper {
 
 
     public List<String> getAllAssetSymbolsEligibleFromDb() {
-        String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true ORDER BY symbol ASC;";
+        String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true and filtre_out = false ORDER BY symbol ASC;";
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
@@ -1012,7 +1012,7 @@ public class BestCombinationStrategyHelper {
     public List<BestCombinationResult> getBestPerfActions(Integer limit, String sort, Boolean filtered){
         String orderBy = (sort == null || sort.isBlank()) ? "rendement_score" : sort;
 
-        String sql = "SELECT s.*, a.name FROM best_in_out_mix_strategy s JOIN alpaca_asset a ON s.symbol = a.symbol WHERE s.profit_factor <> 0 AND s.max_drawdown <> 0 AND s.win_rate < 1";
+        String sql = "SELECT s.*, a.name FROM best_in_out_mix_strategy s JOIN alpaca_asset a ON s.symbol = a.symbol WHERE s.profit_factor <> 0 AND s.max_drawdown <> 0 AND s.win_rate < 1 and filtre_out = false";
         if (filtered != null && filtered) {
             sql += " AND fltred_out = false";
         }

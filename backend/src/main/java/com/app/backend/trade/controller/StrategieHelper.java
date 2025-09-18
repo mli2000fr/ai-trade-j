@@ -239,7 +239,7 @@ public class StrategieHelper {
      * @return liste de symboles
      */
     public List<String> getAllAssetSymbolsEligibleFromDb() {
-        String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true ORDER BY symbol ASC;";
+        String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true and filtre_out = false ORDER BY symbol ASC;";
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
@@ -479,7 +479,14 @@ public class StrategieHelper {
                         }
                         if(isCalcul){
                             BestInOutStrategy result = optimseStrategy(symbol);
-                            this.saveBestInOutStrategy(symbol, result);
+                            if(result == null) {
+                                error.incrementAndGet();
+                                //update assert filtre_out false
+                                String updateSql = "UPDATE alpaca_asset SET filtre_out = TRUE WHERE symbol = ?";
+                                jdbcTemplate.update(updateSql, symbol);
+                            }else{
+                                this.saveBestInOutStrategy(symbol, result);
+                            }
                             nbInsert.incrementAndGet();
                         }
                         // Incrémenter la progression à chaque symbole, calculé ou ignoré
@@ -733,7 +740,7 @@ public class StrategieHelper {
         }else{
             orderBy = "s." + orderBy + " DESC";
         }
-        String sql = "SELECT s.*, a.name FROM best_in_out_single_strategy s JOIN alpaca_asset a ON s.symbol = a.symbol WHERE "+ searchSQL +" s.profit_factor <> 0 AND s.win_rate < 1";
+        String sql = "SELECT s.*, a.name FROM best_in_out_single_strategy s JOIN alpaca_asset a ON s.symbol = a.symbol WHERE "+ searchSQL +" s.profit_factor <> 0 AND s.win_rate < 1 and filtre_out = false";
         if (filtered != null && filtered) {
             sql += " AND fltred_out = false";
         }
@@ -877,8 +884,8 @@ public class StrategieHelper {
         StrategyFilterConfig filterConfig = new StrategyFilterConfig();
         // Utilisation du swingParams de la classe (modifiable si besoin)
         WalkForwardResultPro walkForwardResultPro =  this.optimseStrategy(series, filterConfig, swingParams);
-        if (walkForwardResultPro == null) {
-            return BestInOutStrategy.empty(symbol);
+        if (walkForwardResultPro == null || walkForwardResultPro.getBestCombo() == null) {
+            return null;
         }
         double rendementSum = walkForwardResultPro.getBestCombo().getResult().getRendement() + walkForwardResultPro.getCheck().getRendement();
         double rendementDiff = walkForwardResultPro.getBestCombo().getResult().getRendement() - walkForwardResultPro.getCheck().getRendement();
