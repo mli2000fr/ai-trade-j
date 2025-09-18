@@ -922,6 +922,7 @@ public class StrategieHelper {
         int totalBars = series.getBarCount();
         int kFolds = 3; // 3 folds fixes
         List<List<ComboResult>> foldsResults = new ArrayList<>();
+        List<List<ComboResult>> foldsAllCombos = new ArrayList<>();
         List<Double> trainPerformances = new ArrayList<>();
         List<Double> testPerformances = new ArrayList<>();
         // Définition des indices pour chaque fold
@@ -986,7 +987,7 @@ public class StrategieHelper {
                 new Object[]{"Mean Reversion", bestMeanReversion}
             );
             List<ComboResult> foldResults = new ArrayList<>();
-            ComboResult bestCombo = null;
+            List<ComboResult> foldAllCombos = new ArrayList<>();
             double bestTrainPerf = Double.NEGATIVE_INFINITY;
             for (Object[] entry : strategies) {
                 for (Object[] exit : strategies) {
@@ -1007,14 +1008,15 @@ public class StrategieHelper {
                     // Calcul du ratio overfit pour ce combo
                     double overfitRatioCombo = result.getRendement() / (trainResult.getRendement() == 0.0 ? 1.0 : trainResult.getRendement());
                     boolean isOverfitCombo = (overfitRatioCombo < 0.7 || overfitRatioCombo > 1.3);
+                    ComboResult combo = ComboResult.builder()
+                            .entryName(entryName)
+                            .entryParams(entryParams)
+                            .exitName(exitName)
+                            .exitParams(exitParams)
+                            .result(result)
+                            .build();
+                    foldAllCombos.add(combo);
                     if(!isOverfitCombo){
-                        ComboResult combo = ComboResult.builder()
-                                .entryName(entryName)
-                                .entryParams(entryParams)
-                                .exitName(exitName)
-                                .exitParams(exitParams)
-                                .result(result)
-                                .build();
                         foldResults.add(combo);
                     }
                 }
@@ -1028,10 +1030,13 @@ public class StrategieHelper {
             }
             testPerformances.add(bestTestPerf);
             foldsResults.add(foldResults);
+            foldsAllCombos.add(foldAllCombos);
         }
         // Agrégation des résultats de tous les folds
         List<ComboResult> allResults = new ArrayList<>();
-        for (List<ComboResult> fold : foldsResults) allResults.addAll(fold);
+        for (List<ComboResult> fold : foldsAllCombos) allResults.addAll(fold);
+        List<ComboResult> filteredResults = new ArrayList<>();
+        for (List<ComboResult> fold : foldsResults) filteredResults.addAll(fold);
         // Calcul des moyennes/statistiques pour le builder
         double sumRendement = 0.0, sumDrawdown = 0.0, sumWinRate = 0.0, sumProfitFactor = 0.0, sumTradeDuration = 0.0;
         int totalTrades = 0;
@@ -1059,10 +1064,33 @@ public class StrategieHelper {
         List<ComboResult> scoredCombos = strategieBackTest.computeSwingTradeScores(allResults, weights);
         ComboResult bestScoreResult = null;
         double maxScore = Double.NEGATIVE_INFINITY;
-        for (ComboResult scoreResult : scoredCombos) {
-            if (scoreResult.getResult().getScoreSwingTrade() > maxScore) {
-                maxScore = scoreResult.getResult().getScoreSwingTrade();
-                bestScoreResult = scoreResult;
+        // Sélection hybride/fallback
+        if (!filteredResults.isEmpty()) {
+            // Sélectionne le meilleur combo non-overfit
+            for (ComboResult scoreResult : scoredCombos) {
+                if (filteredResults.contains(scoreResult)) {
+                    if (scoreResult.getResult().getScoreSwingTrade() > maxScore) {
+                        maxScore = scoreResult.getResult().getScoreSwingTrade();
+                        bestScoreResult = scoreResult;
+                    }
+                }
+            }
+        } else {
+            // Fallback: sélectionne le combo dont le ratio overfit est le plus proche de 1
+            double minOverfitDist = Double.POSITIVE_INFINITY;
+            for (ComboResult scoreResult : scoredCombos) {
+                RiskResult res = scoreResult.getResult();
+                double trainRendement = res.getRendement();
+                double overfitRatioCombo = 1.0;
+                if (trainRendement != 0.0) {
+                    overfitRatioCombo = trainRendement / trainRendement; // ratio = 1 (si pas d'info train/test, on met 1)
+                }
+                // Si tu stockes le ratio dans ComboResult, utilise-le ici
+                double dist = Math.abs(overfitRatioCombo - 1.0);
+                if (dist < minOverfitDist) {
+                    minOverfitDist = dist;
+                    bestScoreResult = scoreResult;
+                }
             }
         }
         //fait un check final
