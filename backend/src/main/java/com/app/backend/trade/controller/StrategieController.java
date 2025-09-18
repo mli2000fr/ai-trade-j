@@ -37,7 +37,11 @@ public class StrategieController {
         strategieHelper.updateDBDailyValuAllSymbols();
         return ResponseEntity.ok(true);
     }
-
+    @GetMapping("/strategies/db/update-daily-valu-pre")
+    public ResponseEntity<Boolean> updateDBDailyValuePre() {
+        strategieHelper.updateDBDailyValuAllSymbolsPre();
+        return ResponseEntity.ok(true);
+    }
     /**
      * Calcule les stratégies croisées sur l'ensemble des symboles.
      * @return true si le calcul s'est déroulé correctement

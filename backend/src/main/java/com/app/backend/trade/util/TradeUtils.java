@@ -43,6 +43,9 @@ public class TradeUtils {
     public static String getDateToDayEnd() {
         return LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + "T23:59:59Z";
     }
+    public static String getDateString(LocalDate date) {
+        return date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+    }
 
     /**
      * Lit le contenu d'un fichier de ressources et le retourne sous forme de String.

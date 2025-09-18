@@ -74,7 +74,7 @@ public class DayTradeHelper {
         }
         int compteur = 0;
         String currentStart = dateStart;
-        while (true) {
+        while (compteur < 15000) {
             // S'assurer que currentStart est bien au format RFC3339
             if (!currentStart.endsWith("Z")) {
                 if (currentStart.length() == 16) { // YYYY-MM-DDTHH:mm

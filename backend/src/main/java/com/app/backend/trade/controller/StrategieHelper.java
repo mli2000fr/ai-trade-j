@@ -106,11 +106,9 @@ public class StrategieHelper {
         dailyValueProgress.symbol = "";
         for(String symbol : listeDbSymbols){
             try{
-                List<DailyValue> listeValues = this.updateDailyValue(symbol);
-                for(DailyValue dv : listeValues){
-                    this.insertDailyValue(symbol, dv);
-                }
-                Thread.sleep(200);
+                int nbInsertion = this.updateDailyValue(symbol);
+                TradeUtils.log("updateDailyValue("+symbol+") : " + nbInsertion);
+                Thread.sleep(5000);
             }catch(Exception e){
                 error++;
                 TradeUtils.log("Erreur updateDailyValue("+symbol+") : " + e.getMessage());
@@ -316,7 +314,7 @@ public class StrategieHelper {
      * @param symbol symbole
      * @return liste de DailyValue ajoutées
      */
-    public  List<DailyValue> updateDailyValue(String symbol) {
+    public int updateDailyValue(String symbol) {
 
         // 1. Chercher la date la plus récente pour ce symbol dans la table daily_value
         String sql = "SELECT MAX(date) FROM daily_value WHERE symbol = ?";
@@ -348,9 +346,90 @@ public class StrategieHelper {
             dateStart = lastKnown.plusDays(1).toString(); // format YYYY-MM-DD
         }
         if (!isUpToDate) {
-            return this.alpacaService.getHistoricalBars(symbol, dateStart, null);
+            java.time.LocalDate start = java.time.LocalDate.parse(dateStart);
+            java.time.LocalDate end = TradeUtils.getLastTradingDayBefore(today);
+            int compteur = 0;
+            while (!start.isAfter(end) && compteur < 3000) {
+                java.time.LocalDate trancheEnd = start.plusDays(999);
+                if (trancheEnd.isAfter(end)) {
+                    trancheEnd = end;
+                }
+                List<DailyValue> values = this.alpacaService.getHistoricalBars(symbol, start.toString(), trancheEnd.toString());
+                if (values != null && !values.isEmpty()) {
+                    for(DailyValue dv : values){
+                        this.insertDailyValue(symbol, dv);
+                        compteur++;
+                    }
+                }
+                start = trancheEnd.plusDays(1);
+            }
+            return compteur;
         }
-        return  new ArrayList<>();
+        return 0;
+    }
+
+    public void updateDBDailyValuAllSymbolsPre(){
+        List<String> listeDbSymbols = this.getAllAssetSymbolsFromDb();
+
+        for(String symbol : listeDbSymbols){
+            try{
+                int compteur = updateDailyValuePre(symbol);
+                Thread.sleep(5000);
+                logger.info("updateDBDailyValuAllSymbolsPre {} - {}", symbol, compteur);
+            }catch(Exception e){
+                TradeUtils.log("Erreur updateDBDailyValuAllSymbolsPre("+symbol+") : " + e.getMessage());
+            }
+        }
+    }
+    public int updateDailyValuePre(String symbol) {
+
+        // 1. Chercher la date la plus récente pour ce symbol dans la table daily_value
+        String sql = "SELECT MIN(date) FROM daily_value WHERE symbol = ?";
+        java.sql.Date minDate = null;
+        try {
+            minDate = jdbcTemplate.query(sql, ps -> ps.setString(1, symbol), rs -> {
+                if (rs.next()) {
+                    return rs.getDate(1);
+                }
+                return null;
+            });
+        } catch (Exception e) {
+            logger.warn("Aucune date trouvée pour le symbole {} dans daily_value ou erreur SQL: {}", symbol, e.getMessage());
+        }
+        //date de début
+        LocalDate dateStart = LocalDate.now().minusDays(TradeConstant.HISTORIQUE_DAILY_VALUE);
+        java.time.LocalDate minDateKnown = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
+        if (minDate != null) {
+            minDateKnown = minDate.toLocalDate();
+        }
+        java.time.LocalDate minDateTradingDay = TradeUtils.getLastTradingDayBefore(minDateKnown);
+
+        logger.info("updateDailyValuePre start {} - {}", TradeUtils.getDateString(dateStart), TradeUtils.getDateString(minDateTradingDay));
+        if (dateStart.isBefore(minDateTradingDay)) {
+            int compteur = 0;
+            LocalDate currentStart = dateStart;
+            while (currentStart.isBefore(minDateTradingDay)) {
+                // Calculer la date de fin (max 1000 jours ou minDateTradingDay)
+                LocalDate currentEnd = currentStart.plusDays(999);
+                if (currentEnd.isAfter(minDateTradingDay)) {
+                    currentEnd = minDateTradingDay;
+                }
+                logger.info("updateDailyValuePre {} - {}", TradeUtils.getDateString(currentStart), TradeUtils.getDateString(currentEnd));
+                List<DailyValue> values = this.alpacaService.getHistoricalBars(symbol, TradeUtils.getDateString(currentStart), TradeUtils.getDateString(currentEnd));
+                if (values != null && !values.isEmpty()) {
+                    for(DailyValue dv : values){
+                        this.insertDailyValue(symbol, dv);
+                        compteur++;
+                    }
+                }
+                // Passer au prochain intervalle
+                currentStart = currentEnd.plusDays(1);
+            }
+            logger.info("updateDailyValuePre fin {} - {}", TradeUtils.getDateString(dateStart), TradeUtils.getDateString(currentStart));
+            return compteur;
+        }else{
+            return  0;
+        }
     }
 
 
