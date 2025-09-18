@@ -508,85 +508,6 @@ public class StrategieHelper {
         TradeUtils.log("calculCroisedStrategies: total: "+getCroisedProgress().totalConfigs+", nbInsert: "+nbInsert.get()+", error: " + error.get());
     }
 
-    /**
-     * Optimise la meilleure combinaison IN/OUT par walk-forward pour un symbole.
-     * @param symbol symbole
-     * @return BestInOutStrategy
-     */
-    public BestInOutStrategy optimseBestInOutByWalkForward(String symbol) {
-        List<DailyValue> listeValus = this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_OPTIM);
-        BarSeries series = TradeUtils.mapping(listeValus);
-        BarSeries[] split = TradeUtils.splitSeriesForWalkForward(series);
-        BarSeries optimSeries = split[0];
-        BarSeries testSeries = split[1];
-        // Optimisation des paramètres sur la partie optimisation
-        StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(optimSeries, 10, 30, 5, 15, 15, 25, 0.001, 0.01, 0.002);
-        StrategieBackTest.SmaCrossoverParams bestSmaCrossover = strategieBackTest.optimiseSmaCrossoverParameters(optimSeries, 5, 20, 10, 50);
-        StrategieBackTest.RsiParams bestRsi = strategieBackTest.optimiseRsiParameters(optimSeries, 10, 20, 20, 40, 5, 60, 80, 5);
-        StrategieBackTest.BreakoutParams bestBreakout = strategieBackTest.optimiseBreakoutParameters(optimSeries, 5, 50);
-        StrategieBackTest.MacdParams bestMacd = strategieBackTest.optimiseMacdParameters(optimSeries, 8, 16, 20, 30, 6, 12);
-        StrategieBackTest.MeanReversionParams bestMeanReversion = strategieBackTest.optimiseMeanReversionParameters(optimSeries, 10, 30, 1.0, 5.0, 0.5);
-        // Liste des stratégies et paramètres
-        java.util.List<Object[]> strategies = java.util.Arrays.asList(
-            new Object[]{"Improved Trend", bestImprovedTrend},
-            new Object[]{"SMA Crossover", bestSmaCrossover},
-            new Object[]{"RSI", bestRsi},
-            new Object[]{"Breakout", bestBreakout},
-            new Object[]{"MACD", bestMacd},
-            new Object[]{"Mean Reversion", bestMeanReversion}
-        );
-        double bestPerf = Double.NEGATIVE_INFINITY;
-        BestInOutStrategy bestCombo = null;
-        System.out.println("=== TESTS CROISÉS IN/OUT ===");
-        com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
-        for (Object[] entry : strategies) {
-            for (Object[] exit : strategies) {
-                String entryName = (String) entry[0];
-                Object entryParams = entry[1];
-                String exitName = (String) exit[0];
-                Object exitParams = exit[1];
-                // Instancier les stratégies
-                com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(entryName, entryParams);
-                com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(exitName, exitParams);
-                com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategy, exitStrategy);
-                // Backtest sur la partie test uniquement
-                RiskResult result = strategieBackTest.backtestStrategyRisk(combined, testSeries);
-                System.out.println("Symbol: " + symbol +
-                                   " | IN: " + entryName + " " + gson.toJson(entryParams) +
-                                   " | OUT: " + exitName + " " + gson.toJson(exitParams) +
-                                   " | Rendement: " + String.format("%.4f", result.rendement * 100) + "%"
-                                   + " | Trades: " + result.tradeCount
-                                   + " | WinRate: " + String.format("%.2f", result.winRate * 100) + "%"
-                        + " | Drawdown: " + String.format("%.2f", result.maxDrawdown * 100) + "%"
-                        + " | Score ST: " + String.format("%.2f", result.scoreSwingTrade));
-                if (result.rendement > bestPerf) {
-                    bestPerf = result.rendement;
-                    bestCombo = BestInOutStrategy.builder()
-                            .symbol(symbol)
-                            .entryName(entryName)
-                            .exitName(exitName)
-                            .entryParams(entryParams)
-                            .exitParams(exitParams)
-                            .paramsOptim(ParamsOptim.builder()
-                                    .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
-                                    .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
-                                    .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
-                                    .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
-                                    .nbSimples(listeValus.size())
-                                    .build())
-                            .result(result)
-                            .build();
-                }
-            }
-        }
-        System.out.println("=== MEILLEUR COUPLE IN/OUT ===");
-        if (bestCombo != null) {
-            System.out.println("IN: " + bestCombo.entryName + " | OUT: " + bestCombo.exitName + " | Rendement: " + String.format("%.4f", bestCombo.result.rendement * 100) + "% | Trades: " + bestCombo.result.tradeCount);
-            System.out.println("Paramètres IN: " + gson.toJson(bestCombo.entryParams));
-            System.out.println("Paramètres OUT: " + gson.toJson(bestCombo.exitParams));
-        }
-        return bestCombo;
-    }
 
     /**
      * Instancie une stratégie selon son nom et ses paramètres.
@@ -651,6 +572,8 @@ public class StrategieHelper {
                     avg_trade_bars = ?,
                     max_trade_gain = ?,
                     max_trade_loss = ?,
+                    sharpe_ratio = ?
+                    stability_score = ?,
                     score_swing_trade = ?,
                     score_swing_trade_check = ?,
                     fltred_out = ?,
@@ -681,6 +604,8 @@ public class StrategieHelper {
                 best.result.avgTradeBars,
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
+                best.result.sharpeRatio,
+                best.result.stabilityScore,
                 best.result.scoreSwingTrade,
                 best.check.scoreSwingTrade,
                 best.result.fltredOut,
@@ -699,9 +624,9 @@ public class StrategieHelper {
                     symbol, entry_strategy_name, entry_strategy_params,
                     exit_strategy_name, exit_strategy_params,
                     rendement, rendement_check, rendement_sum, rendement_diff, rendement_score, trade_count, win_rate, max_drawdown, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss,
-                    score_swing_trade, score_swing_trade_check, fltred_out, initial_capital, risk_per_trade, stop_loss_pct, 
+                    sharpe_ratio, stability_score, score_swing_trade, score_swing_trade_check, fltred_out, initial_capital, risk_per_trade, stop_loss_pct, 
                     take_profit_pct, nb_simples, check_result, created_date, updated_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """;
             jdbcTemplate.update(insertSql,
                 symbol,
@@ -722,6 +647,8 @@ public class StrategieHelper {
                 best.result.avgTradeBars,
                 best.result.maxTradeGain,
                 best.result.maxTradeLoss,
+                    best.result.sharpeRatio,
+                    best.result.stabilityScore,
                 best.result.scoreSwingTrade,
                 best.check.scoreSwingTrade,
                 best.result.fltredOut,
@@ -779,7 +706,11 @@ public class StrategieHelper {
                                 .maxTradeGain(rs.getDouble("max_trade_gain"))
                                 .maxTradeLoss(rs.getDouble("max_trade_loss"))
                                 .scoreSwingTrade(rs.getDouble("score_swing_trade"))
-                                .fltredOut(rs.getBoolean("fltred_out")).build()).build();
+                                .fltredOut(rs.getBoolean("fltred_out"))
+                                .sharpeRatio(rs.getDouble("sharpe_ratio"))
+                                .stabilityScore(rs.getDouble("stability_score"))
+                                .build())
+                        .build();
             }, symbol);
         } catch (org.springframework.dao.EmptyResultDataAccessException e) {
             logger.warn("Aucun BestInOutStrategy trouvé pour le symbole: {}", symbol);
@@ -847,6 +778,8 @@ public class StrategieHelper {
                             .maxTradeLoss(rs.getDouble("max_trade_loss"))
                             .scoreSwingTrade(rs.getDouble("score_swing_trade"))
                             .fltredOut(rs.getBoolean("fltred_out"))
+                            .sharpeRatio(rs.getDouble("sharpe_ratio"))
+                            .stabilityScore(rs.getDouble("stability_score"))
                             .build()).build();
         });
         return results;
@@ -944,6 +877,9 @@ public class StrategieHelper {
         StrategyFilterConfig filterConfig = new StrategyFilterConfig();
         // Utilisation du swingParams de la classe (modifiable si besoin)
         WalkForwardResultPro walkForwardResultPro =  this.optimseStrategy(series, filterConfig, swingParams);
+        if (walkForwardResultPro == null) {
+            return BestInOutStrategy.empty(symbol);
+        }
         double rendementSum = walkForwardResultPro.getBestCombo().getResult().getRendement() + walkForwardResultPro.getCheck().getRendement();
         double rendementDiff = walkForwardResultPro.getBestCombo().getResult().getRendement() - walkForwardResultPro.getCheck().getRendement();
         return BestInOutStrategy.builder()
@@ -983,12 +919,12 @@ public class StrategieHelper {
         List<Double> testPerformances = new ArrayList<>();
         // Définition des indices pour chaque fold
         int[][] foldIndices = new int[][] {
-            // Fold 0 : optim 0-40%, test 40-60%
-            {0, (int)Math.round(totalBars*0.4), (int)Math.round(totalBars*0.4), (int)Math.round(totalBars*0.6)},
-            // Fold 1 : optim 20-60%, test 60-80%
-            {(int)Math.round(totalBars*0.2), (int)Math.round(totalBars*0.6), (int)Math.round(totalBars*0.6), (int)Math.round(totalBars*0.8)},
-            // Fold 2 : optim 40-80%, test 80-100%
-            {(int)Math.round(totalBars*0.4), (int)Math.round(totalBars*0.8), (int)Math.round(totalBars*0.8), totalBars}
+            // Fold 0 : optim 0-35%, test 35-50%
+            {0, (int)Math.round(totalBars*0.35), (int)Math.round(totalBars*0.35), (int)Math.round(totalBars*0.5)},
+            // Fold 1 : optim 15-50%, test 50-65%
+            {(int)Math.round(totalBars*0.15), (int)Math.round(totalBars*0.5), (int)Math.round(totalBars*0.5), (int)Math.round(totalBars*0.65)},
+            // Fold 2 : optim 30-65%, test 65-80%
+            {(int)Math.round(totalBars*0.3), (int)Math.round(totalBars*0.65), (int)Math.round(totalBars*0.65), (int)Math.round(totalBars*0.8)}
         };
         for (int fold = 0; fold < kFolds; fold++) {
             int optimStart = foldIndices[fold][0];
@@ -1043,7 +979,6 @@ public class StrategieHelper {
                 new Object[]{"Mean Reversion", bestMeanReversion}
             );
             List<ComboResult> foldResults = new ArrayList<>();
-            double bestPerf = Double.NEGATIVE_INFINITY;
             ComboResult bestCombo = null;
             double bestTrainPerf = Double.NEGATIVE_INFINITY;
             for (Object[] entry : strategies) {
@@ -1066,17 +1001,15 @@ public class StrategieHelper {
                     double overfitRatioCombo = result.getRendement() / (trainResult.getRendement() == 0.0 ? 1.0 : trainResult.getRendement());
                     boolean isOverfitCombo = (overfitRatioCombo < 0.7 || overfitRatioCombo > 1.3);
                     boolean stable = result != null && TradeUtils.isStableAndSimple(result, filterConfig);
-                    result.setFltredOut(!stable || isOverfitCombo);
-                    ComboResult combo = ComboResult.builder()
-                        .entryName(entryName)
-                        .entryParams(entryParams)
-                        .exitName(exitName)
-                        .exitParams(exitParams)
-                        .result(result)
-                        .build();
-                    foldResults.add(combo);
-                    if (result.getRendement() > bestPerf) {
-                        bestPerf = result.getRendement();
+                    if(stable && !isOverfitCombo){
+                        ComboResult combo = ComboResult.builder()
+                                .entryName(entryName)
+                                .entryParams(entryParams)
+                                .exitName(exitName)
+                                .exitParams(exitParams)
+                                .result(result)
+                                .build();
+                        foldResults.add(combo);
                     }
                 }
             }
@@ -1093,28 +1026,9 @@ public class StrategieHelper {
         // Agrégation des résultats de tous les folds
         List<ComboResult> allResults = new ArrayList<>();
         for (List<ComboResult> fold : foldsResults) allResults.addAll(fold);
-        // Filtrage des combos non overfit
-        List<ComboResult> nonOverfitResults = new ArrayList<>();
-        for (ComboResult r : allResults) {
-            if (!r.getResult().isFltredOut()) {
-                nonOverfitResults.add(r);
-            }
-        }
-        // Sélection du meilleur combo parmi les non-overfit
-        ComboResult bestComboNonOverfit = null;
-        double bestPerfNonOverfit = Double.NEGATIVE_INFINITY;
-        for (ComboResult r : nonOverfitResults) {
-            RiskResult res = r.getResult();
-            if (res.getRendement() > bestPerfNonOverfit) {
-                bestPerfNonOverfit = res.getRendement();
-                bestComboNonOverfit = r;
-            }
-        }
-
+        // Calcul des moyennes/statistiques pour le builder
         double sumRendement = 0.0, sumDrawdown = 0.0, sumWinRate = 0.0, sumProfitFactor = 0.0, sumTradeDuration = 0.0;
         int totalTrades = 0;
-        ComboResult bestCombo = null;
-        // Suppression de la variable bestPerf inutile
         for (ComboResult r : allResults) {
             RiskResult res = r.getResult();
             sumRendement += res.getRendement();
@@ -1123,10 +1037,6 @@ public class StrategieHelper {
             sumProfitFactor += res.getProfitFactor();
             sumTradeDuration += res.getAvgTradeBars();
             totalTrades += res.getTradeCount();
-            // Mise à jour du meilleur combo global (fallback)
-            if (bestCombo == null || res.getRendement() > bestCombo.getResult().getRendement()) {
-                bestCombo = r;
-            }
         }
         int n = allResults.size();
         double avgRendement = n > 0 ? sumRendement / n : 0.0;
@@ -1138,16 +1048,23 @@ public class StrategieHelper {
         double avgTestPerf = testPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
         double overfitRatio = avgTestPerf / (avgTrainPerf == 0.0 ? 1.0 : avgTrainPerf);
         boolean isOverfit = (overfitRatio < 0.7 || overfitRatio > 1.3);
-
-        // Si aucun combo non-overfit, fallback sur le meilleur combo global
-        ComboResult finalBestCombo = bestComboNonOverfit != null ? bestComboNonOverfit : bestCombo;
-
+        // Sélection du meilleur combo swing trade
+        SwingTradeScoreWeights weights = new SwingTradeScoreWeights(0.35, 0.25, 0.25, 0.15);
+        List<ComboResult> scoredCombos = strategieBackTest.computeSwingTradeScores(allResults, weights);
+        ComboResult bestScoreResult = null;
+        double maxScore = Double.NEGATIVE_INFINITY;
+        for (ComboResult scoreResult : scoredCombos) {
+            if (scoreResult.getResult().getScoreSwingTrade() > maxScore) {
+                maxScore = scoreResult.getResult().getScoreSwingTrade();
+                bestScoreResult = scoreResult;
+            }
+        }
         //fait un check final
-        com.app.backend.trade.strategy.TradeStrategy entryStrategyCheck = createStrategy(finalBestCombo.getEntryName(), finalBestCombo.getEntryParams());
-        com.app.backend.trade.strategy.TradeStrategy exitStrategyCheck = createStrategy(finalBestCombo.getExitName(), finalBestCombo.getExitParams());
-        com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategyCheck, exitStrategyCheck);
+        com.app.backend.trade.strategy.TradeStrategy entryStrategyCheck = bestScoreResult != null ? createStrategy(bestScoreResult.getEntryName(), bestScoreResult.getEntryParams()) : null;
+        com.app.backend.trade.strategy.TradeStrategy exitStrategyCheck = bestScoreResult != null ? createStrategy(bestScoreResult.getExitName(), bestScoreResult.getExitParams()) : null;
+        com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = (entryStrategyCheck != null && exitStrategyCheck != null) ? new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategyCheck, exitStrategyCheck) : null;
         BarSeries checkSeries = series.getSubSeries(series.getBarCount() - (int)Math.round(totalBars*0.2), series.getBarCount()); // dernier 20% pour le check
-        RiskResult checkR = strategieBackTest.backtestStrategy(combined, checkSeries);
+        RiskResult checkR = (combined != null) ? strategieBackTest.backtestStrategy(combined, checkSeries) : null;
 
         return WalkForwardResultPro.builder()
                 .segmentResults(allResults)
@@ -1157,7 +1074,7 @@ public class StrategieHelper {
                 .avgProfitFactor(avgProfitFactor)
                 .avgTradeDuration(avgTradeDuration)
                 .totalTrades(totalTrades)
-                .bestCombo(finalBestCombo)
+                .bestCombo(bestScoreResult)
                 .avgTrainRendement(avgTrainPerf)
                 .avgTestRendement(avgTestPerf)
                 .overfitRatio(overfitRatio)
@@ -1167,4 +1084,19 @@ public class StrategieHelper {
     }
 
 
+
+
+    /**
+     * Structure pour les pondérations du scoring swing trade.
+     */
+    public static class SwingTradeScoreWeights {
+        public double rendement = 0.35;
+        public double sharpe = 0.25;
+        public double drawdown = 0.25;
+        public double stability = 0.15;
+        public SwingTradeScoreWeights() {}
+        public SwingTradeScoreWeights(double r, double s, double d, double st) {
+            rendement = r; sharpe = s; drawdown = d; stability = st;
+        }
+    }
 }

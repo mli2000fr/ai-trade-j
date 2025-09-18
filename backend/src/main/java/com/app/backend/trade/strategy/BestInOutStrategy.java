@@ -22,9 +22,12 @@ public class BestInOutStrategy {
     public double rendementDiff;
     public double rendementScore;
 
-    public static BestInOutStrategy empty() {
+    public static BestInOutStrategy empty(){
+        return empty("");
+    }
+    public static BestInOutStrategy empty(String symbol) {
         BestInOutStrategy result = new BestInOutStrategy();
-        result.symbol = "";
+        result.symbol = symbol;
         result.entryName = "";
         result.entryParams = null;
         result.exitName = "";

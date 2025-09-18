@@ -20,6 +20,8 @@ CREATE TABLE trade_ai.best_in_out_single_strategy (
     score_swing_trade DOUBLE,
     score_swing_trade_check DOUBLE,
     fltred_out BOOLEAN DEFAULT FALSE,
+    sharpe_ratio DOUBLE,
+    stability_score DOUBLE,
     check_result TEXT,
     created_date DATE,
     updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

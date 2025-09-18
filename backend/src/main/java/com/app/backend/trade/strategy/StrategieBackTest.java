@@ -1,5 +1,7 @@
 package com.app.backend.trade.strategy;
 
+import com.app.backend.trade.controller.StrategieHelper;
+import com.app.backend.trade.model.ComboResult;
 import com.app.backend.trade.model.RiskResult;
 import com.app.backend.trade.util.TradeConstant;
 import com.app.backend.trade.util.TradeUtils;
@@ -7,6 +9,8 @@ import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Controller
@@ -69,6 +73,7 @@ public class StrategieBackTest {
         double maxLoss = Double.POSITIVE_INFINITY;
         int totalTradeBars = 0;
         int tradeStartIndex = 0;
+        List<Double> tradeReturns = new ArrayList<>();
         for (int i = 0; i < series.getBarCount(); i++) {
             double price = series.getBar(i).getClosePrice().doubleValue();
             if (!inPosition && entryRule.isSatisfied(i)) {
@@ -106,6 +111,8 @@ public class StrategieBackTest {
                     if (capital > peakCapital) peakCapital = capital;
                     double drawdown = (peakCapital - capital) / peakCapital;
                     if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+                    // Ajout du rendement par trade
+                    tradeReturns.add(pnl / initialCapital);
                 }
             }
         }
@@ -133,6 +140,12 @@ public class StrategieBackTest {
         double avgTradeBars = tradeCount > 0 ? (double) totalTradeBars / tradeCount : 0.0;
         double maxTradeGain = (maxGain == Double.NEGATIVE_INFINITY) ? 0.0 : maxGain;
         double maxTradeLoss = (maxLoss == Double.POSITIVE_INFINITY) ? 0.0 : maxLoss;
+        // Calcul du ratio de Sharpe
+        double meanReturn = tradeReturns.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double stdReturn = tradeReturns.size() > 1 ? Math.sqrt(tradeReturns.stream().mapToDouble(r -> Math.pow(r - meanReturn, 2)).sum() / (tradeReturns.size() - 1)) : 0.0;
+        double sharpeRatio = stdReturn > 0 ? meanReturn / stdReturn : 0.0;
+        // Score de stabilité (inverse de l'écart-type)
+        double stabilityScore = stdReturn > 0 ? 1.0 / stdReturn : 0.0;
         RiskResult riskResult = RiskResult.builder()
                 .rendement(rendement)
                 .tradeCount(tradeCount)
@@ -144,15 +157,15 @@ public class StrategieBackTest {
                 .maxTradeGain(maxTradeGain)
                 .maxTradeLoss(maxTradeLoss)
                 .scoreSwingTrade(0)
+                .fltredOut(false)
+                .sharpeRatio(sharpeRatio)
+                .stabilityScore(stabilityScore)
                 .build();
-        double scoreSwingTrade = TradeUtils.calculerScoreSwingTrade(riskResult);
-        riskResult.setScoreSwingTrade(scoreSwingTrade);
         return riskResult;
     }
 
     public RiskResult backtestStrategy(TradeStrategy strategy, BarSeries series) {
         RiskResult riskResult =  backtestStrategy(strategy, series, INITIAL_CAPITAL, RISK_PER_TRADE, STOP_LOSS_PCT, TAKE_PROFIL_PCT);
-        riskResult.setScoreSwingTrade(TradeUtils.calculerScoreSwingTrade(riskResult));
         return riskResult;
     }
 
@@ -174,6 +187,7 @@ public class StrategieBackTest {
         double maxLoss = Double.POSITIVE_INFINITY;
         int totalTradeBars = 0;
         int tradeStartIndex = 0;
+        List<Double> tradeReturns = new ArrayList<>();
         for (int i = 0; i < series.getBarCount(); i++) {
             double price = series.getBar(i).getClosePrice().doubleValue();
             if (!inPosition && entryRule.isSatisfied(i)) {
@@ -211,6 +225,8 @@ public class StrategieBackTest {
                     if (capital > peakCapital) peakCapital = capital;
                     double drawdown = (peakCapital - capital) / peakCapital;
                     if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+                    // Ajout du rendement par trade
+                    tradeReturns.add(pnl / initialCapital);
                 }
             }
         }
@@ -238,6 +254,12 @@ public class StrategieBackTest {
         double avgTradeBars = tradeCount > 0 ? (double) totalTradeBars / tradeCount : 0.0;
         double maxTradeGain = (maxGain == Double.NEGATIVE_INFINITY) ? 0.0 : maxGain;
         double maxTradeLoss = (maxLoss == Double.POSITIVE_INFINITY) ? 0.0 : maxLoss;
+        // Calcul du ratio de Sharpe
+        double meanReturn = tradeReturns.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double stdReturn = tradeReturns.size() > 1 ? Math.sqrt(tradeReturns.stream().mapToDouble(r -> Math.pow(r - meanReturn, 2)).sum() / (tradeReturns.size() - 1)) : 0.0;
+        double sharpeRatio = stdReturn > 0 ? meanReturn / stdReturn : 0.0;
+        // Score de stabilité (inverse de l'écart-type)
+        double stabilityScore = stdReturn > 0 ? 1.0 / stdReturn : 0.0;
         RiskResult optimResult = RiskResult.builder()
                 .rendement(rendement)
                 .tradeCount(tradeCount)
@@ -248,12 +270,64 @@ public class StrategieBackTest {
                 .avgTradeBars(avgTradeBars)
                 .maxTradeGain(maxTradeGain)
                 .maxTradeLoss(maxTradeLoss)
-                .scoreSwingTrade(0).build();
-        double scoreSwingTrade = TradeUtils.calculerScoreSwingTrade(optimResult);
-        optimResult.setScoreSwingTrade(scoreSwingTrade);
+                .scoreSwingTrade(0)
+                .fltredOut(false)
+                .sharpeRatio(sharpeRatio)
+                .stabilityScore(stabilityScore)
+                .build();
         return optimResult;
     }
 
+
+    /**
+     * Calcule le score swing trade multi-critères pour une liste de ComboResult.
+     * Normalise les métriques et applique les pondérations.
+     * Applique les filtres durs et retourne le score pour chaque combo.
+     * @param combos liste de ComboResult
+     * @param weights pondérations (rendement, sharpe, drawdown, stabilité)
+     * @return liste de SwingTradeScoreResult (combo + score)
+     */
+    public List<ComboResult> computeSwingTradeScores(List<ComboResult> combos, StrategieHelper.SwingTradeScoreWeights weights) {
+        // Extraction des métriques
+        List<Double> rendementList = new ArrayList<>();
+        List<Double> sharpeList = new ArrayList<>();
+        List<Double> drawdownList = new ArrayList<>();
+        List<Double> stabilityList = new ArrayList<>();
+        for (ComboResult combo : combos) {
+            RiskResult r = combo.getResult();
+            rendementList.add(r.getRendement());
+            sharpeList.add(r.getSharpeRatio());
+            drawdownList.add(r.getMaxDrawdown());
+            stabilityList.add(r.getStabilityScore());
+        }
+        // Normalisation min-max
+        double minRend = Collections.min(rendementList);
+        double maxRend = Collections.max(rendementList);
+        double minSharpe = Collections.min(sharpeList);
+        double maxSharpe = Collections.max(sharpeList);
+        double minDrawdown = Collections.min(drawdownList);
+        double maxDrawdown = Collections.max(drawdownList);
+        double minStab = Collections.min(stabilityList);
+        double maxStab = Collections.max(stabilityList);
+        List<ComboResult> results = new ArrayList<>();
+        for (int i = 0; i < combos.size(); i++) {
+            ComboResult combo = combos.get(i);
+            RiskResult r = combo.getResult();
+            // Filtres durs
+            boolean filteredOut = r.getMaxDrawdown() > 0.3 || r.getSharpeRatio() < 0.5 || r.getTradeCount() < 10 || (r.getWinRate() < 0.5 && r.getProfitFactor() < 1.2);
+            if (filteredOut) continue;
+            // Normalisation min-max
+            double rendNorm = (maxRend - minRend) == 0 ? 0 : (r.getRendement() - minRend) / (maxRend - minRend);
+            double sharpeNorm = (maxSharpe - minSharpe) == 0 ? 0 : (r.getSharpeRatio() - minSharpe) / (maxSharpe - minSharpe);
+            double drawdownNorm = (maxDrawdown - minDrawdown) == 0 ? 0 : (r.getMaxDrawdown() - minDrawdown) / (maxDrawdown - minDrawdown);
+            double stabilityNorm = (maxStab - minStab) == 0 ? 0 : (r.getStabilityScore() - minStab) / (maxStab - minStab);
+            // Score pondéré
+            double score = weights.rendement * rendNorm + weights.sharpe * sharpeNorm + weights.drawdown * (1 - drawdownNorm) + weights.stability * stabilityNorm;
+            combo.getResult().setScoreSwingTrade(score);
+            results.add(combo);
+        }
+        return results;
+    }
 
     // Backtest pour BreakoutStrategy
     public RiskResult backtestBreakoutStrategy(BarSeries series, int lookbackPeriod) {
