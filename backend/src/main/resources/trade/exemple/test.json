@@ -1,6 +1,80 @@
-Gestion des exceptions : Le code gère déjà les erreurs, mais il pourrait être amélioré pour loguer plus d’informations sur les cas d’échec (données insuffisantes, NaN, etc.).
-Monitoring : Ajouter un monitoring du tuning (progression, temps par symbole, logs détaillés).
+Merci pour les précisions 👌 — ça change beaucoup l’estimation, car tes conditions actuelles sont loin d’exploiter le GPU. Je résume et je recalcule :
 
-Personnalisation des features : Actuellement, la grille utilise les features par défaut. Il serait pertinent d’ajouter la possibilité de personnaliser les features selon le symbole ou le type de swing trade.
---- Sauvegarde des résultats : Les résultats sont sauvegardés en base, mais il pourrait être utile d’ajouter une exportation des meilleurs modèles/configs pour analyse externe.
-Optimisation du grid search : La grille est très large, ce qui peut être coûteux en temps de calcul. On pourrait ajouter une étape de pré-filtrage ou utiliser des algorithmes de recherche plus intelligents (Bayesian optimization, random search).
+1. Situation actuelle (CPU Ryzen 9600X)
+
+LSTM : 1 couche.
+
+Hidden size : 64 → 512 (selon grille).
+
+Batch size = 1 (c’est catastrophique pour le GPU).
+
+Pas de mixed precision.
+👉 Résultat : 4 h / symbole (sur CPU).
+
+2. Conséquence directe sur GPU
+
+Batch size = 1 :
+→ Le GPU ne peut pas paralléliser efficacement, car il reçoit des mini-lots ridiculement petits.
+→ Donc même avec une 5070 Ti, tu n’auras jamais les gains “10–20×” qu’on avait estimés si tu ne changes rien.
+→ Tu risques de ne voir que 2× à 4× par rapport au CPU, car beaucoup de temps va partir dans l’overhead CUDA/cuDNN.
+
+Pas de mixed precision :
+→ Tu perds le gros avantage des Tensor Cores (spécialité des RTX récentes).
+→ Si tu restes en FP32 pur, le GPU est sous-utilisé.
+
+3. Estimations réalistes dans ton cas (batch=1, FP32)
+
+RTX 5060 16G :
+
+≈ 2× à 3× plus rapide que ton CPU → 4 h → 1h20 à 2h / symbole.
+
+Avantage VRAM : aucun problème pour loger séquences 1200.
+
+RTX 5070 Ti 12G :
+
+Plus de cœurs + bande passante → 3× à 5× plus rapide que CPU → 4 h → 50 min à 1h20 / symbole.
+
+La VRAM (12 GB) reste suffisante si hidden size ≤ 512.
+
+👉 Donc l’écart entre 5060 et 5070 Ti est réel (5070 Ti ≈ 30-50 % plus rapide), mais tant que tu restes à batch=1 et FP32, tu n’exploites pas du tout leur plein potentiel.
+
+4. Si tu optimises (recommandé 🔥)
+
+Augmente le batch size :
+
+Au lieu de Collections.singletonList(...), organise tes données pour batcher plusieurs symboles ou plusieurs fenêtres.
+
+Même batch=16 ou 32 multipliera l’utilisation GPU.
+
+Sur 5070 Ti, batch=64 est probablement faisable (hidden=256 ou même 512).
+
+Active mixed precision (AMP) :
+
+En FP16, les Tensor Cores font gagner un facteur 2× à 3× supplémentaires.
+
+Ça réduit aussi la consommation VRAM → permet des batchs plus gros.
+
+Truncated BPTT :
+
+Découpe tes séquences de 1200 en tranches (par ex. 200 pas).
+
+Moins de charge mémoire, batch plus grand possible → entraînement plus rapide.
+
+5. Avec ces optimisations
+
+5060 16G :
+
+8–12× speedup → 20-30 min / symbole.
+
+5070 Ti 12G :
+
+12–20× speedup → 12-20 min / symbole.
+👉 Là tu exploites vraiment la différence entre les deux cartes.
+
+✅ Conclusion :
+
+Si tu ne changes rien (batch=1, FP32) → les deux GPU ne seront que 2–5× plus rapides que ton CPU.
+
+Si tu adaptes le code (batch > 1 + AMP) → la 5070 Ti devient bien plus intéressante (2× plus rapide que la 5060 dans la pratique).
+
+Veux-tu que je te propose un exemple concret de modif du code (par ex. PyTorch ou DL4J) pour passer de batch=1 à un vrai batch (et activer AMP) afin que ton GPU soit enfin exploité à 100 % ?
