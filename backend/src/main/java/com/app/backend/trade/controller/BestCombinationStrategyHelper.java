@@ -708,26 +708,28 @@ public class BestCombinationStrategyHelper {
         }
         BarSeries fullSeries = seriesList.get(0);
         int totalCount = fullSeries.getBarCount();
-        // Paramètres walk-forward (modifiable si besoin)
-        double optimWindowPct = 0.2;
-        double testWindowPct = 0.1;
-        double stepWindowPct = 0.1;
-        int optimWindow = Math.max(1, (int) Math.round(totalCount * optimWindowPct));
-        int testWindow = Math.max(1, (int) Math.round(totalCount * testWindowPct));
-        int stepWindow = Math.max(1, (int) Math.round(totalCount * stepWindowPct));
-        int kFolds = 5;
-        int foldSize = (totalCount - (optimWindow + testWindow)) / kFolds;
-        if (foldSize < 1) foldSize = 1;
+        // Répartition en 3 folds selon les pourcentages demandés
+        int[][] foldIndices = new int[][] {
+            // Fold 0 : optim 0-40%, test 40-60%
+            {0, (int)Math.round(totalCount*0.4), (int)Math.round(totalCount*0.4), (int)Math.round(totalCount*0.6)},
+            // Fold 1 : optim 20-60%, test 60-80%
+            {(int)Math.round(totalCount*0.2), (int)Math.round(totalCount*0.6), (int)Math.round(totalCount*0.6), (int)Math.round(totalCount*0.8)},
+            // Fold 2 : optim 40-80%, test 80-100%
+            {(int)Math.round(totalCount*0.4), (int)Math.round(totalCount*0.8), (int)Math.round(totalCount*0.8), totalCount}
+        };
+        int kFolds = 3;
         List<RiskResult> foldResults = new ArrayList<>();
         List<Double> trainPerformances = new ArrayList<>();
         List<Double> testPerformances = new ArrayList<>();
         List<ComboMixResult> listeComboMixResult = new ArrayList<>();
 
         for (int fold = 0; fold < kFolds; fold++) {
-            int start = fold * foldSize;
-            if (start + optimWindow + testWindow > totalCount) break;
-            BarSeries optimSeries = fullSeries.getSubSeries(start, start + optimWindow);
-            BarSeries testSeries = fullSeries.getSubSeries(start + optimWindow, start + optimWindow + testWindow);
+            int optimStart = foldIndices[fold][0];
+            int optimEnd = foldIndices[fold][1];
+            int testStart = foldIndices[fold][2];
+            int testEnd = foldIndices[fold][3];
+            BarSeries optimSeries = fullSeries.getSubSeries(optimStart, optimEnd);
+            BarSeries testSeries = fullSeries.getSubSeries(testStart, testEnd);
             List<TradeStrategy> inStrategies = new ArrayList<>();
             List<String> inStrategyNames = new ArrayList<>();
             for (Class<? extends TradeStrategy> clazz : inCombo) {
@@ -994,8 +996,8 @@ public class BestCombinationStrategyHelper {
                 .nbSimples(totalCount)
                 .build();
 
-        //fait un check final
-        BarSeries checkSeries = fullSeries.getSubSeries(fullSeries.getBarCount() - testWindow, fullSeries.getBarCount());
+        // Check final sur les derniers 20% de bougies
+        BarSeries checkSeries = fullSeries.getSubSeries(fullSeries.getBarCount() - (int)Math.round(totalCount*0.2), fullSeries.getBarCount());
         RiskResult checkResult = this.checkResultat(checkSeries, resultObj);
         resultObj.rendementSum  = resultObj.getResult().getRendement() + checkResult.getRendement();
         resultObj.rendementDiff = resultObj.getResult().getRendement() - checkResult.getRendement();

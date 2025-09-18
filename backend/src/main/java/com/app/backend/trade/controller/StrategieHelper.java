@@ -943,7 +943,7 @@ public class StrategieHelper {
         // Création d'une config de filtrage par défaut (modifiable si besoin)
         StrategyFilterConfig filterConfig = new StrategyFilterConfig();
         // Utilisation du swingParams de la classe (modifiable si besoin)
-        WalkForwardResultPro walkForwardResultPro =  this.optimseStrategy(series, 0.2, 0.1, 0.1, filterConfig, swingParams);
+        WalkForwardResultPro walkForwardResultPro =  this.optimseStrategy(series, filterConfig, swingParams);
         double rendementSum = walkForwardResultPro.getBestCombo().getResult().getRendement() + walkForwardResultPro.getCheck().getRendement();
         double rendementDiff = walkForwardResultPro.getBestCombo().getResult().getRendement() - walkForwardResultPro.getCheck().getRendement();
         return BestInOutStrategy.builder()
@@ -971,30 +971,32 @@ public class StrategieHelper {
      * Optimisation walk-forward professionnelle pour le swing trade.
      * Les paramètres sont des pourcentages du nombre total de bougies.
      * @param series série de prix
-     * @param optimWindowPct pourcentage de la fenêtre d'optimisation (ex: 0.2 pour 20%)
-     * @param testWindowPct pourcentage de la fenêtre de test
-     * @param stepWindowPct pourcentage du pas de glissement
      * @param filterConfig configuration des critères de filtrage
      * @param swingParams paramètres d'optimisation swing trade
      * @return WalkForwardResultPro
      */
-    public WalkForwardResultPro optimseStrategy(BarSeries series, double optimWindowPct, double testWindowPct, double stepWindowPct, StrategyFilterConfig filterConfig, SwingTradeOptimParams swingParams) {
-        logger.info("[optimseStrategy] Démarrage de l'optimisation walk-forward avec validation croisée : optimWindowPct={}, testWindowPct={}, stepWindowPct={}", optimWindowPct, testWindowPct, stepWindowPct);
+    public WalkForwardResultPro optimseStrategy(BarSeries series, StrategyFilterConfig filterConfig, SwingTradeOptimParams swingParams) {
         int totalBars = series.getBarCount();
-        int optimWindow = Math.max(1, (int) Math.round(totalBars * optimWindowPct));
-        int testWindow = Math.max(1, (int) Math.round(totalBars * testWindowPct));
-        int stepWindow = Math.max(1, (int) Math.round(totalBars * stepWindowPct));
-        int kFolds = 5; // Nombre de folds pour la validation croisée (modifiable)
+        int kFolds = 3; // 3 folds fixes
         List<List<ComboResult>> foldsResults = new ArrayList<>();
-        int foldSize = (totalBars - (optimWindow + testWindow)) / kFolds;
-        if (foldSize < 1) foldSize = 1;
         List<Double> trainPerformances = new ArrayList<>();
         List<Double> testPerformances = new ArrayList<>();
+        // Définition des indices pour chaque fold
+        int[][] foldIndices = new int[][] {
+            // Fold 0 : optim 0-40%, test 40-60%
+            {0, (int)Math.round(totalBars*0.4), (int)Math.round(totalBars*0.4), (int)Math.round(totalBars*0.6)},
+            // Fold 1 : optim 20-60%, test 60-80%
+            {(int)Math.round(totalBars*0.2), (int)Math.round(totalBars*0.6), (int)Math.round(totalBars*0.6), (int)Math.round(totalBars*0.8)},
+            // Fold 2 : optim 40-80%, test 80-100%
+            {(int)Math.round(totalBars*0.4), (int)Math.round(totalBars*0.8), (int)Math.round(totalBars*0.8), totalBars}
+        };
         for (int fold = 0; fold < kFolds; fold++) {
-            int start = fold * foldSize;
-            if (start + optimWindow + testWindow > totalBars) break;
-            BarSeries optimSeries = series.getSubSeries(start, start + optimWindow);
-            BarSeries testSeries = series.getSubSeries(start + optimWindow, start + optimWindow + testWindow);
+            int optimStart = foldIndices[fold][0];
+            int optimEnd = foldIndices[fold][1];
+            int testStart = foldIndices[fold][2];
+            int testEnd = foldIndices[fold][3];
+            BarSeries optimSeries = series.getSubSeries(optimStart, optimEnd);
+            BarSeries testSeries = series.getSubSeries(testStart, testEnd);
             // --- Optimisation des paramètres sur le train ---
             StrategieBackTest.ImprovedTrendFollowingParams bestImprovedTrend = strategieBackTest.optimiseImprovedTrendFollowingParameters(
                 optimSeries,
@@ -1144,7 +1146,7 @@ public class StrategieHelper {
         com.app.backend.trade.strategy.TradeStrategy entryStrategyCheck = createStrategy(finalBestCombo.getEntryName(), finalBestCombo.getEntryParams());
         com.app.backend.trade.strategy.TradeStrategy exitStrategyCheck = createStrategy(finalBestCombo.getExitName(), finalBestCombo.getExitParams());
         com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategyCheck, exitStrategyCheck);
-        BarSeries checkSeries = series.getSubSeries(series.getBarCount() - testWindow, series.getBarCount());
+        BarSeries checkSeries = series.getSubSeries(series.getBarCount() - (int)Math.round(totalBars*0.2), series.getBarCount()); // dernier 20% pour le check
         RiskResult checkR = strategieBackTest.backtestStrategy(combined, checkSeries);
 
         return WalkForwardResultPro.builder()
