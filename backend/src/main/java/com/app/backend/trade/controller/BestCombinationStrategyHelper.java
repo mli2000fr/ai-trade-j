@@ -302,6 +302,8 @@ public class BestCombinationStrategyHelper {
                     avg_trade_bars = ?, 
                     max_trade_gain = ?, 
                     max_trade_loss = ?, 
+                    sharpe_ratio = ?
+                    stability_score = ?,
                     score_swing_trade = ?, 
                     score_swing_trade_check = ?,
                     fltred_out = ?,
@@ -330,6 +332,8 @@ public class BestCombinationStrategyHelper {
                     result.result.avgTradeBars,
                     result.result.maxTradeGain,
                     result.result.maxTradeLoss,
+                    result.result.sharpeRatio,
+                    result.result.stabilityScore,
                     result.result.scoreSwingTrade,
                     result.check.scoreSwingTrade,
                     result.result.fltredOut,
@@ -362,6 +366,8 @@ public class BestCombinationStrategyHelper {
                     avg_trade_bars,
                     max_trade_gain,
                     max_trade_loss,
+                    sharpe_ratio, 
+                    stability_score, 
                     score_swing_trade, 
                     score_swing_trade_check,
                     fltred_out,
@@ -373,7 +379,7 @@ public class BestCombinationStrategyHelper {
                     check_result,
                     create_date,
                     update_date
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""";
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""";
             jdbcTemplate.update(insertSql,
                     symbol,
                     inStrategyNamesJson,
@@ -393,6 +399,8 @@ public class BestCombinationStrategyHelper {
                     result.result.avgTradeBars,
                     result.result.maxTradeGain,
                     result.result.maxTradeLoss,
+                    result.result.sharpeRatio,
+                    result.result.stabilityScore,
                     result.result.scoreSwingTrade,
                     result.check.scoreSwingTrade,
                     result.result.fltredOut,
@@ -429,6 +437,8 @@ public class BestCombinationStrategyHelper {
                 .maxTradeGain(row.get("max_trade_gain") != null ? ((Number) row.get("max_trade_gain")).doubleValue() : 0.0)
                 .maxTradeLoss(row.get("max_trade_loss") != null ? ((Number) row.get("max_trade_loss")).doubleValue() : 0.0)
                 .scoreSwingTrade(row.get("score_swing_trade") != null ? ((Number) row.get("score_swing_trade")).doubleValue() : 0.0)
+                .sharpeRatio(row.get("sharpe_ratio") != null ? ((Number) row.get("sharpe_ratio")).doubleValue() : 0.0)
+                .stabilityScore(row.get("stability_score") != null ? ((Number) row.get("stability_score")).doubleValue() : 0.0)
                 .build();
         result.contextOptim = ParamsOptim.builder()
                 .initialCapital(row.get("initial_capital") != null ? ((Number) row.get("initial_capital")).doubleValue() : 0.0)
@@ -710,12 +720,12 @@ public class BestCombinationStrategyHelper {
         int totalCount = fullSeries.getBarCount();
         // Répartition en 3 folds selon les pourcentages demandés
         int[][] foldIndices = new int[][] {
-            // Fold 0 : optim 0-40%, test 40-60%
-            {0, (int)Math.round(totalCount*0.4), (int)Math.round(totalCount*0.4), (int)Math.round(totalCount*0.6)},
-            // Fold 1 : optim 20-60%, test 60-80%
-            {(int)Math.round(totalCount*0.2), (int)Math.round(totalCount*0.6), (int)Math.round(totalCount*0.6), (int)Math.round(totalCount*0.8)},
-            // Fold 2 : optim 40-80%, test 80-100%
-            {(int)Math.round(totalCount*0.4), (int)Math.round(totalCount*0.8), (int)Math.round(totalCount*0.8), totalCount}
+                // Fold 0 : optim 0-35%, test 35-50%
+            {0, (int)Math.round(totalCount*0.35), (int)Math.round(totalCount*0.35), (int)Math.round(totalCount*0.50)},
+                // Fold 1 : optim 15-50%, test 50-65%
+            {(int)Math.round(totalCount*0.15), (int)Math.round(totalCount*0.5), (int)Math.round(totalCount*0.5), (int)Math.round(totalCount*0.65)},
+                // Fold 2 : optim 30-65%, test 65-80%
+            {(int)Math.round(totalCount*0.3), (int)Math.round(totalCount*0.65), (int)Math.round(totalCount*0.65), (int)Math.round(totalCount*0.80)}
         };
         int kFolds = 3;
         List<RiskResult> foldResults = new ArrayList<>();
@@ -1040,6 +1050,8 @@ public class BestCombinationStrategyHelper {
                     .maxTradeGain(rs.getDouble("max_trade_gain"))
                     .maxTradeLoss(rs.getDouble("max_trade_loss"))
                     .scoreSwingTrade(rs.getDouble("score_swing_trade"))
+                    .sharpeRatio(rs.getDouble("sharpe_ratio"))
+                    .stabilityScore(rs.getDouble("stability_score"))
                     .fltredOut(rs.getBoolean("fltred_out")).build();
             result.contextOptim = ParamsOptim.builder()
                     .initialCapital(rs.getDouble("initial_capital"))
