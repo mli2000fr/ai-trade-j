@@ -200,9 +200,9 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
       try {
           let url;
           if (value) {
-           url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.single.symbol)}&isToday=true`;
+           url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.indiceSingle.symbol)}&isToday=true`;
          } else {
-           url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.single.symbol)}&historique=250`;
+           url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.indiceSingle.symbol)}&historique=250`;
          }
         // Bougies : on ajoute le paramètre today si nécessaire
         const bougiesRes = await fetch(url);
