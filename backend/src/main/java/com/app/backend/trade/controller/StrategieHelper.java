@@ -1060,7 +1060,7 @@ public class StrategieHelper {
         boolean isOverfit = (overfitRatio < 0.7 || overfitRatio > 1.3);
         // Sélection du meilleur combo swing trade
         SwingTradeScoreWeights weights = new SwingTradeScoreWeights(0.35, 0.25, 0.25, 0.15);
-        List<ComboResult> scoredCombos = strategieBackTest.computeSwingTradeScores(allResults, weights);
+        List<ComboResult> scoredCombos = strategieBackTest.computeSwingTradeScores(filteredResults, weights);
         ComboResult bestScoreResult = null;
         double maxScore = Double.NEGATIVE_INFINITY;
         // Sélection hybride/fallback

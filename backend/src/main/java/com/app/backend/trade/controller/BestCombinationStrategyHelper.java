@@ -85,8 +85,8 @@ public class BestCombinationStrategyHelper {
 
         // Sélection du meilleur combo swing trade
         StrategieHelper.SwingTradeScoreWeights weights = new StrategieHelper.SwingTradeScoreWeights(0.35, 0.25, 0.25, 0.15);
-        List<ComboMixResult> scoredCombos = strategieBackTest.computeSwingTradeMixScores(allComboMixResult, weights);
         List<ComboMixResult> filteredResults = allComboMixResult.stream().filter(re -> !re.isOverfit()).toList();
+        List<ComboMixResult> scoredCombos = strategieBackTest.computeSwingTradeMixScores(filteredResults, weights);
         ComboMixResult bestScoreResult = null;
         double maxScore = Double.NEGATIVE_INFINITY;
         // Sélection hybride/fallback

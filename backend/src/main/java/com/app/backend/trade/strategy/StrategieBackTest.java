@@ -314,7 +314,32 @@ public class StrategieBackTest {
         for (int i = 0; i < combos.size(); i++) {
             ComboResult combo = combos.get(i);
             RiskResult r = combo.getResult();
-            // Filtres durs
+            // Calcul d'un score global pour chaque résultat
+            double score = 0;
+
+            // Max Drawdown : moins c'est mieux
+            score += (0.4 - r.getMaxDrawdown()) / 0.4 * 25;  // score de 0 à 25
+
+            // Sharpe Ratio : plus c'est élevé, mieux c'est
+            score += Math.min(r.getSharpeRatio() / 2.0, 1.0) * 25;  // score de 0 à 25
+
+            // Profit Factor : plus c'est élevé, mieux c'est
+            score += Math.min((r.getProfitFactor() - 1.0) / 2.0, 1.0) * 25;  // score de 0 à 25
+
+            // WinRate : plus c'est élevé, mieux c'est
+            score += r.getWinRate() * 15;  // score de 0 à 15
+
+            // Nombre de trades : assure la fiabilité
+            score += Math.min(r.getTradeCount() / 20.0, 1.0) * 10; // score de 0 à 10
+
+            // Score total : 0 (mauvais) à 100 (excellent)
+            combo.getResult().setScoreSwingTrade(score);
+            if (score >= 60) {
+                combo.getResult().setScoreSwingTrade(score);
+                results.add(combo);
+            }
+            /*
+             // Filtres durs
             boolean filteredOut = r.getMaxDrawdown() > 0.3 || r.getSharpeRatio() < 0.5 || r.getTradeCount() < 10 || (r.getWinRate() < 0.5 && r.getProfitFactor() < 1.2);
             if (filteredOut) continue;
             // Normalisation min-max
@@ -326,6 +351,7 @@ public class StrategieBackTest {
             double score = weights.rendement * rendNorm + weights.sharpe * sharpeNorm + weights.drawdown * (1 - drawdownNorm) + weights.stability * stabilityNorm;
             combo.getResult().setScoreSwingTrade(score);
             results.add(combo);
+             */
         }
         return results;
     }
@@ -355,7 +381,32 @@ public class StrategieBackTest {
         for (int i = 0; i < combos.size(); i++) {
             ComboMixResult combo = combos.get(i);
             RiskResult r = combo.getResult();
-            // Filtres durs
+            // Calcul d'un score global pour chaque résultat
+            double score = 0;
+
+            // Max Drawdown : moins c'est mieux
+            score += (0.4 - r.getMaxDrawdown()) / 0.4 * 25;  // score de 0 à 25
+
+            // Sharpe Ratio : plus c'est élevé, mieux c'est
+            score += Math.min(r.getSharpeRatio() / 2.0, 1.0) * 25;  // score de 0 à 25
+
+            // Profit Factor : plus c'est élevé, mieux c'est
+            score += Math.min((r.getProfitFactor() - 1.0) / 2.0, 1.0) * 25;  // score de 0 à 25
+
+            // WinRate : plus c'est élevé, mieux c'est
+            score += r.getWinRate() * 15;  // score de 0 à 15
+
+            // Nombre de trades : assure la fiabilité
+            score += Math.min(r.getTradeCount() / 20.0, 1.0) * 10; // score de 0 à 10
+
+            // Score total : 0 (mauvais) à 100 (excellent)
+
+            if (score >= 60) {
+                combo.getResult().setScoreSwingTrade(score);
+                results.add(combo);
+            }
+            /*
+             // Filtres durs
             boolean filteredOut = r.getMaxDrawdown() > 0.3 || r.getSharpeRatio() < 0.5 || r.getTradeCount() < 10 || (r.getWinRate() < 0.5 && r.getProfitFactor() < 1.2);
             if (filteredOut) continue;
             // Normalisation min-max
@@ -366,7 +417,8 @@ public class StrategieBackTest {
             // Score pondéré
             double score = weights.rendement * rendNorm + weights.sharpe * sharpeNorm + weights.drawdown * (1 - drawdownNorm) + weights.stability * stabilityNorm;
             combo.getResult().setScoreSwingTrade(score);
-            results.add(combo);
+            results.add(combo);S
+             */
         }
         return results;
     }
