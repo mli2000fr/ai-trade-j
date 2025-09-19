@@ -1014,6 +1014,7 @@ public class StrategieHelper {
                             .exitName(exitName)
                             .exitParams(exitParams)
                             .result(result)
+                            .trainRendement(trainResult.getRendement())
                             .build();
                     foldAllCombos.add(combo);
                     if(!isOverfitCombo){
@@ -1080,12 +1081,8 @@ public class StrategieHelper {
             double minOverfitDist = Double.POSITIVE_INFINITY;
             for (ComboResult scoreResult : scoredCombos) {
                 RiskResult res = scoreResult.getResult();
-                double trainRendement = res.getRendement();
-                double overfitRatioCombo = 1.0;
-                if (trainRendement != 0.0) {
-                    overfitRatioCombo = trainRendement / trainRendement; // ratio = 1 (si pas d'info train/test, on met 1)
-                }
-                // Si tu stockes le ratio dans ComboResult, utilise-le ici
+                double trainRendement = scoreResult.getTrainRendement();
+                double overfitRatioCombo = trainRendement == 0.0 ? 1.0 : res.getRendement() / trainRendement;
                 double dist = Math.abs(overfitRatioCombo - 1.0);
                 if (dist < minOverfitDist) {
                     minOverfitDist = dist;

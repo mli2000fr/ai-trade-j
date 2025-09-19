@@ -42,8 +42,6 @@ public class BestCombinationStrategyHelper {
 
     public BestCombinationResult findBestCombinationGlobal(String symbol) {
         Map<String, String> bestInOutStrategy = this.getInOutStrategiesForSymbol(symbol);
-        BestCombinationResult bestGlobal = null;
-        double bestScore = Double.NEGATIVE_INFINITY;
         List<Class<? extends TradeStrategy>> strategies = Arrays.asList(
             ImprovedTrendFollowingStrategy.class,
             SmaCrossoverStrategy.class,
@@ -85,11 +83,66 @@ public class BestCombinationStrategyHelper {
             }
         }
 
+        // Sélection du meilleur combo swing trade
+        StrategieHelper.SwingTradeScoreWeights weights = new StrategieHelper.SwingTradeScoreWeights(0.35, 0.25, 0.25, 0.15);
+        List<ComboMixResult> scoredCombos = strategieBackTest.computeSwingTradeMixScores(allComboMixResult, weights);
+        List<ComboMixResult> filteredResults = allComboMixResult.stream().filter(re -> !re.isOverfit()).toList();
+        ComboMixResult bestScoreResult = null;
+        double maxScore = Double.NEGATIVE_INFINITY;
+        // Sélection hybride/fallback
+        if (!filteredResults.isEmpty()) {
+            // Sélectionne le meilleur combo non-overfit
+            for (ComboMixResult scoreResult : scoredCombos) {
+                if (filteredResults.contains(scoreResult)) {
+                    if (scoreResult.getResult().getScoreSwingTrade() > maxScore) {
+                        maxScore = scoreResult.getResult().getScoreSwingTrade();
+                        bestScoreResult = scoreResult;
+                    }
+                }
+            }
+        } else {
+            // Fallback: sélectionne le combo dont le ratio overfit est le plus proche de 1
+            double minOverfitDist = Double.POSITIVE_INFINITY;
+            for (ComboMixResult scoreResult : scoredCombos) {
+                RiskResult res = scoreResult.getResult();
+                double trainRendement = scoreResult.getTrainRendement();
+                double overfitRatioCombo = trainRendement == 0.0 ? 1.0 : res.getRendement() / trainRendement;
+                double dist = Math.abs(overfitRatioCombo - 1.0);
+                if (dist < minOverfitDist) {
+                    minOverfitDist = dist;
+                    bestScoreResult = scoreResult;
+                }
+            }
+        }
+
+        int totalCount = barSeries.getBarCount();
+
+        BestCombinationResult resultObj = new BestCombinationResult();
+        resultObj.symbol = symbol;
+        resultObj.inParams = bestScoreResult.inParams;
+        resultObj.outParams = bestScoreResult.outParams;
+        resultObj.result = bestScoreResult.getResult();
+        resultObj.inStrategyNames = bestScoreResult.inStrategyNames;
+        resultObj.outStrategyNames = bestScoreResult.outStrategyNames;
+        resultObj.contextOptim = ParamsOptim.builder()
+                .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
+                .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
+                .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
+                .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
+                .nbSimples(totalCount)
+                .build();
+
+        // Check final sur les derniers 20% de bougies
+        BarSeries checkSeries = barSeries.getSubSeries(totalCount - (int)Math.round(totalCount*0.2), totalCount);
+        RiskResult checkResult = this.checkResultat(checkSeries, resultObj);
+        resultObj.rendementSum  = resultObj.getResult().getRendement() + checkResult.getRendement();
+        resultObj.rendementDiff = resultObj.getResult().getRendement() - checkResult.getRendement();
+        resultObj.rendementScore = resultObj.rendementSum - (resultObj.rendementDiff > 0 ? resultObj.rendementDiff : -resultObj.rendementDiff);
+        resultObj.check = checkResult;
 
 
-
-        TradeUtils.log("Best global combination for symbol=" + symbol + " : " + resultObjToString(bestGlobal));
-        return bestGlobal;
+        TradeUtils.log("Best global combination for symbol=" + symbol + " : " + resultObjToString(resultObj));
+        return resultObj;
     }
 
 
@@ -713,10 +766,7 @@ public class BestCombinationStrategyHelper {
 
     private List<ComboMixResult> optimseStrategyMix(List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo, StrategyFilterConfig filterConfig, SwingTradeOptimParams swingParams) {
         BestCombinationResult resultObj = new BestCombinationResult();
-        if (seriesList == null || seriesList.isEmpty()) {
-            resultObj.result.rendement = Double.NEGATIVE_INFINITY;
-            return resultObj;
-        }
+
         BarSeries fullSeries = seriesList.get(0);
         int totalCount = fullSeries.getBarCount();
         // Répartition en 3 folds selon les pourcentages demandés
@@ -729,9 +779,6 @@ public class BestCombinationStrategyHelper {
             {(int)Math.round(totalCount*0.3), (int)Math.round(totalCount*0.65), (int)Math.round(totalCount*0.65), (int)Math.round(totalCount*0.80)}
         };
         int kFolds = 3;
-        List<RiskResult> foldResults = new ArrayList<>();
-        List<Double> trainPerformances = new ArrayList<>();
-        List<Double> testPerformances = new ArrayList<>();
         List<ComboMixResult> foldAllCombos = new ArrayList<>();
 
         for (int fold = 0; fold < kFolds; fold++) {
@@ -912,11 +959,8 @@ public class BestCombinationStrategyHelper {
             };
             // Backtest sur la partie optimisation (train)
             RiskResult trainResult = strategieBackTest.backtestStrategy(combinedStrategyOptim, optimSeries);
-            trainPerformances.add(trainResult.rendement);
             // Backtest sur la partie test
             RiskResult testResult = strategieBackTest.backtestStrategy(combinedStrategyTest, testSeries);
-            testPerformances.add(testResult.rendement);
-            foldResults.add(testResult);
 
             double overfitRatioCombo = testResult.getRendement() / (trainResult.getRendement() == 0.0 ? 1.0 : trainResult.getRendement());
             boolean isOverfitCombo = (overfitRatioCombo < 0.7 || overfitRatioCombo > 1.3);
@@ -926,97 +970,11 @@ public class BestCombinationStrategyHelper {
                     .inParams(resultObj.inParams)
                     .outParams(resultObj.outParams)
                     .result(testResult)
-                    .isOverfit(isOverfitCombo)
+                    .trainRendement(trainResult.rendement)
+                    .isOverfit(isOverfitCombo).build();
             foldAllCombos.add(combo);
         }
         return foldAllCombos;
-        /*
-        // Agrégation des résultats des folds
-        double sumRendement = 0.0, sumDrawdown = 0.0, sumWinRate = 0.0, sumProfitFactor = 0.0, sumAvgPnL = 0.0;
-        double sumAvgTradeBars = 0.0, sumMaxTradeGain = 0.0, sumMaxTradeLoss = 0.0, sumScoreSwingTrade = 0.0;
-        int sumTradeCount = 0;
-        for (RiskResult res : foldResults) {
-            sumRendement += res.rendement;
-            sumDrawdown += res.maxDrawdown;
-            sumWinRate += res.winRate;
-            sumProfitFactor += res.profitFactor;
-            sumAvgPnL += res.avgPnL;
-            sumAvgTradeBars += res.avgTradeBars;
-            sumMaxTradeGain += res.maxTradeGain;
-            sumMaxTradeLoss += res.maxTradeLoss;
-            sumScoreSwingTrade += res.scoreSwingTrade;
-            sumTradeCount += res.tradeCount;
-
-        }
-
-        ComboMixResult bestCombo = null;
-        List<ComboMixResult> nonOverfitResults = new ArrayList<>();
-        for(ComboMixResult cbo :listeComboMixResult){
-            // Mise à jour du meilleur combo global (fallback)
-            if (bestCombo == null || cbo.getResult().getRendement() > bestCombo.getResult().getRendement()) {
-                bestCombo = cbo;
-            }
-            if (!cbo.getResult().isFltredOut()) {
-                nonOverfitResults.add(cbo);
-            }
-        }
-        ComboMixResult bestComboNonOverfit = null;
-        double bestPerfNonOverfit = Double.NEGATIVE_INFINITY;
-        for (ComboMixResult cbo : nonOverfitResults) {
-            if (cbo.getResult().getRendement() > bestPerfNonOverfit) {
-                bestPerfNonOverfit = cbo.getResult().getRendement();
-                bestComboNonOverfit = cbo;
-            }
-        }
-        ComboMixResult finalBestCombo = bestComboNonOverfit != null ? bestComboNonOverfit : bestCombo;
-
-        int n = foldResults.size();
-        RiskResult aggResult = RiskResult.builder()
-                .rendement(n > 0 ? sumRendement / n : Double.NEGATIVE_INFINITY)
-                .maxDrawdown(n > 0 ? sumDrawdown / n : 0.0)
-                .winRate(n > 0 ? sumWinRate / n : 0.0)
-                .profitFactor(n > 0 ? sumProfitFactor / n : 0.0)
-                .avgPnL(n > 0 ? sumAvgPnL / n : 0.0)
-                .avgTradeBars(n > 0 ? sumAvgTradeBars / n : 0.0)
-                .maxTradeGain(n > 0 ? sumMaxTradeGain / n : 0.0)
-                .maxTradeLoss(n > 0 ? sumMaxTradeLoss / n : 0.0)
-                .scoreSwingTrade(n > 0 ? sumScoreSwingTrade / n : 0.0)
-                .tradeCount(sumTradeCount)
-                .build();
-        // Calcul du ratio d'overfitting
-        double avgTrainPerf = trainPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-        double avgTestPerf = testPerformances.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-        double overfitRatio = avgTestPerf / (avgTrainPerf == 0.0 ? 1.0 : avgTrainPerf);
-        boolean isOverfit = (overfitRatio < 0.7 || overfitRatio > 1.3);
-        // --- Filtrage final sur le meilleur résultat ---
-        boolean stable = aggResult != null && TradeUtils.isStableAndSimple(aggResult, filterConfig);
-        if (aggResult != null) {
-            aggResult.setFltredOut(!stable || isOverfit);
-        }
-
-        resultObj.inParams = finalBestCombo.inParams;
-        resultObj.outParams = finalBestCombo.outParams;
-        resultObj.result = finalBestCombo.getResult();
-        resultObj.inStrategyNames = inCombo.stream().map(Class::getSimpleName).toList();
-        resultObj.outStrategyNames = outCombo.stream().map(Class::getSimpleName).toList();
-        resultObj.contextOptim = ParamsOptim.builder()
-                .initialCapital(StrategieBackTest.INITIAL_CAPITAL)
-                .riskPerTrade(StrategieBackTest.RISK_PER_TRADE)
-                .stopLossPct(StrategieBackTest.STOP_LOSS_PCT)
-                .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
-                .nbSimples(totalCount)
-                .build();
-
-        // Check final sur les derniers 20% de bougies
-        BarSeries checkSeries = fullSeries.getSubSeries(fullSeries.getBarCount() - (int)Math.round(totalCount*0.2), fullSeries.getBarCount());
-        RiskResult checkResult = this.checkResultat(checkSeries, resultObj);
-        resultObj.rendementSum  = resultObj.getResult().getRendement() + checkResult.getRendement();
-        resultObj.rendementDiff = resultObj.getResult().getRendement() - checkResult.getRendement();
-        resultObj.rendementScore = resultObj.rendementSum - (resultObj.rendementDiff > 0 ? resultObj.rendementDiff : -resultObj.rendementDiff);
-        resultObj.check = checkResult;
-
-        TradeUtils.log("BestCombinationResult (walk-forward) : " + resultObjToString(resultObj));
-        return resultObj;*/
     }
 
 
