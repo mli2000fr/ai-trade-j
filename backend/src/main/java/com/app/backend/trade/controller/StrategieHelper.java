@@ -880,10 +880,8 @@ public class StrategieHelper {
     public BestInOutStrategy optimseStrategy(String symbol) {
         List<DailyValue> listeValus = this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_OPTIM);
         BarSeries series = TradeUtils.mapping(listeValus);
-        // Création d'une config de filtrage par défaut (modifiable si besoin)
-        StrategyFilterConfig filterConfig = new StrategyFilterConfig();
         // Utilisation du swingParams de la classe (modifiable si besoin)
-        WalkForwardResultPro walkForwardResultPro =  this.optimseStrategy(series, filterConfig, swingParams);
+        WalkForwardResultPro walkForwardResultPro =  this.optimseStrategy(series, swingParams);
         if (walkForwardResultPro == null || walkForwardResultPro.getBestCombo() == null) {
             return null;
         }
@@ -914,11 +912,10 @@ public class StrategieHelper {
      * Optimisation walk-forward professionnelle pour le swing trade.
      * Les paramètres sont des pourcentages du nombre total de bougies.
      * @param series série de prix
-     * @param filterConfig configuration des critères de filtrage
      * @param swingParams paramètres d'optimisation swing trade
      * @return WalkForwardResultPro
      */
-    public WalkForwardResultPro optimseStrategy(BarSeries series, StrategyFilterConfig filterConfig, SwingTradeOptimParams swingParams) {
+    public WalkForwardResultPro optimseStrategy(BarSeries series, SwingTradeOptimParams swingParams) {
         int totalBars = series.getBarCount();
         int kFolds = 3; // 3 folds fixes
         List<List<ComboResult>> foldsResults = new ArrayList<>();

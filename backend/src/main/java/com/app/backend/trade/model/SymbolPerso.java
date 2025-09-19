@@ -11,3 +11,4 @@ public class SymbolPerso {
     private String name;
     private String id;
 }
+
