@@ -1005,6 +1005,7 @@ public class StrategieHelper {
                     // Calcul du ratio overfit pour ce combo
                     double overfitRatioCombo = result.getRendement() / (trainResult.getRendement() == 0.0 ? 1.0 : trainResult.getRendement());
                     boolean isOverfitCombo = (overfitRatioCombo < 0.7 || overfitRatioCombo > 1.3);
+                    result.setFltredOut(isOverfitCombo);
                     ComboResult combo = ComboResult.builder()
                             .entryName(entryName)
                             .entryParams(entryParams)

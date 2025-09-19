@@ -964,6 +964,7 @@ public class BestCombinationStrategyHelper {
 
             double overfitRatioCombo = testResult.getRendement() / (trainResult.getRendement() == 0.0 ? 1.0 : trainResult.getRendement());
             boolean isOverfitCombo = (overfitRatioCombo < 0.7 || overfitRatioCombo > 1.3);
+            testResult.setFltredOut(isOverfitCombo);
             ComboMixResult combo =  ComboMixResult.builder()
                     .inStrategyNames(inStrategies.stream().map(TradeStrategy::getName).toList())
                     .outStrategyNames(outStrategies.stream().map(TradeStrategy::getName).toList())
