@@ -131,16 +131,10 @@ public class BestCombinationStrategyHelper {
                 .takeProfitPct(StrategieBackTest.TAKE_PROFIL_PCT)
                 .nbSimples(totalCount)
                 .build();
-
-        // Check final sur les derniers 20% de bougies
-        BarSeries checkSeries = barSeries.getSubSeries(totalCount - (int)Math.round(totalCount*0.2), totalCount);
-        RiskResult checkResult = this.checkResultat(checkSeries, resultObj);
-        resultObj.rendementSum  = resultObj.getResult().getRendement() + checkResult.getRendement();
-        resultObj.rendementDiff = resultObj.getResult().getRendement() - checkResult.getRendement();
+        resultObj.rendementSum  = resultObj.getResult().getRendement() + resultObj.getCheck().getRendement();
+        resultObj.rendementDiff = resultObj.getResult().getRendement() - resultObj.getCheck().getRendement();
         resultObj.rendementScore = resultObj.rendementSum - (resultObj.rendementDiff > 0 ? resultObj.rendementDiff : -resultObj.rendementDiff);
-        resultObj.check = checkResult;
-
-
+        resultObj.check = resultObj.getCheck();
         TradeUtils.log("Best global combination for symbol=" + symbol + " : " + resultObjToString(resultObj));
         return resultObj;
     }
@@ -965,11 +959,16 @@ public class BestCombinationStrategyHelper {
             double overfitRatioCombo = testResult.getRendement() / (trainResult.getRendement() == 0.0 ? 1.0 : trainResult.getRendement());
             boolean isOverfitCombo = (overfitRatioCombo < 0.7 || overfitRatioCombo > 1.3);
             testResult.setFltredOut(isOverfitCombo);
+
+            // Check final sur les derniers 20% de bougies
+            BarSeries checkSeries = fullSeries.getSubSeries(totalCount - (int)Math.round(totalCount*0.2), totalCount);
+            RiskResult checkResult = this.checkResultat(checkSeries, resultObj);
             ComboMixResult combo =  ComboMixResult.builder()
                     .inStrategyNames(inStrategies.stream().map(TradeStrategy::getName).toList())
                     .outStrategyNames(outStrategies.stream().map(TradeStrategy::getName).toList())
                     .inParams(resultObj.inParams)
                     .outParams(resultObj.outParams)
+                    .checkResult(checkResult)
                     .result(testResult)
                     .trainRendement(trainResult.rendement)
                     .isOverfit(isOverfitCombo).build();

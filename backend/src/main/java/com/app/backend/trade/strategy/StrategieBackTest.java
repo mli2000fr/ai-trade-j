@@ -312,14 +312,14 @@ public class StrategieBackTest {
      * @param weights pondérations (rendement, sharpe, drawdown, stabilité)
      * @return liste de SwingTradeScoreResult (combo + score)
      */
-    public List<ComboResult> computeSwingTradeScores(List<ComboResult> combos, StrategieHelper.SwingTradeScoreWeights weights) {
+    public List<ComboResult> computeSwingTradeScores(List<ComboResult> combos) {
         // Extraction des métriques
         List<Double> rendementList = new ArrayList<>();
         List<Double> sharpeList = new ArrayList<>();
         List<Double> drawdownList = new ArrayList<>();
         List<Double> stabilityList = new ArrayList<>();
         for (ComboResult combo : combos) {
-            RiskResult r = combo.getResult();
+            RiskResult r = combo.getCheckResult();
             rendementList.add(r.getRendement());
             sharpeList.add(r.getSharpeRatio());
             drawdownList.add(r.getMaxDrawdown());
@@ -369,7 +369,7 @@ public class StrategieBackTest {
         List<Double> drawdownList = new ArrayList<>();
         List<Double> stabilityList = new ArrayList<>();
         for (ComboMixResult combo : combos) {
-            RiskResult r = combo.getResult();
+            RiskResult r = combo.getCheckResult();
             rendementList.add(r.getRendement());
             sharpeList.add(r.getSharpeRatio());
             drawdownList.add(r.getMaxDrawdown());

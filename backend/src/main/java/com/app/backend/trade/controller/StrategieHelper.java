@@ -904,7 +904,7 @@ public class StrategieHelper {
                         .nbSimples(listeValus.size())
                         .build())
                 .result(walkForwardResultPro.getBestCombo().getResult())
-                .check(walkForwardResultPro.getCheck()).build();
+                .check(walkForwardResultPro.getBestCombo().getCheckResult()).build();
     }
 
 
@@ -1014,6 +1014,10 @@ public class StrategieHelper {
                             .result(result)
                             .trainRendement(trainResult.getRendement())
                             .build();
+                    //fait un check final
+                    BarSeries checkSeries = series.getSubSeries(series.getBarCount() - (int)Math.round(totalBars*0.2), series.getBarCount()); // dernier 20% pour le check
+                    RiskResult checkR = (combined != null) ? strategieBackTest.backtestStrategy(combined, checkSeries) : null;
+                    combo.setCheckResult(checkR);
                     foldAllCombos.add(combo);
                     if(!isOverfitCombo){
                         foldResults.add(combo);
@@ -1021,13 +1025,6 @@ public class StrategieHelper {
                 }
             }
             trainPerformances.add(bestTrainPerf);
-            // Backtest sur test (déjà fait dans foldResults)
-            double bestTestPerf = Double.NEGATIVE_INFINITY;
-            for (ComboResult combo : foldResults) {
-                double perf = combo.getResult().getRendement();
-                if (perf > bestTestPerf) bestTestPerf = perf;
-            }
-            testPerformances.add(bestTestPerf);
             foldsResults.add(foldResults);
             foldsAllCombos.add(foldAllCombos);
         }
@@ -1059,8 +1056,7 @@ public class StrategieHelper {
         double overfitRatio = avgTestPerf / (avgTrainPerf == 0.0 ? 1.0 : avgTrainPerf);
         boolean isOverfit = (overfitRatio < 0.7 || overfitRatio > 1.3);
         // Sélection du meilleur combo swing trade
-        SwingTradeScoreWeights weights = new SwingTradeScoreWeights(0.35, 0.25, 0.25, 0.15);
-        List<ComboResult> scoredCombos = strategieBackTest.computeSwingTradeScores(filteredResults, weights);
+        List<ComboResult> scoredCombos = strategieBackTest.computeSwingTradeScores(filteredResults);
         ComboResult bestScoreResult = null;
         double maxScore = Double.NEGATIVE_INFINITY;
         // Sélection hybride/fallback
@@ -1088,12 +1084,7 @@ public class StrategieHelper {
                 }
             }
         }
-        //fait un check final
-        com.app.backend.trade.strategy.TradeStrategy entryStrategyCheck = bestScoreResult != null ? createStrategy(bestScoreResult.getEntryName(), bestScoreResult.getEntryParams()) : null;
-        com.app.backend.trade.strategy.TradeStrategy exitStrategyCheck = bestScoreResult != null ? createStrategy(bestScoreResult.getExitName(), bestScoreResult.getExitParams()) : null;
-        com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy combined = (entryStrategyCheck != null && exitStrategyCheck != null) ? new com.app.backend.trade.strategy.StrategieBackTest.CombinedTradeStrategy(entryStrategyCheck, exitStrategyCheck) : null;
-        BarSeries checkSeries = series.getSubSeries(series.getBarCount() - (int)Math.round(totalBars*0.2), series.getBarCount()); // dernier 20% pour le check
-        RiskResult checkR = (combined != null) ? strategieBackTest.backtestStrategy(combined, checkSeries) : null;
+
 
         return WalkForwardResultPro.builder()
                 .segmentResults(allResults)
@@ -1108,7 +1099,6 @@ public class StrategieHelper {
                 .avgTestRendement(avgTestPerf)
                 .overfitRatio(overfitRatio)
                 .isOverfit(isOverfit)
-                .check(checkR)
                 .build();
     }
 

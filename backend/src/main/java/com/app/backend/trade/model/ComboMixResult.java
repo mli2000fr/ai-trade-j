@@ -19,6 +19,7 @@ public class ComboMixResult {
     public Map<String, Object> inParams = new HashMap<>();
     public Map<String, Object> outParams = new HashMap<>();
     private RiskResult result;
+    private RiskResult checkResult;
     private ParamsOptim paramsOptim;
     private boolean isOverfit;
     // Ajout du rendement train pour le calcul du ratio d'overfit

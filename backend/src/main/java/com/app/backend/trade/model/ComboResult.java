@@ -15,6 +15,7 @@ public class ComboResult {
     private String exitName;
     private Object exitParams;
     private RiskResult result;
+    private RiskResult checkResult;
     private ParamsOptim paramsOptim;
     // Ajout du rendement train pour le calcul du ratio d'overfit
     private double trainRendement;
