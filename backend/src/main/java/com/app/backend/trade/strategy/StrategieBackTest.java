@@ -280,6 +280,30 @@ public class StrategieBackTest {
     }
 
 
+    enum TradingProfile { CONSERVATIVE, BALANCED, AGGRESSIVE }
+    public double calculScore(TradingProfile profile, RiskResult r){
+        int wDrawdown = 25, wSharpe = 20, wPF = 20, wWinRate = 10, wTrades = 5, wReturn = 20;
+
+        switch(profile) {
+            case CONSERVATIVE:
+                wDrawdown = 30; wSharpe = 25; wPF = 20; wWinRate = 10; wTrades = 5; wReturn = 10; break;
+            case BALANCED:
+                wDrawdown = 25; wSharpe = 20; wPF = 20; wWinRate = 10; wTrades = 5; wReturn = 20; break;
+            case AGGRESSIVE:
+                wDrawdown = 15; wSharpe = 15; wPF = 15; wWinRate = 10; wTrades = 5; wReturn = 40; break;
+        }
+
+        // 3️⃣ Calculer le score
+        double scoreW = 0;
+        scoreW += (0.4 - r.getMaxDrawdown()) / 0.4 * wDrawdown;
+        scoreW += Math.min(r.getSharpeRatio() / 2.0, 1.0) * wSharpe;
+        scoreW += Math.min((r.getProfitFactor() - 1.0) / 2.0, 1.0) * wPF;
+        scoreW += r.getWinRate() * wWinRate;
+        scoreW += Math.min(r.getTradeCount() / 20.0, 1.0) * wTrades;
+        scoreW += Math.min(r.getRendement() / 0.5, 1.0) * wReturn;
+        return scoreW;
+    }
+
     /**
      * Calcule le score swing trade multi-critères pour une liste de ComboResult.
      * Normalise les métriques et applique les pondérations.
@@ -315,24 +339,7 @@ public class StrategieBackTest {
             ComboResult combo = combos.get(i);
             RiskResult r = combo.getResult();
             // Calcul d'un score global pour chaque résultat
-            double score = 0;
-
-            // Max Drawdown : moins c'est mieux
-            score += (0.4 - r.getMaxDrawdown()) / 0.4 * 25;  // score de 0 à 25
-
-            // Sharpe Ratio : plus c'est élevé, mieux c'est
-            score += Math.min(r.getSharpeRatio() / 2.0, 1.0) * 25;  // score de 0 à 25
-
-            // Profit Factor : plus c'est élevé, mieux c'est
-            score += Math.min((r.getProfitFactor() - 1.0) / 2.0, 1.0) * 25;  // score de 0 à 25
-
-            // WinRate : plus c'est élevé, mieux c'est
-            score += r.getWinRate() * 15;  // score de 0 à 15
-
-            // Nombre de trades : assure la fiabilité
-            score += Math.min(r.getTradeCount() / 20.0, 1.0) * 10; // score de 0 à 10
-
-            // Score total : 0 (mauvais) à 100 (excellent)
+            double score = this.calculScore(TradingProfile.BALANCED, r);
             combo.getResult().setScoreSwingTrade(score);
             if (score >= 60) {
                 combo.getResult().setScoreSwingTrade(score);
@@ -382,24 +389,8 @@ public class StrategieBackTest {
             ComboMixResult combo = combos.get(i);
             RiskResult r = combo.getResult();
             // Calcul d'un score global pour chaque résultat
-            double score = 0;
 
-            // Max Drawdown : moins c'est mieux
-            score += (0.4 - r.getMaxDrawdown()) / 0.4 * 25;  // score de 0 à 25
-
-            // Sharpe Ratio : plus c'est élevé, mieux c'est
-            score += Math.min(r.getSharpeRatio() / 2.0, 1.0) * 25;  // score de 0 à 25
-
-            // Profit Factor : plus c'est élevé, mieux c'est
-            score += Math.min((r.getProfitFactor() - 1.0) / 2.0, 1.0) * 25;  // score de 0 à 25
-
-            // WinRate : plus c'est élevé, mieux c'est
-            score += r.getWinRate() * 15;  // score de 0 à 15
-
-            // Nombre de trades : assure la fiabilité
-            score += Math.min(r.getTradeCount() / 20.0, 1.0) * 10; // score de 0 à 10
-
-            // Score total : 0 (mauvais) à 100 (excellent)
+            double score = this.calculScore(TradingProfile.BALANCED, r);
 
             if (score >= 60) {
                 combo.getResult().setScoreSwingTrade(score);
