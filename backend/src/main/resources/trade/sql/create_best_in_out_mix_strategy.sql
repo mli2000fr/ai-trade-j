@@ -18,6 +18,8 @@ CREATE TABLE trade_ai.best_in_out_mix_strategy (
     avg_trade_bars DOUBLE,
     max_trade_gain DOUBLE,
     max_trade_loss DOUBLE,
+    sharpe_ratio DOUBLE,
+    stability_score DOUBLE,
     score_swing_trade DOUBLE,
     score_swing_trade_check DOUBLE,
     fltred_out BOOLEAN DEFAULT FALSE,
