@@ -68,6 +68,7 @@ public class BestCombinationStrategyHelper {
         strategieHelper.updateDBDailyValu(symbol);
         List<DailyValue> listeValus = strategieHelper.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_OPTIM);
         BarSeries barSeries = TradeUtils.mapping(listeValus);
+        List<ComboMixResult> allComboMixResult = new ArrayList<>();
         for (int in = 1; in <= NB_IN; in++) {
             for (int out = 1; out <= NB_OUT; out++) {
                 // Générer les combinaisons qui incluent obligatoirement la best in/out
@@ -77,16 +78,16 @@ public class BestCombinationStrategyHelper {
                     for (List<Class<? extends TradeStrategy>> outCombo : outCombinations) {
 
                         StrategyFilterConfig filterConfig = new StrategyFilterConfig();
-                        BestCombinationResult result = optimseStrategyMix(Arrays.asList(barSeries), inCombo, outCombo, filterConfig, swingParams);
-                        // TradeUtils.log("Global search: inCombo=" + inCombo + ", outCombo=" + outCombo + " => score=" + result.score);
-                        if (result != null && result.result.rendement > bestScore) {
-                            bestScore = result.result.rendement;
-                            bestGlobal = result;
-                        }
+                        List<ComboMixResult> results = optimseStrategyMix(Arrays.asList(barSeries), inCombo, outCombo, filterConfig, swingParams);
+                        allComboMixResult.addAll(results);
                     }
                 }
             }
         }
+
+
+
+
         TradeUtils.log("Best global combination for symbol=" + symbol + " : " + resultObjToString(bestGlobal));
         return bestGlobal;
     }
@@ -710,7 +711,7 @@ public class BestCombinationStrategyHelper {
 
 
 
-    private BestCombinationResult optimseStrategyMix(List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo, StrategyFilterConfig filterConfig, SwingTradeOptimParams swingParams) {
+    private List<ComboMixResult> optimseStrategyMix(List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo, StrategyFilterConfig filterConfig, SwingTradeOptimParams swingParams) {
         BestCombinationResult resultObj = new BestCombinationResult();
         if (seriesList == null || seriesList.isEmpty()) {
             resultObj.result.rendement = Double.NEGATIVE_INFINITY;
@@ -731,7 +732,7 @@ public class BestCombinationStrategyHelper {
         List<RiskResult> foldResults = new ArrayList<>();
         List<Double> trainPerformances = new ArrayList<>();
         List<Double> testPerformances = new ArrayList<>();
-        List<ComboMixResult> listeComboMixResult = new ArrayList<>();
+        List<ComboMixResult> foldAllCombos = new ArrayList<>();
 
         for (int fold = 0; fold < kFolds; fold++) {
             int optimStart = foldIndices[fold][0];
@@ -919,17 +920,17 @@ public class BestCombinationStrategyHelper {
 
             double overfitRatioCombo = testResult.getRendement() / (trainResult.getRendement() == 0.0 ? 1.0 : trainResult.getRendement());
             boolean isOverfitCombo = (overfitRatioCombo < 0.7 || overfitRatioCombo > 1.3);
-            boolean stable = TradeUtils.isStableAndSimple(testResult, filterConfig);
-            testResult.setFltredOut(!stable || isOverfitCombo);
             ComboMixResult combo =  ComboMixResult.builder()
                     .inStrategyNames(inStrategies.stream().map(TradeStrategy::getName).toList())
                     .outStrategyNames(outStrategies.stream().map(TradeStrategy::getName).toList())
                     .inParams(resultObj.inParams)
                     .outParams(resultObj.outParams)
                     .result(testResult)
-                    .build();
-            listeComboMixResult.add(combo);
+                    .isOverfit(isOverfitCombo)
+            foldAllCombos.add(combo);
         }
+        return foldAllCombos;
+        /*
         // Agrégation des résultats des folds
         double sumRendement = 0.0, sumDrawdown = 0.0, sumWinRate = 0.0, sumProfitFactor = 0.0, sumAvgPnL = 0.0;
         double sumAvgTradeBars = 0.0, sumMaxTradeGain = 0.0, sumMaxTradeLoss = 0.0, sumScoreSwingTrade = 0.0;
@@ -1015,7 +1016,7 @@ public class BestCombinationStrategyHelper {
         resultObj.check = checkResult;
 
         TradeUtils.log("BestCombinationResult (walk-forward) : " + resultObjToString(resultObj));
-        return resultObj;
+        return resultObj;*/
     }
 
 
