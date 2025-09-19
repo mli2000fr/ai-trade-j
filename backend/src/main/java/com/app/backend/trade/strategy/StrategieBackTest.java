@@ -1,11 +1,11 @@
 package com.app.backend.trade.strategy;
 
 import com.app.backend.trade.controller.StrategieHelper;
+import com.app.backend.trade.model.ComboMixResult;
 import com.app.backend.trade.model.ComboResult;
 import com.app.backend.trade.model.MarketPhase;
 import com.app.backend.trade.model.RiskResult;
 import com.app.backend.trade.util.TradeConstant;
-import com.app.backend.trade.util.TradeUtils;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Rule;
@@ -313,6 +313,47 @@ public class StrategieBackTest {
         List<ComboResult> results = new ArrayList<>();
         for (int i = 0; i < combos.size(); i++) {
             ComboResult combo = combos.get(i);
+            RiskResult r = combo.getResult();
+            // Filtres durs
+            boolean filteredOut = r.getMaxDrawdown() > 0.3 || r.getSharpeRatio() < 0.5 || r.getTradeCount() < 10 || (r.getWinRate() < 0.5 && r.getProfitFactor() < 1.2);
+            if (filteredOut) continue;
+            // Normalisation min-max
+            double rendNorm = (maxRend - minRend) == 0 ? 0 : (r.getRendement() - minRend) / (maxRend - minRend);
+            double sharpeNorm = (maxSharpe - minSharpe) == 0 ? 0 : (r.getSharpeRatio() - minSharpe) / (maxSharpe - minSharpe);
+            double drawdownNorm = (maxDrawdown - minDrawdown) == 0 ? 0 : (r.getMaxDrawdown() - minDrawdown) / (maxDrawdown - minDrawdown);
+            double stabilityNorm = (maxStab - minStab) == 0 ? 0 : (r.getStabilityScore() - minStab) / (maxStab - minStab);
+            // Score pondéré
+            double score = weights.rendement * rendNorm + weights.sharpe * sharpeNorm + weights.drawdown * (1 - drawdownNorm) + weights.stability * stabilityNorm;
+            combo.getResult().setScoreSwingTrade(score);
+            results.add(combo);
+        }
+        return results;
+    }
+    public List<ComboMixResult> computeSwingTradeMixScores(List<ComboMixResult> combos, StrategieHelper.SwingTradeScoreWeights weights) {
+        // Extraction des métriques
+        List<Double> rendementList = new ArrayList<>();
+        List<Double> sharpeList = new ArrayList<>();
+        List<Double> drawdownList = new ArrayList<>();
+        List<Double> stabilityList = new ArrayList<>();
+        for (ComboMixResult combo : combos) {
+            RiskResult r = combo.getResult();
+            rendementList.add(r.getRendement());
+            sharpeList.add(r.getSharpeRatio());
+            drawdownList.add(r.getMaxDrawdown());
+            stabilityList.add(r.getStabilityScore());
+        }
+        // Normalisation min-max
+        double minRend = Collections.min(rendementList);
+        double maxRend = Collections.max(rendementList);
+        double minSharpe = Collections.min(sharpeList);
+        double maxSharpe = Collections.max(sharpeList);
+        double minDrawdown = Collections.min(drawdownList);
+        double maxDrawdown = Collections.max(drawdownList);
+        double minStab = Collections.min(stabilityList);
+        double maxStab = Collections.max(stabilityList);
+        List<ComboMixResult> results = new ArrayList<>();
+        for (int i = 0; i < combos.size(); i++) {
+            ComboMixResult combo = combos.get(i);
             RiskResult r = combo.getResult();
             // Filtres durs
             boolean filteredOut = r.getMaxDrawdown() > 0.3 || r.getSharpeRatio() < 0.5 || r.getTradeCount() < 10 || (r.getWinRate() < 0.5 && r.getProfitFactor() < 1.2);
