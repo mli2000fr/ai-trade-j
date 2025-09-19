@@ -1099,6 +1099,7 @@ public class StrategieHelper {
                 .avgTestRendement(avgTestPerf)
                 .overfitRatio(overfitRatio)
                 .isOverfit(isOverfit)
+                .check(bestScoreResult.getCheckResult())
                 .build();
     }
 
