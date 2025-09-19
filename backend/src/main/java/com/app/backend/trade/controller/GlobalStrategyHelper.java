@@ -77,7 +77,7 @@ public class GlobalStrategyHelper {
     }
 
     public List<SymbolPerso> getSymbolsPerso() {
-        String sql = "SELECT * FROM trade_ai.symbol_perso;";
+        String sql = "SELECT * FROM symbol_perso;";
         return jdbcTemplate.query(sql, (rs, rowNum) -> SymbolPerso.builder()
                         .symbols(rs.getString("symbols").replaceAll(" ", ""))
                 .name(rs.getString("name"))
@@ -88,7 +88,7 @@ public class GlobalStrategyHelper {
 
 
     public void rattrapage(){
-        String sql = "SELECT symbol FROM trade_ai.best_in_out_single_strategy;";
+        String sql = "SELECT symbol FROM best_in_out_single_strategy;";
         List<String> listSymbol =  jdbcTemplate.queryForList(sql, String.class);
 
         for(String symbol : listSymbol) {
@@ -106,7 +106,7 @@ public class GlobalStrategyHelper {
             );
         }
 
-        String sqlM = "SELECT symbol FROM trade_ai.best_in_out_mix_strategy;";
+        String sqlM = "SELECT symbol FROM best_in_out_mix_strategy;";
         List<String> listSymbolM =  jdbcTemplate.queryForList(sqlM, String.class);
         for(String symbol : listSymbolM) {
             BestCombinationResult mix = bestCombinationStrategyHelper.getBestCombinationResult(symbol);

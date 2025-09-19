@@ -586,13 +586,13 @@ public class BestCombinationStrategyHelper {
 
 
     public List<String> getAllAssetSymbolsEligibleFromDb() {
-        String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true ORDER BY symbol ASC;";
+        String sql = "SELECT symbol FROM alpaca_asset WHERE status = 'active' and eligible = true ORDER BY symbol ASC;";
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
     public List<String> getSymbolFitredFromTabSingle(String sort) {
         String orderBy = sort == null ? "rendement_score" : sort;
-        String sql = "select symbol from trade_ai.best_in_out_single_strategy where fltred_out = 'false'";
+        String sql = "select symbol from best_in_out_single_strategy where fltred_out = 'false'";
         sql += " ORDER BY " + orderBy + " DESC";
         return jdbcTemplate.queryForList(sql, String.class);
     }

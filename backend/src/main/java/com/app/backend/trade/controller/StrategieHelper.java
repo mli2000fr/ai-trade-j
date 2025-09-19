@@ -241,7 +241,7 @@ public class StrategieHelper {
      * @return liste de symboles
      */
     public List<String> getAllAssetSymbolsEligibleFromDb() {
-        String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true ORDER BY symbol ASC;";
+        String sql = "SELECT symbol FROM alpaca_asset WHERE status = 'active' and eligible = true ORDER BY symbol ASC;";
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
@@ -250,7 +250,7 @@ public class StrategieHelper {
      * @return liste de symboles
      */
     public List<String> getAllAssetSymbolsComplementFromDb() {
-        String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE symbol NOT IN (SELECT symbol FROM trade_ai.daily_value);";
+        String sql = "SELECT symbol FROM alpaca_asset WHERE symbol NOT IN (SELECT symbol FROM daily_value);";
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
