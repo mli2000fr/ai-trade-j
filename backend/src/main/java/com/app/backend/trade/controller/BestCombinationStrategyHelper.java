@@ -93,14 +93,14 @@ public class BestCombinationStrategyHelper {
         if (!filteredResults.isEmpty()) {
             // Sélectionne le meilleur combo non-overfit
             for (ComboMixResult scoreResult : scoredCombos) {
-                if (filteredResults.contains(scoreResult)) {
+                //if (filteredResults.contains(scoreResult)) {
                     if (scoreResult.getResult().getScoreSwingTrade() > maxScore) {
                         maxScore = scoreResult.getResult().getScoreSwingTrade();
                         bestScoreResult = scoreResult;
                     }
-                }
+                //}
             }
-        } else {
+        }/* else {
             // Fallback: sélectionne le combo dont le ratio overfit est le plus proche de 1
             double minOverfitDist = Double.POSITIVE_INFINITY;
             for (ComboMixResult scoreResult : scoredCombos) {
@@ -113,7 +113,7 @@ public class BestCombinationStrategyHelper {
                     bestScoreResult = scoreResult;
                 }
             }
-        }
+        }*/
 
         int totalCount = barSeries.getBarCount();
 
