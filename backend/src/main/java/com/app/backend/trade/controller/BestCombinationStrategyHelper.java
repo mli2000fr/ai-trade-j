@@ -649,7 +649,7 @@ public class BestCombinationStrategyHelper {
     }
 
     public List<String> getSymbolFitredFromTabSingle(String sort) {
-        String orderBy = sort == null ? "rendement_score" : sort;
+        String orderBy = sort == null ? "score_swing_trade" : sort;
         String sql = "select symbol from trade_ai.best_in_out_single_strategy where fltred_out = 'false'";
         sql += " ORDER BY " + orderBy + " DESC";
         return jdbcTemplate.queryForList(sql, String.class);
