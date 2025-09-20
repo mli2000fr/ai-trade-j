@@ -58,7 +58,7 @@ interface BestInOutStrategy {
   rendementSum?: any;
   rendementDiff?: any;
   rendementScore?: any;
-  result: {
+  finalResult: {
     rendement: number;
     tradeCount: number;
     winRate: number;
@@ -70,9 +70,8 @@ interface BestInOutStrategy {
     maxTradeGain: number;
     maxTradeLoss: number;
     scoreSwingTrade?: number;
-    fltredOut?: boolean;
   };
-  check: {
+  testResult: {
     rendement: number;
     tradeCount: number;
     winRate: number;
@@ -84,7 +83,6 @@ interface BestInOutStrategy {
     maxTradeGain: number;
     maxTradeLoss: number;
     scoreSwingTrade?: number;
-    fltredOut?: boolean;
   };
   paramsOptim: {
     initialCapital: number;
@@ -101,7 +99,7 @@ interface BestCombinationResult {
   outStrategyNames: string[];
   inParams: Record<string, any>;
   outParams: Record<string, any>;
-  result: {
+  finalResult: {
     rendement: number;
     maxDrawdown: number;
     tradeCount: number;
@@ -112,9 +110,8 @@ interface BestCombinationResult {
     maxTradeGain: number;
     maxTradeLoss: number;
     scoreSwingTrade?: number;
-    fltredOut?: boolean;
   };
-  check: {
+  testResult: {
     rendement: number;
     maxDrawdown: number;
     tradeCount: number;
@@ -125,7 +122,6 @@ interface BestCombinationResult {
     maxTradeGain: number;
     maxTradeLoss: number;
     scoreSwingTrade?: number;
-    fltredOut?: boolean;
   };
   rendementSum: number;
   rendementDiff: number;
@@ -156,7 +152,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [indices, setIndices] = useState<{ [symbol: string]: SignalInfo | string }>({});
   const [indicesMix, setIndicesMix] = useState<{ [symbol: string]: SignalInfo | string }>({});
   const [sort, setSort] = useState<string>('single:score_swing_trade');
-  const [showOnlyNonFiltered, setShowOnlyNonFiltered] = useState(true);
+  const [topProfil, setTopProfil] = useState(true);
   const [bougies, setBougies] = useState<any[]>([]);
   const [bougiesLoading, setBougiesLoading] = useState(false);
   const [bougiesError, setBougiesError] = useState<string | null>(null);
@@ -179,8 +175,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
       const type = sort.split(':')[0];
       const tri = sort.split(':')[1];
       url += `limit=${limit}&type=${type}&sort=${tri}`;
-      if (showOnlyNonFiltered) {
-        url += `&filtered=true`;
+      if (topProfil) {
+        url += `&topProfil=true`;
       }
     }
     fetch(url)
@@ -196,7 +192,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   useEffect(() => {
     fetchData(false, '');
     // eslint-disable-next-line
-  }, [limit, sort, showOnlyNonFiltered]);
+  }, [limit, sort, topProfil]);
 
   useEffect(() => {
     if (!data || data.length === 0) return;
@@ -297,7 +293,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
 
   useEffect(() => {
     setCheckedRows({});
-  }, [sort, showOnlyNonFiltered]);
+  }, [sort, topProfil]);
 
   useEffect(() => {
     fetch('/api/result/symbol_pero')
@@ -352,13 +348,13 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               <FormControlLabel
                 control={
                   <Checkbox
-                    checked={showOnlyNonFiltered}
-                    onChange={e => setShowOnlyNonFiltered(e.target.checked)}
+                    checked={topProfil}
+                    onChange={e => setTopProfil(e.target.checked)}
                     disabled={searchMode}
                     size="small"
                   />
                 }
-                label="Fiable"
+                label="Top profil"
                 sx={{ ml: 2 }}
               />
               <Button
@@ -456,7 +452,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                     <TableCell colSpan={4} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', fontSize: '1rem' }}>LSDM</TableCell>
-                    <TableCell colSpan={8} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
+                    <TableCell colSpan={9} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
                     <TableCell colSpan={5} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                   </TableRow>
@@ -481,13 +477,14 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                        <span>Profit Factor</span>
                      </Tooltip>
                     </TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Max Drawdown</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 130, maxWidth: 300 }}>
                     <Tooltip title="Doit être positif et idéalement > 1" arrow placement="top" enterDelay={200} leaveDelay={100}
                         slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
                         <span>Sharpe Ratio</span>
                       </Tooltip>
                     </TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>win Rate</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Win Rate</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 130, maxWidth: 300 }}>Score Swing Trade</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Durée moyenne trade</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
@@ -510,7 +507,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     }
 
                     // Vérifie que indice est un objet et non une chaîne
-                    if (indice && indice.type === 'BUY' && !row.single.result.fltredOut) bgColor = 'rgba(76, 175, 80, 0.5)';
+                    if (indice && indice.type === 'BUY') bgColor = 'rgba(76, 175, 80, 0.5)';
                     if (indice && indice.type === 'SELL') bgColor = 'rgba(244, 67, 54, 0.05)';
                     return (
                       <TableRow
@@ -562,31 +559,28 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                           indices[row.single.symbol] === 'pending'
                             ? (<CircularProgress size={16} />)
                             : (indice && indice.type
-                                ? (row.single.result.fltredOut
-                                    ? <span style={{ color: 'red', fontWeight: 'bold' }}>{indice.type + ' (' + indice.dateStr + ')'}</span>
-                                    : indice.type + ' (' + indice.dateStr + ')')
+                                ? (indice.type + ' (' + indice.dateStr + ')')
                                 : '-')
                         }</TableCell>
-                        <TableCell align="center"><b>{(row.single.check.rendement * 100).toFixed(2)} %</b> ({(row.single.result.rendement * 100).toFixed(2)} %)</TableCell>
-                        <TableCell align="center">{row.single.check.avgPnL.toFixed(2)}</TableCell>
-                        <TableCell align="center">{row.single.check.profitFactor.toFixed(2)}</TableCell>
-                        <TableCell align="center">{row.single.check.sharpeRatio.toFixed(2)}</TableCell>
-                        <TableCell align="center">{(row.single.check.winRate * 100).toFixed(2)} %</TableCell>
-                        <TableCell align="center">{row.single.result.scoreSwingTrade !== undefined ? (row.single.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
-                        <TableCell align="center">{row.single.check.avgTradeBars !== undefined ? row.single.check.avgTradeBars.toFixed(2) : '-'}</TableCell>
+                        <TableCell align="center"><b>{(row.single.finalResult.rendement * 100).toFixed(2)} %</b> ({(row.single.testResult.rendement * 100).toFixed(2)} %)</TableCell>
+                        <TableCell align="center">{row.single.finalResult.avgPnL.toFixed(2)}</TableCell>
+                        <TableCell align="center">{row.single.finalResult.profitFactor.toFixed(2)}</TableCell>
+                        <TableCell align="center">{(row.single.finalResult.maxDrawdown * 100).toFixed(2)} %</TableCell>
+                        <TableCell align="center">{row.single.finalResult.sharpeRatio.toFixed(2)}</TableCell>
+                        <TableCell align="center">{(row.single.finalResult.winRate * 100).toFixed(2)} %</TableCell>
+                        <TableCell align="center">{row.single.finalResult.scoreSwingTrade !== undefined ? (row.single.finalResult.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
+                        <TableCell align="center">{row.single.finalResult.avgTradeBars !== undefined ? row.single.finalResult.avgTradeBars.toFixed(2) : '-'}</TableCell>
                         <TableCell align="center">{
                           indiceMixRaw === 'pending'
                             ? (<CircularProgress size={16} />)
                             : indiceMix
-                              ? (row.mix.result.fltredOut
-                                  ? <span style={{ color: 'red', fontWeight: 'bold' }}>{indiceMix.type + ' (' + indiceMix.dateStr + ')'}</span>
-                                  : indiceMix.type + ' (' + indiceMix.dateStr + ')')
+                              ? (indiceMix.type + ' (' + indiceMix.dateStr + ')')
                               : '-'
                         }</TableCell>
-                        <TableCell align="center">{(row.mix.result.rendement * 100).toFixed(2)}% | {(row.mix.check.rendement * 100).toFixed(2)}%</TableCell>
+                        <TableCell align="center">{(row.mix.finalResult.rendement * 100).toFixed(2)}% | {(row.mix.testResult.rendement * 100).toFixed(2)}%</TableCell>
                         <TableCell align="center">{(row.mix.rendementScore * 100).toFixed(2)}</TableCell>
-                        <TableCell align="center">{row.mix.result.scoreSwingTrade !== undefined ? (row.mix.result.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
-                        <TableCell align="center">{row.mix.result.avgTradeBars !== undefined ? row.mix.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
+                        <TableCell align="center">{row.mix.finalResult.scoreSwingTrade !== undefined ? (row.mix.finalResult.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
+                        <TableCell align="center">{row.mix.finalResult.avgTradeBars !== undefined ? row.mix.finalResult.avgTradeBars.toFixed(2) : '-'}</TableCell>
                         <TableCell align="center"><Button size="small" variant="outlined" onClick={() => { setSelected(row); setOpen(true); }}>Détails</Button></TableCell>
                       </TableRow>
                     );

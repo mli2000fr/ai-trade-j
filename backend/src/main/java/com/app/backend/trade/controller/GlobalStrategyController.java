@@ -24,9 +24,9 @@ public class GlobalStrategyController {
     public List<MixResultat> getBestScoreAction(@RequestParam(value = "limit", required = false) Integer limit,
                                                 @RequestParam(value = "type", required = false, defaultValue = "single") String type,
                                                 @RequestParam(value = "sort", required = false, defaultValue = "rendement_score") String sort,
-                                                @RequestParam(value = "filtered", required = false) Boolean filtered,
+                                                @RequestParam(value = "topProfil", required = false) Boolean topProfil,
                                                 @RequestParam(value = "search", required = false) String search) {
-        return globalStrategyHelper.getBestScoreAction(limit, type, sort, search, filtered);
+        return globalStrategyHelper.getBestScoreAction(limit, type, sort, search, topProfil);
     }
 
     @GetMapping("/infosSymbol")
@@ -41,11 +41,5 @@ public class GlobalStrategyController {
     }
 
 
-
-    @GetMapping("/db/ratrapage")
-    public ResponseEntity<Boolean> rattrapage() {
-        globalStrategyHelper.rattrapage();
-        return ResponseEntity.ok(true);
-    }
 
 }

@@ -5,10 +5,7 @@ CREATE TABLE trade_ai.best_in_out_single_strategy (
     exit_strategy_name VARCHAR(50),
     exit_strategy_params TEXT,
     rendement DOUBLE,
-    rendement_check DOUBLE,
-    rendement_sum DOUBLE,
-    rendement_diff DOUBLE,
-    rendement_score DOUBLE,
+    rendement_test DOUBLE,
     trade_count INT,
     win_rate DOUBLE,
     max_drawdown DOUBLE,
@@ -18,11 +15,9 @@ CREATE TABLE trade_ai.best_in_out_single_strategy (
     max_trade_gain DOUBLE,
     max_trade_loss DOUBLE,
     score_swing_trade DOUBLE,
-    score_swing_trade_check DOUBLE,
-    fltred_out BOOLEAN DEFAULT FALSE,
     sharpe_ratio DOUBLE,
     stability_score DOUBLE,
-    check_result TEXT,
+    result_test TEXT,
     created_date DATE,
     updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         -- param de test
@@ -32,14 +27,6 @@ CREATE TABLE trade_ai.best_in_out_single_strategy (
         take_profit_pct DOUBLE,
     nb_simples INT
 );
-
-CREATE INDEX idx_rendement ON trade_ai.best_in_out_single_strategy (rendement);
-CREATE INDEX idx_rendement_sum ON trade_ai.best_in_out_single_strategy (rendement_sum);
-CREATE INDEX idx_rendement_score ON trade_ai.best_in_out_single_strategy (rendement_score);
-CREATE INDEX idx_created_date ON trade_ai.best_in_out_single_strategy (created_date);
-CREATE INDEX idx_updated_date ON trade_ai.best_in_out_single_strategy (updated_date);
-CREATE INDEX idx_fltred_out ON trade_ai.best_in_out_single_strategy (fltred_out);
-CREATE INDEX idx_score_swing_trade ON trade_ai.best_in_out_single_strategy (score_swing_trade);
 
 Voici l’explication de chaque colonne de la table best_in_out_strategy :
 symbol : le symbole de l’actif (ex : « AAPL » pour Apple). C’est la clé primaire, chaque ligne correspond à un actif unique.

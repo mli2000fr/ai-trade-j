@@ -27,7 +27,6 @@ public class RiskResult {
 
     public double scoreSwingTrade = 0;
 
-    public boolean fltredOut;
     /** Ratio de Sharpe du backtest */
     public double sharpeRatio;
     /** Score de stabilité inter-fenêtres (ex: écart-type des rendements) */

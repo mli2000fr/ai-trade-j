@@ -25,20 +25,20 @@ public class GlobalStrategyHelper {
     @Autowired
     private BestCombinationStrategyHelper bestCombinationStrategyHelper;
 
-    public List<MixResultat> getBestScoreAction(Integer limit, String type, String sort, String search, Boolean filtered) {
+    public List<MixResultat> getBestScoreAction(Integer limit, String type, String sort, String search, Boolean topProfil) {
 
         if(search != null && !search.isEmpty()) {
-            return getBestScoreActionSingle(limit, sort, search, filtered);
+            return getBestScoreActionSingle(limit, sort, search, topProfil);
         }else if(type != null && type.equals("mix")) {
-            return getBestScoreActionMix(limit, sort, filtered);
+            return getBestScoreActionMix(limit, sort, topProfil);
         } else {
-            return getBestScoreActionSingle(limit, sort, null, filtered);
+            return getBestScoreActionSingle(limit, sort, null, topProfil);
         }
     }
 
-    public List<MixResultat> getBestScoreActionSingle(Integer limit, String sort, String search, Boolean filtered) {
+    public List<MixResultat> getBestScoreActionSingle(Integer limit, String sort, String search, Boolean topProfil) {
 
-        List<BestInOutStrategy> listeSingle = strategieHelper.getBestPerfActions(limit, sort, search, filtered);
+        List<BestInOutStrategy> listeSingle = strategieHelper.getBestPerfActions(limit, sort, search, topProfil);
         List<MixResultat> results = new ArrayList<>();
         for(BestInOutStrategy single : listeSingle) {
             BestCombinationResult mix = bestCombinationStrategyHelper.getBestCombinationResult(single.getSymbol());
@@ -86,41 +86,4 @@ public class GlobalStrategyHelper {
         );
     }
 
-
-    public void rattrapage(){
-        String sql = "SELECT symbol FROM trade_ai.best_in_out_single_strategy;";
-        List<String> listSymbol =  jdbcTemplate.queryForList(sql, String.class);
-
-        for(String symbol : listSymbol) {
-            BestInOutStrategy best = strategieHelper.getBestInOutStrategy(symbol);
-            String updateSql = """
-                        UPDATE best_in_out_single_strategy SET
-                            rendement_check = ?,
-                            score_swing_trade_check = ?
-                        WHERE symbol = ?
-                    """;
-            jdbcTemplate.update(updateSql,
-                    best.check.rendement,
-                    best.check.scoreSwingTrade,
-                    symbol
-            );
-        }
-
-        String sqlM = "SELECT symbol FROM trade_ai.best_in_out_mix_strategy;";
-        List<String> listSymbolM =  jdbcTemplate.queryForList(sqlM, String.class);
-        for(String symbol : listSymbolM) {
-            BestCombinationResult mix = bestCombinationStrategyHelper.getBestCombinationResult(symbol);
-            String updateSqlM = """
-                        UPDATE best_in_out_mix_strategy SET
-                            rendement_check = ?,
-                            score_swing_trade_check = ?
-                        WHERE symbol = ?
-                    """;
-            jdbcTemplate.update(updateSqlM,
-                    mix.check.rendement,
-                    mix.check.scoreSwingTrade,
-                    symbol
-            );
-        }
-    }
 }
