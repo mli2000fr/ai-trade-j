@@ -28,8 +28,8 @@ public class BestCombinationStrategyHelper {
     private final StrategieBackTest strategieBackTest;
     private final Gson gson = new Gson();
 
-    private static final int NB_IN = 2;
-    private static final int NB_OUT = 2;
+    private static final int NB_IN = 1;
+    private static final int NB_OUT = 1;
     private static final boolean INSERT_ONLY = true;
 
     @Autowired
@@ -84,9 +84,9 @@ public class BestCombinationStrategyHelper {
         }
 
         // Sélection du meilleur combo swing trade
-        StrategieHelper.SwingTradeScoreWeights weights = new StrategieHelper.SwingTradeScoreWeights(0.35, 0.25, 0.25, 0.15);
+
         List<ComboMixResult> filteredResults = allComboMixResult.stream().filter(re -> !re.isOverfit()).toList();
-        List<ComboMixResult> scoredCombos = strategieBackTest.computeSwingTradeMixScores(filteredResults, weights);
+        List<ComboMixResult> scoredCombos = strategieBackTest.computeSwingTradeMixScores(filteredResults);
         ComboMixResult bestScoreResult = null;
         double maxScore = Double.NEGATIVE_INFINITY;
         // Sélection hybride/fallback
@@ -122,6 +122,7 @@ public class BestCombinationStrategyHelper {
         resultObj.inParams = bestScoreResult.inParams;
         resultObj.outParams = bestScoreResult.outParams;
         resultObj.result = bestScoreResult.getResult();
+        resultObj.check = bestScoreResult.getCheckResult();
         resultObj.inStrategyNames = bestScoreResult.inStrategyNames;
         resultObj.outStrategyNames = bestScoreResult.outStrategyNames;
         resultObj.contextOptim = ParamsOptim.builder()
@@ -134,7 +135,7 @@ public class BestCombinationStrategyHelper {
         resultObj.rendementSum  = resultObj.getResult().getRendement() + resultObj.getCheck().getRendement();
         resultObj.rendementDiff = resultObj.getResult().getRendement() - resultObj.getCheck().getRendement();
         resultObj.rendementScore = resultObj.rendementSum - (resultObj.rendementDiff > 0 ? resultObj.rendementDiff : -resultObj.rendementDiff);
-        resultObj.check = resultObj.getCheck();
+
         TradeUtils.log("Best global combination for symbol=" + symbol + " : " + resultObjToString(resultObj));
         return resultObj;
     }
@@ -706,8 +707,6 @@ public class BestCombinationStrategyHelper {
                     }
                     if(isCalcul){
                         BestCombinationResult result = findBestCombinationGlobal(symbol);
-                        double scoreST =  TradeUtils.calculerScoreSwingTrade(result.getResult());
-                        result.result.setScoreSwingTrade(scoreST);
                         this.saveBestCombinationResult(symbol, result);
                         nbInsert.incrementAndGet();
                     }
@@ -734,27 +733,6 @@ public class BestCombinationStrategyHelper {
         TradeUtils.log("calculMixStrategies: total: "+listeDbSymbols.size()+", nbInsert: "+nbInsert.get()+", error: " + error.get());
     }
 
-
-
-    public void calculScoreST(){
-        String selectSql = "SELECT symbol, backtest_result FROM best_in_out_mix_strategy";
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(selectSql);
-        for (Map<String, Object> row : rows) {
-            String symbol = (String) row.get("symbol");
-            String backtestResultJson = (String) row.get("backtest_result");
-            if (backtestResultJson == null || backtestResultJson.isEmpty()) continue;
-            RiskResult result = null;
-            try {
-                result = gson.fromJson(backtestResultJson, RiskResult.class);
-            } catch (Exception e) {
-                continue;
-            }
-            if (result == null) continue;
-            double scoreST = TradeUtils.calculerScoreSwingTrade(result);
-            String updateSql = "UPDATE best_in_out_mix_strategy SET score_swing_trade = ? WHERE symbol = ?";
-            jdbcTemplate.update(updateSql, scoreST, symbol);
-        }
-    }
 
 
 
@@ -962,10 +940,13 @@ public class BestCombinationStrategyHelper {
 
             // Check final sur les derniers 20% de bougies
             BarSeries checkSeries = fullSeries.getSubSeries(totalCount - (int)Math.round(totalCount*0.2), totalCount);
+
+            resultObj.inStrategyNames = inCombo.stream().map(Class::getSimpleName).toList();
+            resultObj.outStrategyNames = outCombo.stream().map(Class::getSimpleName).toList();
             RiskResult checkResult = this.checkResultat(checkSeries, resultObj);
             ComboMixResult combo =  ComboMixResult.builder()
-                    .inStrategyNames(inStrategies.stream().map(TradeStrategy::getName).toList())
-                    .outStrategyNames(outStrategies.stream().map(TradeStrategy::getName).toList())
+                    .inStrategyNames(inStrategyNames)
+                    .outStrategyNames(outStrategyNames)
                     .inParams(resultObj.inParams)
                     .outParams(resultObj.outParams)
                     .checkResult(checkResult)
