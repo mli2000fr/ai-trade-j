@@ -32,4 +32,5 @@ public class RiskResult {
     /** Score de stabilité inter-fenêtres (ex: écart-type des rendements) */
     public double stabilityScore;
 
+    public int numFlod;
 }

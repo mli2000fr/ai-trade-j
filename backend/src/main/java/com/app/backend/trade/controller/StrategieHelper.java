@@ -570,6 +570,7 @@ public class StrategieHelper {
                     rendement_test = ?,
                     trade_count = ?,
                     win_rate = ?,
+                    num_flod = ?
                     max_drawdown = ?,
                     avg_pnl = ?,
                     profit_factor = ?,
@@ -598,6 +599,7 @@ public class StrategieHelper {
                     best.testResult.rendement,
                 best.finalResult.tradeCount,
                 best.finalResult.winRate,
+                best.finalResult.numFlod,
                 best.finalResult.maxDrawdown,
                 best.finalResult.avgPnL,
                 best.finalResult.profitFactor,
@@ -621,10 +623,10 @@ public class StrategieHelper {
                 INSERT INTO best_in_out_single_strategy (
                     symbol, entry_strategy_name, entry_strategy_params,
                     exit_strategy_name, exit_strategy_params,
-                    rendement, rendement_test, trade_count, win_rate, max_drawdown, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss,
+                    rendement, rendement_test, trade_count, win_rate, num_flod, max_drawdown, avg_pnl, profit_factor, avg_trade_bars, max_trade_gain, max_trade_loss,
                     sharpe_ratio, stability_score, score_swing_trade, initial_capital, risk_per_trade, stop_loss_pct, 
                     take_profit_pct, nb_simples, result_test, created_date, updated_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """;
             jdbcTemplate.update(insertSql,
                 symbol,
@@ -636,6 +638,7 @@ public class StrategieHelper {
                 best.testResult.rendement,
                 best.finalResult.tradeCount,
                 best.finalResult.winRate,
+                best.finalResult.numFlod,
                 best.finalResult.maxDrawdown,
                 best.finalResult.avgPnL,
                 best.finalResult.profitFactor,
@@ -689,6 +692,7 @@ public class StrategieHelper {
                                 .rendement(rs.getDouble("rendement"))
                                 .tradeCount(rs.getInt("trade_count"))
                                 .winRate(rs.getDouble("win_rate"))
+                                .winRate(rs.getInt("num_flod"))
                                 .maxDrawdown(rs.getDouble("max_drawdown"))
                                 .avgPnL(rs.getDouble("avg_pnl"))
                                 .profitFactor(rs.getDouble("profit_factor"))
@@ -756,6 +760,7 @@ public class StrategieHelper {
                             .rendement(rs.getDouble("rendement"))
                             .tradeCount(rs.getInt("trade_count"))
                             .winRate(rs.getDouble("win_rate"))
+                            .winRate(rs.getInt("num_flod"))
                             .maxDrawdown(rs.getDouble("max_drawdown"))
                             .avgPnL(rs.getDouble("avg_pnl"))
                             .profitFactor(rs.getDouble("profit_factor"))
@@ -982,6 +987,7 @@ public class StrategieHelper {
                     if(!isOverfitCombo){
                         BarSeries finalSeries = series.getSubSeries(series.getBarCount() - (int)Math.round(totalBars*0.2), series.getBarCount()); // dernier 20% pour le test
                         RiskResult finalResult = strategieBackTest.backtestStrategy(combined, finalSeries);
+                        finalResult.setNumFlod(fold);
 
                         foldResults.add(ComboResult.builder()
                                 .entryName(entryName)

@@ -7,6 +7,7 @@ CREATE TABLE trade_ai.best_in_out_single_strategy (
     rendement DOUBLE,
     rendement_test DOUBLE,
     trade_count INT,
+    num_flod INT,
     win_rate DOUBLE,
     max_drawdown DOUBLE,
     avg_pnl DOUBLE,
