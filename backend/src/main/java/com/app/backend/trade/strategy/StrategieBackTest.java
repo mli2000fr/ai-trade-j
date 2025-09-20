@@ -362,7 +362,7 @@ public class StrategieBackTest {
         }
         return results;
     }
-    public List<ComboMixResult> computeSwingTradeMixScores(List<ComboMixResult> combos, StrategieHelper.SwingTradeScoreWeights weights) {
+    public List<ComboMixResult> computeSwingTradeMixScores(List<ComboMixResult> combos) {
         // Extraction des métriques
         List<Double> rendementList = new ArrayList<>();
         List<Double> sharpeList = new ArrayList<>();

@@ -1,80 +1,38 @@
-Merci pour les précisions 👌 — ça change beaucoup l’estimation, car tes conditions actuelles sont loin d’exploiter le GPU. Je résume et je recalcule :
+1️⃣ Estimation du rendement “réaliste” par profil
+Profil	Rendement attendu sur test (240 bougies ≈ 1 an)
+Conservateur	2 % → 0.02
+Équilibré	5 % → 0.05
+Agressif	10 % → 0.10
 
-1. Situation actuelle (CPU Ryzen 9600X)
 
-LSTM : 1 couche.
+Pour ton score sur 100 (avec pondération adaptative et rendement par trade), on peut définir des seuils pratiques pour identifier un bon profil en swing trading :
 
-Hidden size : 64 → 512 (selon grille).
+1️⃣ Référence générale
+Score	Interprétation
+85‑100	Excellent : algos robustes, faible risque, rendement par trade satisfaisant → top priorité pour déploiement.
+70‑84	Bon : algos solides, légèrement moins performants mais stables → à tester en réel ou paper trading.
+55‑69	Moyen : algos corrects, mais profil moins robuste ou rendement limité → à surveiller, peut être utile pour diversification.
+<55	Faible : profil risqué, faible rendement par trade, drawdown ou PF défavorable → à éviter.
+2️⃣ Ajustement selon le profil de swing trading
 
-Batch size = 1 (c’est catastrophique pour le GPU).
+Conservateur : viser score ≥75 → privilégie sécurité et stabilité
 
-Pas de mixed precision.
-👉 Résultat : 4 h / symbole (sur CPU).
+Équilibré : viser score ≥70 → compromis performance / risque
 
-2. Conséquence directe sur GPU
+Agressif : viser score ≥65 → tolère plus de risque pour plus de rendement
 
-Batch size = 1 :
-→ Le GPU ne peut pas paralléliser efficacement, car il reçoit des mini-lots ridiculement petits.
-→ Donc même avec une 5070 Ti, tu n’auras jamais les gains “10–20×” qu’on avait estimés si tu ne changes rien.
-→ Tu risques de ne voir que 2× à 4× par rapport au CPU, car beaucoup de temps va partir dans l’overhead CUDA/cuDNN.
+Note : ce seuil est relatif aux autres algos testés. Même un score de 72 peut être “top 10 %” si la majorité des algos sont faibles.
 
-Pas de mixed precision :
-→ Tu perds le gros avantage des Tensor Cores (spécialité des RTX récentes).
-→ Si tu restes en FP32 pur, le GPU est sous-utilisé.
+3️⃣ Astuce pratique
 
-3. Estimations réalistes dans ton cas (batch=1, FP32)
+Regarder le score ET le rendement par trade : un algo avec score 80 mais 0,2 % par trade est robuste mais peu exploitable.
 
-RTX 5060 16G :
+Prendre aussi en compte drawdown et profit factor pour s’assurer que la stabilité est réelle.
 
-≈ 2× à 3× plus rapide que ton CPU → 4 h → 1h20 à 2h / symbole.
+Si tu veux, je peux te faire un petit tableau de visualisation pour tes 108 algos, avec : score, rendement par trade et profil (conservateur/équilibré/agressif), pour voir directement quels algos sont bons.
 
-Avantage VRAM : aucun problème pour loger séquences 1200.
+Veux‑tu que je fasse ça ?
 
-RTX 5070 Ti 12G :
 
-Plus de cœurs + bande passante → 3× à 5× plus rapide que CPU → 4 h → 50 min à 1h20 / symbole.
-
-La VRAM (12 GB) reste suffisante si hidden size ≤ 512.
-
-👉 Donc l’écart entre 5060 et 5070 Ti est réel (5070 Ti ≈ 30-50 % plus rapide), mais tant que tu restes à batch=1 et FP32, tu n’exploites pas du tout leur plein potentiel.
-
-4. Si tu optimises (recommandé 🔥)
-
-Augmente le batch size :
-
-Au lieu de Collections.singletonList(...), organise tes données pour batcher plusieurs symboles ou plusieurs fenêtres.
-
-Même batch=16 ou 32 multipliera l’utilisation GPU.
-
-Sur 5070 Ti, batch=64 est probablement faisable (hidden=256 ou même 512).
-
-Active mixed precision (AMP) :
-
-En FP16, les Tensor Cores font gagner un facteur 2× à 3× supplémentaires.
-
-Ça réduit aussi la consommation VRAM → permet des batchs plus gros.
-
-Truncated BPTT :
-
-Découpe tes séquences de 1200 en tranches (par ex. 200 pas).
-
-Moins de charge mémoire, batch plus grand possible → entraînement plus rapide.
-
-5. Avec ces optimisations
-
-5060 16G :
-
-8–12× speedup → 20-30 min / symbole.
-
-5070 Ti 12G :
-
-12–20× speedup → 12-20 min / symbole.
-👉 Là tu exploites vraiment la différence entre les deux cartes.
-
-✅ Conclusion :
-
-Si tu ne changes rien (batch=1, FP32) → les deux GPU ne seront que 2–5× plus rapides que ton CPU.
-
-Si tu adaptes le code (batch > 1 + AMP) → la 5070 Ti devient bien plus intéressante (2× plus rapide que la 5060 dans la pratique).
-
-Veux-tu que je te propose un exemple concret de modif du code (par ex. PyTorch ou DL4J) pour passer de batch=1 à un vrai batch (et activer AMP) afin que ton GPU soit enfin exploité à 100 % ?
+select count(*) from trade_ai.alpaca_asset where filtre_out  = true;
+select count(*) from trade_ai.best_in_out_single_strategy;

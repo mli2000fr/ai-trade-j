@@ -879,14 +879,17 @@ public class StrategieHelper {
 
     public BestInOutStrategy optimseStrategy(String symbol) {
         List<DailyValue> listeValus = this.getDailyValuesFromDb(symbol, TradeConstant.NOMBRE_TOTAL_BOUGIES_OPTIM);
+        if(listeValus.size() < TradeConstant.NOMBRE_TOTAL_BOUGIES_MIN_OPTIM){
+            throw new IllegalArgumentException("Pas assez de données pour le symbole " + symbol + " (" + listeValus.size() + " bougies, minimum " + TradeConstant.NOMBRE_TOTAL_BOUGIES_MIN_OPTIM + ")");
+        }
         BarSeries series = TradeUtils.mapping(listeValus);
         // Utilisation du swingParams de la classe (modifiable si besoin)
         WalkForwardResultPro walkForwardResultPro =  this.optimseStrategy(series, swingParams);
         if (walkForwardResultPro == null || walkForwardResultPro.getBestCombo() == null) {
             return null;
         }
-        double rendementSum = walkForwardResultPro.getBestCombo().getResult().getRendement() + walkForwardResultPro.getCheck().getRendement();
-        double rendementDiff = walkForwardResultPro.getBestCombo().getResult().getRendement() - walkForwardResultPro.getCheck().getRendement();
+        double rendementSum = walkForwardResultPro.getBestCombo().getResult().getRendement() + walkForwardResultPro.getBestCombo().getCheckResult().getRendement();
+        double rendementDiff = walkForwardResultPro.getBestCombo().getResult().getRendement() - walkForwardResultPro.getBestCombo().getCheckResult().getRendement();
         return BestInOutStrategy.builder()
                 .symbol(symbol)
                 .rendementSum(rendementSum)
