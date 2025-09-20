@@ -805,6 +805,10 @@ public class StrategieHelper {
         SignalType signal = SignalType.HOLD;
         if (entrySignal) signal =  SignalType.BUY;
         if (exitSignal) signal = SignalType.SELL;
+        if (entrySignal && exitSignal) {
+            // Cas non logique, à traiter selon la logique métier
+            signal = SignalType.CONFIT;
+        }
         LocalDate dateSaved = saveSignalHistory(symbol, signal);
         String dateSavedStr = dateSaved.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"));
         return SignalInfo.builder().symbol(symbol).type(signal).dateStr(dateSavedStr).build();
