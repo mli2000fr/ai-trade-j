@@ -462,7 +462,7 @@ public class StrategieHelper {
         try {
             List<String> listeDbSymbols = this.getAllAssetSymbolsEligibleFromDb();
             croisedProgress.totalConfigs = listeDbSymbols.size();
-            int nbThreads = 1;//Math.max(2, Runtime.getRuntime().availableProcessors());
+            int nbThreads = Math.max(2, Runtime.getRuntime().availableProcessors());
             java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(nbThreads);
             List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
             for(String symbol : listeDbSymbols){
