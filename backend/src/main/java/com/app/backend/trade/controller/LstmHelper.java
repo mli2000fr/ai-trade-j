@@ -6,6 +6,7 @@ import com.app.backend.trade.lstm.LstmTradePredictor;
 import com.app.backend.trade.lstm.LstmTuningService;
 import com.app.backend.trade.model.DailyValue;
 import com.app.backend.trade.model.PreditLsdm;
+import com.app.backend.trade.model.RiskResult;
 import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.util.TradeUtils;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
@@ -186,5 +187,119 @@ public class LstmHelper {
      */
     public String exportTuningMetricsToCsv(String symbol, String outputPath) {
         return lstmTuningService.hyperparamsRepository.exportTuningMetricsToCsv(symbol, outputPath);
+    }
+
+    /**
+     * Backtest LSTM sur toute la série historique.
+     * Applique le modèle LSTM à chaque bar, génère les signaux et simule les trades.
+     * Retourne un objet RiskResult avec les métriques de performance.
+     */
+    public RiskResult backtestLstm(String symbol, double initialCapital, double riskPerTrade, double stopLossPct, double takeProfitPct) throws IOException {
+        LstmConfig config = lstmTuningService.hyperparamsRepository.loadHyperparams(symbol);
+        if (config == null) {
+            logger.info("Aucun hyperparamètre LSTM pour {}.", symbol);
+            return RiskResult.builder().rendement(0).tradeCount(0).winRate(0).maxDrawdown(0).avgPnL(0).profitFactor(0).avgTradeBars(0).maxTradeGain(0).maxTradeLoss(0).scoreSwingTrade(0).sharpeRatio(0).stabilityScore(0).build();
+        }
+        MultiLayerNetwork model = lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
+        BarSeries series = getBarBySymbol(symbol, null);
+        boolean inPosition = false;
+        double entryPrice = 0.0;
+        double capital = initialCapital;
+        double positionSize = 0.0;
+        double maxDrawdown = 0.0;
+        double peakCapital = initialCapital;
+        int tradeCount = 0;
+        int winCount = 0;
+        double totalGain = 0.0;
+        double totalLoss = 0.0;
+        double sumPnL = 0.0;
+        double maxGain = Double.NEGATIVE_INFINITY;
+        double maxLoss = Double.POSITIVE_INFINITY;
+        int totalTradeBars = 0;
+        int tradeStartIndex = 0;
+        java.util.List<Double> tradeReturns = new java.util.ArrayList<>();
+        for (int i = 0; i < series.getBarCount(); i++) {
+            // Prédire le signal LSTM pour la bougie i
+            PreditLsdm pred = lstmTradePredictor.getPreditAtIndex(symbol, series, config, model, i);
+            double price = series.getBar(i).getClosePrice().doubleValue();
+            if (!inPosition && pred.getSignal() == SignalType.BUY) {
+                // Entrée en position
+                positionSize = capital * riskPerTrade;
+                entryPrice = price;
+                inPosition = true;
+                tradeStartIndex = i;
+            } else if (inPosition) {
+                double stopLossPrice = entryPrice * (1 - stopLossPct);
+                double takeProfitPrice = entryPrice * (1 + takeProfitPct);
+                boolean stopLossHit = price <= stopLossPrice;
+                boolean takeProfitHit = price >= takeProfitPrice;
+                boolean exitSignal = pred.getSignal() == SignalType.SELL;
+                if (stopLossHit || takeProfitHit || exitSignal) {
+                    double exitPrice = price;
+                    if (stopLossHit) exitPrice = stopLossPrice;
+                    if (takeProfitHit) exitPrice = takeProfitPrice;
+                    double pnl = positionSize * ((exitPrice - entryPrice) / entryPrice);
+                    capital += pnl;
+                    tradeCount++;
+                    sumPnL += pnl;
+                    if (pnl > 0) {
+                        winCount++;
+                        totalGain += pnl;
+                        if (pnl > maxGain) maxGain = pnl;
+                    } else {
+                        totalLoss += Math.abs(pnl);
+                        if (pnl < maxLoss) maxLoss = pnl;
+                    }
+                    totalTradeBars += (i - tradeStartIndex + 1);
+                    inPosition = false;
+                    if (capital > peakCapital) peakCapital = capital;
+                    double drawdown = (peakCapital - capital) / peakCapital;
+                    if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+                    tradeReturns.add(pnl / initialCapital);
+                }
+            }
+        }
+        // Si une position reste ouverte à la fin, on la clôture au dernier prix
+        if (inPosition) {
+            double price = series.getBar(series.getEndIndex()).getClosePrice().doubleValue();
+            double pnl = positionSize * ((price - entryPrice) / entryPrice);
+            capital += pnl;
+            tradeCount++;
+            sumPnL += pnl;
+            if (pnl > 0) {
+                winCount++;
+                totalGain += pnl;
+                if (pnl > maxGain) maxGain = pnl;
+            } else {
+                totalLoss += Math.abs(pnl);
+                if (pnl < maxLoss) maxLoss = pnl;
+            }
+            totalTradeBars += (series.getEndIndex() - tradeStartIndex + 1);
+        }
+        double rendement = (capital / initialCapital) - 1.0;
+        double winRate = tradeCount > 0 ? (double) winCount / tradeCount : 0.0;
+        double avgPnL = tradeCount > 0 ? sumPnL / tradeCount : 0.0;
+        double profitFactor = totalLoss > 0 ? totalGain / totalLoss : 0.0;
+        double avgTradeBars = tradeCount > 0 ? (double) totalTradeBars / tradeCount : 0.0;
+        double maxTradeGain = (maxGain == Double.NEGATIVE_INFINITY) ? 0.0 : maxGain;
+        double maxTradeLoss = (maxLoss == Double.POSITIVE_INFINITY) ? 0.0 : maxLoss;
+        double meanReturn = tradeReturns.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double stdReturn = tradeReturns.size() > 1 ? Math.sqrt(tradeReturns.stream().mapToDouble(r -> Math.pow(r - meanReturn, 2)).sum() / (tradeReturns.size() - 1)) : 0.0;
+        double sharpeRatio = stdReturn > 0 ? meanReturn / stdReturn : 0.0;
+        double stabilityScore = stdReturn > 0 ? 1.0 / stdReturn : 0.0;
+        return RiskResult.builder()
+                .rendement(rendement)
+                .tradeCount(tradeCount)
+                .winRate(winRate)
+                .maxDrawdown(maxDrawdown)
+                .avgPnL(avgPnL)
+                .profitFactor(profitFactor)
+                .avgTradeBars(avgTradeBars)
+                .maxTradeGain(maxTradeGain)
+                .maxTradeLoss(maxTradeLoss)
+                .scoreSwingTrade(0)
+                .sharpeRatio(sharpeRatio)
+                .stabilityScore(stabilityScore)
+                .build();
     }
 }

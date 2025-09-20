@@ -703,6 +703,27 @@ public class LstmTradePredictor {
                 .build();
     }
 
+    /**
+     * Prédit le signal LSTM pour une bougie d'index donné dans la série.
+     * Utilisé pour le backtest bar par bar.
+     */
+    public PreditLsdm getPreditAtIndex(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model, int index) {
+        // On doit avoir assez de données pour la fenêtre
+        if (index < config.getWindowSize()) {
+            // Pas assez de données pour prédire
+            return PreditLsdm.builder()
+                    .lastClose(series.getBar(index).getClosePrice().doubleValue())
+                    .predictedClose(series.getBar(index).getClosePrice().doubleValue())
+                    .signal(SignalType.NONE)
+                    .position("")
+                    .lastDate(series.getBar(index).getEndTime().toString())
+                    .build();
+        }
+        // Créer une sous-série pour la fenêtre centrée sur index
+        BarSeries subSeries = series.getSubSeries(index - config.getWindowSize(), index + 1);
+        return getPredit(symbol, subSeries, config, model);
+    }
+
 
     /**
      * Sauvegarde le modèle LSTM en base MySQL.
