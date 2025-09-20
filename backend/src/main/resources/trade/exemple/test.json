@@ -32,3 +32,7 @@ Prendre aussi en compte drawdown et profit factor pour s’assurer que la stabil
 Si tu veux, je peux te faire un petit tableau de visualisation pour tes 108 algos, avec : score, rendement par trade et profil (conservateur/équilibré/agressif), pour voir directement quels algos sont bons.
 
 Veux‑tu que je fasse ça ?
+
+
+select count(*) from trade_ai.alpaca_asset where filtre_out  = true;
+select count(*) from trade_ai.best_in_out_single_strategy;
