@@ -27,11 +27,6 @@ public class BestCombinaisonStrategyRestController {
         return true;
     }
 
-    @GetMapping("/calculScoreST")
-    public ResponseEntity<Boolean> calculScoreSwingTrade() {
-        bestCombinationStrategyHelper.calculScoreST();
-        return ResponseEntity.ok(true);
-    }
 
     // Monitoring du calcul mix strategies
     @GetMapping("/monitor")
