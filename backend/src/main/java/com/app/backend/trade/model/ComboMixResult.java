@@ -18,10 +18,9 @@ public class ComboMixResult {
     public List<String> outStrategyNames;
     public Map<String, Object> inParams = new HashMap<>();
     public Map<String, Object> outParams = new HashMap<>();
-    private RiskResult result;
-    private RiskResult checkResult;
+    private RiskResult finalResult;
+    private RiskResult testResult;
     private ParamsOptim paramsOptim;
-    private boolean isOverfit;
     // Ajout du rendement train pour le calcul du ratio d'overfit
     private double trainRendement;
 }

@@ -158,7 +158,6 @@ public class StrategieBackTest {
                 .maxTradeGain(maxTradeGain)
                 .maxTradeLoss(maxTradeLoss)
                 .scoreSwingTrade(0)
-                .fltredOut(false)
                 .sharpeRatio(sharpeRatio)
                 .stabilityScore(stabilityScore)
                 .build();
@@ -272,7 +271,6 @@ public class StrategieBackTest {
                 .maxTradeGain(maxTradeGain)
                 .maxTradeLoss(maxTradeLoss)
                 .scoreSwingTrade(0)
-                .fltredOut(false)
                 .sharpeRatio(sharpeRatio)
                 .stabilityScore(stabilityScore)
                 .build();
@@ -309,7 +307,6 @@ public class StrategieBackTest {
      * Normalise les métriques et applique les pondérations.
      * Applique les filtres durs et retourne le score pour chaque combo.
      * @param combos liste de ComboResult
-     * @param weights pondérations (rendement, sharpe, drawdown, stabilité)
      * @return liste de SwingTradeScoreResult (combo + score)
      */
     public List<ComboResult> computeSwingTradeScores(List<ComboResult> combos) {
@@ -319,7 +316,7 @@ public class StrategieBackTest {
         List<Double> drawdownList = new ArrayList<>();
         List<Double> stabilityList = new ArrayList<>();
         for (ComboResult combo : combos) {
-            RiskResult r = combo.getCheckResult();
+            RiskResult r = combo.getFinalResult();
             rendementList.add(r.getRendement());
             sharpeList.add(r.getSharpeRatio());
             drawdownList.add(r.getMaxDrawdown());
@@ -337,12 +334,12 @@ public class StrategieBackTest {
         List<ComboResult> results = new ArrayList<>();
         for (int i = 0; i < combos.size(); i++) {
             ComboResult combo = combos.get(i);
-            RiskResult r = combo.getResult();
+            RiskResult r = combo.getFinalResult();
             // Calcul d'un score global pour chaque résultat
             double score = this.calculScore(TradingProfile.BALANCED, r);
-            combo.getResult().setScoreSwingTrade(score);
+            combo.getFinalResult().setScoreSwingTrade(score);
             if (score >= 60) {
-                combo.getResult().setScoreSwingTrade(score);
+                combo.getFinalResult().setScoreSwingTrade(score);
                 results.add(combo);
             }
             /*
@@ -369,7 +366,7 @@ public class StrategieBackTest {
         List<Double> drawdownList = new ArrayList<>();
         List<Double> stabilityList = new ArrayList<>();
         for (ComboMixResult combo : combos) {
-            RiskResult r = combo.getCheckResult();
+            RiskResult r = combo.getFinalResult();
             rendementList.add(r.getRendement());
             sharpeList.add(r.getSharpeRatio());
             drawdownList.add(r.getMaxDrawdown());
@@ -387,13 +384,13 @@ public class StrategieBackTest {
         List<ComboMixResult> results = new ArrayList<>();
         for (int i = 0; i < combos.size(); i++) {
             ComboMixResult combo = combos.get(i);
-            RiskResult r = combo.getResult();
+            RiskResult r = combo.getFinalResult();
             // Calcul d'un score global pour chaque résultat
 
             double score = this.calculScore(TradingProfile.BALANCED, r);
 
             if (score >= 60) {
-                combo.getResult().setScoreSwingTrade(score);
+                combo.getFinalResult().setScoreSwingTrade(score);
                 results.add(combo);
             }
             /*

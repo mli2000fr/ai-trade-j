@@ -153,6 +153,15 @@ public class LstmTuningService {
 
     public LstmConfig tuneSymbol(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
         long startSymbol = System.currentTimeMillis();
+        // Suivi d'avancement
+        TuningProgress progress = new TuningProgress();
+        progress.symbol = symbol;
+        progress.totalConfigs = grid.size();
+        progress.testedConfigs.set(0);
+        progress.status = "en_cours";
+        progress.startTime = startSymbol;
+        progress.lastUpdate = startSymbol;
+        tuningProgressMap.put(symbol, progress);
         logger.info("[TUNING] Début du tuning pour le symbole {} ({} configs)", symbol, grid.size());
         double bestScore = Double.MAX_VALUE;
         LstmConfig conf = hyperparamsRepository.loadHyperparams(symbol);
@@ -195,6 +204,14 @@ public class LstmTuningService {
             }
             hyperparamsRepository.saveTuningMetrics(symbol, config, score, rmse, direction);
             long endConfig = System.currentTimeMillis();
+            logger.info("[TUNING] [{}] Fin config {} | MSE={}, RMSE={}, direction={}, durée={} ms", symbol, grid.size(), score, rmse, direction, (endConfig - startConfig));
+            // Mise à jour du suivi d'avancement
+            TuningProgress p = tuningProgressMap.get(symbol);
+            if (p != null) {
+                p.testedConfigs.incrementAndGet();
+                p.lastUpdate = System.currentTimeMillis();
+            }
+
             logger.info("[TUNING] [{}] Fin config {}/{} | MSE={}, RMSE={}, direction={}, durée={} ms", symbol, i+1, grid.size(), score, rmse, direction, (endConfig - startConfig));
             if (score < bestScore) {
                 bestScore = score;
@@ -203,7 +220,11 @@ public class LstmTuningService {
             }
             logger.info("[TUNING] [{}] Progression : {}/{} configs terminées", symbol, i+1, grid.size());
         }
+
         long endSymbol = System.currentTimeMillis();
+        progress.status = "termine";
+        progress.endTime = endSymbol;
+        progress.lastUpdate = endSymbol;
         if (bestConfig != null && bestModel != null) {
             hyperparamsRepository.saveHyperparams(symbol, bestConfig);
             try {
@@ -482,7 +503,7 @@ public class LstmTuningService {
             long startSymbol = System.currentTimeMillis();
             logger.info("[TUNING] Début tuning symbole {}/{} : {}", i+1, symbols.size(), symbol);
             BarSeries series = seriesProvider.apply(symbol);
-            tuneSymbolMultiThread(symbol, grid, series, jdbcTemplate);
+            tuneSymbol(symbol, grid, series, jdbcTemplate);
             try {
                 org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
                 org.nd4j.linalg.api.memory.MemoryWorkspaceManager wsManager = org.nd4j.linalg.factory.Nd4j.getWorkspaceManager();
