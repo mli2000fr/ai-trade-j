@@ -74,9 +74,7 @@ public class BestCombinationStrategyHelper {
                 List<List<Class<? extends TradeStrategy>>> outCombinations = (outClass != null) ? generateCombinationsWithMandatory(strategies, out, outClass) : generateCombinations(strategies, out);
                 for (List<Class<? extends TradeStrategy>> inCombo : inCombinations) {
                     for (List<Class<? extends TradeStrategy>> outCombo : outCombinations) {
-
-                        StrategyFilterConfig filterConfig = new StrategyFilterConfig();
-                        List<ComboMixResult> results = optimseStrategyMix(Arrays.asList(barSeries), inCombo, outCombo, filterConfig, swingParams);
+                        List<ComboMixResult> results = optimseStrategyMix(Arrays.asList(barSeries), inCombo, outCombo, swingParams);
                         allComboMixResult.addAll(results);
                     }
                 }
@@ -85,35 +83,19 @@ public class BestCombinationStrategyHelper {
 
         // Sélection du meilleur combo swing trade
 
-        List<ComboMixResult> filteredResults = allComboMixResult.stream().filter(re -> !re.isOverfit()).toList();
-        List<ComboMixResult> scoredCombos = strategieBackTest.computeSwingTradeMixScores(filteredResults);
+        List<ComboMixResult> scoredCombos = strategieBackTest.computeSwingTradeMixScores(allComboMixResult);
         ComboMixResult bestScoreResult = null;
         double maxScore = Double.NEGATIVE_INFINITY;
         // Sélection hybride/fallback
-        if (!filteredResults.isEmpty()) {
+        if (!allComboMixResult.isEmpty()) {
             // Sélectionne le meilleur combo non-overfit
             for (ComboMixResult scoreResult : scoredCombos) {
-                //if (filteredResults.contains(scoreResult)) {
                     if (scoreResult.getFinalResult().getScoreSwingTrade() > maxScore) {
                         maxScore = scoreResult.getFinalResult().getScoreSwingTrade();
                         bestScoreResult = scoreResult;
                     }
-                //}
             }
-        }/* else {
-            // Fallback: sélectionne le combo dont le ratio overfit est le plus proche de 1
-            double minOverfitDist = Double.POSITIVE_INFINITY;
-            for (ComboMixResult scoreResult : scoredCombos) {
-                RiskResult res = scoreResult.getResult();
-                double trainRendement = scoreResult.getTrainRendement();
-                double overfitRatioCombo = trainRendement == 0.0 ? 1.0 : res.getRendement() / trainRendement;
-                double dist = Math.abs(overfitRatioCombo - 1.0);
-                if (dist < minOverfitDist) {
-                    minOverfitDist = dist;
-                    bestScoreResult = scoreResult;
-                }
-            }
-        }*/
+        }
 
         int totalCount = barSeries.getBarCount();
 
@@ -323,10 +305,10 @@ public class BestCombinationStrategyHelper {
         String outStrategyNamesJson = gson.toJson(result.outStrategyNames);
         String inParamsJson = gson.toJson(result.inParams);
         String outParamsJson = gson.toJson(result.outParams);
-        String check = new com.google.gson.Gson().toJson(result.testResult);
+        String testResult = new com.google.gson.Gson().toJson(result.testResult);
         // Vérifier si le symbol existe déjà
-        String checkSql = "SELECT COUNT(*) FROM best_in_out_mix_strategy WHERE symbol = ?";
-        int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
+        String sql = "SELECT COUNT(*) FROM best_in_out_mix_strategy WHERE symbol = ?";
+        int count = jdbcTemplate.queryForObject(sql, Integer.class, symbol);
         if (count > 0) {
             // UPDATE
             String updateSql = """
@@ -336,10 +318,7 @@ public class BestCombinationStrategyHelper {
                     in_params = ?, 
                     out_params = ?, 
                     rendement = ?, 
-                    rendement_check = ?,
-                    rendement_sum = ?,
-                    rendement_diff = ?,
-                    rendement_score = ?,
+                    rendement_test = ?,
                     trade_count = ?, 
                     win_rate = ?, 
                     max_drawdown = ?, 
@@ -351,14 +330,13 @@ public class BestCombinationStrategyHelper {
                     sharpe_ratio = ?
                     stability_score = ?,
                     score_swing_trade = ?, 
-                    score_swing_trade_check = ?,
                     fltred_out = ?,
                     nb_simples = ?,
                     initial_capital = ?, 
                     risk_per_trade = ?, 
                     stop_loss_pct = ?, 
                     take_profit_pct = ?, 
-                    check_result = ?
+                    result_test = ?
                     update_date = CURRENT_TIMESTAMP WHERE symbol = ?""";
             jdbcTemplate.update(updateSql,
                     inStrategyNamesJson,
@@ -367,9 +345,6 @@ public class BestCombinationStrategyHelper {
                     outParamsJson,
                     result.finalResult.rendement,
                     result.testResult.rendement,
-                    result.rendementSum,
-                    result.rendementDiff,
-                    result.rendementScore,
                     result.finalResult.tradeCount,
                     result.finalResult.winRate,
                     result.finalResult.maxDrawdown,
@@ -381,13 +356,12 @@ public class BestCombinationStrategyHelper {
                     result.finalResult.sharpeRatio,
                     result.finalResult.stabilityScore,
                     result.finalResult.scoreSwingTrade,
-                    result.testResult.scoreSwingTrade,
                     result.contextOptim.nbSimples,
                     result.contextOptim.initialCapital,
                     result.contextOptim.riskPerTrade,
                     result.contextOptim.stopLossPct,
                     result.contextOptim.takeProfitPct,
-                    check,
+                    testResult,
                     symbol);
         } else {
             // INSERT
@@ -399,10 +373,7 @@ public class BestCombinationStrategyHelper {
                     in_params, 
                     out_params, 
                     rendement,
-                    rendement_check,
-                    rendement_sum,
-                    rendement_diff,
-                    rendement_score,
+                    rendement_test,
                     trade_count,
                     win_rate,
                     max_drawdown,
@@ -414,16 +385,15 @@ public class BestCombinationStrategyHelper {
                     sharpe_ratio, 
                     stability_score, 
                     score_swing_trade, 
-                    score_swing_trade_check,
                     initial_capital, 
                     risk_per_trade, 
                     stop_loss_pct, 
                     take_profit_pct, 
                     nb_simples,
-                    check_result,
+                    result_test,
                     create_date,
                     update_date
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""";
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""";
             jdbcTemplate.update(insertSql,
                     symbol,
                     inStrategyNamesJson,
@@ -432,9 +402,6 @@ public class BestCombinationStrategyHelper {
                     outParamsJson,
                     result.finalResult.rendement,
                     result.testResult.rendement,
-                    result.rendementSum,
-                    result.rendementDiff,
-                    result.rendementScore,
                     result.finalResult.tradeCount,
                     result.finalResult.winRate,
                     result.finalResult.maxDrawdown,
@@ -446,13 +413,12 @@ public class BestCombinationStrategyHelper {
                     result.finalResult.sharpeRatio,
                     result.finalResult.stabilityScore,
                     result.finalResult.scoreSwingTrade,
-                    result.testResult.scoreSwingTrade,
                     result.contextOptim.initialCapital,
                     result.contextOptim.riskPerTrade,
                     result.contextOptim.stopLossPct,
                     result.contextOptim.takeProfitPct,
                     result.contextOptim.nbSimples,
-                    check,
+                    testResult,
                     java.sql.Date.valueOf(java.time.LocalDate.now()));
         }
     }
@@ -490,10 +456,7 @@ public class BestCombinationStrategyHelper {
                 .takeProfitPct(row.get("take_profit_pct") != null ? ((Number) row.get("take_profit_pct")).doubleValue() : 0.0)
                 .nbSimples(row.get("nb_simples") != null ? ((Integer) row.get("nb_simples")).intValue() : 0)
                 .build();
-        result.testResult = new com.google.gson.Gson().fromJson((String)row.get("check_result"), RiskResult.class);
-        result.rendementSum = row.get("rendement_sum") != null ? ((Number) row.get("rendement_sum")).doubleValue() : 0.0;
-        result.rendementDiff = row.get("rendement_diff") != null ? ((Number) row.get("rendement_diff")).doubleValue() : 0.0;
-        result.rendementScore = row.get("rendement_score") != null ? ((Number) row.get("rendement_score")).doubleValue() : 0.0;
+        result.testResult = new com.google.gson.Gson().fromJson((String)row.get("result_test"), RiskResult.class);
         return result;
     }
 
@@ -645,7 +608,7 @@ public class BestCombinationStrategyHelper {
 
     public List<String> getSymbolFitredFromTabSingle(String sort) {
         String orderBy = sort == null ? "score_swing_trade" : sort;
-        String sql = "select symbol from trade_ai.best_in_out_single_strategy where fltred_out = 'false'";
+        String sql = "select symbol from trade_ai.best_in_out_single_strategy";
         sql += " ORDER BY " + orderBy + " DESC";
         return jdbcTemplate.queryForList(sql, String.class);
     }
@@ -692,8 +655,8 @@ public class BestCombinationStrategyHelper {
                 boolean isCalcul = true;
                 try{
                     if(INSERT_ONLY){
-                        String checkSql = "SELECT COUNT(*) FROM best_in_out_mix_strategy WHERE symbol = ?";
-                        int count = jdbcTemplate.queryForObject(checkSql, Integer.class, symbol);
+                        String sql = "SELECT COUNT(*) FROM best_in_out_mix_strategy WHERE symbol = ?";
+                        int count = jdbcTemplate.queryForObject(sql, Integer.class, symbol);
                         if(count > 0){
                             isCalcul = false;
                             TradeUtils.log("calculMixStrategies: symbole "+symbol+" déjà en base, on passe");
@@ -730,7 +693,7 @@ public class BestCombinationStrategyHelper {
 
 
 
-    private List<ComboMixResult> optimseStrategyMix(List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo, StrategyFilterConfig filterConfig, SwingTradeOptimParams swingParams) {
+    private List<ComboMixResult> optimseStrategyMix(List<BarSeries> seriesList, List<Class<? extends TradeStrategy>> inCombo, List<Class<? extends TradeStrategy>> outCombo, SwingTradeOptimParams swingParams) {
         BestCombinationResult resultObj = new BestCombinationResult();
 
         BarSeries fullSeries = seriesList.get(0);
@@ -931,22 +894,26 @@ public class BestCombinationStrategyHelper {
             double overfitRatioCombo = testResult.getRendement() / (trainResult.getRendement() == 0.0 ? 1.0 : trainResult.getRendement());
             boolean isOverfitCombo = (overfitRatioCombo < 0.7 || overfitRatioCombo > 1.3);
 
-            // Check final sur les derniers 20% de bougies
-            BarSeries checkSeries = fullSeries.getSubSeries(totalCount - (int)Math.round(totalCount*0.2), totalCount);
+            if(!isOverfitCombo){
 
-            resultObj.inStrategyNames = inCombo.stream().map(Class::getSimpleName).toList();
-            resultObj.outStrategyNames = outCombo.stream().map(Class::getSimpleName).toList();
-            RiskResult finalResultat = this.getFinalResultat(checkSeries, resultObj);
-            ComboMixResult combo =  ComboMixResult.builder()
-                    .inStrategyNames(inStrategyNames)
-                    .outStrategyNames(outStrategyNames)
-                    .inParams(resultObj.inParams)
-                    .outParams(resultObj.outParams)
-                    .finalResult(finalResultat)
-                    .testResult(testResult)
-                    .trainRendement(trainResult.rendement)
-                    .isOverfit(isOverfitCombo).build();
-            foldAllCombos.add(combo);
+                // test final sur les derniers 20% de bougies
+                BarSeries finalSeries = fullSeries.getSubSeries(totalCount - (int)Math.round(totalCount*0.2), totalCount);
+
+                resultObj.inStrategyNames = inCombo.stream().map(Class::getSimpleName).toList();
+                resultObj.outStrategyNames = outCombo.stream().map(Class::getSimpleName).toList();
+                RiskResult finalResultat = this.getFinalResultat(finalSeries, resultObj);
+                finalResultat.setNumFlod(fold);
+                ComboMixResult combo =  ComboMixResult.builder()
+                        .inStrategyNames(inStrategyNames)
+                        .outStrategyNames(outStrategyNames)
+                        .inParams(resultObj.inParams)
+                        .outParams(resultObj.outParams)
+                        .finalResult(finalResultat)
+                        .testResult(testResult)
+                        .trainRendement(trainResult.rendement).build();
+                foldAllCombos.add(combo);
+            }
+
         }
         return foldAllCombos;
     }
@@ -992,86 +959,83 @@ public class BestCombinationStrategyHelper {
                     .takeProfitPct(rs.getDouble("take_profit_pct"))
                     .nbSimples(rs.getInt("nb_simples"))
                     .build();
-            result.testResult = new com.google.gson.Gson().fromJson(rs.getString("check_result"), RiskResult.class);
-            result.rendementSum = rs.getDouble("rendement_sum");
-            result.rendementDiff = rs.getDouble("rendement_diff");
-            result.rendementScore = rs.getDouble("rendement_score");
+            result.testResult = new com.google.gson.Gson().fromJson(rs.getString("result_test"), RiskResult.class);
             return result;
         });
         return results;
     }
 
 
-    public RiskResult getFinalResultat(BarSeries checkSeries, BestCombinationResult resultObj){
-        List<TradeStrategy> inStrategiesCheck = new ArrayList<>();
+    public RiskResult getFinalResultat(BarSeries finalSeries, BestCombinationResult resultObj){
+        List<TradeStrategy> inStrategiesFT = new ArrayList<>();
         for (String name : resultObj.inStrategyNames) {
             Object params = resultObj.inParams.get(name.replace("Strategy", ""));
             if (name.equals("ImprovedTrendFollowingStrategy") && params instanceof StrategieBackTest.ImprovedTrendFollowingParams) {
                 StrategieBackTest.ImprovedTrendFollowingParams p = (StrategieBackTest.ImprovedTrendFollowingParams) params;
-                inStrategiesCheck.add(new ImprovedTrendFollowingStrategy(p.trendPeriod, p.shortMaPeriod, p.longMaPeriod, p.breakoutThreshold, p.useRsiFilter, p.rsiPeriod));
+                inStrategiesFT.add(new ImprovedTrendFollowingStrategy(p.trendPeriod, p.shortMaPeriod, p.longMaPeriod, p.breakoutThreshold, p.useRsiFilter, p.rsiPeriod));
             } else if (name.equals("SmaCrossoverStrategy") && params instanceof StrategieBackTest.SmaCrossoverParams) {
                 StrategieBackTest.SmaCrossoverParams p = (StrategieBackTest.SmaCrossoverParams) params;
-                inStrategiesCheck.add(new SmaCrossoverStrategy(p.shortPeriod, p.longPeriod));
+                inStrategiesFT.add(new SmaCrossoverStrategy(p.shortPeriod, p.longPeriod));
             } else if (name.equals("RsiStrategy") && params instanceof StrategieBackTest.RsiParams) {
                 StrategieBackTest.RsiParams p = (StrategieBackTest.RsiParams) params;
-                inStrategiesCheck.add(new RsiStrategy(p.rsiPeriod, p.oversold, p.overbought));
+                inStrategiesFT.add(new RsiStrategy(p.rsiPeriod, p.oversold, p.overbought));
             } else if (name.equals("BreakoutStrategy") && params instanceof StrategieBackTest.BreakoutParams) {
                 StrategieBackTest.BreakoutParams p = (StrategieBackTest.BreakoutParams) params;
-                inStrategiesCheck.add(new BreakoutStrategy(p.lookbackPeriod));
+                inStrategiesFT.add(new BreakoutStrategy(p.lookbackPeriod));
             } else if (name.equals("MacdStrategy") && params instanceof StrategieBackTest.MacdParams) {
                 StrategieBackTest.MacdParams p = (StrategieBackTest.MacdParams) params;
-                inStrategiesCheck.add(new MacdStrategy(p.shortPeriod, p.longPeriod, p.signalPeriod));
+                inStrategiesFT.add(new MacdStrategy(p.shortPeriod, p.longPeriod, p.signalPeriod));
             } else if (name.equals("MeanReversionStrategy") && params instanceof StrategieBackTest.MeanReversionParams) {
                 StrategieBackTest.MeanReversionParams p = (StrategieBackTest.MeanReversionParams) params;
-                inStrategiesCheck.add(new MeanReversionStrategy(p.smaPeriod, p.threshold));
+                inStrategiesFT.add(new MeanReversionStrategy(p.smaPeriod, p.threshold));
             }
         }
-        List<TradeStrategy> outStrategiesCheck = new ArrayList<>();
+        List<TradeStrategy> outStrategiesFT = new ArrayList<>();
         for (String name : resultObj.outStrategyNames) {
             Object params = resultObj.outParams.get(name.replace("Strategy", ""));
             if (name.equals("ImprovedTrendFollowingStrategy") && params instanceof StrategieBackTest.ImprovedTrendFollowingParams) {
                 StrategieBackTest.ImprovedTrendFollowingParams p = (StrategieBackTest.ImprovedTrendFollowingParams) params;
-                outStrategiesCheck.add(new ImprovedTrendFollowingStrategy(p.trendPeriod, p.shortMaPeriod, p.longMaPeriod, p.breakoutThreshold, p.useRsiFilter, p.rsiPeriod));
+                outStrategiesFT.add(new ImprovedTrendFollowingStrategy(p.trendPeriod, p.shortMaPeriod, p.longMaPeriod, p.breakoutThreshold, p.useRsiFilter, p.rsiPeriod));
             } else if (name.equals("SmaCrossoverStrategy") && params instanceof StrategieBackTest.SmaCrossoverParams) {
                 StrategieBackTest.SmaCrossoverParams p = (StrategieBackTest.SmaCrossoverParams) params;
-                outStrategiesCheck.add(new SmaCrossoverStrategy(p.shortPeriod, p.longPeriod));
+                outStrategiesFT.add(new SmaCrossoverStrategy(p.shortPeriod, p.longPeriod));
             } else if (name.equals("RsiStrategy") && params instanceof StrategieBackTest.RsiParams) {
                 StrategieBackTest.RsiParams p = (StrategieBackTest.RsiParams) params;
-                outStrategiesCheck.add(new RsiStrategy(p.rsiPeriod, p.oversold, p.overbought));
+                outStrategiesFT.add(new RsiStrategy(p.rsiPeriod, p.oversold, p.overbought));
             } else if (name.equals("BreakoutStrategy") && params instanceof StrategieBackTest.BreakoutParams) {
                 StrategieBackTest.BreakoutParams p = (StrategieBackTest.BreakoutParams) params;
-                outStrategiesCheck.add(new BreakoutStrategy(p.lookbackPeriod));
+                outStrategiesFT.add(new BreakoutStrategy(p.lookbackPeriod));
             } else if (name.equals("MacdStrategy") && params instanceof StrategieBackTest.MacdParams) {
                 StrategieBackTest.MacdParams p = (StrategieBackTest.MacdParams) params;
-                outStrategiesCheck.add(new MacdStrategy(p.shortPeriod, p.longPeriod, p.signalPeriod));
+                outStrategiesFT.add(new MacdStrategy(p.shortPeriod, p.longPeriod, p.signalPeriod));
             } else if (name.equals("MeanReversionStrategy") && params instanceof StrategieBackTest.MeanReversionParams) {
                 StrategieBackTest.MeanReversionParams p = (StrategieBackTest.MeanReversionParams) params;
-                outStrategiesCheck.add(new MeanReversionStrategy(p.smaPeriod, p.threshold));
+                outStrategiesFT.add(new MeanReversionStrategy(p.smaPeriod, p.threshold));
             }
         }
-        // Combiner les règles d'entrée et de sortie pour le check
-        Rule entryRuleCheck = null;
-        Rule exitRuleCheck = null;
-        for (TradeStrategy strat : inStrategiesCheck) {
-            if (entryRuleCheck == null) entryRuleCheck = strat.getEntryRule(checkSeries);
-            else entryRuleCheck = entryRuleCheck.or(strat.getEntryRule(checkSeries));
+        // Combiner les règles d'entrée et de sortie pour le FT
+        Rule entryRuleFT = null;
+        Rule exitRuleFT = null;
+        for (TradeStrategy strat : inStrategiesFT) {
+            if (entryRuleFT == null) entryRuleFT = strat.getEntryRule(finalSeries);
+            else entryRuleFT = entryRuleFT.or(strat.getEntryRule(finalSeries));
         }
-        for (TradeStrategy strat : outStrategiesCheck) {
-            if (exitRuleCheck == null) exitRuleCheck = strat.getExitRule(checkSeries);
-            else exitRuleCheck = exitRuleCheck.or(strat.getExitRule(checkSeries));
+        for (TradeStrategy strat : outStrategiesFT) {
+            if (exitRuleFT == null) exitRuleFT = strat.getExitRule(finalSeries);
+            else exitRuleFT = exitRuleFT.or(strat.getExitRule(finalSeries));
         }
-        final Rule finalEntryRuleCheck = entryRuleCheck;
-        final Rule finalExitRuleCheck = exitRuleCheck;
-        TradeStrategy combinedCheckStrategy = new TradeStrategy() {
+        final Rule finalentryRuleFT = entryRuleFT;
+        final Rule finalexitRuleFT = exitRuleFT;
+        TradeStrategy combinedFTStrategy = new TradeStrategy() {
             @Override
-            public Rule getEntryRule(BarSeries s) { return finalEntryRuleCheck; }
+            public Rule getEntryRule(BarSeries s) { return finalentryRuleFT; }
             @Override
-            public Rule getExitRule(BarSeries s) { return finalExitRuleCheck; }
+            public Rule getExitRule(BarSeries s) { return finalexitRuleFT; }
             @Override
-            public String getName() { return "CombinedCheckStrategy"; }
+            public String getName() { return "CombinedFTStrategy"; }
         };
-        StrategieBackTest backTestCheck = new StrategieBackTest();
-        return backTestCheck.backtestStrategy(combinedCheckStrategy, checkSeries);
+        StrategieBackTest backTestFT = new StrategieBackTest();
+        return backTestFT.backtestStrategy(combinedFTStrategy, finalSeries);
     }
 
 }

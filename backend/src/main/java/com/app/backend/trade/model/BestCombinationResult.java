@@ -21,9 +21,6 @@ public class BestCombinationResult {
     public Map<String, Object> outParams = new HashMap<>();
     public RiskResult finalResult;
     public RiskResult testResult;
-    public double rendementSum;
-    public double rendementDiff;
-    public double rendementScore;
     public ParamsOptim contextOptim;
 
     public static BestCombinationResult empty() {
@@ -57,9 +54,6 @@ public class BestCombinationResult {
             .maxTradeLoss(0.0)
             .scoreSwingTrade(0.0)
             .build();
-        result.rendementSum = 0.0;
-        result.rendementDiff = 0.0;
-        result.rendementScore = 0.0;
         result.contextOptim = new ParamsOptim();
         return result;
     }

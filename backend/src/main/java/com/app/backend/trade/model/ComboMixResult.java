@@ -21,7 +21,6 @@ public class ComboMixResult {
     private RiskResult finalResult;
     private RiskResult testResult;
     private ParamsOptim paramsOptim;
-    private boolean isOverfit;
     // Ajout du rendement train pour le calcul du ratio d'overfit
     private double trainRendement;
 }

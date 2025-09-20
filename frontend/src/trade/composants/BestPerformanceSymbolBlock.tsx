@@ -102,9 +102,10 @@ interface BestCombinationResult {
   finalResult: {
     rendement: number;
     maxDrawdown: number;
+    avgPnL: number;
+    sharpeRatio: number;
     tradeCount: number;
     winRate: number;
-    avgPnL: number;
     profitFactor: number;
     avgTradeBars: number;
     maxTradeGain: number;
@@ -114,9 +115,10 @@ interface BestCombinationResult {
   testResult: {
     rendement: number;
     maxDrawdown: number;
+    avgPnL: number;
+    sharpeRatio: number;
     tradeCount: number;
     winRate: number;
-    avgPnL: number;
     profitFactor: number;
     avgTradeBars: number;
     maxTradeGain: number;
@@ -453,7 +455,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                     <TableCell colSpan={4} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', fontSize: '1rem' }}>LSDM</TableCell>
                     <TableCell colSpan={9} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
-                    <TableCell colSpan={5} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
+                    <TableCell colSpan={9} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                   </TableRow>
                   <TableRow>
@@ -489,7 +491,26 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Durée moyenne trade</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300  }}>Rendement</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Rendement</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300 }}>
+                    <Tooltip title="Profit moyen par trade (Doit être positif)" arrow placement="top" enterDelay={200} leaveDelay={100}
+                      slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
+                      <span>Avg PnL</span>
+                    </Tooltip>
+                    </TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300 }}>
+                    <Tooltip title="Doit être > 1 pour être intéressant" arrow placement="top" enterDelay={200} leaveDelay={100}
+                       slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
+                       <span>Profit Factor</span>
+                     </Tooltip>
+                    </TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Max Drawdown</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300 }}>
+                    <Tooltip title="Doit être positif et idéalement > 1" arrow placement="top" enterDelay={200} leaveDelay={100}
+                        slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
+                        <span>Sharpe Ratio</span>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Win Rate</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300  }}>Score Swing Trade</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Durée moyenne trade</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Détails</TableCell>
@@ -578,7 +599,11 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                               : '-'
                         }</TableCell>
                         <TableCell align="center">{(row.mix.finalResult.rendement * 100).toFixed(2)}% | {(row.mix.testResult.rendement * 100).toFixed(2)}%</TableCell>
-                        <TableCell align="center">{(row.mix.rendementScore * 100).toFixed(2)}</TableCell>
+                        <TableCell align="center">{row.mix.finalResult.avgPnL.toFixed(2)}</TableCell>
+                        <TableCell align="center">{row.mix.finalResult.profitFactor.toFixed(2)}</TableCell>
+                        <TableCell align="center">{(row.mix.finalResult.maxDrawdown * 100).toFixed(2)} %</TableCell>
+                        <TableCell align="center">{row.mix.finalResult.sharpeRatio.toFixed(2)}</TableCell>
+                        <TableCell align="center">{(row.mix.finalResult.winRate * 100).toFixed(2)} %</TableCell>
                         <TableCell align="center">{row.mix.finalResult.scoreSwingTrade !== undefined ? (row.mix.finalResult.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
                         <TableCell align="center">{row.mix.finalResult.avgTradeBars !== undefined ? row.mix.finalResult.avgTradeBars.toFixed(2) : '-'}</TableCell>
                         <TableCell align="center"><Button size="small" variant="outlined" onClick={() => { setSelected(row); setOpen(true); }}>Détails</Button></TableCell>
