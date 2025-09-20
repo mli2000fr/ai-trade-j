@@ -888,8 +888,8 @@ public class StrategieHelper {
         if (walkForwardResultPro == null || walkForwardResultPro.getBestCombo() == null) {
             return null;
         }
-        double rendementSum = walkForwardResultPro.getBestCombo().getResult().getRendement() + walkForwardResultPro.getCheck().getRendement();
-        double rendementDiff = walkForwardResultPro.getBestCombo().getResult().getRendement() - walkForwardResultPro.getCheck().getRendement();
+        double rendementSum = walkForwardResultPro.getBestCombo().getResult().getRendement() + walkForwardResultPro.getBestCombo().getCheckResult().getRendement();
+        double rendementDiff = walkForwardResultPro.getBestCombo().getResult().getRendement() - walkForwardResultPro.getBestCombo().getCheckResult().getRendement();
         return BestInOutStrategy.builder()
                 .symbol(symbol)
                 .rendementSum(rendementSum)
