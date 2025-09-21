@@ -29,6 +29,10 @@ Optimisation du risk management : Tester différents paramètres de stop loss/ta
 Exemple de features additionnels à intégrer :
 features = Arrays.asList("close", "volume", "rsi", "sma", "ema", "macd", "atr", "bollinger_upper", "bollinger_lower", "stochastic", "momentum");
 Il faudra adapter la méthode extractFeatureMatrix pour calculer ces nouveaux indicateurs.
+
+backtestMultiStrategies
+
+
 Conclusion
 Votre base est solide et bien adaptée au swing trade. Les axes d’amélioration principaux sont :
 enrichir les features,
