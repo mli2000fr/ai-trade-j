@@ -490,7 +490,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 130, maxWidth: 300 }}>Score Swing Trade</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Durée moyenne trade</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300  }}>Rendement</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 120, width: 130, maxWidth: 300  }}>Rendement</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300 }}>
                     <Tooltip title="Profit moyen par trade (Doit être positif)" arrow placement="top" enterDelay={200} leaveDelay={100}
                       slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
@@ -598,7 +598,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                               ? (indiceMix.type + ' (' + indiceMix.dateStr + ')')
                               : '-'
                         }</TableCell>
-                        <TableCell align="center">{(row.mix.finalResult.rendement * 100).toFixed(2)}% | {(row.mix.testResult.rendement * 100).toFixed(2)}%</TableCell>
+                        <TableCell align="center"><b>{(row.mix.finalResult.rendement * 100).toFixed(2)} %</b>| {(row.mix.testResult.rendement * 100).toFixed(2)} %</TableCell>
                         <TableCell align="center">{row.mix.finalResult.avgPnL.toFixed(2)}</TableCell>
                         <TableCell align="center">{row.mix.finalResult.profitFactor.toFixed(2)}</TableCell>
                         <TableCell align="center">{(row.mix.finalResult.maxDrawdown * 100).toFixed(2)} %</TableCell>

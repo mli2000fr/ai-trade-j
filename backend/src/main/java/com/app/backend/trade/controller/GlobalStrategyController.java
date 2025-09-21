@@ -25,9 +25,8 @@ public class GlobalStrategyController {
                                                 @RequestParam(value = "type", required = false, defaultValue = "single") String type,
                                                 @RequestParam(value = "sort", required = false, defaultValue = "rendement_score") String sort,
                                                 @RequestParam(value = "topProfil", required = false) Boolean topProfil,
-                                                @RequestParam(value = "buyOnly", required = false) Boolean buyOnly,
                                                 @RequestParam(value = "search", required = false) String search) {
-        return globalStrategyHelper.getBestScoreAction(limit, type, sort, search, topProfil, buyOnly);
+        return globalStrategyHelper.getBestScoreAction(limit, type, sort, search, topProfil);
     }
 
     @GetMapping("/infosSymbol")
