@@ -167,6 +167,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [isToday, setIsToday] = useState(false);
   const [buySingleOnly, setBuySingleOnly] = useState(false);
   const [buyMixOnly, setBuyMixOnly] = useState(false);
+  const [buyLstmOnly, setBuyLstmOnly] = useState(false);
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const fetchData = (searchModeParam = false, searchValueParam = '') => {
@@ -223,7 +224,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
         .catch(() => {
           setIndicesMix(prev => ({ ...prev, [symbol]: '-' }));
         });
-      // Ajout fetch LSDM
+      // Ajout fetch LSTM
       setLstmResults(prev => ({ ...prev, [symbol]: 'pending' }));
       fetch(`/api/lstm/predict?symbol=${encodeURIComponent(symbol)}`)
         .then(res => res.json())
@@ -330,6 +331,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <MenuItem value={30}>30</MenuItem>
                   <MenuItem value={50}>50</MenuItem>
                   <MenuItem value={100}>100</MenuItem>
+                  <MenuItem value={10000}>All</MenuItem>
                 </Select>
               </FormControl>
               <FormControl size="small" sx={{ minWidth: 180 }}>
@@ -383,6 +385,18 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   />
                 }
                 label="Buy/Mix"
+                sx={{ ml: 2 }}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={buyLstmOnly}
+                    onChange={e => setBuyLstmOnly(e.target.checked)}
+                    disabled={searchMode}
+                    size="small"
+                  />
+                }
+                label="Buy/Lstm"
                 sx={{ ml: 2 }}
               />
               <Button
@@ -479,7 +493,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <TableRow>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
-                    <TableCell colSpan={4} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', fontSize: '1rem' }}>LSDM</TableCell>
+                    <TableCell colSpan={4} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', fontSize: '1rem' }}>LSTM</TableCell>
                     <TableCell colSpan={9} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
                     <TableCell colSpan={9} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
@@ -546,6 +560,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   {data.filter(row => {
                     let singleOk = true;
                     let mixOk = true;
+                    let lstmOk = true;
                     if (buySingleOnly) {
                       const indice = indices[row.single.symbol];
                       singleOk = (typeof indice === 'object' && indice.type && indice.type.startsWith('BUY')) ? true : false;
@@ -554,7 +569,11 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                       const indiceMix = indicesMix[row.mix.symbol ?? ''];
                       mixOk = (typeof indiceMix === 'object' && indiceMix.type && indiceMix.type.startsWith('BUY')) ? true : false;
                     }
-                    return singleOk && mixOk;
+                    if (buyLstmOnly) {
+                      const lstm = lstmResults[row.single.symbol];
+                      lstmOk = (typeof lstm === 'object' && lstm.signal && typeof lstm.signal === 'object' && lstm.signal.type && lstm.signal.type.startsWith('BUY')) ? true : false;
+                    }
+                    return singleOk && mixOk && lstmOk;
                   }).map((row, i) => {
                     let bgColor = undefined;
                     const indice = indices[row.single.symbol] as SignalInfo;
