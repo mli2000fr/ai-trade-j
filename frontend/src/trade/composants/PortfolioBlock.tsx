@@ -22,6 +22,7 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import BestPerformanceDialog from './BestPerformanceDialog';
+import Tooltip from '@mui/material/Tooltip';
 
 interface PortfolioBlockProps {
   portfolio: any;
@@ -352,7 +353,12 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                               : {}
                           }
                         >
-                          <TableCell sx={cellStyle}>{pos.symbol}</TableCell>
+                          <TableCell sx={cellStyle}>
+                          <Tooltip title={pos.name || pos.symbol} arrow placement="top" enterDelay={200} leaveDelay={100}
+                              slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
+                              <span>{pos.symbol}</span>
+                            </Tooltip>
+                          </TableCell>
                           <TableCell sx={signalCellStyle}>{signalCellContent}</TableCell>
                           <TableCell sx={cellStyle}>{pos.avg_entry_price !== undefined && pos.avg_entry_price !== null ? Number(pos.avg_entry_price).toFixed(2) + ' $' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.current_price !== undefined && pos.current_price !== null ? Number(pos.current_price).toFixed(2) + ' $' : '-'}</TableCell>
