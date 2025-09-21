@@ -1228,6 +1228,45 @@ public class LstmTradePredictor {
     }
 
     /**
+     * Filtre ou limite l'impact des outliers dans une colonne de features.
+     * Utilise le clipping à l'intervalle [Q1 - 1.5*IQR, Q3 + 1.5*IQR].
+     */
+    public double[] filterOutliers(double[] col) {
+        int n = col.length;
+        double[] sorted = java.util.Arrays.copyOf(col, n);
+        java.util.Arrays.sort(sorted);
+        double q1 = sorted[n / 4];
+        double q3 = sorted[(3 * n) / 4];
+        double iqr = q3 - q1;
+        double lower = q1 - 1.5 * iqr;
+        double upper = q3 + 1.5 * iqr;
+        double[] filtered = new double[n];
+        for (int i = 0; i < n; i++) {
+            filtered[i] = Math.max(lower, Math.min(upper, col[i]));
+        }
+        return filtered;
+    }
+
+    /**
+     * Monitoring du drift des données : log si la moyenne ou l'écart-type change trop.
+     * Seuils arbitraires : 20% de variation.
+     */
+    private java.util.Map<String, double[]> driftStats = new java.util.HashMap<>();
+    public void monitorDrift(double[] col, String featureName) {
+        double mean = java.util.Arrays.stream(col).average().orElse(0.0);
+        double std = Math.sqrt(java.util.Arrays.stream(col).map(v -> (v - mean) * (v - mean)).average().orElse(0.0));
+        double[] lastStats = driftStats.get(featureName);
+        if (lastStats != null) {
+            double lastMean = lastStats[0];
+            double lastStd = lastStats[1];
+            if (Math.abs(mean - lastMean) / (Math.abs(lastMean) + 1e-8) > 0.2 || Math.abs(std - lastStd) / (Math.abs(lastStd) + 1e-8) > 0.2) {
+                logger.warn("[DRIFT] Feature '{}' : drift détecté (mean {:.3f} -> {:.3f}, std {:.3f} -> {:.3f})", featureName, lastMean, mean, lastStd, std);
+            }
+        }
+        driftStats.put(featureName, new double[]{mean, std});
+    }
+
+    /**
      * Normalise une matrice de features selon le type de chaque feature.
      * @param matrix matrice [barCount][numFeatures]
      * @param features liste des features (pour choisir la méthode)
@@ -1240,6 +1279,10 @@ public class LstmTradePredictor {
         for (int f = 0; f < numFeatures; f++) {
             double[] col = new double[barCount];
             for (int i = 0; i < barCount; i++) col[i] = matrix[i][f];
+            // Filtrer les outliers
+            col = filterOutliers(col);
+            // Monitoring du drift
+            monitorDrift(col, features.get(f));
             String normType = getFeatureNormalizationType(features.get(f));
             if (normType.equals("zscore")) {
                 double mean = java.util.Arrays.stream(col).average().orElse(0.0);
