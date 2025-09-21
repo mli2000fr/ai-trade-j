@@ -451,8 +451,7 @@ public class LstmTuningService {
      * @param jdbcTemplate accès base
      * @param seriesProvider fonction pour obtenir BarSeries par symbole
      */
-    public void tuneAllSymbolsMultiThread(List<String> symbols, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
-        List<LstmConfig> grid = generateSwingTradeGrid();
+    public void tuneAllSymbolsMultiThread(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         int numThreads = Math.min(symbols.size(), Runtime.getRuntime().availableProcessors());
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
         java.util.concurrent.CompletionService<Void> completionService = new java.util.concurrent.ExecutorCompletionService<>(executor);

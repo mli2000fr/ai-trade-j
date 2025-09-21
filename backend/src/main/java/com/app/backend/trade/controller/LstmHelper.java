@@ -4,19 +4,14 @@ package com.app.backend.trade.controller;
 import com.app.backend.trade.lstm.LstmConfig;
 import com.app.backend.trade.lstm.LstmTradePredictor;
 import com.app.backend.trade.lstm.LstmTuningService;
-import com.app.backend.trade.model.DailyValue;
-import com.app.backend.trade.model.PreditLsdm;
-import com.app.backend.trade.model.RiskResult;
-import com.app.backend.trade.model.SignalType;
+import com.app.backend.trade.model.*;
 import com.app.backend.trade.util.TradeUtils;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
-
 import java.io.IOException;
-import java.lang.reflect.Array;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -82,6 +77,11 @@ public class LstmHelper {
 
     // Prédiction LSTM
     public PreditLsdm getPredit(String symbol) throws IOException {
+        PreditLsdm preditLsdmDb = this.getPreditFromDB(symbol);
+        if(preditLsdmDb != null){
+            return preditLsdmDb;
+        }
+
         LstmConfig config = lstmTuningService.hyperparamsRepository.loadHyperparams(symbol);
         if (config == null) {
             logger.info("Hyperparamètres existants trouvés pour {}. Ignorer le tuning.", symbol);
@@ -90,7 +90,55 @@ public class LstmHelper {
         MultiLayerNetwork model = lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
 
         BarSeries series = getBarBySymbol(symbol, null);
-        return lstmTradePredictor.getPredit(symbol, series, config, model);
+        PreditLsdm preditLsdm = lstmTradePredictor.getPredit(symbol, series, config, model);
+        saveSignalHistory(symbol, preditLsdm);
+        return preditLsdm;
+    }
+    public void saveSignalHistory(String symbol, PreditLsdm preditLsdm) {
+        java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
+        String insertSql = "INSERT INTO signal_lstm (symbol, signal_lstm, price_lstm, price_clo, position_lstm, lstm_created_at) VALUES (?, ?, ?, ?, ?, ?)";
+        jdbcTemplate.update(insertSql,
+                symbol,
+                preditLsdm.getSignal().name(),
+                preditLsdm.getPredictedClose(),
+                preditLsdm.getLastClose(),
+                preditLsdm.getPosition(),
+                java.sql.Date.valueOf(lastTradingDay));
+    }
+    public PreditLsdm getPreditFromDB(String symbol) {
+        String sql = "SELECT * FROM signal_lstm WHERE symbol = ? ORDER BY lstm_created_at DESC LIMIT 1";
+        try {
+            return jdbcTemplate.query(sql, ps -> ps.setString(1, symbol), rs -> {
+                if (rs.next()) {
+                    String signalStr = rs.getString("signal_lstm");
+                    double priceLstm = rs.getDouble("price_lstm");
+                    double priceClo = rs.getDouble("price_clo");
+                    String positionLstm = rs.getString("position_lstm");
+                    java.sql.Date lastDate = rs.getDate("lstm_created_at");
+                    SignalType type;
+                    try {
+                        type = SignalType.valueOf(signalStr);
+                    } catch (Exception e) {
+                        logger.warn("SignalType inconnu en base: {}", signalStr);
+                        type = null;
+                    }
+
+                    java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
+                    java.time.LocalDate lastKnown = lastDate.toLocalDate();
+                    // Si la dernière date connue est le dernier jour de cotation, la base est à jour
+                    if (lastKnown.isEqual(lastTradingDay) || lastKnown.isAfter(lastTradingDay)) {
+                        String dateSavedStr = lastKnown.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"));
+                        return PreditLsdm.builder().signal(type).lastClose(priceClo).lastDate(dateSavedStr).predictedClose(priceLstm).position(positionLstm).build();
+                    }else{
+                        return null;
+                    }
+                }
+                return null;
+            });
+        } catch (Exception e) {
+            logger.warn("Erreur SQL getPreditFromDB pour {}: {}", symbol, e.getMessage());
+            return null;
+        }
     }
 
     // Entraînement LSTM avec personnalisation des features
@@ -156,24 +204,24 @@ public class LstmHelper {
      * @param randomGridSize nombre de configurations aléatoires à tester (si useRandomGrid=true)
      */
     public void tuneAllSymbols(boolean useRandomGrid, int randomGridSize) {
-        List<String> symbols = getSymbolFitredFromTabSingle("rendement_score");
+        List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
         List<LstmConfig> grid;
         if (useRandomGrid) {
             grid = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize);
         } else {
             grid = lstmTuningService.generateSwingTradeGrid();
         }
-        lstmTuningService.tuneAllSymbols(symbols, grid, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
+        lstmTuningService.tuneAllSymbolsMultiThread(symbols, grid, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
     }
 
     // Méthode existante conservée pour compatibilité
     public void tuneAllSymbols() {
-        tuneAllSymbols(false, 10);
+        tuneAllSymbols(true, 5);
     }
 
     public List<String> getSymbolFitredFromTabSingle(String sort) {
-        String orderBy = sort == null ? "rendement_score" : sort;
-        String sql = "select symbol from trade_ai.best_in_out_single_strategy where fltred_out = 'false'";
+        String orderBy = sort == null ? "score_swing_trade" : sort;
+        String sql = "select symbol from best_in_out_single_strategy s where s.avg_pnl > 0 AND s.profit_factor > 1 AND s.win_rate > 0.5 AND s.max_drawdown < 0.2 AND s.sharpe_ratio > 1 AND s.rendement > 0.05";
         sql += " ORDER BY " + orderBy + " DESC";
         return jdbcTemplate.queryForList(sql, String.class);
     }
