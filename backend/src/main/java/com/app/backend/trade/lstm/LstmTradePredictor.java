@@ -896,6 +896,8 @@ public class LstmTradePredictor {
         String formattedDate = series.getLastBar().getEndTime().format(formatter);
         logger.info("------------PREDICT {} | lastClose={}, predictedClose={}, delta={}, threshold={}, signal={}, position={}",
             config.getWindowSize(), lastClose, predicted, delta, th, signal, position);
+        // Ajout analyse d'erreur/anomalie
+        logPredictionAnomalies(symbol, lastClose, predicted, th);
         return PreditLsdm.builder()
                 .lastClose(lastClose)
                 .predictedClose(predicted)
@@ -905,14 +907,8 @@ public class LstmTradePredictor {
                 .build();
     }
 
-    /**
-     * Prédit le signal LSTM pour une bougie d'index donné dans la série.
-     * Utilisé pour le backtest bar par bar.
-     */
     public PreditLsdm getPreditAtIndex(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model, int index) {
-        // On doit avoir assez de données pour la fenêtre
         if (index < config.getWindowSize()) {
-            // Pas assez de données pour prédire
             return PreditLsdm.builder()
                     .lastClose(series.getBar(index).getClosePrice().doubleValue())
                     .predictedClose(series.getBar(index).getClosePrice().doubleValue())
@@ -921,9 +917,12 @@ public class LstmTradePredictor {
                     .lastDate(series.getBar(index).getEndTime().toString())
                     .build();
         }
-        // Créer une sous-série pour la fenêtre centrée sur index
         BarSeries subSeries = series.getSubSeries(index - config.getWindowSize(), index + 1);
-        return getPredit(symbol, subSeries, config, model);
+        PreditLsdm pred = getPredit(symbol, subSeries, config, model);
+        // Ajout analyse d'erreur/anomalie
+        double th = computeSwingTradeThreshold(subSeries);
+        logPredictionAnomalies(symbol, pred.getLastClose(), pred.getPredictedClose(), th);
+        return pred;
     }
 
 
@@ -1291,5 +1290,126 @@ public class LstmTradePredictor {
             }
         }
         return transposed;
+    }
+
+    /**
+     * Analyse l'importance des features par permutation (Permutation Feature Importance).
+     * Retourne un tableau d'importance pour chaque feature.
+     * @param series série de bougies
+     * @param config configuration LSTM
+     * @param model modèle entraîné
+     * @return tableau d'importance des features
+     */
+    public double[] computePermutationFeatureImportance(BarSeries series, LstmConfig config, MultiLayerNetwork model) {
+        java.util.List<String> features = config.getFeatures();
+        int numFeatures = features.size();
+        double[] importances = new double[numFeatures];
+        double[] closes = extractCloseValues(series);
+        double lastClose = closes[closes.length - 1];
+        double basePred = predictNextClose("", series, config, model);
+        for (int f = 0; f < numFeatures; f++) {
+            // Permuter la colonne f
+            double[][] matrix = extractFeatureMatrix(series, features);
+            double[] col = new double[matrix.length];
+            for (int i = 0; i < matrix.length; i++) col[i] = matrix[i][f];
+            java.util.Collections.shuffle(java.util.Arrays.asList(col));
+            for (int i = 0; i < matrix.length; i++) matrix[i][f] = col[i];
+            double[][] normMatrix = normalizeMatrix(matrix, features);
+            int barCount = normMatrix.length;
+            double[][] lastWindow = new double[config.getWindowSize()][numFeatures];
+            for (int i = 0; i < config.getWindowSize(); i++) {
+                for (int ff = 0; ff < numFeatures; ff++) {
+                    lastWindow[i][ff] = normMatrix[barCount - config.getWindowSize() + i][ff];
+                }
+            }
+            double[][][] lastSequence = new double[1][config.getWindowSize()][numFeatures];
+            for (int j = 0; j < config.getWindowSize(); j++) {
+                for (int ff = 0; ff < numFeatures; ff++) {
+                    lastSequence[0][j][ff] = lastWindow[j][ff];
+                }
+            }
+            double[][][] transposed = transposeSequencesMulti(lastSequence);
+            double[][][] inputSeq = new double[1][numFeatures][1];
+            for (int ff = 0; ff < numFeatures; ff++) {
+                inputSeq[0][ff][0] = transposed[0][ff][config.getWindowSize() - 1];
+            }
+            org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(inputSeq);
+            org.nd4j.linalg.api.ndarray.INDArray output = model.output(input);
+            double permPred = output.getDouble(0);
+            importances[f] = Math.abs(basePred - permPred);
+        }
+        // Log explicatif
+        logger.info("[PERM-IMPORTANCE] Importance des features : {}", java.util.Arrays.toString(importances));
+        return importances;
+    }
+
+    /**
+     * Calcule des valeurs SHAP simplifiées (perturbation locale) pour chaque feature.
+     * Retourne un tableau de valeurs SHAP.
+     * @param series série de bougies
+     * @param config configuration LSTM
+     * @param model modèle entraîné
+     * @return tableau de valeurs SHAP
+     */
+    public double[] computeShapValues(BarSeries series, LstmConfig config, MultiLayerNetwork model) {
+        java.util.List<String> features = config.getFeatures();
+        int numFeatures = features.size();
+        double[] shapValues = new double[numFeatures];
+        double[] closes = extractCloseValues(series);
+        double basePred = predictNextClose("", series, config, model);
+        double[][] matrix = extractFeatureMatrix(series, features);
+        double[][] normMatrix = normalizeMatrix(matrix, features);
+        int barCount = normMatrix.length;
+        double[][] lastWindow = new double[config.getWindowSize()][numFeatures];
+        for (int i = 0; i < config.getWindowSize(); i++) {
+            for (int f = 0; f < numFeatures; f++) {
+                lastWindow[i][f] = normMatrix[barCount - config.getWindowSize() + i][f];
+            }
+        }
+        for (int f = 0; f < numFeatures; f++) {
+            double[][] perturbedWindow = new double[config.getWindowSize()][numFeatures];
+            for (int i = 0; i < config.getWindowSize(); i++) {
+                for (int ff = 0; ff < numFeatures; ff++) {
+                    perturbedWindow[i][ff] = lastWindow[i][ff];
+                }
+            }
+            // Perturber la feature f (mettre à zéro ou à la moyenne)
+            final int featureIndex = f; // Correction: variable final pour lambda
+            double meanF = java.util.Arrays.stream(lastWindow).mapToDouble(row -> row[featureIndex]).average().orElse(0.0);
+            for (int i = 0; i < config.getWindowSize(); i++) {
+                perturbedWindow[i][f] = meanF;
+            }
+            double[][][] lastSequence = new double[1][config.getWindowSize()][numFeatures];
+            for (int j = 0; j < config.getWindowSize(); j++) {
+                for (int ff = 0; ff < numFeatures; ff++) {
+                    lastSequence[0][j][ff] = perturbedWindow[j][ff];
+                }
+            }
+            double[][][] transposed = transposeSequencesMulti(lastSequence);
+            double[][][] inputSeq = new double[1][numFeatures][1];
+            for (int ff = 0; ff < numFeatures; ff++) {
+                inputSeq[0][ff][0] = transposed[0][ff][config.getWindowSize() - 1];
+            }
+            org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(inputSeq);
+            org.nd4j.linalg.api.ndarray.INDArray output = model.output(input);
+            double pertPred = output.getDouble(0);
+            shapValues[f] = basePred - pertPred;
+        }
+        logger.info("[SHAP] Valeurs SHAP simplifiées : {}", java.util.Arrays.toString(shapValues));
+        return shapValues;
+    }
+
+    /**
+     * Loggue les cas où la prédiction est très éloignée du close réel (anomalie ou erreur).
+     * @param symbol symbole
+     * @param lastClose close réel
+     * @param predictedClose close prédit
+     * @param threshold seuil swing trade
+     */
+    public void logPredictionAnomalies(String symbol, double lastClose, double predictedClose, double threshold) {
+        double delta = Math.abs(predictedClose - lastClose);
+        if (delta > 2 * threshold || delta / lastClose > 0.1) {
+            logger.warn("[LSTM ANOMALIE] Prédiction très éloignée du close réel : symbol={}, lastClose={}, predictedClose={}, delta={}, threshold={}", symbol, lastClose, predictedClose, delta, threshold);
+        }
     }
 }
