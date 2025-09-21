@@ -340,9 +340,9 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   onChange={e => setSort(e.target.value)}
                   disabled={searchMode}
                 >
-                  <MenuItem value="single:rendement_check">Single - Rendement</MenuItem>
+                  <MenuItem value="single:rendement">Single - Rendement</MenuItem>
                   <MenuItem value="single:score_swing_trade">Single - Score Swing Trade</MenuItem>
-                  <MenuItem value="mix:rendement_check">Mix - Rendement</MenuItem>
+                  <MenuItem value="mix:rendement">Mix - Rendement</MenuItem>
                   <MenuItem value="mix:score_swing_trade">Mix - Score Swing Trade</MenuItem>
                 </Select>
               </FormControl>
