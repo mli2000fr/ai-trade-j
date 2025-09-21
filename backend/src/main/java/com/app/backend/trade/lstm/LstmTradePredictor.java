@@ -35,6 +35,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.app.backend.trade.exception.InsufficientDataException;
 import com.app.backend.trade.exception.ModelNotFoundException;
+import org.ta4j.core.indicators.ROCIndicator;
+import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
+import org.ta4j.core.indicators.helpers.PreviousValueIndicator;
+import org.ta4j.core.indicators.statistics.StandardDeviationIndicator;
+import org.ta4j.core.num.Num;
 
 @Service
 public class LstmTradePredictor {
@@ -887,15 +892,30 @@ public class LstmTradePredictor {
         int barCount = series.getBarCount();
         int numFeatures = features.size();
         double[][] matrix = new double[barCount][numFeatures];
+        // Pré-calcul des indicateurs techniques pour éviter recalculs inutiles
+        org.ta4j.core.indicators.helpers.ClosePriceIndicator closeIndicator = new org.ta4j.core.indicators.helpers.ClosePriceIndicator(series);
+        org.ta4j.core.indicators.helpers.VolumeIndicator volumeIndicator = new org.ta4j.core.indicators.helpers.VolumeIndicator(series);
+        org.ta4j.core.indicators.SMAIndicator sma = new org.ta4j.core.indicators.SMAIndicator(closeIndicator, 14);
+        org.ta4j.core.indicators.EMAIndicator ema = new org.ta4j.core.indicators.EMAIndicator(closeIndicator, 14);
+        org.ta4j.core.indicators.RSIIndicator rsi = new org.ta4j.core.indicators.RSIIndicator(closeIndicator, 14);
+        org.ta4j.core.indicators.MACDIndicator macd = new org.ta4j.core.indicators.MACDIndicator(closeIndicator, 12, 26);
+        org.ta4j.core.indicators.ATRIndicator atr = new org.ta4j.core.indicators.ATRIndicator(series, 14);
+        org.ta4j.core.indicators.bollinger.BollingerBandsMiddleIndicator bbm = new org.ta4j.core.indicators.bollinger.BollingerBandsMiddleIndicator(sma);
+        Num k = series.numOf(2.0);
+        org.ta4j.core.indicators.bollinger.BollingerBandsUpperIndicator bbu = new org.ta4j.core.indicators.bollinger.BollingerBandsUpperIndicator(bbm, new StandardDeviationIndicator(closeIndicator, 14), k);
+        org.ta4j.core.indicators.bollinger.BollingerBandsLowerIndicator bbl = new org.ta4j.core.indicators.bollinger.BollingerBandsLowerIndicator(bbm, new StandardDeviationIndicator(closeIndicator, 14), k);
+        org.ta4j.core.indicators.StochasticOscillatorKIndicator stochastic = new org.ta4j.core.indicators.StochasticOscillatorKIndicator(series, 14);
+        org.ta4j.core.indicators.CCIIndicator cci = new org.ta4j.core.indicators.CCIIndicator(series, 14);
+        ROCIndicator momentum = new ROCIndicator(closeIndicator, 10);
         for (int i = 0; i < barCount; i++) {
             int f = 0;
             for (String feat : features) {
                 switch (feat.toLowerCase()) {
                     case "close":
-                        matrix[i][f] = series.getBar(i).getClosePrice().doubleValue();
+                        matrix[i][f] = closeIndicator.getValue(i).doubleValue();
                         break;
                     case "volume":
-                        matrix[i][f] = series.getBar(i).getVolume().doubleValue();
+                        matrix[i][f] = volumeIndicator.getValue(i).doubleValue();
                         break;
                     case "open":
                         matrix[i][f] = series.getBar(i).getOpenPrice().doubleValue();
@@ -907,20 +927,45 @@ public class LstmTradePredictor {
                         matrix[i][f] = series.getBar(i).getLowPrice().doubleValue();
                         break;
                     case "sma":
-                        org.ta4j.core.indicators.SMAIndicator sma = new org.ta4j.core.indicators.SMAIndicator(new org.ta4j.core.indicators.helpers.ClosePriceIndicator(series), 14);
                         matrix[i][f] = i >= 13 ? sma.getValue(i).doubleValue() : 0.0;
                         break;
                     case "ema":
-                        org.ta4j.core.indicators.EMAIndicator ema = new org.ta4j.core.indicators.EMAIndicator(new org.ta4j.core.indicators.helpers.ClosePriceIndicator(series), 14);
                         matrix[i][f] = i >= 13 ? ema.getValue(i).doubleValue() : 0.0;
                         break;
                     case "rsi":
-                        org.ta4j.core.indicators.RSIIndicator rsi = new org.ta4j.core.indicators.RSIIndicator(new org.ta4j.core.indicators.helpers.ClosePriceIndicator(series), 14);
                         matrix[i][f] = i >= 13 ? rsi.getValue(i).doubleValue() : 0.0;
                         break;
                     case "macd":
-                        org.ta4j.core.indicators.MACDIndicator macd = new org.ta4j.core.indicators.MACDIndicator(new org.ta4j.core.indicators.helpers.ClosePriceIndicator(series), 12, 26);
                         matrix[i][f] = i >= 25 ? macd.getValue(i).doubleValue() : 0.0;
+                        break;
+                    case "atr":
+                        matrix[i][f] = i >= 13 ? atr.getValue(i).doubleValue() : 0.0;
+                        break;
+                    case "bollinger_high":
+                        matrix[i][f] = i >= 13 ? bbu.getValue(i).doubleValue() : 0.0;
+                        break;
+                    case "bollinger_low":
+                        matrix[i][f] = i >= 13 ? bbl.getValue(i).doubleValue() : 0.0;
+                        break;
+                    case "stochastic":
+                        matrix[i][f] = i >= 13 ? stochastic.getValue(i).doubleValue() : 0.0;
+                        break;
+                    case "cci":
+                        matrix[i][f] = i >= 13 ? cci.getValue(i).doubleValue() : 0.0;
+                        break;
+                    case "momentum":
+                        matrix[i][f] = i >= 9 ? momentum.getValue(i).doubleValue() : 0.0;
+                        break;
+                    case "day_of_week":
+                        matrix[i][f] = series.getBar(i).getEndTime().getDayOfWeek().getValue();
+                        break;
+                    case "month":
+                        matrix[i][f] = series.getBar(i).getEndTime().getMonthValue();
+                        break;
+                    case "session":
+                        int hour = series.getBar(i).getEndTime().getHour();
+                        // 0 = nuit, 1 = matin, 2 = après-midi, 3 = clôture
+                        matrix[i][f] = hour < 8 ? 0 : (hour < 12 ? 1 : (hour < 17 ? 2 : 3));
                         break;
                     default:
                         matrix[i][f] = 0.0;

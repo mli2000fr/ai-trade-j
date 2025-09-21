@@ -105,9 +105,14 @@ public class LstmConfig {
     private String swingTradeType = "range";
 
     /**
-     * Liste des features à inclure dans la séquence d'entrée (ex : close, volume, rsi, sma, ema, macd).
+     * Liste des features à inclure dans la séquence d'entrée (ex : close, volume, rsi, sma, ema, macd, atr, bollinger_high, bollinger_low, stochastic, cci, momentum, day_of_week, month, session).
      */
-    private java.util.List<String> features = java.util.Arrays.asList("close", "volume", "rsi", "sma", "ema", "macd");
+    private java.util.List<String> features = java.util.Arrays.asList(
+        "close", "volume", "rsi", "sma", "ema", "macd",
+        "atr", "bollinger_high", "bollinger_low",
+        "stochastic", "cci", "momentum",
+        "day_of_week", "month", "session"
+    );
 
     /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
