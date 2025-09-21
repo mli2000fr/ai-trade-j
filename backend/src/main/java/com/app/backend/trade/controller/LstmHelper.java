@@ -156,7 +156,8 @@ public class LstmHelper {
                 config.getLearningRate(),
                 config.getOptimizer(),
                 config.getL1(),
-                config.getL2()
+                config.getL2(),
+                config
         );
         model = lstmTradePredictor.trainLstm(series, config, model);
         try {
@@ -168,7 +169,7 @@ public class LstmHelper {
 
     // Prédiction LSTM avec personnalisation des features
     public PreditLsdm getPredit(String symbol, List<String> features) throws IOException {
-        LstmConfig config = lstmTuningService.tuneSymbol(symbol, lstmTuningService.generateSwingTradeGrid(), getBarBySymbol(symbol, null), jdbcTemplate);
+        LstmConfig config = lstmTuningService.tuneSymbol(symbol, lstmTuningService.generateSwingTradeGrid(), getBarBySymbol(symbol, null), jdbcTemplate, true);
         if (features != null && !features.isEmpty()) {
             config.setFeatures(features);
         }

@@ -541,6 +541,183 @@ public class LstmTradePredictor {
     }
 
     /**
+     * Validation croisée temporelle (Time Series Split) :
+     * Découpe la série en k segments consécutifs, chaque segment sert de test à tour de rôle, le passé sert de train.
+     * Respecte la chronologie des données financières.
+     * @param series série de bougies
+     * @param config configuration LSTM
+     * @return MSE moyen sur les k folds
+     */
+    public double crossValidateLstmTimeSeriesSplit(BarSeries series, LstmConfig config) {
+        int windowSize = config.getWindowSize();
+        int kFolds = config.getKFolds();
+        double[] closes = extractCloseValues(series);
+        int totalLength = closes.length;
+        int foldSize = (totalLength - windowSize) / kFolds;
+        if (foldSize < 1) {
+            logger.error("Pas assez de données pour la validation croisée temporelle (windowSize={}, closes={})", windowSize, totalLength);
+            return Double.POSITIVE_INFINITY;
+        }
+        double[] foldMSE = new double[kFolds];
+        for (int fold = 0; fold < kFolds; fold++) {
+            int testStart = windowSize + fold * foldSize;
+            int testEnd = (fold == kFolds - 1) ? totalLength : testStart + foldSize;
+            if (testEnd > totalLength) testEnd = totalLength;
+            // Train = tout avant testStart
+            if (testStart - windowSize < windowSize) {
+                foldMSE[fold] = Double.POSITIVE_INFINITY;
+                continue;
+            }
+            BarSeries trainSeries = series.getSubSeries(0, testStart);
+            BarSeries testSeries = series.getSubSeries(testStart - windowSize, testEnd);
+            MultiLayerNetwork model = initModel(
+                config.getFeatures().size(),
+                1,
+                config.getLstmNeurons(),
+                config.getDropoutRate(),
+                config.getLearningRate(),
+                config.getOptimizer(),
+                config.getL1(),
+                config.getL2(),
+                config
+            );
+            try {
+                model = trainLstm(trainSeries, config, model);
+                double mse = evaluateModel(model, testSeries, config);
+                foldMSE[fold] = mse;
+                logger.info("[TimeSeriesCV] Fold {} : MSE={}", fold, mse);
+            } catch (Exception e) {
+                logger.error("[TimeSeriesCV] Fold {} : erreur {}", fold, e.getMessage());
+                foldMSE[fold] = Double.POSITIVE_INFINITY;
+            }
+        }
+        double meanMSE = 0.0;
+        int count = 0;
+        for (int i = 0; i < kFolds; i++) {
+            if (!Double.isNaN(foldMSE[i]) && !Double.isInfinite(foldMSE[i])) {
+                meanMSE += foldMSE[i];
+                count++;
+            }
+        }
+        if (count == 0) {
+            logger.error("Validation croisée temporelle impossible : aucun fold valide");
+            return Double.POSITIVE_INFINITY;
+        }
+        meanMSE /= count;
+        logger.info("Validation croisée temporelle terminée. MSE moyen ({} folds valides) : {}", count, meanMSE);
+        return meanMSE;
+    }
+
+    // Évalue le modèle sur le jeu de test (MSE)
+    private double evaluateModel(MultiLayerNetwork model, BarSeries series, LstmConfig config) {
+        int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
+        int windowSize = config.getWindowSize();
+        int numSeq;
+        double[][][] testSeq;
+        double[][][] testLabel;
+        if (numFeatures > 1) {
+            // Multi-features
+            double[][] matrix = extractFeatureMatrix(series, config.getFeatures());
+            double[][] normMatrix = normalizeMatrix(matrix, config.getFeatures());
+            numSeq = normMatrix.length - windowSize;
+            if (numSeq <= 0) {
+                logger.warn("Pas assez de données pour évaluer le modèle (windowSize={}, closes={})", windowSize, normMatrix.length);
+                return Double.POSITIVE_INFINITY;
+            }
+            double[][][] sequences = createSequencesMulti(normMatrix, windowSize);
+            double[][][] sequencesTransposed = transposeSequencesMulti(sequences);
+            // Extraire la dernière étape de chaque séquence pour input [batch, numFeatures, 1]
+            double[][][] lastStepSeq = new double[numSeq][numFeatures][1];
+            for (int i = 0; i < numSeq; i++) {
+                for (int f = 0; f < numFeatures; f++) {
+                    lastStepSeq[i][f][0] = sequencesTransposed[i][f][windowSize - 1];
+                }
+            }
+            double[] closes = extractCloseValues(series);
+            double[] normCloses = normalize(closes);
+            double[][][] labelSeq = new double[numSeq][1][1];
+            for (int i = 0; i < numSeq; i++) {
+                labelSeq[i][0][0] = normCloses[i + windowSize];
+            }
+            int splitIdx = (int)(numSeq * 0.8);
+            if (splitIdx == numSeq) splitIdx = numSeq - 1;
+            testSeq = java.util.Arrays.copyOfRange(lastStepSeq, splitIdx, numSeq);
+            testLabel = java.util.Arrays.copyOfRange(labelSeq, splitIdx, numSeq);
+        } else {
+            // Univarié
+            double[] closes = extractCloseValues(series);
+            double min, max;
+            if ("global".equalsIgnoreCase(config.getNormalizationScope())) {
+                min = java.util.Arrays.stream(closes).min().orElse(0.0);
+                max = java.util.Arrays.stream(closes).max().orElse(0.0);
+            } else {
+                min = Double.MAX_VALUE;
+                max = -Double.MAX_VALUE;
+                for (int i = closes.length - windowSize; i < closes.length; i++) {
+                    if (i >= 0) {
+                        if (closes[i] < min) min = closes[i];
+                        if (closes[i] > max) max = closes[i];
+                    }
+                }
+            }
+            double[] normalized = normalize(closes, min, max);
+            numSeq = normalized.length - windowSize;
+            if (numSeq <= 0) {
+                logger.warn("Pas assez de données pour évaluer le modèle (windowSize={}, closes={})", windowSize, closes.length);
+                return Double.POSITIVE_INFINITY;
+            }
+            double[][][] sequences = createSequences(normalized, windowSize);
+            double[][][] labelSeq = new double[numSeq][1][1];
+            for (int i = 0; i < numSeq; i++) {
+                labelSeq[i][0][0] = normalized[i + windowSize];
+            }
+            int splitIdx = (int)(numSeq * 0.8);
+            if (splitIdx == numSeq) splitIdx = numSeq - 1;
+            testSeq = java.util.Arrays.copyOfRange(sequences, splitIdx, numSeq);
+            testLabel = java.util.Arrays.copyOfRange(labelSeq, splitIdx, numSeq);
+        }
+        if (testSeq.length == 0 || testLabel.length == 0) {
+            logger.warn("Jeu de test vide pour l'évaluation du modèle");
+            return Double.POSITIVE_INFINITY;
+        }
+        org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(testSeq);
+        org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel); // [batch, 1, 1]
+        if (containsNaN(testOutput)) {
+            logger.warn("TestOutput contient des NaN pour l'évaluation du modèle");
+            return Double.POSITIVE_INFINITY;
+        }
+        org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
+        if (containsNaN(predictions)) {
+            logger.warn("Prédictions contiennent des NaN pour l'évaluation du modèle");
+            return Double.POSITIVE_INFINITY;
+        }
+        // Vérification et alignement des shapes
+        logger.info("Shape predictions: {}", java.util.Arrays.toString(predictions.shape()));
+        logger.info("Shape testOutput: {}", java.util.Arrays.toString(testOutput.shape()));
+        if (!java.util.Arrays.equals(predictions.shape(), testOutput.shape())) {
+            try {
+                predictions = predictions.reshape(testOutput.shape());
+            } catch (Exception e) {
+                logger.error("Erreur lors du reshape des prédictions : {}", e.getMessage());
+                return Double.POSITIVE_INFINITY;
+            }
+        }
+        double mse = Double.POSITIVE_INFINITY;
+        try {
+            org.nd4j.linalg.api.ndarray.INDArray diff = predictions.sub(testOutput);
+            org.nd4j.linalg.api.ndarray.INDArray squared = diff.mul(diff);
+            mse = squared.meanNumber().doubleValue();
+        } catch (Exception e) {
+            logger.error("Erreur lors du calcul du MSE d'évaluation : {}", e.getMessage());
+        }
+        if (Double.isInfinite(mse) || Double.isNaN(mse)) {
+            logger.warn("MSE infini ou NaN lors de l'évaluation du modèle");
+            return Double.POSITIVE_INFINITY;
+        }
+        return mse;
+    }
+
+    /**
      * Prédit la prochaine valeur de clôture à partir de la série et du windowSize.
      * @param series série de bougies
      * @return valeur de clôture prédite

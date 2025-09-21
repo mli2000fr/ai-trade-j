@@ -49,7 +49,7 @@ public class LstmTuningService {
      * @param jdbcTemplate accès base
      * @return la meilleure configuration trouvée
      */
-    public LstmConfig tuneSymbolMultiThread(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
+    public LstmConfig tuneSymbolMultiThread(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate, boolean useTimeSeriesCV) {
         long startSymbol = System.currentTimeMillis();
         // Suivi d'avancement
         TuningProgress progress = new TuningProgress();
@@ -87,10 +87,13 @@ public class LstmTuningService {
                     config.getLearningRate(),
                     config.getOptimizer(),
                     config.getL1(),
-                    config.getL2()
+                    config.getL2(),
+                        config
                 );
                 model = lstmTradePredictor.trainLstm(series, config, model);
-                double score = lstmTradePredictor.crossValidateLstm(series, config);
+                double score = useTimeSeriesCV
+                    ? lstmTradePredictor.crossValidateLstmTimeSeriesSplit(series, config)
+                    : lstmTradePredictor.crossValidateLstm(series, config);
                 double rmse = Math.sqrt(score);
                 double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model);
                 double[] closes = lstmTradePredictor.extractCloseValues(series);
@@ -151,7 +154,7 @@ public class LstmTuningService {
         return bestConfig;
     }
 
-    public LstmConfig tuneSymbol(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
+    public LstmConfig tuneSymbol(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate, boolean useTimeSeriesCV) {
         long startSymbol = System.currentTimeMillis();
         // Suivi d'avancement
         TuningProgress progress = new TuningProgress();
@@ -175,7 +178,9 @@ public class LstmTuningService {
             long startConfig = System.currentTimeMillis();
             LstmConfig config = grid.get(i);
             logger.info("[TUNING] [{}] Début config {}/{}", symbol, i+1, grid.size());
-            double score = lstmTradePredictor.crossValidateLstm(series, config);
+            double score = useTimeSeriesCV
+                ? lstmTradePredictor.crossValidateLstmTimeSeriesSplit(series, config)
+                : lstmTradePredictor.crossValidateLstm(series, config);
             int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
             MultiLayerNetwork model = lstmTradePredictor.initModel(
                 numFeatures,
@@ -185,7 +190,8 @@ public class LstmTuningService {
                 config.getLearningRate(),
                 config.getOptimizer(),
                 config.getL1(),
-                config.getL2()
+                config.getL2(),
+                    config
             );
             model = lstmTradePredictor.trainLstm(series, config, model);
             double rmse = Math.sqrt(score);
@@ -240,114 +246,7 @@ public class LstmTuningService {
     }
 
 
-    // Évalue le modèle sur le jeu de test (MSE)
-    private double evaluateModel(MultiLayerNetwork model, BarSeries series, LstmConfig config) {
-        int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
-        int windowSize = config.getWindowSize();
-        int numSeq;
-        double[][][] testSeq;
-        double[][][] testLabel;
-        if (numFeatures > 1) {
-            // Multi-features
-            double[][] matrix = lstmTradePredictor.extractFeatureMatrix(series, config.getFeatures());
-            double[][] normMatrix = lstmTradePredictor.normalizeMatrix(matrix);
-            numSeq = normMatrix.length - windowSize;
-            if (numSeq <= 0) {
-                logger.warn("Pas assez de données pour évaluer le modèle (windowSize={}, closes={})", windowSize, normMatrix.length);
-                return Double.POSITIVE_INFINITY;
-            }
-            double[][][] sequences = lstmTradePredictor.createSequencesMulti(normMatrix, windowSize);
-            double[][][] sequencesTransposed = lstmTradePredictor.transposeSequencesMulti(sequences);
-            // Extraire la dernière étape de chaque séquence pour input [batch, numFeatures, 1]
-            double[][][] lastStepSeq = new double[numSeq][numFeatures][1];
-            for (int i = 0; i < numSeq; i++) {
-                for (int f = 0; f < numFeatures; f++) {
-                    lastStepSeq[i][f][0] = sequencesTransposed[i][f][windowSize - 1];
-                }
-            }
-            double[] closes = lstmTradePredictor.extractCloseValues(series);
-            double[] normCloses = lstmTradePredictor.normalize(closes);
-            double[][][] labelSeq = new double[numSeq][1][1];
-            for (int i = 0; i < numSeq; i++) {
-                labelSeq[i][0][0] = normCloses[i + windowSize];
-            }
-            int splitIdx = (int)(numSeq * 0.8);
-            if (splitIdx == numSeq) splitIdx = numSeq - 1;
-            testSeq = java.util.Arrays.copyOfRange(lastStepSeq, splitIdx, numSeq);
-            testLabel = java.util.Arrays.copyOfRange(labelSeq, splitIdx, numSeq);
-        } else {
-            // Univarié
-            double[] closes = lstmTradePredictor.extractCloseValues(series);
-            double min, max;
-            if ("global".equalsIgnoreCase(config.getNormalizationScope())) {
-                min = java.util.Arrays.stream(closes).min().orElse(0.0);
-                max = java.util.Arrays.stream(closes).max().orElse(0.0);
-            } else {
-                min = Double.MAX_VALUE;
-                max = -Double.MAX_VALUE;
-                for (int i = closes.length - windowSize; i < closes.length; i++) {
-                    if (i >= 0) {
-                        if (closes[i] < min) min = closes[i];
-                        if (closes[i] > max) max = closes[i];
-                    }
-                }
-            }
-            double[] normalized = lstmTradePredictor.normalize(closes, min, max);
-            numSeq = normalized.length - windowSize;
-            if (numSeq <= 0) {
-                logger.warn("Pas assez de données pour évaluer le modèle (windowSize={}, closes={})", windowSize, closes.length);
-                return Double.POSITIVE_INFINITY;
-            }
-            double[][][] sequences = lstmTradePredictor.createSequences(normalized, windowSize);
-            double[][][] labelSeq = new double[numSeq][1][1];
-            for (int i = 0; i < numSeq; i++) {
-                labelSeq[i][0][0] = normalized[i + windowSize];
-            }
-            int splitIdx = (int)(numSeq * 0.8);
-            if (splitIdx == numSeq) splitIdx = numSeq - 1;
-            testSeq = java.util.Arrays.copyOfRange(sequences, splitIdx, numSeq);
-            testLabel = java.util.Arrays.copyOfRange(labelSeq, splitIdx, numSeq);
-        }
-        if (testSeq.length == 0 || testLabel.length == 0) {
-            logger.warn("Jeu de test vide pour l'évaluation du modèle");
-            return Double.POSITIVE_INFINITY;
-        }
-        org.nd4j.linalg.api.ndarray.INDArray testInput = lstmTradePredictor.toINDArray(testSeq);
-        org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel); // [batch, 1, 1]
-        if (lstmTradePredictor.containsNaN(testOutput)) {
-            logger.warn("TestOutput contient des NaN pour l'évaluation du modèle");
-            return Double.POSITIVE_INFINITY;
-        }
-        org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
-        if (lstmTradePredictor.containsNaN(predictions)) {
-            logger.warn("Prédictions contiennent des NaN pour l'évaluation du modèle");
-            return Double.POSITIVE_INFINITY;
-        }
-        // Vérification et alignement des shapes
-        logger.info("Shape predictions: {}", java.util.Arrays.toString(predictions.shape()));
-        logger.info("Shape testOutput: {}", java.util.Arrays.toString(testOutput.shape()));
-        if (!java.util.Arrays.equals(predictions.shape(), testOutput.shape())) {
-            try {
-                predictions = predictions.reshape(testOutput.shape());
-            } catch (Exception e) {
-                logger.error("Erreur lors du reshape des prédictions : {}", e.getMessage());
-                return Double.POSITIVE_INFINITY;
-            }
-        }
-        double mse = Double.POSITIVE_INFINITY;
-        try {
-            org.nd4j.linalg.api.ndarray.INDArray diff = predictions.sub(testOutput);
-            org.nd4j.linalg.api.ndarray.INDArray squared = diff.mul(diff);
-            mse = squared.meanNumber().doubleValue();
-        } catch (Exception e) {
-            logger.error("Erreur lors du calcul du MSE d'évaluation : {}", e.getMessage());
-        }
-        if (Double.isInfinite(mse) || Double.isNaN(mse)) {
-            logger.warn("MSE infini ou NaN lors de l'évaluation du modèle");
-            return Double.POSITIVE_INFINITY;
-        }
-        return mse;
-    }
+
 
     /**
      * Génère automatiquement une grille de configurations adaptée au swing trade.
@@ -463,7 +362,7 @@ public class LstmTuningService {
                 long startSymbol = System.currentTimeMillis();
                 try {
                     BarSeries series = seriesProvider.apply(symbol);
-                    tuneSymbol(symbol, grid, series, jdbcTemplate);
+                    tuneSymbol(symbol, grid, series, jdbcTemplate, true);
                 } catch (Exception e) {
                     logger.error("Erreur dans le tuning du symbole {} : {}", symbol, e.getMessage());
                 }
@@ -502,7 +401,7 @@ public class LstmTuningService {
             long startSymbol = System.currentTimeMillis();
             logger.info("[TUNING] Début tuning symbole {}/{} : {}", i+1, symbols.size(), symbol);
             BarSeries series = seriesProvider.apply(symbol);
-            tuneSymbol(symbol, grid, series, jdbcTemplate);
+            tuneSymbol(symbol, grid, series, jdbcTemplate, true);
             try {
                 org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
                 org.nd4j.linalg.api.memory.MemoryWorkspaceManager wsManager = org.nd4j.linalg.factory.Nd4j.getWorkspaceManager();
