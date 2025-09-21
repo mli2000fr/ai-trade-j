@@ -6,6 +6,7 @@ import com.app.backend.trade.model.MixResultat;
 import com.app.backend.trade.model.SymbolPerso;
 import com.app.backend.trade.strategy.BestInOutStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 
@@ -15,6 +16,14 @@ import java.util.List;
 @Controller
 public class GlobalStrategyHelper {
 
+    @Value("${signal.mix.active}")
+    private boolean mixActive;
+
+    @Value("${signal.lstm.active}")
+    private boolean lstmActive;
+
+    @Value("${signal.single.active}")
+    private boolean singleActive;
 
     @Autowired
     private StrategieHelper strategieHelper;
@@ -25,22 +34,27 @@ public class GlobalStrategyHelper {
     @Autowired
     private BestCombinationStrategyHelper bestCombinationStrategyHelper;
 
-    public List<MixResultat> getBestScoreAction(Integer limit, String type, String sort, String search, Boolean topProfil) {
+    public List<MixResultat> getBestScoreAction(Integer limit, String type, String sort, String search, Boolean topProfil, Boolean buyOnly) {
 
         if(search != null && !search.isEmpty()) {
-            return getBestScoreActionSingle(limit, sort, search, topProfil);
+            return getBestScoreActionSingle(limit, sort, search, topProfil, null);
         }else if(type != null && type.equals("mix")) {
-            return getBestScoreActionMix(limit, sort, topProfil);
+            return getBestScoreActionMix(limit, sort, topProfil, buyOnly);
         } else {
-            return getBestScoreActionSingle(limit, sort, null, topProfil);
+            return getBestScoreActionSingle(limit, sort, null, topProfil, buyOnly);
         }
     }
 
-    public List<MixResultat> getBestScoreActionSingle(Integer limit, String sort, String search, Boolean topProfil) {
+    public List<MixResultat> getBestScoreActionSingle(Integer limit, String sort, String search, Boolean topProfil, Boolean buyOnly) {
 
         List<BestInOutStrategy> listeSingle = strategieHelper.getBestPerfActions(limit, sort, search, topProfil);
         List<MixResultat> results = new ArrayList<>();
         for(BestInOutStrategy single : listeSingle) {
+
+            if(buyOnly != null && buyOnly) {
+                //strategieHelper.getBestInOutSignal()
+            }
+
             BestCombinationResult mix = bestCombinationStrategyHelper.getBestCombinationResult(single.getSymbol());
             results.add(MixResultat.builder()
                      .name(single.getName())
@@ -51,7 +65,7 @@ public class GlobalStrategyHelper {
         return results;
     }
 
-    public List<MixResultat> getBestScoreActionMix(Integer limit, String sort, Boolean filtered) {
+    public List<MixResultat> getBestScoreActionMix(Integer limit, String sort, Boolean filtered, Boolean buyOnly) {
 
         List<BestCombinationResult> listeMix = bestCombinationStrategyHelper.getBestPerfActions(limit, sort, filtered);
 
