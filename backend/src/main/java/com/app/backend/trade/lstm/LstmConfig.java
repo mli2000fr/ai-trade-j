@@ -115,6 +115,21 @@ public class LstmConfig {
     );
 
     /**
+     * Nombre de couches LSTM empilées (stacked LSTM)
+     */
+    private int numLstmLayers = 1;
+
+    /**
+     * Active le mode bidirectionnel (Bidirectional LSTM)
+     */
+    private boolean bidirectional = false;
+
+    /**
+     * Active la couche d'attention (si supportée)
+     */
+    private boolean attention = false;
+
+    /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
      * @throws RuntimeException si le fichier de configuration ne peut pas être chargé
      */
@@ -137,6 +152,9 @@ public class LstmConfig {
                 normalizationScope = props.getProperty("normalizationScope", "window");
                 normalizationMethod = props.getProperty("normalizationMethod", "auto");
                 swingTradeType = props.getProperty("swingTradeType", "range");
+                numLstmLayers = Integer.parseInt(props.getProperty("numLstmLayers", "1"));
+                bidirectional = Boolean.parseBoolean(props.getProperty("bidirectional", "false"));
+                attention = Boolean.parseBoolean(props.getProperty("attention", "false"));
             }
             optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
@@ -164,6 +182,9 @@ public class LstmConfig {
         normalizationScope = rs.getString("normalization_scope");
         normalizationMethod = rs.getString("normalization_method") != null ? rs.getString("normalization_method") : "auto";
         swingTradeType = rs.getString("swing_trade_type") != null ? rs.getString("swing_trade_type") : "range";
+        numLstmLayers = rs.getInt("num_lstm_layers");
+        bidirectional = rs.getBoolean("bidirectional");
+        attention = rs.getBoolean("attention");
     }
 
     /**

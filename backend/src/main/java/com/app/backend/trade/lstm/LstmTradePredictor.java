@@ -36,8 +36,6 @@ import org.slf4j.LoggerFactory;
 import com.app.backend.trade.exception.InsufficientDataException;
 import com.app.backend.trade.exception.ModelNotFoundException;
 import org.ta4j.core.indicators.ROCIndicator;
-import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
-import org.ta4j.core.indicators.helpers.PreviousValueIndicator;
 import org.ta4j.core.indicators.statistics.StandardDeviationIndicator;
 import org.ta4j.core.num.Num;
 
@@ -66,7 +64,8 @@ public class LstmTradePredictor {
             config.getLearningRate(),
             config.getOptimizer(),
             config.getL1(),
-            config.getL2()
+            config.getL2(),
+                config
         );
     }
 
@@ -79,7 +78,7 @@ public class LstmTradePredictor {
      * @param learningRate taux d'apprentissage
      * @param optimizer nom de l'optimiseur ("adam", "rmsprop", "sgd")
      */
-    public MultiLayerNetwork initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate, double learningRate, String optimizer, double l1, double l2) {
+    public MultiLayerNetwork initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate, double learningRate, String optimizer, double l1, double l2, LstmConfig config) {
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
         builder.updater(
             "adam".equalsIgnoreCase(optimizer) ? new org.nd4j.linalg.learning.config.Adam(learningRate)
@@ -88,28 +87,48 @@ public class LstmTradePredictor {
         );
         builder.l1(l1);
         builder.l2(l2);
-        MultiLayerConfiguration conf = builder
-            .list()
-            .layer(new LSTM.Builder()
-                .nIn(inputSize)
+        org.deeplearning4j.nn.conf.NeuralNetConfiguration.ListBuilder listBuilder = builder.list();
+        int nLayers = config != null ? config.getNumLstmLayers() : 1;
+        boolean bidir = config != null && config.isBidirectional();
+        boolean attention = config != null && config.isAttention();
+        // Ajout des couches LSTM empilées
+        for (int i = 0; i < nLayers; i++) {
+            LSTM.Builder lstmBuilder = new LSTM.Builder()
+                .nIn(i == 0 ? inputSize : lstmNeurons)
                 .nOut(lstmNeurons)
-                .activation(Activation.TANH)
-                .build())
-            .layer(new DropoutLayer.Builder()
-                .dropOut(dropoutRate)
-                .build())
-            .layer(new org.deeplearning4j.nn.conf.layers.DenseLayer.Builder()
+                .activation(Activation.TANH);
+            if (bidir) {
+                listBuilder.layer(new org.deeplearning4j.nn.conf.layers.recurrent.Bidirectional(lstmBuilder.build()));
+            } else {
+                listBuilder.layer(lstmBuilder.build());
+            }
+            // Dropout après chaque LSTM sauf la dernière
+            if (dropoutRate > 0.0 && (i < nLayers - 1)) {
+                listBuilder.layer(new DropoutLayer.Builder().dropOut(dropoutRate).build());
+            }
+        }
+        // Attention (simulée par une couche Dense avec softmax si activé)
+        if (attention) {
+            listBuilder.layer(new org.deeplearning4j.nn.conf.layers.DenseLayer.Builder()
                 .nIn(lstmNeurons)
-                .nOut(Math.max(16, lstmNeurons / 4))
-                .activation(Activation.RELU)
-                .build())
-            .layer(new RnnOutputLayer.Builder()
-                .nIn(Math.max(16, lstmNeurons / 4))
-                .nOut(outputSize)
-                .activation(Activation.IDENTITY)
-                .lossFunction(LossFunctions.LossFunction.MSE)
-                .build())
-            .build();
+                .nOut(lstmNeurons)
+                .activation(Activation.SOFTMAX)
+                .build());
+        }
+        // Couche Dense classique
+        listBuilder.layer(new org.deeplearning4j.nn.conf.layers.DenseLayer.Builder()
+            .nIn(lstmNeurons)
+            .nOut(Math.max(16, lstmNeurons / 4))
+            .activation(Activation.RELU)
+            .build());
+        // Couche de sortie
+        listBuilder.layer(new RnnOutputLayer.Builder()
+            .nIn(Math.max(16, lstmNeurons / 4))
+            .nOut(outputSize)
+            .activation(Activation.IDENTITY)
+            .lossFunction(LossFunctions.LossFunction.MSE)
+            .build());
+        MultiLayerConfiguration conf = listBuilder.build();
         MultiLayerNetwork model = new MultiLayerNetwork(conf);
         model.init();
         return model;
@@ -122,14 +141,15 @@ public class LstmTradePredictor {
         if (model == null) {
             logger.info("Réinitialisation du modèle LSTM : numFeatures demandé = {}", numFeatures);
             return initModel(
-                numFeatures, // Correction ici : nombre de features
+                numFeatures,
                 1,
                 config.getLstmNeurons(),
                 config.getDropoutRate(),
                 config.getLearningRate(),
                 config.getOptimizer(),
                 config.getL1(),
-                config.getL2()
+                config.getL2(),
+                config
             );
         } else {
             logger.info("Modèle LSTM déjà initialisé");
@@ -447,7 +467,7 @@ public class LstmTradePredictor {
             }
             logger.info("[CV] Fold {} : trainInput shape={}, testInput shape={}", fold, java.util.Arrays.toString(trainInput.shape()), java.util.Arrays.toString(testInput.shape()));
             logger.info("[CV] Fold {} : testLabel min={}, max={}", fold, java.util.Arrays.stream(testLabel).mapToDouble(arr -> arr[0][0]).min().orElse(Double.NaN), java.util.Arrays.stream(testLabel).mapToDouble(arr -> arr[0][0]).max().orElse(Double.NaN));
-            MultiLayerNetwork model = initModel(windowSize, 1, config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getOptimizer(), config.getL1(), config.getL2());
+            MultiLayerNetwork model = initModel(windowSize, 1, config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getOptimizer(), config.getL1(), config.getL2(), config);
             double bestMSE = Double.MAX_VALUE;
             int epochsWithoutImprovement = 0;
             for (int epoch = 0; epoch < config.getNumEpochs(); epoch++) {
