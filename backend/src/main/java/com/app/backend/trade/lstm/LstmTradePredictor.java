@@ -253,7 +253,7 @@ public class LstmTradePredictor {
      */
     public org.nd4j.linalg.api.ndarray.INDArray prepareLstmInputMulti(BarSeries series, int windowSize, java.util.List<String> features) {
         double[][] matrix = extractFeatureMatrix(series, features);
-        double[][] normMatrix = normalizeMatrix(matrix);
+        double[][] normMatrix = normalizeMatrix(matrix, features);
         double[][][] sequences = createSequencesMulti(normMatrix, windowSize);
         return toINDArray(sequences);
     }
@@ -276,7 +276,7 @@ public class LstmTradePredictor {
         int numFeatures = features.size();
         model = ensureModelWindowSize(model, numFeatures, config);
         double[][] matrix = extractFeatureMatrix(series, features);
-        double[][] normMatrix = normalizeMatrix(matrix);
+        double[][] normMatrix = normalizeMatrix(matrix, features);
         int numSeq = normMatrix.length - config.getWindowSize();
         if (numSeq <= 0) {
             logger.error("Pas assez de données pour entraîner le modèle (windowSize={}, barCount={})", config.getWindowSize(), normMatrix.length);
@@ -533,7 +533,7 @@ public class LstmTradePredictor {
         int numFeatures = features.size();
         model = ensureModelWindowSize(model, numFeatures, config);
         double[][] matrix = extractFeatureMatrix(series, features);
-        double[][] normMatrix = normalizeMatrix(matrix);
+        double[][] normMatrix = normalizeMatrix(matrix, features);
         int barCount = normMatrix.length;
         if (barCount < config.getWindowSize()) {
             throw new InsufficientDataException("Données insuffisantes pour la prédiction (windowSize=" + config.getWindowSize() + ", barCount=" + barCount + ").");
@@ -883,6 +883,55 @@ public class LstmTradePredictor {
     }
 
     /**
+     * Détermine le type de normalisation à appliquer pour chaque feature.
+     * @param feature nom du feature
+     * @return "zscore" pour oscillateurs, "minmax" pour prix/volume, sinon "minmax"
+     */
+    public String getFeatureNormalizationType(String feature) {
+        String f = feature.toLowerCase();
+        if (f.equals("rsi") || f.equals("stochastic") || f.equals("cci") || f.equals("momentum")) {
+            return "zscore";
+        } else if (f.equals("close") || f.equals("open") || f.equals("high") || f.equals("low") || f.equals("sma") || f.equals("ema") || f.equals("macd") || f.equals("atr") || f.startsWith("bollinger")) {
+            return "minmax";
+        } else if (f.equals("volume")) {
+            return "minmax";
+        } else if (f.equals("day_of_week") || f.equals("month") || f.equals("session")) {
+            return "minmax";
+        }
+        return "minmax";
+    }
+
+    /**
+     * Interpole les NaN dans une colonne par la première valeur valide suivante ou précédente.
+     * @param col tableau de valeurs (peut contenir des NaN)
+     * @return tableau sans NaN (interpolé)
+     */
+    public double[] interpolateNaN(double[] col) {
+        int n = col.length;
+        double[] res = new double[n];
+        // Copie initiale
+        System.arraycopy(col, 0, res, 0, n);
+        // Remplacement des NaN par la première valeur valide suivante
+        double lastValid = Double.NaN;
+        for (int i = 0; i < n; i++) {
+            if (Double.isNaN(res[i])) {
+                // Cherche la prochaine valeur valide
+                int j = i + 1;
+                while (j < n && Double.isNaN(res[j])) j++;
+                if (j < n) res[i] = res[j];
+                else if (!Double.isNaN(lastValid)) res[i] = lastValid;
+            } else {
+                lastValid = res[i];
+            }
+        }
+        // Si toujours NaN, met à zéro
+        for (int i = 0; i < n; i++) {
+            if (Double.isNaN(res[i])) res[i] = 0.0;
+        }
+        return res;
+    }
+
+    /**
      * Extrait une matrice de features (close, volume, indicateurs techniques) d'une série de bougies.
      * @param series série de bougies TA4J
      * @param features liste des features à inclure (ex: "close", "volume", "rsi", "macd", "sma", "ema")
@@ -927,34 +976,34 @@ public class LstmTradePredictor {
                         matrix[i][f] = series.getBar(i).getLowPrice().doubleValue();
                         break;
                     case "sma":
-                        matrix[i][f] = i >= 13 ? sma.getValue(i).doubleValue() : 0.0;
+                        matrix[i][f] = i >= 13 ? sma.getValue(i).doubleValue() : Double.NaN;
                         break;
                     case "ema":
-                        matrix[i][f] = i >= 13 ? ema.getValue(i).doubleValue() : 0.0;
+                        matrix[i][f] = i >= 13 ? ema.getValue(i).doubleValue() : Double.NaN;
                         break;
                     case "rsi":
-                        matrix[i][f] = i >= 13 ? rsi.getValue(i).doubleValue() : 0.0;
+                        matrix[i][f] = i >= 13 ? rsi.getValue(i).doubleValue() : Double.NaN;
                         break;
                     case "macd":
-                        matrix[i][f] = i >= 25 ? macd.getValue(i).doubleValue() : 0.0;
+                        matrix[i][f] = i >= 25 ? macd.getValue(i).doubleValue() : Double.NaN;
                         break;
                     case "atr":
-                        matrix[i][f] = i >= 13 ? atr.getValue(i).doubleValue() : 0.0;
+                        matrix[i][f] = i >= 13 ? atr.getValue(i).doubleValue() : Double.NaN;
                         break;
                     case "bollinger_high":
-                        matrix[i][f] = i >= 13 ? bbu.getValue(i).doubleValue() : 0.0;
+                        matrix[i][f] = i >= 13 ? bbu.getValue(i).doubleValue() : Double.NaN;
                         break;
                     case "bollinger_low":
-                        matrix[i][f] = i >= 13 ? bbl.getValue(i).doubleValue() : 0.0;
+                        matrix[i][f] = i >= 13 ? bbl.getValue(i).doubleValue() : Double.NaN;
                         break;
                     case "stochastic":
-                        matrix[i][f] = i >= 13 ? stochastic.getValue(i).doubleValue() : 0.0;
+                        matrix[i][f] = i >= 13 ? stochastic.getValue(i).doubleValue() : Double.NaN;
                         break;
                     case "cci":
-                        matrix[i][f] = i >= 13 ? cci.getValue(i).doubleValue() : 0.0;
+                        matrix[i][f] = i >= 13 ? cci.getValue(i).doubleValue() : Double.NaN;
                         break;
                     case "momentum":
-                        matrix[i][f] = i >= 9 ? momentum.getValue(i).doubleValue() : 0.0;
+                        matrix[i][f] = i >= 9 ? momentum.getValue(i).doubleValue() : Double.NaN;
                         break;
                     case "day_of_week":
                         matrix[i][f] = series.getBar(i).getEndTime().getDayOfWeek().getValue();
@@ -964,36 +1013,46 @@ public class LstmTradePredictor {
                         break;
                     case "session":
                         int hour = series.getBar(i).getEndTime().getHour();
-                        // 0 = nuit, 1 = matin, 2 = après-midi, 3 = clôture
                         matrix[i][f] = hour < 8 ? 0 : (hour < 12 ? 1 : (hour < 17 ? 2 : 3));
                         break;
                     default:
-                        matrix[i][f] = 0.0;
+                        matrix[i][f] = Double.NaN;
                 }
                 f++;
             }
+        }
+        // Interpolation des NaN pour chaque colonne
+        for (int f = 0; f < numFeatures; f++) {
+            double[] col = new double[barCount];
+            for (int i = 0; i < barCount; i++) col[i] = matrix[i][f];
+            col = interpolateNaN(col);
+            for (int i = 0; i < barCount; i++) matrix[i][f] = col[i];
         }
         return matrix;
     }
 
     /**
-     * Normalise une matrice de features (MinMax par colonne).
+     * Normalise une matrice de features selon le type de chaque feature.
      * @param matrix matrice [barCount][numFeatures]
+     * @param features liste des features (pour choisir la méthode)
      * @return matrice normalisée
      */
-    public double[][] normalizeMatrix(double[][] matrix) {
+    public double[][] normalizeMatrix(double[][] matrix, java.util.List<String> features) {
         int barCount = matrix.length;
         int numFeatures = matrix[0].length;
         double[][] norm = new double[barCount][numFeatures];
         for (int f = 0; f < numFeatures; f++) {
-            double min = Double.MAX_VALUE;
-            double max = -Double.MAX_VALUE;
-            for (int i = 0; i < barCount; i++) {
-                if (matrix[i][f] < min) min = matrix[i][f];
-                if (matrix[i][f] > max) max = matrix[i][f];
-            }
-            for (int i = 0; i < barCount; i++) {
-                norm[i][f] = (min == max) ? 0.5 : (matrix[i][f] - min) / (max - min);
+            double[] col = new double[barCount];
+            for (int i = 0; i < barCount; i++) col[i] = matrix[i][f];
+            String normType = getFeatureNormalizationType(features.get(f));
+            if (normType.equals("zscore")) {
+                double mean = java.util.Arrays.stream(col).average().orElse(0.0);
+                double std = Math.sqrt(java.util.Arrays.stream(col).map(v -> (v - mean) * (v - mean)).average().orElse(0.0));
+                for (int i = 0; i < barCount; i++) norm[i][f] = std == 0.0 ? 0.0 : (col[i] - mean) / std;
+            } else {
+                double min = java.util.Arrays.stream(col).min().orElse(0.0);
+                double max = java.util.Arrays.stream(col).max().orElse(0.0);
+                for (int i = 0; i < barCount; i++) norm[i][f] = (min == max) ? 0.5 : (col[i] - min) / (max - min);
             }
         }
         return norm;
