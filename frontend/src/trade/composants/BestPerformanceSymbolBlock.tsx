@@ -165,6 +165,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [selectedSymbolPerso, setSelectedSymbolPerso] = useState<string>('');
   const [symbolPersoData, setSymbolPersoData] = useState<{symbols: string[]} | null>(null);
   const [isToday, setIsToday] = useState(false);
+  const [buySingleOnly, setBuySingleOnly] = useState(false);
+  const [buyMixOnly, setBuyMixOnly] = useState(false);
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const fetchData = (searchModeParam = false, searchValueParam = '') => {
@@ -359,6 +361,30 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                 label="Top profil"
                 sx={{ ml: 2 }}
               />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={buySingleOnly}
+                    onChange={e => setBuySingleOnly(e.target.checked)}
+                    disabled={searchMode}
+                    size="small"
+                  />
+                }
+                label="Buy/Single"
+                sx={{ ml: 2 }}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={buyMixOnly}
+                    onChange={e => setBuyMixOnly(e.target.checked)}
+                    disabled={searchMode}
+                    size="small"
+                  />
+                }
+                label="Buy/Mix"
+                sx={{ ml: 2 }}
+              />
               <Button
                 variant="contained"
                 color="primary"
@@ -517,7 +543,19 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {data.map((row, i) => {
+                  {data.filter(row => {
+                    let singleOk = true;
+                    let mixOk = true;
+                    if (buySingleOnly) {
+                      const indice = indices[row.single.symbol];
+                      singleOk = (typeof indice === 'object' && indice.type && indice.type.startsWith('BUY')) ? true : false;
+                    }
+                    if (buyMixOnly) {
+                      const indiceMix = indicesMix[row.mix.symbol ?? ''];
+                      mixOk = (typeof indiceMix === 'object' && indiceMix.type && indiceMix.type.startsWith('BUY')) ? true : false;
+                    }
+                    return singleOk && mixOk;
+                  }).map((row, i) => {
                     let bgColor = undefined;
                     const indice = indices[row.single.symbol] as SignalInfo;
                     const lstmResult = lstmResults[row.single.symbol] as PreditLstm;
