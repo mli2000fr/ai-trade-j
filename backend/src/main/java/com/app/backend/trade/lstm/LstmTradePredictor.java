@@ -800,7 +800,7 @@ public class LstmTradePredictor {
      * @throws IOException en cas d'erreur d'accès à la base
      */
     // Sauvegarde du modèle dans MySQL
-    public void saveModelToDb(String symbol, MultiLayerNetwork model, JdbcTemplate jdbcTemplate, LstmConfig config) throws IOException {
+    public void saveModelToDb(String symbol, MultiLayerNetwork model, JdbcTemplate jdbcTemplate, LstmConfig config, ScalerSet scalers) throws IOException {
         if (model != null) {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ModelSerializer.writeModel(model, baos, true);
@@ -822,12 +822,13 @@ public class LstmTradePredictor {
             );
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             String hyperparamsJson = mapper.writeValueAsString(params);
-            String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, updated_date) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)";
+            String scalersJson = mapper.writeValueAsString(scalers);
+            String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, scalers_json, updated_date) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
             try {
-                jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson, config.getNormalizationScope());
-                logger.info("Modèle et hyperparamètres sauvegardés en base pour le symbole : {} (scope={})", symbol, config.getNormalizationScope());
+                jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson, config.getNormalizationScope(), scalersJson);
+                logger.info("Modèle, hyperparamètres et scalers sauvegardés en base pour le symbole : {} (scope={})", symbol, config.getNormalizationScope());
             } catch (Exception e) {
-                logger.error("Erreur lors de la sauvegarde du modèle en base : {}", e.getMessage());
+                logger.error("Erreur lors de la sauvegarde du modèle/scalers en base : {}", e.getMessage());
                 throw e;
             }
         }

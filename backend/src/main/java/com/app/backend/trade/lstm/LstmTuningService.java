@@ -69,6 +69,7 @@ public class LstmTuningService {
         }
         LstmConfig bestConfig = null;
         MultiLayerNetwork bestModel = null;
+        LstmTradePredictor.ScalerSet bestScalers = null;
         int numThreads = Math.min(grid.size(), Runtime.getRuntime().availableProcessors());
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
         List<java.util.concurrent.Future<TuningResult>> futures = new java.util.ArrayList<>();
@@ -92,6 +93,7 @@ public class LstmTuningService {
                 );
                 LstmTradePredictor.TrainResult trainResult = lstmTradePredictor.trainLstmWithScalers(series, config, model);
                 model = trainResult.model;
+                LstmTradePredictor.ScalerSet scalers = trainResult.scalers;
                 double score = useTimeSeriesCV
                     ? lstmTradePredictor.crossValidateLstmTimeSeriesSplit(series, config)
                     : lstmTradePredictor.crossValidateLstm(series, config);
@@ -118,7 +120,7 @@ public class LstmTuningService {
                     p.testedConfigs.incrementAndGet();
                     p.lastUpdate = System.currentTimeMillis();
                 }
-                return new TuningResult(config, model, score);
+                return new TuningResult(config, model, score, scalers);
             }));
         }
         executor.shutdown();
@@ -130,6 +132,7 @@ public class LstmTuningService {
                     bestScore = result.score;
                     bestConfig = result.config;
                     bestModel = result.model;
+                    bestScalers = result.scalers;
                 }
             } catch (Exception e) {
                 progress.status = "erreur";
@@ -141,16 +144,16 @@ public class LstmTuningService {
         progress.status = "termine";
         progress.endTime = endSymbol;
         progress.lastUpdate = endSymbol;
-        if (bestConfig != null && bestModel != null) {
+        if (bestConfig != null && bestModel != null && bestScalers != null) {
             hyperparamsRepository.saveHyperparams(symbol, bestConfig);
             try {
-                lstmTradePredictor.saveModelToDb(symbol, bestModel, jdbcTemplate, bestConfig);
+                lstmTradePredictor.saveModelToDb(symbol, bestModel, jdbcTemplate, bestConfig, bestScalers);
             } catch (Exception e) {
                 logger.error("Erreur lors de la sauvegarde du meilleur modèle : {}", e.getMessage());
             }
             logger.info("[TUNING] Fin tuning pour {} | Meilleure config : windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={}, Test MSE={}, durée totale={} ms", symbol, bestConfig.getWindowSize(), bestConfig.getLstmNeurons(), bestConfig.getDropoutRate(), bestConfig.getLearningRate(), bestConfig.getL1(), bestConfig.getL2(), bestScore, (endSymbol - startSymbol));
         } else {
-            logger.warn("[TUNING] Aucun modèle valide trouvé pour {}", symbol);
+            logger.warn("[TUNING] Aucun modèle/scaler valide trouvé pour {}", symbol);
         }
         return bestConfig;
     }
@@ -423,10 +426,12 @@ public class LstmTuningService {
         LstmConfig config;
         MultiLayerNetwork model;
         double score;
-        TuningResult(LstmConfig config, MultiLayerNetwork model, double score) {
+        LstmTradePredictor.ScalerSet scalers;
+        TuningResult(LstmConfig config, MultiLayerNetwork model, double score, LstmTradePredictor.ScalerSet scalers) {
             this.config = config;
             this.model = model;
             this.score = score;
+            this.scalers = scalers;
         }
     }
 }
