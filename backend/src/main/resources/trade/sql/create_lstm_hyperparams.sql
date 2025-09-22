@@ -12,6 +12,7 @@ CREATE TABLE trade_ai.lstm_hyperparams (
     l1 DOUBLE,
     l2 DOUBLE,
     num_layers INT,
+    horizon_bars INT,
     bidirectional BOOLEAN DEFAULT FALSE,
     attention BOOLEAN DEFAULT FALSE,
     normalization_scope VARCHAR(32) DEFAULT 'window',

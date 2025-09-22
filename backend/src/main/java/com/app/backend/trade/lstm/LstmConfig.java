@@ -130,6 +130,11 @@ public class LstmConfig {
     private boolean attention = false;
 
     /**
+     * Horizon de prédiction pour la classification swing (nombre de barres à l'avance)
+     */
+    private int horizonBars = 5; // Par défaut 5, configurable
+
+    /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
      * @throws RuntimeException si le fichier de configuration ne peut pas être chargé
      */
@@ -155,6 +160,7 @@ public class LstmConfig {
                 numLstmLayers = Integer.parseInt(props.getProperty("numLstmLayers", "1"));
                 bidirectional = Boolean.parseBoolean(props.getProperty("bidirectional", "false"));
                 attention = Boolean.parseBoolean(props.getProperty("attention", "false"));
+                horizonBars = Integer.parseInt(props.getProperty("horizonBars", "5"));
             }
             optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
@@ -185,6 +191,7 @@ public class LstmConfig {
         numLstmLayers = rs.getInt("num_lstm_layers");
         bidirectional = rs.getBoolean("bidirectional");
         attention = rs.getBoolean("attention");
+        horizonBars = rs.getInt("horizon_bars");
     }
 
     /**

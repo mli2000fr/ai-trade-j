@@ -53,8 +53,9 @@ public class LstmTradePredictor {
      * Initialise le modèle LSTM avec les hyperparamètres fournis.
      * @param inputSize nombre de features (nIn)
      * @param outputSize taille de la sortie (nOut)
+     * @param classification true pour classification (softmax), false pour régression
      */
-    public MultiLayerNetwork initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate, double learningRate, String optimizer, double l1, double l2, LstmConfig config) {
+    public MultiLayerNetwork initModel(int inputSize, int outputSize, int lstmNeurons, double dropoutRate, double learningRate, String optimizer, double l1, double l2, LstmConfig config, boolean classification) {
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
         builder.updater(
             "adam".equalsIgnoreCase(optimizer) ? new org.nd4j.linalg.learning.config.Adam(learningRate)
@@ -99,8 +100,8 @@ public class LstmTradePredictor {
         listBuilder.layer(new RnnOutputLayer.Builder()
             .nIn(Math.max(16, lstmNeurons / 4))
             .nOut(outputSize)
-            .activation(Activation.IDENTITY)
-            .lossFunction(LossFunctions.LossFunction.MSE)
+            .activation(classification ? Activation.SOFTMAX : Activation.IDENTITY)
+            .lossFunction(classification ? LossFunctions.LossFunction.MCXENT : LossFunctions.LossFunction.MSE)
             .build());
         MultiLayerConfiguration conf = listBuilder.build();
         MultiLayerNetwork model = new MultiLayerNetwork(conf);
