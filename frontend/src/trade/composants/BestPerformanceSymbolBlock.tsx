@@ -38,7 +38,7 @@ interface PreditLstm {
     lastClose: number;
     predictedClose: number;
     lastDate?: string | null;
-    signal?: SignalInfo;
+    signal?: string | null;
     position?: string | null;
 }
 
@@ -396,7 +396,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     size="small"
                   />
                 }
-                label="Buy/Lstm"
+                label="Up/Lstm"
                 sx={{ ml: 2 }}
               />
               <Button
@@ -571,7 +571,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     }
                     if (buyLstmOnly) {
                       const lstm = lstmResults[row.single.symbol];
-                      lstmOk = (typeof lstm === 'object' && lstm.signal && typeof lstm.signal === 'object' && lstm.signal.type && lstm.signal.type.startsWith('BUY')) ? true : false;
+                      lstmOk = (typeof lstm === 'object' && lstm.signal && lstm.signal.startsWith('UP')) ? true : false;
                     }
                     return singleOk && mixOk && lstmOk;
                   }).map((row, i) => {

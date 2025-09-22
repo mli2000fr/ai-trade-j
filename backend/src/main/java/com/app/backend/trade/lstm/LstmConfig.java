@@ -117,7 +117,7 @@ public class LstmConfig {
     /**
      * Nombre de couches LSTM empilées (stacked LSTM)
      */
-    private int numLstmLayers = 1;
+    private int numLstmLayers = 2;
 
     /**
      * Active le mode bidirectionnel (Bidirectional LSTM)
