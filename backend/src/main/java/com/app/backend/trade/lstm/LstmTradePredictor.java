@@ -885,67 +885,6 @@ public class LstmTradePredictor {
         return model;
     }
 
-    public static class LoadedModel {
-        public MultiLayerNetwork model;
-        public LstmTradePredictor.ScalerSet scalers;
-        public LoadedModel(MultiLayerNetwork model, LstmTradePredictor.ScalerSet scalers) {
-            this.model = model;
-            this.scalers = scalers;
-        }
-    }
-
-    public LoadedModel loadModelAndScalersFromDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException {
-        LstmConfig config = hyperparamsRepository.loadHyperparams(symbol);
-        if (config == null) {
-            throw new IOException("Aucun hyperparamètre trouvé pour le symbole " + symbol);
-        }
-        String sql = "SELECT model_blob, normalization_scope, hyperparams_json, scalers_json FROM lstm_models WHERE symbol = ?";
-        MultiLayerNetwork model = null;
-        LstmTradePredictor.ScalerSet scalers = null;
-        try {
-            java.util.Map<String, Object> result = jdbcTemplate.queryForMap(sql, symbol);
-            byte[] modelBytes = (byte[]) result.get("model_blob");
-            String normalizationScope = (String) result.get("normalization_scope");
-            String hyperparamsJson = result.containsKey("hyperparams_json") ? (String) result.get("hyperparams_json") : null;
-            String scalersJson = result.containsKey("scalers_json") ? (String) result.get("scalers_json") : null;
-            boolean normalizationSet = false;
-            if (normalizationScope != null && !normalizationScope.isEmpty()) {
-                config.setNormalizationScope(normalizationScope);
-                normalizationSet = true;
-            }
-            if (!normalizationSet && hyperparamsJson != null && !hyperparamsJson.isEmpty()) {
-                try {
-                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                    java.util.Map<?,?> jsonMap = mapper.readValue(hyperparamsJson, java.util.Map.class);
-                    Object normScopeObj = jsonMap.get("normalizationScope");
-                    if (normScopeObj != null && normScopeObj instanceof String && !((String)normScopeObj).isEmpty()) {
-                        config.setNormalizationScope((String)normScopeObj);
-                        normalizationSet = true;
-                    }
-                } catch (Exception e) {
-                    logger.warn("Impossible de parser hyperparams_json pour normalizationScope : {}", e.getMessage());
-                }
-            }
-            if (modelBytes != null) {
-                ByteArrayInputStream bais = new ByteArrayInputStream(modelBytes);
-                model = ModelSerializer.restoreMultiLayerNetwork(bais);
-                logger.info("Modèle chargé depuis la base pour le symbole : {} (scope={})", symbol, config.getNormalizationScope());
-            }
-            if (scalersJson != null && !scalersJson.isEmpty()) {
-                try {
-                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                    scalers = mapper.readValue(scalersJson, LstmTradePredictor.ScalerSet.class);
-                } catch (Exception e) {
-                    logger.warn("Impossible de parser scalers_json : {}", e.getMessage());
-                }
-            }
-        } catch (EmptyResultDataAccessException e) {
-            logger.error("Modèle non trouvé en base pour le symbole : {}", symbol);
-            throw new IOException("Modèle non trouvé en base");
-        }
-        return new LoadedModel(model, scalers);
-    }
-
     public boolean containsNaN(org.nd4j.linalg.api.ndarray.INDArray array) {
         for (int i = 0; i < array.length(); i++) {
             if (Double.isNaN(array.getDouble(i))) return true;
