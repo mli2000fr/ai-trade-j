@@ -89,7 +89,7 @@ public class LstmTuningService {
                     config.getOptimizer(),
                     config.getL1(),
                     config.getL2(),
-                    config
+                    config, true
                 );
                 LstmTradePredictor.TrainResult trainResult = lstmTradePredictor.trainLstmWithScalers(series, config, model);
                 model = trainResult.model;
@@ -178,6 +178,7 @@ public class LstmTuningService {
         }
         LstmConfig bestConfig = null;
         MultiLayerNetwork bestModel = null;
+        LstmTradePredictor.ScalerSet bestScalers = null;
         for (int i = 0; i < grid.size(); i++) {
             long startConfig = System.currentTimeMillis();
             LstmConfig config = grid.get(i);
@@ -195,7 +196,7 @@ public class LstmTuningService {
                 config.getOptimizer(),
                 config.getL1(),
                 config.getL2(),
-                config
+                config, true
             );
             LstmTradePredictor.TrainResult trainResult = lstmTradePredictor.trainLstmWithScalers(series, config, model);
             model = trainResult.model;
@@ -228,6 +229,7 @@ public class LstmTuningService {
                 bestScore = score;
                 bestConfig = config;
                 bestModel = model;
+                bestScalers = trainResult.scalers;
             }
             logger.info("[TUNING] [{}] Progression : {}/{} configs terminées", symbol, i+1, grid.size());
         }
@@ -236,10 +238,10 @@ public class LstmTuningService {
         progress.status = "termine";
         progress.endTime = endSymbol;
         progress.lastUpdate = endSymbol;
-        if (bestConfig != null && bestModel != null) {
+        if (bestConfig != null && bestModel != null && bestScalers != null) {
             hyperparamsRepository.saveHyperparams(symbol, bestConfig);
             try {
-                lstmTradePredictor.saveModelToDb(symbol, bestModel, jdbcTemplate, bestConfig);
+                lstmTradePredictor.saveModelToDb(symbol, bestModel, jdbcTemplate, bestConfig, bestScalers);
             } catch (Exception e) {
                 logger.error("Erreur lors de la sauvegarde du meilleur modèle : {}", e.getMessage());
             }
