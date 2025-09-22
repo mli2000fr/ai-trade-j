@@ -742,11 +742,10 @@ public class LstmTradePredictor {
         return threshold;
     }
 
-    public PreditLsdm getPredit(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model) {
-        // Toujours nIn = numFeatures
+    public PreditLsdm getPredit(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers) {
         model = ensureModelWindowSize(model, config.getFeatures().size(), config);
         double th = computeSwingTradeThreshold(series);
-        double predicted = predictNextClose(symbol, series, config, model);
+        double predicted = predictNextCloseWithScalerSet(symbol, series, config, model, scalers);
         predicted = Math.round(predicted * 1000.0) / 1000.0;
         double[] closes = extractCloseValues(series);
         double lastClose = closes[closes.length - 1];
@@ -776,21 +775,17 @@ public class LstmTradePredictor {
                 .build();
     }
 
-    public PreditLsdm getPreditAtIndex(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model, int index) {
-        if (index < config.getWindowSize()) {
-            return PreditLsdm.builder()
-                    .lastClose(series.getBar(index).getClosePrice().doubleValue())
-                    .predictedClose(series.getBar(index).getClosePrice().doubleValue())
-                    .signal(SignalType.NONE)
-                    .position("")
-                    .lastDate(series.getBar(index).getEndTime().toString())
-                    .build();
+    // Surcharge pour compatibilité (ancienne signature)
+    public PreditLsdm getPredit(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model) {
+        // Chargement du scaler depuis la base si possible
+        LoadedModel loaded = null;
+        try {
+            loaded = loadModelAndScalersFromDb(symbol, hyperparamsRepository.jdbcTemplate);
+        } catch (Exception e) {
+            logger.warn("Impossible de charger le ScalerSet depuis la base : {}", e.getMessage());
         }
-        BarSeries subSeries = series.getSubSeries(index - config.getWindowSize(), index + 1);
-        PreditLsdm pred = getPredit(symbol, subSeries, config, model);
-        double th = computeSwingTradeThreshold(subSeries);
-        logPredictionAnomalies(symbol, pred.getLastClose(), pred.getPredictedClose(), th);
-        return pred;
+        ScalerSet scalers = loaded != null ? loaded.scalers : null;
+        return getPredit(symbol, series, config, model, scalers);
     }
 
     /**
