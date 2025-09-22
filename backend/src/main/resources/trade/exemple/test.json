@@ -60,3 +60,17 @@ Monitoring: enregistrer MSE par fold, Sharpes simulés, confusion matrix (classi
 Correction de logs/messages inversés (ex: “Hyperparamètres existants trouvés” quand config == null).
 
 
+
+Early stopping : Le paramètre patience/minDelta est bien présent dans la config, mais il faudrait vérifier que l’entraînement du modèle l’utilise réellement.
+Gestion mémoire : Si la grille est très large, attention au nombre de modèles chargés simultanément (risque d’OutOfMemory).
+Robustesse exception : Les exceptions dans les threads sont loggées, mais le tuning continue. C’est bien, mais il pourrait être utile d’ajouter une notification ou un reporting centralisé.
+Critère de sélection : Le score utilisé est le MSE. Pour le swing trade, il peut être pertinent d’ajouter d’autres métriques (profitabilité simulée, ratio gain/perte, etc.) pour le choix final.
+Sauvegarde des modèles : Un contrôle sur la taille et la version des modèles sauvegardés peut être utile pour la maintenance.
+
+Early stopping : S’assurer qu’il est bien utilisé dans l’entraînement (paramètres patience/minDelta).
+Métriques trading : Ajouter des métriques de performance trading (profit factor, win rate, drawdown, etc.) pour le choix final, pas seulement RMSE.
+Gestion mémoire : Surveiller le nombre de modèles chargés simultanément (risque OutOfMemory si grille très large).
+Seuil swing trade : Vérifier que le seuil est dynamique et adapté à chaque symbole.
+Robustesse exception : Les erreurs sont loggées, mais il serait utile d’avoir un reporting centralisé.
+Versioning des hyperparamètres : S’assurer que les params sauvegardés sont bien à jour par rapport aux données.
+
