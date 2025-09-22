@@ -691,17 +691,38 @@ public class LstmTradePredictor {
         if (predicted < min || predicted > max) {
             logger.warn("[LSTM WARNING] Prédiction hors plage min/max : predicted={}, min={}, max={}", predicted, min, max);
         }
-        // Limitation de la prédiction à ±10% autour du dernier close (sécurité, mais log si utilisé)
-        double lowerBound = lastClose * 0.9;
-        double upperBound = lastClose * 1.1;
-        double predictedLimited = Math.max(lowerBound, Math.min(predicted, upperBound));
-        if (predicted != predictedLimited) {
-            logger.warn("[LSTM WARNING] Prédiction limitée : predicted={} -> limited=[{}, {}]", predicted, lowerBound, upperBound);
+        // Limitation de la prédiction à ±X% autour du dernier close si activée
+        double predictedLimited = predicted;
+        double pct = config.getLimitPredictionPct();
+        if (pct > 0.0) {
+            double lowerBound = lastClose * (1.0 - pct);
+            double upperBound = lastClose * (1.0 + pct);
+            double before = predictedLimited;
+            predictedLimited = Math.max(lowerBound, Math.min(predictedLimited, upperBound));
+            if (predictedLimited != before) {
+                monitorLimitImpact(predicted, predictedLimited, lastClose);
+            }
         }
         String position = analyzePredictionPosition(lastCloseWindow, predictedLimited);
         logger.info("[PREDICT-NORM] windowSize={}, lastWindow={}, min={}, max={}, predictedNorm={}, predicted={}, predictedLimited={}, normalizationScope={}, position={}",
             windowSize, java.util.Arrays.toString(lastCloseWindow), min, max, predictedNorm, predicted, predictedLimited, config.getNormalizationScope(), position);
         return predictedLimited;
+    }
+
+    // Statistiques d'impact de la borne de limitation
+    private int limitAppliedCount = 0;
+    private double totalLimitDelta = 0.0;
+    private double maxLimitDelta = 0.0;
+    private double minLimitDelta = Double.MAX_VALUE;
+
+    private void monitorLimitImpact(double predicted, double predictedLimited, double lastClose) {
+        double delta = Math.abs(predictedLimited - predicted);
+        limitAppliedCount++;
+        totalLimitDelta += delta;
+        if (delta > maxLimitDelta) maxLimitDelta = delta;
+        if (delta < minLimitDelta) minLimitDelta = delta;
+        logger.warn("[LSTM LIMIT] Limitation appliquée : predicted={} -> limited={}, delta={}, lastClose={}", predicted, predictedLimited, delta, lastClose);
+        logger.info("[LSTM LIMIT STATS] Occurrences={}, delta moyen={}, delta max={}, delta min={}", limitAppliedCount, totalLimitDelta/limitAppliedCount, maxLimitDelta, minLimitDelta);
     }
 
     public String analyzePredictionPosition(double[] window, double predicted) {
@@ -1006,12 +1027,17 @@ public class LstmTradePredictor {
             : Double.NaN;
         double[] closes = extractCloseValues(series);
         double lastClose = closes[closes.length - 1];
-        // Limitation de la prédiction à ±10% autour du dernier close (sécurité, mais log si utilisé)
-        double lowerBound = lastClose * 0.9;
-        double upperBound = lastClose * 1.1;
-        double predictedLimited = Math.max(lowerBound, Math.min(predicted, upperBound));
-        if (predicted != predictedLimited) {
-            logger.warn("[LSTM WARNING] Prédiction limitée : predicted={} -> limited=[{}, {}]", predicted, lowerBound, upperBound);
+        // Limitation de la prédiction à ±X% autour du dernier close si activée
+        double predictedLimited = predicted;
+        double pct = config.getLimitPredictionPct();
+        if (pct > 0.0) {
+            double lowerBound = lastClose * (1.0 - pct);
+            double upperBound = lastClose * (1.0 + pct);
+            double before = predictedLimited;
+            predictedLimited = Math.max(lowerBound, Math.min(predictedLimited, upperBound));
+            if (predictedLimited != before) {
+                monitorLimitImpact(predicted, predictedLimited, lastClose);
+            }
         }
         return predictedLimited;
     }
