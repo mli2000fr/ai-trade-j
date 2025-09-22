@@ -97,6 +97,11 @@ public class BestCombinationStrategyHelper {
             }
         }
 
+        if(bestScoreResult == null){
+            TradeUtils.log("Aucun combo mix trouvé pour le symbole " + symbol);
+            return null;
+        }
+
         int totalCount = barSeries.getBarCount();
 
         BestCombinationResult resultObj = new BestCombinationResult();
@@ -669,7 +674,12 @@ public class BestCombinationStrategyHelper {
                     }
                     if(isCalcul){
                         BestCombinationResult result = findBestCombinationGlobal(symbol);
-                        this.saveBestCombinationResult(symbol, result);
+                        if(result == null){
+                            TradeUtils.log("calculMixStrategies: symbole "+symbol+" pas de résultat, on passe");
+                            this.saveBestCombinationResult(symbol, BestCombinationResult.empty());
+                        }else{
+                            this.saveBestCombinationResult(symbol, result);
+                        }
                         nbInsert.incrementAndGet();
                     }
                 }catch(Exception e){
