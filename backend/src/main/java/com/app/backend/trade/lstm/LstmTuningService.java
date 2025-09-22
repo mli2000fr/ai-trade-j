@@ -88,9 +88,10 @@ public class LstmTuningService {
                     config.getOptimizer(),
                     config.getL1(),
                     config.getL2(),
-                        config
+                    config
                 );
-                model = lstmTradePredictor.trainLstm(series, config, model);
+                LstmTradePredictor.TrainResult trainResult = lstmTradePredictor.trainLstmWithScalers(series, config, model);
+                model = trainResult.model;
                 double score = useTimeSeriesCV
                     ? lstmTradePredictor.crossValidateLstmTimeSeriesSplit(series, config)
                     : lstmTradePredictor.crossValidateLstm(series, config);
@@ -191,9 +192,10 @@ public class LstmTuningService {
                 config.getOptimizer(),
                 config.getL1(),
                 config.getL2(),
-                    config
+                config
             );
-            model = lstmTradePredictor.trainLstm(series, config, model);
+            LstmTradePredictor.TrainResult trainResult = lstmTradePredictor.trainLstmWithScalers(series, config, model);
+            model = trainResult.model;
             double rmse = Math.sqrt(score);
             double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model);
             double[] closes = lstmTradePredictor.extractCloseValues(series);

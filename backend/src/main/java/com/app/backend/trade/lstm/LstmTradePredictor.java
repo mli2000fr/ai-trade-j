@@ -35,7 +35,6 @@ import org.ta4j.core.BarSeries;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.app.backend.trade.exception.InsufficientDataException;
-import com.app.backend.trade.exception.ModelNotFoundException;
 import org.ta4j.core.indicators.ROCIndicator;
 import org.ta4j.core.indicators.statistics.StandardDeviationIndicator;
 import org.ta4j.core.num.Num;
@@ -196,37 +195,68 @@ public class LstmTradePredictor {
     /**
      * Entraîne le modèle LSTM avec séquences complètes [batch, numFeatures, windowSize].
      * Labels: next-step pour chaque time step de la fenêtre (séquence à séquence).
+     * Retourne le modèle et le set de scalers appris sur le train.
      */
-    public MultiLayerNetwork trainLstm(BarSeries series, LstmConfig config, MultiLayerNetwork model) {
+    public static class TrainResult {
+        public MultiLayerNetwork model;
+        public ScalerSet scalers;
+        public TrainResult(MultiLayerNetwork model, ScalerSet scalers) {
+            this.model = model;
+            this.scalers = scalers;
+        }
+    }
+    public TrainResult trainLstmWithScalers(BarSeries series, LstmConfig config, MultiLayerNetwork model) {
         java.util.List<String> features = config.getFeatures();
         int numFeatures = features.size();
         model = ensureModelWindowSize(model, numFeatures, config);
 
         double[][] matrix = extractFeatureMatrix(series, features);
-        double[][] normMatrix = normalizeMatrix(matrix, features);
         int windowSize = config.getWindowSize();
-        int numSeq = normMatrix.length - windowSize;
+        int numSeq = matrix.length - windowSize;
         if (numSeq <= 0) {
-            logger.error("Pas assez de données pour entraîner le modèle (windowSize={}, barCount={})", windowSize, normMatrix.length);
+            logger.error("Pas assez de données pour entraîner le modèle (windowSize={}, barCount={})", windowSize, matrix.length);
             throw new IllegalArgumentException("Pas assez de données pour entraîner le modèle");
         }
-        // Entrées: séquences complètes transposées -> [numSeq, numFeatures, windowSize]
+        // Split train/test
+        int splitIdx = (int)(numSeq * 0.8);
+        if (splitIdx == numSeq) splitIdx = numSeq - 1;
+        // Apprentissage des scalers sur le train uniquement
+        ScalerSet scalers = new ScalerSet();
+        for (int f = 0; f < numFeatures; f++) {
+            double[] col = new double[splitIdx + windowSize];
+            for (int i = 0; i < splitIdx + windowSize; i++) col[i] = matrix[i][f];
+            String normType = getFeatureNormalizationType(features.get(f));
+            FeatureScaler.Type type = normType.equals("zscore") ? FeatureScaler.Type.ZSCORE : FeatureScaler.Type.MINMAX;
+            FeatureScaler scaler = new FeatureScaler(type);
+            scaler.fit(col);
+            scalers.featureScalers.put(features.get(f), scaler);
+        }
+        // Label scaler (close)
+        double[] closes = extractCloseValues(series);
+        double[] labelTrain = new double[splitIdx + windowSize + 1];
+        for (int i = 0; i < splitIdx + windowSize + 1; i++) labelTrain[i] = closes[i];
+        FeatureScaler.Type labelType = config.getNormalizationMethod().equalsIgnoreCase("zscore") ? FeatureScaler.Type.ZSCORE : FeatureScaler.Type.MINMAX;
+        FeatureScaler labelScaler = new FeatureScaler(labelType);
+        labelScaler.fit(labelTrain);
+        scalers.labelScaler = labelScaler;
+        // Normalisation des features
+        double[][] normMatrix = new double[matrix.length][numFeatures];
+        for (int f = 0; f < numFeatures; f++) {
+            double[] col = new double[matrix.length];
+            for (int i = 0; i < matrix.length; i++) col[i] = matrix[i][f];
+            normMatrix = applyScalerToMatrix(normMatrix, col, scalers.featureScalers.get(features.get(f)), f);
+        }
+        // Séquences
         double[][][] sequences = createSequencesMulti(normMatrix, windowSize);
         double[][][] sequencesTransposed = transposeSequencesMulti(sequences);
-
-        // Labels: next-step pour chaque time step -> [numSeq, 1, windowSize]
-        double[] closes = extractCloseValues(series);
-        double[] normCloses = normalize(closes); // conserver minmax global pour labels comme avant
+        // Labels normalisés
+        double[] normCloses = scalers.labelScaler.transform(closes);
         double[][][] labelSeq = new double[numSeq][1][windowSize];
         for (int i = 0; i < numSeq; i++) {
             for (int t = 0; t < windowSize; t++) {
-                // label du pas t = close normalisé de i+t+1
                 labelSeq[i][0][t] = normCloses[i + t + 1];
             }
         }
-
-        int splitIdx = (int)(numSeq * 0.8);
-        if (splitIdx == numSeq) splitIdx = numSeq - 1;
         double[][][] trainSeq = java.util.Arrays.copyOfRange(sequencesTransposed, 0, splitIdx);
         double[][][] testSeq = java.util.Arrays.copyOfRange(sequencesTransposed, splitIdx, numSeq);
         double[][][] trainLabel = java.util.Arrays.copyOfRange(labelSeq, 0, splitIdx);
@@ -239,12 +269,10 @@ public class LstmTradePredictor {
             logger.error("Jeu de test vide, impossible d'évaluer le modèle");
             throw new IllegalArgumentException("Jeu de test vide");
         }
-
-        org.nd4j.linalg.api.ndarray.INDArray trainInput = toINDArray(trainSeq); // [batch, numFeatures, windowSize]
-        org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabel); // [batch, 1, windowSize]
+        org.nd4j.linalg.api.ndarray.INDArray trainInput = toINDArray(trainSeq);
+        org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabel);
         org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(testSeq);
         org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel);
-
         if (containsNaN(trainOutput)) {
             logger.error("TrainOutput contient des NaN, impossible d'entraîner le modèle");
             throw new IllegalArgumentException("TrainOutput contient des NaN");
@@ -253,18 +281,16 @@ public class LstmTradePredictor {
             logger.error("TestOutput contient des NaN, impossible d'évaluer le modèle");
             throw new IllegalArgumentException("TestOutput contient des NaN");
         }
-
         org.nd4j.linalg.dataset.api.iterator.DataSetIterator trainIterator = new ListDataSetIterator<>(
             java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput))
         );
-
         double bestScore = Double.MAX_VALUE;
         int epochsWithoutImprovement = 0;
         int actualEpochs = 0;
         for (int i = 0; i < config.getNumEpochs(); i++) {
             model.fit(trainIterator);
             actualEpochs++;
-            org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput); // [batch, 1, windowSize]
+            org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
             if (containsNaN(predictions)) {
                 logger.error("Prédictions contiennent des NaN à l'epoch {}", i + 1);
                 break;
@@ -292,7 +318,14 @@ public class LstmTradePredictor {
             }
         }
         logger.info("Entraînement terminé après {} epochs. Meilleur Test MSE : {}", actualEpochs, bestScore);
-        return model;
+        return new TrainResult(model, scalers);
+    }
+
+    // Applique un scaler à une colonne du matrix
+    private double[][] applyScalerToMatrix(double[][] normMatrix, double[] col, FeatureScaler scaler, int f) {
+        double[] normCol = scaler.transform(col);
+        for (int i = 0; i < normCol.length; i++) normMatrix[i][f] = normCol[i];
+        return normMatrix;
     }
 
     /**
@@ -450,7 +483,8 @@ public class LstmTradePredictor {
                 config
             );
             try {
-                model = trainLstm(trainSeries, config, model);
+                LstmTradePredictor.TrainResult trainResult = trainLstmWithScalers(trainSeries, config, model);
+                model = trainResult.model;
                 double mse = evaluateModel(model, testSeries, config);
                 foldMSE[fold] = mse;
                 logger.info("[TimeSeriesCV] Fold {} : MSE={}", fold, mse);
@@ -1089,6 +1123,50 @@ public class LstmTradePredictor {
             }
         }
         return transposed;
+    }
+
+    // Classe utilitaire pour la normalisation cohérente
+    public static class FeatureScaler implements java.io.Serializable {
+        public enum Type { MINMAX, ZSCORE }
+        public Type type;
+        public double min, max, mean, std;
+        public FeatureScaler(Type type) { this.type = type; }
+        public void fit(double[] values) {
+            if (type == Type.MINMAX) {
+                min = java.util.Arrays.stream(values).min().orElse(0.0);
+                max = java.util.Arrays.stream(values).max().orElse(0.0);
+            } else {
+                mean = java.util.Arrays.stream(values).average().orElse(0.0);
+                std = Math.sqrt(java.util.Arrays.stream(values).map(v -> (v - mean) * (v - mean)).average().orElse(0.0));
+            }
+        }
+        public double[] transform(double[] values) {
+            double[] res = new double[values.length];
+            if (type == Type.MINMAX) {
+                if (min == max) {
+                    for (int i = 0; i < values.length; i++) res[i] = 0.5;
+                } else {
+                    for (int i = 0; i < values.length; i++) res[i] = (values[i] - min) / (max - min);
+                }
+            } else {
+                if (std == 0.0) {
+                    for (int i = 0; i < values.length; i++) res[i] = 0.0;
+                } else {
+                    for (int i = 0; i < values.length; i++) res[i] = (values[i] - mean) / std;
+                }
+            }
+            return res;
+        }
+        public double inverse(double value) {
+            if (type == Type.MINMAX) return value * (max - min) + min;
+            else return value * std + mean;
+        }
+    }
+
+    // Structure pour stocker les scalers de toutes les features + label
+    public static class ScalerSet implements java.io.Serializable {
+        public java.util.Map<String, FeatureScaler> featureScalers = new java.util.HashMap<>();
+        public FeatureScaler labelScaler;
     }
 
     public void logPredictionAnomalies(String symbol, double lastClose, double predictedClose, double threshold) {
