@@ -217,7 +217,7 @@ public class LstmHelper {
 
     // Méthode existante conservée pour compatibilité
     public void tuneAllSymbols() {
-        tuneAllSymbols(true, 5);
+        tuneAllSymbols(false, 1);
     }
 
     public List<String> getSymbolFitredFromTabSingle(String sort) {
