@@ -215,6 +215,20 @@ public class LstmHelper {
         lstmTuningService.tuneAllSymbolsMultiThread(symbols, grid, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
     }
 
+    public void tuneAllSymbolsBis() {
+        tuneAllSymbolsBis(false, 1);
+    }
+    public void tuneAllSymbolsBis(boolean useRandomGrid, int randomGridSize) {
+        List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
+        List<LstmConfig> grid;
+        if (useRandomGrid) {
+            grid = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize);
+        } else {
+            grid = lstmTuningService.generateSwingTradeGrid();
+        }
+        lstmTuningService.tuneAllSymbols(symbols, grid, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
+    }
+
     // Méthode existante conservée pour compatibilité
     public void tuneAllSymbols() {
         tuneAllSymbols(false, 1);

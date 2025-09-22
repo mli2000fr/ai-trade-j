@@ -1,41 +1,16 @@
-1. Features et ingénierie de données
-Ajouter des indicateurs de volatilité : Pour le swing trade, la volatilité (ATR, Bollinger Bands, etc.) est souvent un signal clé. Ajouter ces indicateurs dans la liste des features peut améliorer la détection des swings.
-Inclure des signaux de momentum : Par exemple, Stochastic Oscillator, CCI, ou Momentum Indicator.
-Features temporelles : Ajouter le jour de la semaine, le mois, ou des flags de session peut aider à capter des patterns saisonniers.
-
-Souhaitez-vous que j’améliore la normalisation ou que je vous propose une analyse d’importance des features ?
-
-
-2. Prétraitement et normalisation
-Normalisation par feature : Actuellement, la normalisation est faite par colonne (feature), mais il peut être pertinent d’appliquer une normalisation différente selon le type d’indicateur (ex : zscore pour les oscillateurs, minmax pour les prix).
-Gestion des valeurs manquantes : Pour les indicateurs qui ne sont pas définis sur les premiers bars (ex : SMA, EMA, MACD), remplacer les zéros par NaN ou interpoler pour éviter de biaiser l’apprentissage.
-3. Architecture du modèle
-Stacked LSTM : Ajouter une ou plusieurs couches LSTM supplémentaires peut permettre au modèle de mieux capter les patterns complexes du swing trade.
-Attention Mechanism : Intégrer une couche d’attention (si la librairie le permet) pour que le modèle se concentre sur les points clés de la séquence.
-Bidirectional LSTM : Pour certains patterns, un LSTM bidirectionnel peut améliorer la prédiction.
-4. Tuning et validation
-Grid Search plus fin : Tester des plages plus larges pour certains hyperparamètres (windowSize, neurons, dropout, learningRate).
-Random Search + Bayesian Optimization : Après le random/grid search, utiliser une optimisation bayésienne pour affiner la recherche des meilleurs hyperparamètres.
-Validation croisée temporelle : Utiliser une validation croisée "time series split" pour respecter la chronologie des données financières.
-5. Post-traitement et interprétabilité
-Explicabilité : Ajouter des outils pour analyser l’importance des features (ex : permutation importance, SHAP).
-Analyse des erreurs : Logguer les cas où la prédiction est très éloignée du close réel pour affiner le modèle ou détecter des anomalies.
-6. Robustesse et production
-Gestion des outliers : Filtrer ou limiter l’impact des outliers dans les données d’entrée.
-Monitoring du drift : Mettre en place un suivi du drift des données pour détecter quand le modèle devient moins performant.
-7. Backtest et simulation
-Backtest multi-stratégies : Simuler plusieurs stratégies de swing trade (range, breakout, mean reversion) pour comparer la performance du modèle selon le contexte.
-Optimisation du risk management : Tester différents paramètres de stop loss/take profit pour maximiser le rendement et limiter le drawdown.
-Exemple de features additionnels à intégrer :
-features = Arrays.asList("close", "volume", "rsi", "sma", "ema", "macd", "atr", "bollinger_upper", "bollinger_lower", "stochastic", "momentum");
-Il faudra adapter la méthode extractFeatureMatrix pour calculer ces nouveaux indicateurs.
-
-backtestMultiStrategies
-
-
-Conclusion
-Votre base est solide et bien adaptée au swing trade. Les axes d’amélioration principaux sont :
-enrichir les features,
-tester des architectures LSTM plus avancées,
-affiner le tuning,
-améliorer la robustesse et l’interprétabilité.
+Points clés (bugs/correctifs)
+Fuite de données dans la normalisation: la normalisation est recalculée sur train+test, et la cible close n’utilise pas la même méthode/scope que les features. Unifier via des “scalers” appris sur train uniquement et réutilisés partout (CV, eval, prédiction).
+Mauvais usage LSTM à l’inférence: seule la dernière étape de la fenêtre est passée au réseau. Il faut passer la séquence complète [batch, features, time] et récupérer la dernière sortie.
+evaluateModel refait un split 80/20 et reshape les sorties pour matcher à tout prix. En CV, il faut évaluer sur le fold test passé et ne pas reshaper à l’aveugle.
+Arrays.asList(double[]) ne permute pas (tableaux primitifs). Bug dans l’importance par permutation.
+SHAP: basePred est dénormalisé alors que pertPred est en espace normalisé. Comparaison incohérente d’unités.
+Découpage TimeSeriesSplit: la condition if (testStart - windowSize < windowSize) est incorrecte; vérifier qu’il y a au moins windowSize+1 points côté train.
+Logging: les formats {: .3f} ne fonctionnent pas avec SLF4J; utiliser {} ou String.format.
+Mémoire et threads DL4J: nettoyer workspaces/GC après chaque config/fold; éventuellement utiliser ParallelWrapper ou EarlyStopping.
+Améliorations de conception
+Utiliser un état de normalisation persistant (train only) et l’enregistrer avec le modèle (ou en base) pour une prédiction cohérente.
+Bascule vers un schéma many-to-one: entrée = séquence complète, sortie = valeur suivante du close.
+Early stopping natif DL4J (EarlyStoppingTrainer) avec ScoreCalculator sur validation, plutôt que patience artisanale.
+Seed global pour reproductibilité: Nd4j.getRandom().setSeed(...) et seed dans la config DL4J.
+Seuil swing plus robuste: ATR% ou percentile des retours absolus, pas max(1% prix, abs diff moyen).
+Réduire la verbosité logs et uniformiser les shapes avant MSE sans reshape forcé.

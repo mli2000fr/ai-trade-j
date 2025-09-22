@@ -52,4 +52,11 @@ public class LstmController {
         lsdmHelper.tuneAllSymbols();
         return true;
     }
+
+
+    @GetMapping("/tuneAllSymbolsBis")
+    public boolean tuneAllSymbolsBis() {
+        lsdmHelper.tuneAllSymbolsBis();
+        return true;
+    }
 }
