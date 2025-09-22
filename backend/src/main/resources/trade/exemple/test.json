@@ -1,10 +1,5 @@
-Je regarde ton implémentation LSTM et ta logique swing trade; je te fais un diagnostic rapide et concret, puis les correctifs prioritaires.
-En bref
-Points solides
-Pipeline propres: features TA4J variées (prix, RSI, MACD, ATR, Bollinger…), filtrage des outliers, suivi de drift, persistance modèle + hyperparams.
-Entraînement avec early stopping et CV (k-fold + time-series split), tuning multi-symboles multi-configs, logs détaillés.
-Backtests avec gestion du risque (capital, riskPerTrade, SL/TP).
 Points bloquants pour du swing trading pro
+
 LSTM entraîné sans exploiter la séquence: tu n’envoies que le dernier pas de la fenêtre au réseau ([batch, features, 1]) au lieu de toute la séquence ([batch, features, window]). Ça annule l’intérêt du LSTM (il devient quasi dense).
 Incohérences d’entrée modèle (nIn): parfois tu passes windowSize, parfois le nombre de features (numFeatures). Pour un RNN DL4J: nIn = numFeatures, timeSeriesLength = windowSize.
 Normalisation incohérente entre inputs et labels:
@@ -21,32 +16,41 @@ crossValidateLstm crée [numSeq, window, 1] sans transposition vers [batch, feat
 Early stopping utilise le “test” interne 80/20 comme validation; mélange des rôles. Pour le pro: split train/val séparé (ou early stopping sur validation), test final strict hors échantillon (walk-forward).
 Absence de scalers persistés: min/max (ou mean/std) utilisés pour normaliser/dénormaliser devraient être appris sur train, stockés et réutilisés à l’inférence (pas recalculés).
 Reproductibilité: pas de seed global (Nd4j/DL4J), tuning potentiellement non déterministe.
-Correctifs prioritaires (simples et à fort impact)
-Faire vraiment du LSTM (séquences complètes)
+
+1.Faire vraiment du LSTM (séquences complètes)
 Entraînement/éval/inférence: alimenter le réseau avec [batch, numFeatures, windowSize].
 Supprimer lastStepSeq; utiliser sequencesTransposed (features × window) partout (trainLstm, evaluateModel, predictNextClose).
 Toujours initModel(nIn = numFeatures, outputSize = 1).
-Normalisation cohérente et sans fuite
+
+2.Normalisation cohérente et sans fuite
 Définir un scaler par feature (et un scaler pour le label) appris sur “train” uniquement. Stocker min/max ou mean/std (par feature + label) avec le modèle.
 Utiliser le même scaler pour val/test/inférence (pas recalculer sur les données courantes).
 Respecter la scope choisie (window vs global) à l’entraînement et à l’inférence de manière identique; pour le pro, préférer “window” ou returns normalisés.
-Cible swing adaptée
+
+3.Cible swing adaptée
 Option A (régression): prédire le retour cumulé à H jours (par ex. 5-10 barres): y = (Close[t+H]-Close[t])/Close[t].
 Option B (classification): 3 classes UP/DOWN/FLAT sur H jours, avec softmax. Les sorties proba facilitent le filtrage et le sizing.
 Calibrer H au style de swing (durée moyenne de trade observée).
-Seuils de décision robustes
+
+4.Seuils de décision robustes
 Basés sur ATR(14) (k×ATR en % du prix) ou sur la volatilité des returns (std des log-returns).
 Éviter la borne arbitraire ±10% autour du close; si conservée, loguer et monitorer l’impact.
-Harmoniser les signaux
+
+5.Harmoniser les signaux
 Mapper UP -> BUY, DOWN -> SELL, STABLE -> HOLD dans le backtest. Ou faire renvoyer BUY/SELL directement par le prédicteur pour éviter l’ambiguïté.
-Validation chronologique stricte
+
+6.Validation chronologique stricte
 Préférer la time series CV (expanding window) pour le score tuning. Garder un test final out-of-sample (derniers 20% comme tu fais déjà, mais sans réutiliser ces données pour early stopping).
 Utiliser EarlyStoppingTrainer (DL4J) avec un vrai set de validation (séquentiel, pas mélangé).
-Gestion des scalers et méta-données
+
+7.Gestion des scalers et méta-données
 Sauvegarder avec le modèle: liste des features, windowSize, méthode de normalisation, et paramètres des scalers (par feature + label). Recharger exactement ces paramètres à l’inférence.
-Réglages/Perf
+
+8.Réglages/Perf
 Tuning: privilégier random search ou bayésien; réduire la grille (300 epochs × grosse grille = coût/overfit). Baisser epochs, s’appuyer sur early stopping et scheduler LR.
 Fixer un seed (Nd4j.getRandom().setSeed(...)) et Workspaces pour stabilité.
+
+
 Améliorations secondaires utiles
 Utiliser returns/log-returns comme label et aussi comme certaines features (évite les effets d’échelle).
 Ajouter fees/slippage dans le backtest, exécution sur bar suivante (open) plutôt qu’au close courant.
@@ -54,6 +58,5 @@ Position sizing plus réaliste (ATR sizing, risk-based en unités, non pas valeu
 Gestion des classes déséquilibrées (si classification): pondération, focal loss, etc.
 Monitoring: enregistrer MSE par fold, Sharpes simulés, confusion matrix (classification).
 Correction de logs/messages inversés (ex: “Hyperparamètres existants trouvés” quand config == null).
-Conclusion
-La base est bonne et riche, mais dans l’état, le LSTM n’exploite pas la dynamique temporelle (entrée séquentielle cassée) et la normalisation/target ne sont pas alignées pour du swing pro.
-En appliquant les 5–6 correctifs prioritaires ci-dessus (séquences complètes, nIn=numFeatures, normalisation cohérente persistée, cible H-step, seuil ATR, mapping signaux), tu passes à une implémentation beaucoup plus crédible et exploitable en swing trading professionnel.
+
+
