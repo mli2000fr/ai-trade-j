@@ -50,26 +50,6 @@ public class LstmTradePredictor {
     }
 
     /**
-     * Constructeur principal.
-     * Initialise le modèle LSTM avec les paramètres du fichier de configuration.
-     * @param config configuration des hyperparamètres LSTM
-     */
-    public void initWithConfig(LstmConfig config) {
-        // Initialisation automatique du modèle avec les paramètres du fichier de config
-        initModel(
-            config.getWindowSize(),
-            1,
-            config.getLstmNeurons(),
-            config.getDropoutRate(),
-            config.getLearningRate(),
-            config.getOptimizer(),
-            config.getL1(),
-            config.getL2(),
-                config
-        );
-    }
-
-    /**
      * Initialise le modèle LSTM avec les hyperparamètres fournis.
      * @param inputSize taille de l'entrée (doit être égal au windowSize utilisé)
      * @param outputSize taille de la sortie
@@ -983,21 +963,6 @@ public class LstmTradePredictor {
         return model;
     }
 
-    /**
-     * Entraîne le modèle avec les paramètres du fichier de configuration.
-     * Permet d'activer ou désactiver la validation croisée k-fold via le paramètre crossValidation.
-     * @param series série de bougies
-     * @param crossValidation true pour activer la validation croisée, false pour entraînement classique
-     */
-    public void trainWithConfig(BarSeries series, LstmConfig config, boolean crossValidation) {
-        if (crossValidation) {
-            logger.info("Entraînement LSTM avec validation croisée ({} folds)", config.getKFolds());
-            crossValidateLstm(series, config);
-        } else {
-            logger.info("Entraînement LSTM classique (train/test split 80/20)");
-            trainLstm(series, config, null);
-        }
-    }
 
     /**
      * Vérifie si un INDArray contient au moins un NaN.

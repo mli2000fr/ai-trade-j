@@ -141,61 +141,6 @@ public class LstmHelper {
         }
     }
 
-    // Entraînement LSTM avec personnalisation des features
-    public void trainLstm(String symbol, List<String> features) {
-        BarSeries series = getBarBySymbol(symbol, null);
-        LstmConfig config = new LstmConfig();
-        if (features != null && !features.isEmpty()) {
-            config.setFeatures(features);
-        }
-        MultiLayerNetwork model = lstmTradePredictor.initModel(
-                config.getWindowSize(),
-                1,
-                config.getLstmNeurons(),
-                config.getDropoutRate(),
-                config.getLearningRate(),
-                config.getOptimizer(),
-                config.getL1(),
-                config.getL2(),
-                config
-        );
-        model = lstmTradePredictor.trainLstm(series, config, model);
-        try {
-            lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate, config);
-        } catch (Exception e) {
-            logger.error("Erreur lors de la sauvegarde du modèle : {}", e.getMessage());
-        }
-    }
-
-    // Prédiction LSTM avec personnalisation des features
-    public PreditLsdm getPredit(String symbol, List<String> features) throws IOException {
-        LstmConfig config = lstmTuningService.tuneSymbol(symbol, lstmTuningService.generateSwingTradeGrid(), getBarBySymbol(symbol, null), jdbcTemplate, true);
-        if (features != null && !features.isEmpty()) {
-            config.setFeatures(features);
-        }
-        MultiLayerNetwork model = lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
-        BarSeries series = getBarBySymbol(symbol, null);
-        return lstmTradePredictor.getPredit(symbol, series, config, model);
-    }
-
-    /**
-     * Lance une validation croisée k-fold sur le modèle LSTM pour un symbole donné.
-     * Les résultats sont loggés (voir app.log).
-     */
-    public void crossValidateLstm(String symbol, int windowSize, int numEpochs, int kFolds, int lstmNeurons, double dropoutRate, int patience, double minDelta, double learningRate, String optimizer) {
-        BarSeries series = getBarBySymbol(symbol, null);
-        LstmConfig config = new LstmConfig();
-        config.setWindowSize(windowSize);
-        config.setNumEpochs(numEpochs);
-        config.setKFolds(kFolds);
-        config.setLstmNeurons(lstmNeurons);
-        config.setDropoutRate(dropoutRate);
-        config.setPatience(patience);
-        config.setMinDelta(minDelta);
-        config.setLearningRate(learningRate);
-        config.setOptimizer(optimizer);
-        lstmTradePredictor.crossValidateLstm(series, config);
-    }
 
     /**
      * Lance le tuning automatique pour une liste de symboles.
@@ -239,17 +184,6 @@ public class LstmHelper {
         String sql = "select symbol from best_in_out_single_strategy s where s.avg_pnl > 0 AND s.profit_factor > 1 AND s.win_rate > 0.5 AND s.max_drawdown < 0.2 AND s.sharpe_ratio > 1 AND s.rendement > 0.05";
         sql += " ORDER BY " + orderBy + " DESC";
         return jdbcTemplate.queryForList(sql, String.class);
-    }
-
-    /**
-     * Exporte les métriques tuning LSTM au format CSV pour un symbole ou tous les symboles.
-     *
-     * @param symbol     symbole à exporter (null pour tous)
-     * @param outputPath chemin du fichier CSV à générer
-     * @return chemin du fichier généré ou null si aucun résultat
-     */
-    public String exportTuningMetricsToCsv(String symbol, String outputPath) {
-        return lstmTuningService.hyperparamsRepository.exportTuningMetricsToCsv(symbol, outputPath);
     }
 
     /**

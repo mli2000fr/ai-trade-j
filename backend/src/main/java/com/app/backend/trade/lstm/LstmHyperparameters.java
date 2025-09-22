@@ -1,9 +1,5 @@
 package com.app.backend.trade.lstm;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.File;
-import java.io.IOException;
-
 public class LstmHyperparameters {
     public int windowSize;
     public int lstmNeurons;
@@ -33,15 +29,5 @@ public class LstmHyperparameters {
         this.l2 = l2;
         this.normalizationScope = normalizationScope;
         this.normalizationMethod = normalizationMethod;
-    }
-
-    public void saveToFile(String path) throws IOException {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.writeValue(new File(path), this);
-    }
-
-    public static LstmHyperparameters loadFromFile(String path) throws IOException {
-        ObjectMapper mapper = new ObjectMapper();
-        return mapper.readValue(new File(path), LstmHyperparameters.class);
     }
 }
