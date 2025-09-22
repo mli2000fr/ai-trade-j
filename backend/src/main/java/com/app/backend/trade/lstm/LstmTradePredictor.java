@@ -45,8 +45,11 @@ public class LstmTradePredictor {
 
     private final LstmHyperparamsRepository hyperparamsRepository;
 
-    public LstmTradePredictor(LstmHyperparamsRepository hyperparamsRepository) {
+    private final JdbcTemplate jdbcTemplate;
+
+    public LstmTradePredictor(LstmHyperparamsRepository hyperparamsRepository, JdbcTemplate jdbcTemplate) {
         this.hyperparamsRepository = hyperparamsRepository;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
@@ -124,7 +127,8 @@ public class LstmTradePredictor {
                 config.getOptimizer(),
                 config.getL1(),
                 config.getL2(),
-                config
+                config,
+                    true
             );
         } else {
             logger.info("Modèle LSTM déjà initialisé");
@@ -401,7 +405,8 @@ public class LstmTradePredictor {
                 config.getOptimizer(),
                 config.getL1(),
                 config.getL2(),
-                config
+                config,
+                    true
             );
 
             double bestMSE = Double.MAX_VALUE;
@@ -481,7 +486,8 @@ public class LstmTradePredictor {
                 config.getOptimizer(),
                 config.getL1(),
                 config.getL2(),
-                config
+                config,
+                    true
             );
             try {
                 LstmTradePredictor.TrainResult trainResult = trainLstmWithScalers(trainSeries, config, model);
@@ -781,7 +787,7 @@ public class LstmTradePredictor {
         // Chargement du scaler depuis la base si possible
         LoadedModel loaded = null;
         try {
-            loaded = loadModelAndScalersFromDb(symbol, hyperparamsRepository.jdbcTemplate);
+            loaded = loadModelAndScalersFromDb(symbol, jdbcTemplate);
         } catch (Exception e) {
             logger.warn("Impossible de charger le ScalerSet depuis la base : {}", e.getMessage());
         }
@@ -1354,7 +1360,7 @@ public class LstmTradePredictor {
             model.fit(trainIterator);
             actualEpochs++;
             org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
-            double loss = org.nd4j.linalg.lossfunctions.LossFunctions.LossFunction.MCXENT.getILossFunction().computeScore(testOutput, predictions, org.nd4j.linalg.api.ops.impl.loss.SoftmaxCrossEntropyLoss.LossReduction.MEAN_BY_NONZERO_WEIGHT_COUNT, null, false);
+            double loss = org.nd4j.linalg.lossfunctions.LossFunctions.LossFunction.MCXENT.getILossFunction().computeScore(testOutput, predictions, null, null, false);
             logger.info("Epoch {} terminé, Test MCXENT : {}", i + 1, loss);
             if (bestScore - loss > config.getMinDelta()) {
                 bestScore = loss;
