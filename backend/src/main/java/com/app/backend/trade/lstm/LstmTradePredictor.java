@@ -1278,4 +1278,126 @@ public class LstmTradePredictor {
             logger.warn("[LSTM ANOMALIE] Prédiction très éloignée du close réel : symbol={}, lastClose={}, predictedClose={}, delta={}, threshold={}", symbol, lastClose, predictedClose, delta, threshold);
         }
     }
+
+    /**
+     * Entraîne le modèle LSTM pour la classification swing (UP/DOWN/FLAT)
+     * Retourne le modèle et le set de scalers appris sur le train.
+     */
+    public TrainResult trainSwingClassificationLstmWithScalers(BarSeries series, LstmConfig config, MultiLayerNetwork model, double seuilUp, double seuilDown) {
+        java.util.List<String> features = config.getFeatures();
+        int numFeatures = features.size();
+        int horizonBars = config.getHorizonBars();
+        model = initModel(
+            numFeatures,
+            3, // 3 classes
+            config.getLstmNeurons(),
+            config.getDropoutRate(),
+            config.getLearningRate(),
+            config.getOptimizer(),
+            config.getL1(),
+            config.getL2(),
+            config,
+            true // classification
+        );
+        double[][] matrix = extractFeatureMatrix(series, features);
+        int windowSize = config.getWindowSize();
+        int numSeq = matrix.length - windowSize - horizonBars;
+        if (numSeq <= 0) {
+            logger.error("Pas assez de données pour entraîner le modèle swing classification (windowSize={}, horizonBars={}, barCount={})", windowSize, horizonBars, matrix.length);
+            throw new IllegalArgumentException("Pas assez de données pour entraîner le modèle");
+        }
+        // Split train/test
+        int splitIdx = (int)(numSeq * 0.8);
+        if (splitIdx == numSeq) splitIdx = numSeq - 1;
+        // Apprentissage des scalers sur le train uniquement
+        ScalerSet scalers = new ScalerSet();
+        for (int f = 0; f < numFeatures; f++) {
+            double[] col = new double[splitIdx + windowSize];
+            for (int i = 0; i < splitIdx + windowSize; i++) col[i] = matrix[i][f];
+            String normType = getFeatureNormalizationType(features.get(f));
+            FeatureScaler.Type type = normType.equals("zscore") ? FeatureScaler.Type.ZSCORE : FeatureScaler.Type.MINMAX;
+            FeatureScaler scaler = new FeatureScaler(type);
+            scaler.fit(col);
+            scalers.featureScalers.put(features.get(f), scaler);
+        }
+        // Normalisation des features
+        double[][] normMatrix = new double[matrix.length][numFeatures];
+        for (int f = 0; f < numFeatures; f++) {
+            double[] col = new double[matrix.length];
+            for (int i = 0; i < matrix.length; i++) col[i] = matrix[i][f];
+            normMatrix = applyScalerToMatrix(normMatrix, col, scalers.featureScalers.get(features.get(f)), f);
+        }
+        // Séquences
+        double[][][] sequences = createSequencesMulti(normMatrix, windowSize);
+        double[][][] sequencesTransposed = transposeSequencesMulti(sequences);
+        // Labels swing classification
+        double[] closes = extractCloseValues(series);
+        int[] swingLabels = generateSwingClassificationLabels(closes, horizonBars, seuilUp, seuilDown); // 0=DOWN, 1=FLAT, 2=UP
+        double[][] oneHotLabels = encodeOneHot(swingLabels, 3);
+        // Adapter la taille des séquences à celle des labels
+        double[][][] inputSeq = java.util.Arrays.copyOfRange(sequencesTransposed, 0, swingLabels.length);
+        double[][] trainLabels = java.util.Arrays.copyOfRange(oneHotLabels, 0, splitIdx);
+        double[][] testLabels = java.util.Arrays.copyOfRange(oneHotLabels, splitIdx, swingLabels.length);
+        double[][][] trainSeq = java.util.Arrays.copyOfRange(inputSeq, 0, splitIdx);
+        double[][][] testSeq = java.util.Arrays.copyOfRange(inputSeq, splitIdx, swingLabels.length);
+        org.nd4j.linalg.api.ndarray.INDArray trainInput = toINDArray(trainSeq);
+        org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabels);
+        org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(testSeq);
+        org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabels);
+        org.nd4j.linalg.dataset.api.iterator.DataSetIterator trainIterator = new ListDataSetIterator<>(
+            java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput))
+        );
+        double bestScore = Double.MAX_VALUE;
+        int epochsWithoutImprovement = 0;
+        int actualEpochs = 0;
+        for (int i = 0; i < config.getNumEpochs(); i++) {
+            model.fit(trainIterator);
+            actualEpochs++;
+            org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
+            double loss = org.nd4j.linalg.lossfunctions.LossFunctions.LossFunction.MCXENT.getILossFunction().computeScore(testOutput, predictions, org.nd4j.linalg.api.ops.impl.loss.SoftmaxCrossEntropyLoss.LossReduction.MEAN_BY_NONZERO_WEIGHT_COUNT, null, false);
+            logger.info("Epoch {} terminé, Test MCXENT : {}", i + 1, loss);
+            if (bestScore - loss > config.getMinDelta()) {
+                bestScore = loss;
+                epochsWithoutImprovement = 0;
+            } else {
+                epochsWithoutImprovement++;
+                if (epochsWithoutImprovement >= config.getPatience()) {
+                    logger.info("Early stopping déclenché à l'epoch {}. Meilleur Test MCXENT : {}", i + 1, bestScore);
+                    break;
+                }
+            }
+        }
+        logger.info("Entraînement swing classification terminé après {} epochs. Meilleur Test MCXENT : {}", actualEpochs, bestScore);
+        return new TrainResult(model, scalers);
+    }
+
+    /**
+     * Génère les labels swing classification (0=DOWN, 1=FLAT, 2=UP) selon l'horizon et les seuils
+     */
+    public int[] generateSwingClassificationLabels(double[] closes, int horizonBars, double seuilUp, double seuilDown) {
+        int n = closes.length - horizonBars;
+        int[] labels = new int[n];
+        for (int i = 0; i < n; i++) {
+            double delta = closes[i + horizonBars] - closes[i];
+            if (delta > seuilUp) {
+                labels[i] = 2; // UP
+            } else if (delta < -seuilDown) {
+                labels[i] = 0; // DOWN
+            } else {
+                labels[i] = 1; // FLAT
+            }
+        }
+        return labels;
+    }
+
+    /**
+     * Encode les labels en one-hot (ex: 2 -> [0,0,1])
+     */
+    public double[][] encodeOneHot(int[] labels, int numClasses) {
+        double[][] oneHot = new double[labels.length][numClasses];
+        for (int i = 0; i < labels.length; i++) {
+            oneHot[i][labels[i]] = 1.0;
+        }
+        return oneHot;
+    }
 }

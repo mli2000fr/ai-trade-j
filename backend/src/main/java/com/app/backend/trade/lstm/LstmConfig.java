@@ -157,7 +157,7 @@ public class LstmConfig {
                 normalizationScope = props.getProperty("normalizationScope", "window");
                 normalizationMethod = props.getProperty("normalizationMethod", "auto");
                 swingTradeType = props.getProperty("swingTradeType", "range");
-                numLstmLayers = Integer.parseInt(props.getProperty("numLstmLayers", "1"));
+                numLstmLayers = Integer.parseInt(props.getProperty("numLstmLayers", "2"));
                 bidirectional = Boolean.parseBoolean(props.getProperty("bidirectional", "false"));
                 attention = Boolean.parseBoolean(props.getProperty("attention", "false"));
                 horizonBars = Integer.parseInt(props.getProperty("horizonBars", "5"));
