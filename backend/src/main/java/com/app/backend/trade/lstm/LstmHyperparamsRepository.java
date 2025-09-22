@@ -17,7 +17,11 @@ public class LstmHyperparamsRepository {
     }
 
     public void saveHyperparams(String symbol, LstmConfig config) {
-        String sql = "REPLACE INTO lstm_hyperparams (symbol, window_size, lstm_neurons, dropout_rate, learning_rate, num_epochs, patience, min_delta, k_folds, optimizer, l1, l2, normalization_scope, normalization_method, swing_trade_type, num_layers, bidirectional, attention, features, updated_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+        String sql = "REPLACE INTO lstm_hyperparams (symbol, window_size, lstm_neurons, dropout_rate, learning_rate, " +
+                "num_epochs, patience, min_delta, k_folds, optimizer, l1, l2, normalization_scope, " +
+                "normalization_method, swing_trade_type, num_layers, bidirectional, attention, features, " +
+                "threshold_type, threshold_k, limit_prediction_pct, updated_date) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
         jdbcTemplate.update(sql,
             symbol,
             config.getWindowSize(),
@@ -37,7 +41,10 @@ public class LstmHyperparamsRepository {
             config.getNumLstmLayers(),
             config.isBidirectional(),
             config.isAttention(),
-            new Gson().toJson(config.getFeatures())
+            new Gson().toJson(config.getFeatures()),
+                    config.getThresholdType(),
+                    config.getThresholdK(),
+                config.getLimitPredictionPct()
         );
     }
 
@@ -69,6 +76,10 @@ public class LstmHyperparamsRepository {
         config.setBidirectional(rs.getBoolean("bidirectional"));
         config.setAttention(rs.getBoolean("attention"));
         config.setHorizonBars(rs.getInt("horizon_bars"));
+        config.setThresholdK(rs.getDouble("threshold_k"));
+        config.setThresholdType(rs.getString("threshold_type"));
+        config.setHorizonBars(rs.getInt("horizon_bars"));
+        config.setLimitPredictionPct(rs.getDouble("limit_prediction_pct"));
         config.setNormalizationScope(rs.getString("normalization_scope"));
         config.setNormalizationMethod(rs.getString("normalization_method") != null ? rs.getString("normalization_method") : "auto");
         config.setSwingTradeType(rs.getString("swing_trade_type") != null ? rs.getString("swing_trade_type") : "range");

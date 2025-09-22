@@ -135,6 +135,21 @@ public class LstmConfig {
     private int horizonBars = 5; // Par défaut 5, configurable
 
     /**
+     * Type de seuil swing trade : "ATR" ou "returns" (volatilité des log-returns)
+     */
+    private String thresholdType = "ATR";
+
+    /**
+     * Coefficient multiplicateur pour le seuil (k)
+     */
+    private double thresholdK = 1.0;
+
+    /**
+     * Pourcentage de limitation de la prédiction autour du close (ex: 0.1 pour ±10%). 0 = désactivé.
+     */
+    private double limitPredictionPct = 0.0;
+
+    /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
      * @throws RuntimeException si le fichier de configuration ne peut pas être chargé
      */
@@ -161,6 +176,9 @@ public class LstmConfig {
                 bidirectional = Boolean.parseBoolean(props.getProperty("bidirectional", "false"));
                 attention = Boolean.parseBoolean(props.getProperty("attention", "false"));
                 horizonBars = Integer.parseInt(props.getProperty("horizonBars", "5"));
+                thresholdType = props.getProperty("thresholdType", "ATR");
+                thresholdK = Double.parseDouble(props.getProperty("thresholdK", "1.0"));
+                limitPredictionPct = Double.parseDouble(props.getProperty("limitPredictionPct", "0.0"));
             }
             optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
@@ -192,6 +210,9 @@ public class LstmConfig {
         bidirectional = rs.getBoolean("bidirectional");
         attention = rs.getBoolean("attention");
         horizonBars = rs.getInt("horizon_bars");
+        thresholdType = rs.getString("threshold_type") != null ? rs.getString("threshold_type") : "ATR";
+        thresholdK = rs.getDouble("threshold_k");
+        limitPredictionPct = rs.getDouble("limit_prediction_pct");
     }
 
     /**

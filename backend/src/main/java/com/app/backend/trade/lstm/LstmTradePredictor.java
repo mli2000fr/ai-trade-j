@@ -736,22 +736,45 @@ public class LstmTradePredictor {
         }
     }
 
-    public double computeSwingTradeThreshold(BarSeries series) {
-        double[] closes = extractCloseValues(series);
-        if (closes.length < 2) return 0.0;
-        double avgPrice = java.util.Arrays.stream(closes).average().orElse(0.0);
-        double volatility = 0.0;
-        for (int i = 1; i < closes.length; i++) {
-            volatility += Math.abs(closes[i] - closes[i-1]);
+    /**
+     * Calcule le seuil swing trade selon la config : ATR(14) ou std des log-returns
+     */
+    public double computeSwingTradeThreshold(BarSeries series, LstmConfig config) {
+        double k = config.getThresholdK();
+        String type = config.getThresholdType();
+        if ("ATR".equalsIgnoreCase(type)) {
+            org.ta4j.core.indicators.ATRIndicator atr = new org.ta4j.core.indicators.ATRIndicator(series, 14);
+            double lastATR = atr.getValue(series.getEndIndex()).doubleValue();
+            double lastClose = series.getBar(series.getEndIndex()).getClosePrice().doubleValue();
+            return k * lastATR / lastClose; // ATR en % du prix
+        } else if ("returns".equalsIgnoreCase(type)) {
+            double[] closes = extractCloseValues(series);
+            if (closes.length < 2) return 0.0;
+            double[] logReturns = new double[closes.length - 1];
+            for (int i = 1; i < closes.length; i++) {
+                logReturns[i - 1] = Math.log(closes[i] / closes[i - 1]);
+            }
+            double mean = java.util.Arrays.stream(logReturns).average().orElse(0.0);
+            double std = Math.sqrt(java.util.Arrays.stream(logReturns).map(r -> Math.pow(r - mean, 2)).sum() / logReturns.length);
+            return k * std;
+        } else {
+            // fallback : ancienne méthode
+            double[] closes = extractCloseValues(series);
+            if (closes.length < 2) return 0.0;
+            double avgPrice = java.util.Arrays.stream(closes).average().orElse(0.0);
+            double volatility = 0.0;
+            for (int i = 1; i < closes.length; i++) {
+                volatility += Math.abs(closes[i] - closes[i-1]);
+            }
+            volatility /= (closes.length - 1);
+            double threshold = Math.max(avgPrice * 0.01, volatility);
+            return threshold;
         }
-        volatility /= (closes.length - 1);
-        double threshold = Math.max(avgPrice * 0.01, volatility);
-        return threshold;
     }
 
     public PreditLsdm getPredit(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers) {
         model = ensureModelWindowSize(model, config.getFeatures().size(), config);
-        double th = computeSwingTradeThreshold(series);
+        double th = computeSwingTradeThreshold(series, config);
         double predicted = predictNextCloseWithScalerSet(symbol, series, config, model, scalers);
         predicted = Math.round(predicted * 1000.0) / 1000.0;
         double[] closes = extractCloseValues(series);

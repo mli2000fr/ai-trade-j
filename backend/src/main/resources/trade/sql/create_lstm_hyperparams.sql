@@ -19,5 +19,8 @@ CREATE TABLE trade_ai.lstm_hyperparams (
     normalization_method VARCHAR(32) DEFAULT 'minmax',
     swing_trade_type VARCHAR(32) DEFAULT 'minmax',
     features VARCHAR(255),
+    threshold_type VARCHAR(32),
+    threshold_k DOUBLE,
+    limit_prediction_pct Doubole,
     updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

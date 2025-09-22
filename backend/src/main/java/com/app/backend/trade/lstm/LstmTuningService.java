@@ -102,7 +102,7 @@ public class LstmTuningService {
                 double[] closes = lstmTradePredictor.extractCloseValues(series);
                 double lastClose = closes[closes.length - 1];
                 double delta = predicted - lastClose;
-                double th = lstmTradePredictor.computeSwingTradeThreshold(series);
+                double th = lstmTradePredictor.computeSwingTradeThreshold(series, config);
                 String direction;
                 if (delta > th) {
                     direction = "up";
@@ -205,7 +205,7 @@ public class LstmTuningService {
             double[] closes = lstmTradePredictor.extractCloseValues(series);
             double lastClose = closes[closes.length - 1];
             double delta = predicted - lastClose;
-            double th = lstmTradePredictor.computeSwingTradeThreshold(series);
+            double th = lstmTradePredictor.computeSwingTradeThreshold(series, config);
             String direction;
             if (delta > th) {
                 direction = "up";
