@@ -32,6 +32,23 @@ public class LstmTuningService {
 
     private final ConcurrentHashMap<String, TuningProgress> tuningProgressMap = new ConcurrentHashMap<>();
 
+    // Structure de reporting centralisé des exceptions tuning
+    public static class TuningExceptionReportEntry {
+        public String symbol;
+        public LstmConfig config;
+        public String message;
+        public String stacktrace;
+        public long timestamp;
+        public TuningExceptionReportEntry(String symbol, LstmConfig config, String message, String stacktrace, long timestamp) {
+            this.symbol = symbol;
+            this.config = config;
+            this.message = message;
+            this.stacktrace = stacktrace;
+            this.timestamp = timestamp;
+        }
+    }
+    private final java.util.concurrent.ConcurrentLinkedQueue<TuningExceptionReportEntry> tuningExceptionReport = new java.util.concurrent.ConcurrentLinkedQueue<>();
+
     public LstmTuningService(LstmTradePredictor lstmTradePredictor, LstmHyperparamsRepository hyperparamsRepository) {
         this.lstmTradePredictor = lstmTradePredictor;
         this.hyperparamsRepository = hyperparamsRepository;
@@ -39,6 +56,10 @@ public class LstmTuningService {
 
     public ConcurrentHashMap<String, TuningProgress> getTuningProgressMap() {
         return tuningProgressMap;
+    }
+
+    public java.util.List<TuningExceptionReportEntry> getTuningExceptionReport() {
+        return new java.util.ArrayList<>(tuningExceptionReport);
     }
 
     /**
@@ -147,6 +168,8 @@ public class LstmTuningService {
                 progress.status = "erreur";
                 progress.lastUpdate = System.currentTimeMillis();
                 logger.error("Erreur lors de la récupération du résultat de tuning : {}", e.getMessage());
+                String stack = e.getCause() != null ? org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace(e.getCause()) : org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace(e);
+                tuningExceptionReport.add(new TuningExceptionReportEntry(symbol, null, e.getMessage(), stack, System.currentTimeMillis()));
             }
         }
         long endSymbol = System.currentTimeMillis();
@@ -192,23 +215,33 @@ public class LstmTuningService {
             long startConfig = System.currentTimeMillis();
             LstmConfig config = grid.get(i);
             logger.info("[TUNING] [{}] Début config {}/{}", symbol, i+1, grid.size());
-            double score = useTimeSeriesCV
-                ? lstmTradePredictor.crossValidateLstmTimeSeriesSplit(series, config)
-                : lstmTradePredictor.crossValidateLstm(series, config);
-            int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
-            MultiLayerNetwork model = lstmTradePredictor.initModel(
-                numFeatures,
-                1,
-                config.getLstmNeurons(),
-                config.getDropoutRate(),
-                config.getLearningRate(),
-                config.getOptimizer(),
-                config.getL1(),
-                config.getL2(),
-                config, true
-            );
-            LstmTradePredictor.TrainResult trainResult = lstmTradePredictor.trainLstmWithScalers(series, config, model);
-            model = trainResult.model;
+            double score = Double.POSITIVE_INFINITY;
+            MultiLayerNetwork model = null;
+            LstmTradePredictor.TrainResult trainResult = null;
+            try {
+                score = useTimeSeriesCV
+                    ? lstmTradePredictor.crossValidateLstmTimeSeriesSplit(series, config)
+                    : lstmTradePredictor.crossValidateLstm(series, config);
+                int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
+                model = lstmTradePredictor.initModel(
+                    numFeatures,
+                    1,
+                    config.getLstmNeurons(),
+                    config.getDropoutRate(),
+                    config.getLearningRate(),
+                    config.getOptimizer(),
+                    config.getL1(),
+                    config.getL2(),
+                    config, true
+                );
+                trainResult = lstmTradePredictor.trainLstmWithScalers(series, config, model);
+                model = trainResult.model;
+            } catch (Exception e) {
+                logger.error("Erreur lors du tuning config {}/{} : {}", i+1, grid.size(), e.getMessage());
+                String stack = org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace(e);
+                tuningExceptionReport.add(new TuningExceptionReportEntry(symbol, config, e.getMessage(), stack, System.currentTimeMillis()));
+                continue;
+            }
             double rmse = Math.sqrt(score);
             double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model);
             double[] closes = lstmTradePredictor.extractCloseValues(series);
