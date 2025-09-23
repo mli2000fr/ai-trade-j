@@ -111,7 +111,16 @@ public class LstmTuningService {
                 } else {
                     direction = "stable";
                 }
-                hyperparamsRepository.saveTuningMetrics(symbol, config, score, rmse, direction);
+                // Calcul des métriques trading sur le jeu de test
+                double[] tradingMetrics = lstmTradePredictor.calculateTradingMetrics(series, config, model);
+                double profitTotal = tradingMetrics[0];
+                int numTrades = (int) tradingMetrics[1];
+                double profitFactor = tradingMetrics[2];
+                double winRate = tradingMetrics[3];
+                double maxDrawdown = tradingMetrics[4];
+                // Sauvegarde des métriques
+                hyperparamsRepository.saveTuningMetrics(symbol, config, score, rmse, direction,
+                    profitTotal, profitFactor, winRate, maxDrawdown, numTrades);
                 long endConfig = System.currentTimeMillis();
                 logger.info("[TUNING] [{}] Fin config {}/{} | MSE={}, RMSE={}, direction={}, durée={} ms", symbol, configIndex, grid.size(), score, rmse, direction, (endConfig - startConfig));
                 // Mise à jour du suivi d'avancement
@@ -214,7 +223,16 @@ public class LstmTuningService {
             } else {
                 direction = "stable";
             }
-            hyperparamsRepository.saveTuningMetrics(symbol, config, score, rmse, direction);
+            // Calcul des métriques trading sur le jeu de test
+            double[] tradingMetrics = lstmTradePredictor.calculateTradingMetrics(series, config, model);
+            double profitTotal = tradingMetrics[0];
+            int numTrades = (int) tradingMetrics[1];
+            double profitFactor = tradingMetrics[2];
+            double winRate = tradingMetrics[3];
+            double maxDrawdown = tradingMetrics[4];
+            // Sauvegarde des métriques
+            hyperparamsRepository.saveTuningMetrics(symbol, config, score, rmse, direction,
+                profitTotal, profitFactor, winRate, maxDrawdown, numTrades);
             long endConfig = System.currentTimeMillis();
             logger.info("[TUNING] [{}] Fin config {} | MSE={}, RMSE={}, direction={}, durée={} ms", symbol, grid.size(), score, rmse, direction, (endConfig - startConfig));
             // Mise à jour du suivi d'avancement
