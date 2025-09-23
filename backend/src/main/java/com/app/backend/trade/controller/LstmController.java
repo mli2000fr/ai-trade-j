@@ -2,6 +2,9 @@ package com.app.backend.trade.controller;
 
 import com.app.backend.trade.lstm.LstmTuningService;
 import com.app.backend.trade.model.PreditLsdm;
+import org.nd4j.linalg.factory.Nd4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,6 +23,7 @@ public class LstmController {
 
     @Autowired
     private LstmHelper lsdmHelper;
+    private static final Logger logger = LoggerFactory.getLogger(LstmController.class);
 
     /**
      * Lance l'entraînement du modèle LSTM pour un symbole donné.
@@ -47,6 +51,9 @@ public class LstmController {
 
     @GetMapping("/tuneAllSymbols")
     public boolean tuneAllSymbols() {
+        logger.info("dddddddddddddd -> " + org.nd4j.linalg.factory.Nd4j.getExecutioner().getClass().getSimpleName());
+        logger.info("Backend: " + Nd4j.getExecutioner().getClass().getSimpleName());
+        logger.info("Blas Vendor: " + Nd4j.factory().blas().getBlasVendor());
         lsdmHelper.tuneAllSymbols();
         return true;
     }

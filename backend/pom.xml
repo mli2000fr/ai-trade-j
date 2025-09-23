@@ -28,6 +28,16 @@
                 <enabled>true</enabled>
             </snapshots>
         </repository>
+        <repository>
+            <id>sonatype</id>
+            <name>Sonatype OSSRH</name>
+            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+        </repository>
+        <repository>
+            <id>deeplearning4j</id>
+            <name>Deeplearning4j Repository</name>
+            <url>https://repo.deeplearning4j.org/</url>
+        </repository>
     </repositories>
     <dependencies>
         <dependency>
@@ -72,11 +82,11 @@
             <artifactId>deeplearning4j-datasets</artifactId>
             <version>1.0.0-M2.1</version>
         </dependency>
-        <dependency>
+        <!--<dependency>
             <groupId>org.nd4j</groupId>
             <artifactId>nd4j-native-platform</artifactId>
             <version>1.0.0-M2.1</version>
-        </dependency>
+        </dependency>-->
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
@@ -104,6 +114,18 @@
             <groupId>org.threeten</groupId>
             <artifactId>threetenbp</artifactId>
             <version>1.5.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.nd4j</groupId>
+            <artifactId>nd4j-cuda-11.6</artifactId>
+            <version>1.0.0-M2.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.nd4j</groupId>
+            <artifactId>nd4j-cuda-11.6</artifactId>
+            <version>1.0.0-M2.1</version>
+            <classifier>windows-x86_64-cudnn</classifier>
         </dependency>
     </dependencies>
     <build>
