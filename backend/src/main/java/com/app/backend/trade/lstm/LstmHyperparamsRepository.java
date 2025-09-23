@@ -88,8 +88,9 @@ public class LstmHyperparamsRepository {
     }
 
     // Sauvegarde des métriques de tuning pour chaque config testée
-    public void saveTuningMetrics(String symbol, LstmConfig config, double mse, double rmse, String direction) {
-        String sql = "INSERT INTO lstm_tuning_metrics (symbol, window_size, lstm_neurons, dropout_rate, learning_rate, l1, l2, num_epochs, patience, min_delta, optimizer, normalization_scope, normalization_method, swing_trade_type, features, mse, rmse, direction, horizon_bars, tested_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+    public void saveTuningMetrics(String symbol, LstmConfig config, double mse, double rmse, String direction,
+                                  double profitTotal, double profitFactor, double winRate, double maxDrawdown, int numTrades) {
+        String sql = "INSERT INTO lstm_tuning_metrics (symbol, window_size, lstm_neurons, dropout_rate, learning_rate, l1, l2, num_epochs, patience, min_delta, optimizer, normalization_scope, normalization_method, swing_trade_type, features, mse, rmse, direction, horizon_bars, profit_total, profit_factor, win_rate, max_drawdown, num_trades, tested_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
         jdbcTemplate.update(sql,
             symbol,
             config.getWindowSize(),
@@ -109,7 +110,12 @@ public class LstmHyperparamsRepository {
             mse,
             rmse,
             direction,
-            config.getHorizonBars()
+            config.getHorizonBars(),
+            profitTotal,
+            profitFactor,
+            winRate,
+            maxDrawdown,
+            numTrades
         );
     }
 
