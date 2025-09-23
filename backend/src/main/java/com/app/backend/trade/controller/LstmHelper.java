@@ -10,6 +10,8 @@ import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.ta4j.core.BarSeries;
 import java.io.IOException;
 import java.util.Arrays;
@@ -184,6 +186,11 @@ public class LstmHelper {
         String sql = "select symbol from best_in_out_single_strategy s where s.avg_pnl > 0 AND s.profit_factor > 1 AND s.win_rate > 0.5 AND s.max_drawdown < 0.2 AND s.sharpe_ratio > 1 AND s.rendement > 0.05";
         sql += " ORDER BY " + orderBy + " DESC";
         return jdbcTemplate.queryForList(sql, String.class);
+    }
+
+
+    public List<LstmTuningService.TuningExceptionReportEntry> getTuningExceptionReport() {
+        return lstmTuningService.getTuningExceptionReport();
     }
 
 }

@@ -1,10 +1,12 @@
 package com.app.backend.trade.controller;
 
+import com.app.backend.trade.lstm.LstmTuningService;
 import com.app.backend.trade.model.PreditLsdm;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
  * Contrôleur REST pour la gestion des opérations LSTM (entraînement et prédiction).
@@ -58,5 +60,14 @@ public class LstmController {
     public boolean tuneAllSymbolsBis() {
         lsdmHelper.tuneAllSymbolsBis();
         return true;
+    }
+
+    /**
+     * Endpoint REST pour récupérer le reporting centralisé des erreurs de tuning LSTM
+     */
+    @GetMapping("/tuning-exceptions")
+    @ResponseBody
+    public List<LstmTuningService.TuningExceptionReportEntry> getTuningExceptionReport() {
+        return lsdmHelper.getTuningExceptionReport();
     }
 }
