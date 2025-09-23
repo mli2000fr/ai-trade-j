@@ -22,6 +22,8 @@ public class StrategieBackTest {
     public final static double RISK_PER_TRADE = 0.15;    // Risque par trade de 1% (plus conservateur)
     public final static double STOP_LOSS_PCT = 0.05; // Stop loss à 2% (plus serré)
     public final static double TAKE_PROFIL_PCT = 0.1;    // Take profit à 6% (ratio risque/récompense 1:3)
+    public final static double FEE_PCT = 0.0001;
+    public final static double SLIP_PAGE_PCT = 0.0001;
 
     // Backtest générique pour une stratégie TradeStrategy (rendement simple)
     private double backtestStrategySimple(TradeStrategy strategy, BarSeries series) {

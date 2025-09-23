@@ -10,6 +10,9 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.app.backend.trade.strategy.StrategieBackTest.FEE_PCT;
+import static com.app.backend.trade.strategy.StrategieBackTest.SLIP_PAGE_PCT;
+
 /**
  * Service de tuning des hyperparamètres LSTM pour le trading.
  */
@@ -133,7 +136,7 @@ public class LstmTuningService {
                     direction = "stable";
                 }
                 // Calcul des métriques trading sur le jeu de test
-                double[] tradingMetrics = lstmTradePredictor.calculateTradingMetrics(series, config, model);
+                double[] tradingMetrics = lstmTradePredictor.calculateTradingMetricsAdvanced(series, config, model,  FEE_PCT, SLIP_PAGE_PCT);
                 double profitTotal = tradingMetrics[0];
                 int numTrades = (int) tradingMetrics[1];
                 double profitFactor = tradingMetrics[2];
@@ -257,7 +260,7 @@ public class LstmTuningService {
                 direction = "stable";
             }
             // Calcul des métriques trading sur le jeu de test
-            double[] tradingMetrics = lstmTradePredictor.calculateTradingMetrics(series, config, model);
+            double[] tradingMetrics = lstmTradePredictor.calculateTradingMetricsAdvanced(series, config, model,  FEE_PCT, SLIP_PAGE_PCT);
             double profitTotal = tradingMetrics[0];
             int numTrades = (int) tradingMetrics[1];
             double profitFactor = tradingMetrics[2];
