@@ -24,10 +24,6 @@ public class LstmController {
     /**
      * Lance l'entraînement du modèle LSTM pour un symbole donné.
      * @param symbol le symbole à entraîner (ex : "BTCUSDT")
-     * @param windowSize la taille de la fenêtre pour le LSTM
-     * @param numEpochs le nombre d'epochs pour l'entraînement
-     * @param learningRate le taux d'apprentissage
-     * @param optimizer le nom de l'optimiseur (ex : "adam")
      * @return message de confirmation
      */
     @GetMapping("/train")

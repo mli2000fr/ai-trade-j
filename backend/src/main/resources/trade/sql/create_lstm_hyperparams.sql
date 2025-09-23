@@ -21,6 +21,6 @@ CREATE TABLE trade_ai.lstm_hyperparams (
     features VARCHAR(255),
     threshold_type VARCHAR(32),
     threshold_k DOUBLE,
-    limit_prediction_pct Doubole,
+    limit_prediction_pct DOUBLE,
     updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

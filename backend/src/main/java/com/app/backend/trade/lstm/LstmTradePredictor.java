@@ -103,11 +103,24 @@ public class LstmTradePredictor {
             .nOut(Math.max(16, lstmNeurons / 4))
             .activation(Activation.RELU)
             .build());
+        // Correction : choix de l'activation et de la loss selon outputSize et classification
+        Activation outputActivation;
+        LossFunctions.LossFunction outputLoss;
+        if (outputSize == 1) {
+            outputActivation = Activation.IDENTITY;
+            outputLoss = LossFunctions.LossFunction.MSE;
+        } else if (classification) {
+            outputActivation = Activation.SOFTMAX;
+            outputLoss = LossFunctions.LossFunction.MCXENT;
+        } else {
+            outputActivation = Activation.IDENTITY;
+            outputLoss = LossFunctions.LossFunction.MSE;
+        }
         listBuilder.layer(new RnnOutputLayer.Builder()
             .nIn(Math.max(16, lstmNeurons / 4))
             .nOut(outputSize)
-            .activation(classification ? Activation.SOFTMAX : Activation.IDENTITY)
-            .lossFunction(classification ? LossFunctions.LossFunction.MCXENT : LossFunctions.LossFunction.MSE)
+            .activation(outputActivation)
+            .lossFunction(outputLoss)
             .build());
         MultiLayerConfiguration conf = listBuilder.build();
         MultiLayerNetwork model = new MultiLayerNetwork(conf);
