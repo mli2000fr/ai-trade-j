@@ -15,6 +15,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 import com.app.backend.trade.model.PreditLsdm;
 import com.app.backend.trade.model.SignalType;
@@ -1455,12 +1456,15 @@ public class LstmTradePredictor {
 
     /**
      * Calcule les métriques de performance trading à partir des prédictions LSTM sur le jeu de test.
+     * Ajout : gestion des frais, slippage, backtest multi-symboles, validation hors échantillon.
      * @param series la série temporelle des barres
      * @param config la configuration LSTM
      * @param model le modèle LSTM entraîné
-     * @return un tableau contenant : [profit total, nombre de trades, taux de réussite, drawdown max, profit factor]
+     * @param feePct pourcentage de frais par trade (ex: 0.001 = 0.1%)
+     * @param slippagePct pourcentage de slippage par trade (ex: 0.001 = 0.1%)
+     * @return un tableau contenant : [profit total, nombre de trades, profit factor, win rate, drawdown max, wins, losses]
      */
-    public double[] calculateTradingMetrics(BarSeries series, LstmConfig config, MultiLayerNetwork model) {
+    public double[] calculateTradingMetricsAdvanced(BarSeries series, LstmConfig config, MultiLayerNetwork model, double feePct, double slippagePct) {
         double[] closes = extractCloseValues(series);
         int windowSize = config.getWindowSize();
         int numSeq = closes.length - windowSize;
@@ -1488,8 +1492,10 @@ public class LstmTradePredictor {
         for (int i = 0; i < predictions.size(0); i++) {
             double pred = predictions.getDouble(i);
             double close = closes[i + windowSize];
+            double entryPrice = close;
+            double fee = entryPrice * feePct;
+            double slip = entryPrice * slippagePct;
             if (pred > 0.5) {
-                double entryPrice = close;
                 double stopLoss = entryPrice * (1 - stopLossPct);
                 double takeProfit = entryPrice * (1 + takeProfitPct);
                 numTrades++;
@@ -1497,20 +1503,19 @@ public class LstmTradePredictor {
                     close = closes[j + windowSize];
                     if (close <= stopLoss) {
                         losses++;
-                        double loss = positionSize * (entryPrice - close);
+                        double loss = positionSize * (entryPrice - close - slip) - fee;
                         totalProfit -= loss;
                         sumLosses += loss;
                         break;
                     } else if (close >= takeProfit) {
                         wins++;
-                        double gain = positionSize * (close - entryPrice);
+                        double gain = positionSize * (close - entryPrice - slip) - fee;
                         totalProfit += gain;
                         sumGains += gain;
                         break;
                     }
                 }
             } else if (pred < -0.5) {
-                double entryPrice = close;
                 double stopLoss = entryPrice * (1 + stopLossPct);
                 double takeProfit = entryPrice * (1 - takeProfitPct);
                 numTrades++;
@@ -1518,13 +1523,13 @@ public class LstmTradePredictor {
                     close = closes[j + windowSize];
                     if (close >= stopLoss) {
                         losses++;
-                        double loss = positionSize * (close - entryPrice);
+                        double loss = positionSize * (close - entryPrice - slip) - fee;
                         totalProfit -= loss;
                         sumLosses += loss;
                         break;
                     } else if (close <= takeProfit) {
                         wins++;
-                        double gain = positionSize * (entryPrice - close);
+                        double gain = positionSize * (entryPrice - close - slip) - fee;
                         totalProfit += gain;
                         sumGains += gain;
                         break;
@@ -1534,6 +1539,101 @@ public class LstmTradePredictor {
             // Calcul du drawdown max
             if (totalProfit < maxDrawdown) {
                 maxDrawdown = totalProfit;
+            }
+        }
+        double profitFactor = sumLosses != 0.0 ? sumGains / Math.abs(sumLosses) : 0.0;
+        double winRate = numTrades > 0 ? (double) wins / numTrades : 0.0;
+        return new double[] { totalProfit, numTrades, profitFactor, winRate, maxDrawdown, wins, losses };
+    }
+
+    /**
+     * Backtest multi-symboles : agrège les métriques sur une liste de séries.
+     */
+    public double[][] backtestMultiSymbol(List<BarSeries> seriesList, LstmConfig config, MultiLayerNetwork model, double feePct, double slippagePct) {
+        double[][] results = new double[seriesList.size()][];
+        for (int i = 0; i < seriesList.size(); i++) {
+            results[i] = calculateTradingMetricsAdvanced(seriesList.get(i), config, model, feePct, slippagePct);
+        }
+        return results;
+    }
+
+    /**
+     * Validation business hors échantillon : génère les signaux sur la période test et calcule les métriques business.
+     */
+    public double[] validateOutOfSample(BarSeries series, LstmConfig config, MultiLayerNetwork model, double feePct, double slippagePct) {
+        double[] closes = extractCloseValues(series);
+        int windowSize = config.getWindowSize();
+        int numSeq = closes.length - windowSize;
+        if (numSeq <= 0) {
+            logger.warn("Pas assez de données pour la validation OOS (windowSize={}, closes={})", windowSize, closes.length);
+            return new double[] { Double.NaN, 0, 0, 0, 0, 0, 0 };
+        }
+        // Split train/test (80/20)
+        int splitIdx = (int)(numSeq * 0.8);
+        if (splitIdx == numSeq) splitIdx = numSeq - 1;
+        double[][][] sequences = createSequences(closes, windowSize);
+        double[][][] inputSeq = transposeSequencesMulti(sequences);
+        org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(java.util.Arrays.copyOfRange(inputSeq, splitIdx, numSeq));
+        double[] closesTest = java.util.Arrays.copyOfRange(closes, splitIdx + windowSize, closes.length);
+        org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
+        // Génération des signaux et calcul des métriques sur la période test
+        double capital = INITIAL_CAPITAL;
+        double positionSize = 1.0;
+        double stopLossPct = STOP_LOSS_PCT;
+        double takeProfitPct = TAKE_PROFIL_PCT;
+        double maxDrawdown = 0.0;
+        double totalProfit = 0.0;
+        int numTrades = 0;
+        int wins = 0;
+        int losses = 0;
+        double sumGains = 0.0;
+        double sumLosses = 0.0;
+        for (int i = 0; i < predictions.size(0); i++) {
+            double pred = predictions.getDouble(i);
+            double close = closesTest[i];
+            double entryPrice = close;
+            double fee = entryPrice * feePct;
+            double slip = entryPrice * slippagePct;
+            if (pred > 0.5) {
+                double stopLoss = entryPrice * (1 - stopLossPct);
+                double takeProfit = entryPrice * (1 + takeProfitPct);
+                numTrades++;
+                for (int j = i + 1; j < predictions.size(0); j++) {
+                    close = closesTest[j];
+                    if (close <= stopLoss) {
+                        losses++;
+                        double loss = positionSize * (entryPrice - close - slip) - fee;
+                        totalProfit -= loss;
+                        sumLosses += loss;
+                        break;
+                    } else if (close >= takeProfit) {
+                        wins++;
+                        double gain = positionSize * (close - entryPrice - slip) - fee;
+                        totalProfit += gain;
+                        sumGains += gain;
+                        break;
+                    }
+                }
+            } else if (pred < -0.5) {
+                double stopLoss = entryPrice * (1 + stopLossPct);
+                double takeProfit = entryPrice * (1 - takeProfitPct);
+                numTrades++;
+                for (int j = i + 1; j < predictions.size(0); j++) {
+                    close = closesTest[j];
+                    if (close >= stopLoss) {
+                        losses++;
+                        double loss = positionSize * (close - entryPrice - slip) - fee;
+                        totalProfit -= loss;
+                        sumLosses += loss;
+                        break;
+                    } else if (close <= takeProfit) {
+                        wins++;
+                        double gain = positionSize * (entryPrice - close - slip) - fee;
+                        totalProfit += gain;
+                        sumGains += gain;
+                        break;
+                    }
+                }
             }
         }
         double profitFactor = sumLosses != 0.0 ? sumGains / Math.abs(sumLosses) : 0.0;
