@@ -93,6 +93,9 @@ public class LstmTuningService {
      * @return la meilleure configuration trouvée
      */
     public LstmConfig tuneSymbolMultiThread(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
+        if(isSymbolAlreydyTuned(symbol, jdbcTemplate)){
+            return null;
+        }
         waitForMemory(); // Protection mémoire avant de lancer le tuning
         long startSymbol = System.currentTimeMillis();
         // Suivi d'avancement
@@ -246,7 +249,22 @@ public class LstmTuningService {
         return bestConfig;
     }
 
+    public boolean isSymbolAlreydyTuned(String symbol, JdbcTemplate jdbcTemplate) {
+        String sql = "SELECT COUNT(*) FROM lstm_models WHERE symbol = ?";
+        try {
+            Integer count = jdbcTemplate.queryForObject(sql, Integer.class, symbol);
+            return count != null && count > 0;
+        } catch (Exception e) {
+            logger.error("Erreur lors de la vérification du tuning du symbole {} : {}", symbol, e.getMessage());
+            return false;
+        }
+    }
+
     public LstmConfig tuneSymbol(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
+        if(isSymbolAlreydyTuned(symbol, jdbcTemplate)){
+            return null;
+        }
+
         waitForMemory(); // Protection mémoire avant de lancer le tuning
         long startSymbol = System.currentTimeMillis();
         // Suivi d'avancement

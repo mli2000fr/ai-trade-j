@@ -28,6 +28,8 @@ import org.deeplearning4j.nn.conf.layers.RnnOutputLayer;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.util.ModelSerializer;
 import org.nd4j.linalg.activations.Activation;
+import org.deeplearning4j.nn.conf.WorkspaceMode;
+import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
 import org.nd4j.linalg.lossfunctions.LossFunctions;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -70,6 +72,9 @@ public class LstmTradePredictor {
         );
         builder.l1(l1);
         builder.l2(l2);
+        // Activation des workspaces ND4J pour une meilleure gestion mémoire
+        builder.trainingWorkspaceMode(WorkspaceMode.ENABLED);
+        builder.inferenceWorkspaceMode(WorkspaceMode.ENABLED);
 
         org.deeplearning4j.nn.conf.NeuralNetConfiguration.ListBuilder listBuilder = builder.list();
         int nLayers = config != null ? config.getNumLstmLayers() : 1;
