@@ -231,7 +231,9 @@ public class LstmTradePredictor {
         int numFeatures = features.size();
         model = ensureModelWindowSize(model, numFeatures, config);
 
+        logger.info("[DEBUG] Features utilisés pour le training : {}", features);
         double[][] matrix = extractFeatureMatrix(series, features);
+        logger.info("[DEBUG] Shape de la matrice de features : [{}][{}] (barCount x numFeatures)", matrix.length, matrix[0].length);
         int windowSize = config.getWindowSize();
         int numSeq = matrix.length - windowSize;
         if (numSeq <= 0) {
@@ -1386,7 +1388,7 @@ public class LstmTradePredictor {
         if (splitIdx == numSeq) splitIdx = numSeq - 1;
         // Apprentissage des scalers sur le train uniquement
         ScalerSet scalers = new ScalerSet();
-        for (int f = 0; f < numFeatures; f++) {
+        for ( int f = 0; f < numFeatures; f++) {
             double[] col = new double[splitIdx + windowSize];
             for (int i = 0; i < splitIdx + windowSize; i++) col[i] = matrix[i][f];
             String normType = getFeatureNormalizationType(features.get(f));
