@@ -687,7 +687,7 @@ public class LstmTuningService {
     }
 
     // Limite de threads pour éviter OOM (configurable)
-    private static final int MAX_THREADS = 12; // Peut être ajusté selon la machine
+    private static final int MAX_THREADS = 8; // Peut être ajusté selon la machine
     // Seuil mémoire (80% de la mémoire max JVM)
     private static final double MEMORY_USAGE_THRESHOLD = 0.8;
 
