@@ -178,11 +178,14 @@ public class LstmTuningService {
                     p.testedConfigs.incrementAndGet();
                     p.lastUpdate = System.currentTimeMillis();
                 }
-                return new TuningResult(config, model, score, scalers);
+                // Calcul du score métier
+                double businessScore = computeBusinessScore(profitFactor, winRate, maxDrawdown);
+                return new TuningResult(config, model, score, scalers, profitFactor, winRate, maxDrawdown, businessScore);
             }));
         }
         executor.shutdown();
         int failedConfigs = 0;
+        double bestBusinessScore = Double.NEGATIVE_INFINITY;
         for (int i = 0; i < futures.size(); i++) {
             try {
                 TuningResult result = futures.get(i).get();
@@ -191,8 +194,8 @@ public class LstmTuningService {
                     failedConfigs++;
                     continue;
                 }
-                if (result.score < bestScore) {
-                    bestScore = result.score;
+                if (result.businessScore > bestBusinessScore) {
+                    bestBusinessScore = result.businessScore;
                     bestConfig = result.config;
                     bestModel = result.model;
                     bestScalers = result.scalers;
@@ -263,6 +266,7 @@ public class LstmTuningService {
         MultiLayerNetwork bestModel = null;
         LstmTradePredictor.ScalerSet bestScalers = null;
         int failedConfigs = 0;
+        double bestBusinessScore = Double.NEGATIVE_INFINITY;
         for (int i = 0; i < grid.size(); i++) {
             long startConfig = System.currentTimeMillis();
             LstmConfig config = grid.get(i);
@@ -341,6 +345,13 @@ public class LstmTuningService {
             logger.info("[TUNING] [{}] Fin config {}/{} | MSE={}, RMSE={}, direction={}, durée={} ms", symbol, i+1, grid.size(), score, rmse, direction, (endConfig - startConfig));
             if (score < bestScore) {
                 bestScore = score;
+                bestConfig = config;
+                bestModel = model;
+                bestScalers = trainResult.scalers;
+            }
+            double businessScore = computeBusinessScore(profitFactor, winRate, maxDrawdown);
+            if (businessScore > bestBusinessScore) {
+                bestBusinessScore = businessScore;
                 bestConfig = config;
                 bestModel = model;
                 bestScalers = trainResult.scalers;
@@ -556,17 +567,35 @@ public class LstmTuningService {
         logger.info("[TUNING] Fin tuning multi-symboles | durée totale={} ms", (endAll - startAll));
     }
 
+    /**
+     * Calcule un score métier pour le swing trade en combinant profit factor, win rate et drawdown.
+     * Plus le score est élevé, mieux c'est.
+     */
+    private double computeBusinessScore(double profitFactor, double winRate, double maxDrawdown) {
+        // Exemple de formule : maximise profitFactor et winRate, pénalise le drawdown
+        return profitFactor * winRate / (1.0 + maxDrawdown);
+    }
+
     // Classe interne pour stocker le résultat du tuning
     private static class TuningResult {
         LstmConfig config;
         MultiLayerNetwork model;
         double score;
         LstmTradePredictor.ScalerSet scalers;
-        TuningResult(LstmConfig config, MultiLayerNetwork model, double score, LstmTradePredictor.ScalerSet scalers) {
+        double profitFactor;
+        double winRate;
+        double maxDrawdown;
+        double businessScore;
+        TuningResult(LstmConfig config, MultiLayerNetwork model, double score, LstmTradePredictor.ScalerSet scalers,
+                     double profitFactor, double winRate, double maxDrawdown, double businessScore) {
             this.config = config;
             this.model = model;
             this.score = score;
             this.scalers = scalers;
+            this.profitFactor = profitFactor;
+            this.winRate = winRate;
+            this.maxDrawdown = maxDrawdown;
+            this.businessScore = businessScore;
         }
     }
 }
