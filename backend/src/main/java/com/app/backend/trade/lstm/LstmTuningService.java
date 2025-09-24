@@ -39,10 +39,15 @@ public class LstmTuningService {
     @PostConstruct
     public void initNd4jCuda() {
         try {
+            // Activation cuDNN si disponible
+            System.setProperty("org.deeplearning4j.cudnn.enabled", "true");
             org.nd4j.linalg.factory.Nd4jBackend backend = org.nd4j.linalg.factory.Nd4j.getBackend();
             logger.info("ND4J backend utilisé : {}", backend.getClass().getSimpleName());
             if (!backend.getClass().getSimpleName().toLowerCase().contains("cuda")) {
                 logger.warn("Le backend ND4J n'est pas CUDA ! Le GPU ne sera pas utilisé.");
+                logger.warn("Pour forcer CUDA, lancez la JVM avec : -Dorg.nd4j.linalg.defaultbackend=org.nd4j.linalg.jcublas.JCublasBackend");
+            } else {
+                logger.info("Backend CUDA détecté. Pour de meilleures performances, vérifiez que cuDNN est activé et que la version CUDA/cuDNN est compatible avec ND4J/DL4J.");
             }
         } catch (Exception e) {
             logger.error("Erreur lors de la détection du backend ND4J : {}", e.getMessage());
@@ -353,19 +358,19 @@ public class LstmTuningService {
      */
     public List<LstmConfig> generateSwingTradeGrid() {
         List<LstmConfig> grid = new java.util.ArrayList<>();
-        int[] windowSizes = {10, 20, 30, 40, 60};
-        int[] lstmNeurons = {64, 100, 128, 256, 512};
-        double[] dropoutRates = {0.2, 0.3, 0.4};
-        double[] learningRates = {0.0005, 0.001, 0.002};
-        double[] l1s = {0.0, 0.0001};
-        double[] l2s = {0.0001, 0.001, 0.01};
-        int numEpochs = 300;
-        int patience = 20;
-        double minDelta = 0.0002;
-        int kFolds = 5;
+        int[] windowSizes = {20, 30, 40}; // Fenêtres typiques swing
+        int[] lstmNeurons = {64, 128, 256}; // Taille raisonnable pour swing
+        double[] dropoutRates = {0.2, 0.3};
+        double[] learningRates = {0.0005, 0.001};
+        double[] l1s = {0.0};
+        double[] l2s = {0.0001, 0.001};
+        int numEpochs = 150;
+        int patience = 10;
+        double minDelta = 0.0005;
+        int kFolds = 3;
         String optimizer = "adam";
-        String[] scopes = {"window", "global"};
-        String[] swingTypes = {"range", "breakout", "mean_reversion"};
+        String[] scopes = {"window"};
+        String[] swingTypes = {"range", "mean_reversion"};
         for (String swingType : swingTypes) {
             for (String scope : scopes) {
                 for (int windowSize : windowSizes) {

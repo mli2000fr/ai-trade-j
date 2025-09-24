@@ -321,12 +321,12 @@ public class LstmTradePredictor {
             logger.error("TestOutput contient des NaN, impossible d'évaluer le modèle");
             throw new IllegalArgumentException("TestOutput contient des NaN");
         }
-        int batchSize = config.getBatchSize() > 0 ? config.getBatchSize() : 64;
+        int batchSize = config.getBatchSize() > 0 ? config.getBatchSize() : 256;
         org.nd4j.linalg.dataset.api.iterator.DataSetIterator trainIterator = new org.deeplearning4j.datasets.iterator.AsyncDataSetIterator(
-            new ListDataSetIterator<>(java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput)), batchSize), 2
+            new ListDataSetIterator<>(java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput)), batchSize), 8
         );
         org.nd4j.linalg.dataset.api.iterator.DataSetIterator valIterator = new org.deeplearning4j.datasets.iterator.AsyncDataSetIterator(
-            new ListDataSetIterator<>(java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(valInput, valOutput)), batchSize), 2
+            new ListDataSetIterator<>(java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(valInput, valOutput)), batchSize), 8
         );
         // EarlyStoppingTrainer
         org.deeplearning4j.earlystopping.EarlyStoppingConfiguration<MultiLayerNetwork> esConf = new org.deeplearning4j.earlystopping.EarlyStoppingConfiguration.Builder<MultiLayerNetwork>()

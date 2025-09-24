@@ -150,9 +150,9 @@ public class LstmConfig {
     private double limitPredictionPct = 0.0;
 
     /**
-     * Taille du batch pour l'entraînement (par défaut 64)
+     * Taille du batch pour l'entraînement (par défaut 256)
      */
-    private int batchSize = 64;
+    private int batchSize = 256;
 
     /**
      * Mode de validation croisée : split, timeseries, kfold
@@ -189,7 +189,7 @@ public class LstmConfig {
                 thresholdType = props.getProperty("thresholdType", "ATR");
                 thresholdK = Double.parseDouble(props.getProperty("thresholdK", "1.0"));
                 limitPredictionPct = Double.parseDouble(props.getProperty("limitPredictionPct", "0.0"));
-                batchSize = Integer.parseInt(props.getProperty("batchSize", "64"));
+                batchSize = Integer.parseInt(props.getProperty("batchSize", "256"));
                 cvMode = props.getProperty("cvMode", "split");
             }
             optimizer = props.getProperty("optimizer", "adam");
