@@ -155,6 +155,11 @@ public class LstmConfig {
     private int batchSize = 64;
 
     /**
+     * Mode de validation croisée : split, timeseries, kfold
+     */
+    private String cvMode = "split";
+
+    /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
      * @throws RuntimeException si le fichier de configuration ne peut pas être chargé
      */
@@ -185,6 +190,7 @@ public class LstmConfig {
                 thresholdK = Double.parseDouble(props.getProperty("thresholdK", "1.0"));
                 limitPredictionPct = Double.parseDouble(props.getProperty("limitPredictionPct", "0.0"));
                 batchSize = Integer.parseInt(props.getProperty("batchSize", "64"));
+                cvMode = props.getProperty("cvMode", "split");
             }
             optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
@@ -220,6 +226,7 @@ public class LstmConfig {
         thresholdK = rs.getDouble("threshold_k");
         limitPredictionPct = rs.getDouble("limit_prediction_pct");
         batchSize = rs.getInt("batch_size");
+        cvMode = rs.getString("cv_mode") != null ? rs.getString("cv_mode") : "split";
     }
 
     /**

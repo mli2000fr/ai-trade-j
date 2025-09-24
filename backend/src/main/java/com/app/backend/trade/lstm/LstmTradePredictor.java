@@ -677,8 +677,9 @@ public class LstmTradePredictor {
                 lastSequence[0][j][f] = lastWindow[j][f];
             }
         }
-        double[][][] inputSeq = transposeSequencesMulti(lastSequence); // [1, numFeatures, windowSize]
-        org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(inputSeq);
+        // Correction : transposer pour obtenir [1][numFeatures][windowSize]
+        lastSequence = transposeTimeFeature(lastSequence);
+        org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(lastSequence);
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input); // [1,1,windowSize]
         double predictedNorm = output.getDouble(0, 0, windowSize - 1); // dernier pas de temps
 
@@ -1038,8 +1039,9 @@ public class LstmTradePredictor {
                 lastSequence[0][j][f] = lastWindow[j][f];
             }
         }
-        double[][][] inputSeq = transposeSequencesMulti(lastSequence); // [1, numFeatures, windowSize]
-        org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(inputSeq);
+        // Correction : transposer pour obtenir [1][numFeatures][windowSize]
+        lastSequence = transposeTimeFeature(lastSequence);
+        org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(lastSequence);
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input); // [1,1,windowSize]
         double predictedNorm = output.getDouble(0, 0, windowSize - 1); // dernier pas de temps
 
@@ -1305,6 +1307,19 @@ public class LstmTradePredictor {
         return transposed;
     }
 
+    // Transpose [batch][window][features] -> [batch][features][window] pour l'inférence LSTM DL4J
+    private double[][][] transposeTimeFeature(double[][][] seq) {
+        int batch = seq.length;
+        int time = seq[0].length;
+        int features = seq[0][0].length;
+        double[][][] out = new double[batch][features][time];
+        for (int b = 0; b < batch; b++)
+            for (int t = 0; t < time; t++)
+                for (int f = 0; f < features; f++)
+                    out[b][f][t] = seq[b][t][f];
+        return out;
+    }
+
     // Classe utilitaire pour la normalisation cohérente
     public static class FeatureScaler implements java.io.Serializable {
         public enum Type { MINMAX, ZSCORE }
@@ -1496,9 +1511,19 @@ public class LstmTradePredictor {
             logger.warn("Pas assez de données pour calculer les métriques trading (windowSize={}, closes={})", windowSize, closes.length);
             return new double[] { Double.NaN, 0, 0, 0, 0, 0, 0 };
         }
-        double[][][] sequences = createSequences(closes, windowSize);
-        double[][][] inputSeq = transposeSequencesMulti(sequences); // [numSeq, 1, windowSize]
-        org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(inputSeq);
+        // Correction : gérer multivarié et univarié
+        org.nd4j.linalg.api.ndarray.INDArray testInput;
+        if (config.getFeatures() != null && config.getFeatures().size() > 1) {
+            double[][] matrix = extractFeatureMatrix(series, config.getFeatures());
+            double[][] normMatrix = normalizeMatrix(matrix, config.getFeatures());
+            double[][][] sequences = createSequencesMulti(normMatrix, windowSize); // [numSeq, windowSize, numFeatures]
+            double[][][] sequencesTransposed = transposeSequencesMulti(sequences); // [numSeq, numFeatures, window]
+            testInput = toINDArray(sequencesTransposed);
+        } else {
+            double[][][] sequences = createSequences(closes, windowSize); // [numSeq, windowSize, 1]
+            double[][][] sequencesTransposed = transposeSequencesMulti(sequences); // [numSeq, 1, windowSize]
+            testInput = toINDArray(sequencesTransposed);
+        }
         org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
 
         double capital = INITIAL_CAPITAL;
@@ -1663,5 +1688,90 @@ public class LstmTradePredictor {
         double profitFactor = sumLosses != 0.0 ? sumGains / Math.abs(sumLosses) : 0.0;
         double winRate = numTrades > 0 ? (double) wins / numTrades : 0.0;
         return new double[] { totalProfit, numTrades, profitFactor, winRate, maxDrawdown, wins, losses };
+    }
+
+    /**
+     * Score rapide par split simple train/test (80/20).
+     * Entraîne sur le train, évalue le MSE sur le test.
+     */
+    public double splitScoreLstm(BarSeries series, LstmConfig config) {
+        java.util.List<String> features = config.getFeatures();
+        int numFeatures = features.size();
+        double[][] matrix = extractFeatureMatrix(series, features);
+        int windowSize = config.getWindowSize();
+        int numSeq = matrix.length - windowSize;
+        if (numSeq <= 0) {
+            logger.error("[splitScoreLstm] Pas assez de données (windowSize={}, barCount={})", windowSize, matrix.length);
+            return Double.POSITIVE_INFINITY;
+        }
+        // Split 80/20
+        int splitIdx = (int)(numSeq * 0.8);
+        if (splitIdx == numSeq) splitIdx = numSeq - 1;
+        // Normalisation sur le train uniquement
+        double[][] normMatrix = new double[matrix.length][numFeatures];
+        for (int f = 0; f < numFeatures; f++) {
+            double[] col = new double[splitIdx + windowSize];
+            for (int i = 0; i < splitIdx + windowSize; i++) col[i] = matrix[i][f];
+            String normType = getFeatureNormalizationType(features.get(f));
+            FeatureScaler.Type type = normType.equals("zscore") ? FeatureScaler.Type.ZSCORE : FeatureScaler.Type.MINMAX;
+            FeatureScaler scaler = new FeatureScaler(type);
+            scaler.fit(col);
+            double[] fullCol = new double[matrix.length];
+            for (int i = 0; i < matrix.length; i++) fullCol[i] = matrix[i][f];
+            double[] normCol = scaler.transform(fullCol);
+            for (int i = 0; i < matrix.length; i++) normMatrix[i][f] = normCol[i];
+        }
+        double[][][] sequences = createSequencesMulti(normMatrix, windowSize);
+        double[][][] sequencesTransposed = transposeSequencesMulti(sequences);
+        double[] closes = extractCloseValues(series);
+        double[] labelTrain = new double[splitIdx + windowSize + 1];
+        for (int i = 0; i < splitIdx + windowSize + 1; i++) labelTrain[i] = closes[i];
+        FeatureScaler.Type labelType = config.getNormalizationMethod().equalsIgnoreCase("zscore") ? FeatureScaler.Type.ZSCORE : FeatureScaler.Type.MINMAX;
+        FeatureScaler labelScaler = new FeatureScaler(labelType);
+        labelScaler.fit(labelTrain);
+        double[] normCloses = labelScaler.transform(closes);
+        double[][][] labelSeq = new double[numSeq][1][windowSize];
+        for (int i = 0; i < numSeq; i++) {
+            for (int t = 0; t < windowSize; t++) {
+                labelSeq[i][0][t] = normCloses[i + t + 1];
+            }
+        }
+        double[][][] trainSeq = java.util.Arrays.copyOfRange(sequencesTransposed, 0, splitIdx);
+        double[][][] testSeq = java.util.Arrays.copyOfRange(sequencesTransposed, splitIdx, numSeq);
+        double[][][] trainLabel = java.util.Arrays.copyOfRange(labelSeq, 0, splitIdx);
+        double[][][] testLabel = java.util.Arrays.copyOfRange(labelSeq, splitIdx, numSeq);
+        if (trainSeq.length == 0 || testSeq.length == 0) return Double.POSITIVE_INFINITY;
+        org.nd4j.linalg.api.ndarray.INDArray trainInput = toINDArray(trainSeq);
+        org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLabel);
+        org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(testSeq);
+        org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel);
+        MultiLayerNetwork model = initModel(
+            numFeatures,
+            1,
+            config.getLstmNeurons(),
+            config.getDropoutRate(),
+            config.getLearningRate(),
+            config.getOptimizer(),
+            config.getL1(),
+            config.getL2(),
+            config, true
+        );
+        int patience = config.getPatience();
+        double minDelta = config.getMinDelta();
+        double bestMSE = Double.MAX_VALUE;
+        int epochsWithoutImprovement = 0;
+        for (int epoch = 0; epoch < config.getNumEpochs(); epoch++) {
+            model.fit(new ListDataSetIterator<>(java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput))));
+            org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
+            double mse = org.nd4j.linalg.ops.transforms.Transforms.pow(predictions.sub(testOutput), 2).meanNumber().doubleValue();
+            if (bestMSE - mse > minDelta) {
+                bestMSE = mse;
+                epochsWithoutImprovement = 0;
+            } else {
+                epochsWithoutImprovement++;
+                if (epochsWithoutImprovement >= patience) break;
+            }
+        }
+        return bestMSE;
     }
 }

@@ -245,9 +245,15 @@ public class LstmTuningService {
             MultiLayerNetwork model = null;
             LstmTradePredictor.TrainResult trainResult = null;
             try {
-                score = useTimeSeriesCV
-                    ? lstmTradePredictor.crossValidateLstmTimeSeriesSplit(series, config)
-                    : lstmTradePredictor.crossValidateLstm(series, config);
+                // Sélection du mode de validation selon cvMode
+                String cvMode = config.getCvMode() != null ? config.getCvMode() : "split";
+                if ("timeseries".equalsIgnoreCase(cvMode)) {
+                    score = lstmTradePredictor.crossValidateLstmTimeSeriesSplit(series, config);
+                } else if ("kfold".equalsIgnoreCase(cvMode)) {
+                    score = lstmTradePredictor.crossValidateLstm(series, config);
+                } else { // split simple
+                    score = lstmTradePredictor.splitScoreLstm(series, config);
+                }
                 int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
                 model = lstmTradePredictor.initModel(
                     numFeatures,
@@ -400,18 +406,18 @@ public class LstmTuningService {
      * @param n nombre de configurations à générer
      * @return liste de LstmConfig aléatoires
      */
-    public List<LstmConfig> generateRandomSwingTradeGrid(int n) {
+    public List<LstmConfig> generateRandomSwingTradeGrid(int n, String cvMode) {
         java.util.Random rand = new java.util.Random();
-        int[] windowSizes = {10, 20, 30, 40, 60};
-        int[] lstmNeurons = {64, 100, 128, 256, 512};
-        double[] dropoutRates = {0.2, 0.3, 0.4};
-        double[] learningRates = {0.0005, 0.001, 0.002};
-        double[] l1s = {0.0, 0.0001};
-        double[] l2s = {0.0001, 0.001, 0.01};
-        int numEpochs = 300;
-        int patience = 20;
-        double minDelta = 0.0002;
-        int kFolds = 5;
+        int[] windowSizes = {10, 20, 30};
+        int[] lstmNeurons = {64, 128};
+        double[] dropoutRates = {0.2, 0.3};
+        double[] learningRates = {0.0005, 0.001};
+        double[] l1s = {0.0};
+        double[] l2s = {0.0001, 0.001};
+        int numEpochs = 50;
+        int patience = 5;
+        double minDelta = 0.0005;
+        int kFolds = 3;
         String optimizer = "adam";
         String[] scopes = {"window", "global"};
         String[] swingTypes = {"range", "breakout", "mean_reversion"};
@@ -432,6 +438,8 @@ public class LstmTuningService {
             config.setNormalizationScope(scopes[rand.nextInt(scopes.length)]);
             config.setNormalizationMethod("auto");
             config.setSwingTradeType(swingTypes[rand.nextInt(swingTypes.length)]);
+            // Ajout du mode de validation croisée
+            config.setCvMode(cvMode);
             grid.add(config);
         }
         return grid;

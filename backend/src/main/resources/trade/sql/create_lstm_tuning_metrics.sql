@@ -18,6 +18,7 @@ CREATE TABLE trade_ai.lstm_tuning_metrics (
     mse DOUBLE NOT NULL,
     rmse DOUBLE NOT NULL,
     direction VARCHAR(8) NOT NULL,
+    horizon_bars INT NOT NULL,
     profit_total DOUBLE NOT NULL,
     profit_factor DOUBLE NOT NULL,
     win_rate DOUBLE NOT NULL,

@@ -70,7 +70,7 @@ public class LstmHelper {
         boolean useRandomGrid = true;
         List<LstmConfig> grid;
         if (useRandomGrid) {
-            grid = lstmTuningService.generateRandomSwingTradeGrid(10);
+            grid = lstmTuningService.generateRandomSwingTradeGrid(10, "");
         } else {
             grid = lstmTuningService.generateSwingTradeGrid();
         }
@@ -159,7 +159,7 @@ public class LstmHelper {
         List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
         List<LstmConfig> grid;
         if (useRandomGrid) {
-            grid = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize);
+            grid = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize, "");
         } else {
             grid = lstmTuningService.generateSwingTradeGrid();
         }
@@ -173,7 +173,7 @@ public class LstmHelper {
         List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
         List<LstmConfig> grid;
         if (useRandomGrid) {
-            grid = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize);
+            grid = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize, "");
         } else {
             grid = lstmTuningService.generateSwingTradeGrid();
         }
