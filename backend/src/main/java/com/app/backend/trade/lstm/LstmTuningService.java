@@ -92,7 +92,7 @@ public class LstmTuningService {
      * @param jdbcTemplate accès base
      * @return la meilleure configuration trouvée
      */
-    public LstmConfig tuneSymbolMultiThread(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate, boolean useTimeSeriesCV) {
+    public LstmConfig tuneSymbolMultiThread(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
         long startSymbol = System.currentTimeMillis();
         // Suivi d'avancement
         TuningProgress progress = new TuningProgress();
@@ -137,9 +137,15 @@ public class LstmTuningService {
                 LstmTradePredictor.TrainResult trainResult = lstmTradePredictor.trainLstmWithScalers(series, config, model);
                 model = trainResult.model;
                 LstmTradePredictor.ScalerSet scalers = trainResult.scalers;
-                double score = useTimeSeriesCV
-                    ? lstmTradePredictor.crossValidateLstmTimeSeriesSplit(series, config)
-                    : lstmTradePredictor.crossValidateLstm(series, config);
+                double score = Double.POSITIVE_INFINITY;
+                String cvMode = config.getCvMode() != null ? config.getCvMode() : "split";
+                if ("timeseries".equalsIgnoreCase(cvMode)) {
+                    score = lstmTradePredictor.crossValidateLstmTimeSeriesSplit(series, config);
+                } else if ("kfold".equalsIgnoreCase(cvMode)) {
+                    score = lstmTradePredictor.crossValidateLstm(series, config);
+                } else { // split simple
+                    score = lstmTradePredictor.splitScoreLstm(series, config);
+                }
                 double rmse = Math.sqrt(score);
                 double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model);
                 double[] closes = lstmTradePredictor.extractCloseValues(series);
