@@ -93,6 +93,7 @@ public class LstmTuningService {
      * @return la meilleure configuration trouvée
      */
     public LstmConfig tuneSymbolMultiThread(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
+        waitForMemory(); // Protection mémoire avant de lancer le tuning
         long startSymbol = System.currentTimeMillis();
         // Suivi d'avancement
         TuningProgress progress = new TuningProgress();
@@ -113,15 +114,16 @@ public class LstmTuningService {
         LstmConfig bestConfig = null;
         MultiLayerNetwork bestModel = null;
         LstmTradePredictor.ScalerSet bestScalers = null;
-        int numThreads = Math.min(grid.size(), Runtime.getRuntime().availableProcessors());
+        int numThreads = Math.min(Math.min(grid.size(), Runtime.getRuntime().availableProcessors()), MAX_THREADS);
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
         List<java.util.concurrent.Future<TuningResult>> futures = new java.util.ArrayList<>();
         for (int i = 0; i < grid.size(); i++) {
+            waitForMemory(); // Protection mémoire avant chaque tâche
             final int configIndex = i + 1;
             LstmConfig config = grid.get(i);
             futures.add(executor.submit(() -> {
                 long startConfig = System.currentTimeMillis();
-                logger.info("[TUNING] [{}] | Début config {}/{}", symbol, Thread.currentThread().getName(), configIndex, grid.size());
+                logger.info("[TUNING] [{}] | Début config {}/{}", symbol, Thread.currentThread().getName(), configIndex);
                 int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
                 MultiLayerNetwork model = lstmTradePredictor.initModel(
                     numFeatures,
@@ -245,6 +247,7 @@ public class LstmTuningService {
     }
 
     public LstmConfig tuneSymbol(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
+        waitForMemory(); // Protection mémoire avant de lancer le tuning
         long startSymbol = System.currentTimeMillis();
         // Suivi d'avancement
         TuningProgress progress = new TuningProgress();
@@ -546,13 +549,14 @@ public class LstmTuningService {
      * @param seriesProvider fonction pour obtenir BarSeries par symbole
      */
     public void tuneAllSymbolsMultiThread(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
-        int numThreads = Math.min(symbols.size(), Runtime.getRuntime().availableProcessors());
+        int numThreads = Math.min(Math.min(symbols.size(), Runtime.getRuntime().availableProcessors()), MAX_THREADS);
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
         java.util.concurrent.CompletionService<Void> completionService = new java.util.concurrent.ExecutorCompletionService<>(executor);
         int submitted = 0;
         long startAll = System.currentTimeMillis();
         logger.info("[TUNING] Début tuning multi-symboles ({} symboles)", symbols.size());
         for (String symbol : symbols) {
+            waitForMemory(); // Protection mémoire avant chaque soumission de tâche
             completionService.submit(() -> {
                 long startSymbol = System.currentTimeMillis();
                 try {
@@ -592,6 +596,7 @@ public class LstmTuningService {
         long startAll = System.currentTimeMillis();
         logger.info("[TUNING] Début tuning multi-symboles ({} symboles)", symbols.size());
         for (int i = 0; i < symbols.size(); i++) {
+            waitForMemory(); // Protection mémoire avant chaque tuning de symbole
             String symbol = symbols.get(i);
             long startSymbol = System.currentTimeMillis();
             logger.info("[TUNING] Début tuning symbole {}/{} : {}", i+1, symbols.size(), symbol);
@@ -640,6 +645,40 @@ public class LstmTuningService {
             this.winRate = winRate;
             this.maxDrawdown = maxDrawdown;
             this.businessScore = businessScore;
+        }
+    }
+
+    // Limite de threads pour éviter OOM (configurable)
+    private static final int MAX_THREADS = 2; // Peut être ajusté selon la machine
+    // Seuil mémoire (80% de la mémoire max JVM)
+    private static final double MEMORY_USAGE_THRESHOLD = 0.8;
+
+    /**
+     * Vérifie si l'utilisation mémoire approche du seuil critique.
+     * Retourne true si la mémoire est trop utilisée.
+     */
+    private static boolean isMemoryUsageHigh() {
+        Runtime runtime = Runtime.getRuntime();
+        long maxMemory = runtime.maxMemory();
+        long totalMemory = runtime.totalMemory();
+        long freeMemory = runtime.freeMemory();
+        long usedMemory = totalMemory - freeMemory;
+        double usage = (double) usedMemory / (double) maxMemory;
+        return usage > MEMORY_USAGE_THRESHOLD;
+    }
+
+    /**
+     * Attend que la mémoire soit sous le seuil critique, sinon sleep et log.
+     */
+    private static void waitForMemory() {
+        while (isMemoryUsageHigh()) {
+            logger.warn("[TUNING] Utilisation mémoire élevée (> {}%), attente avant de lancer une nouvelle tâche...", (int)(MEMORY_USAGE_THRESHOLD*100));
+            try {
+                Thread.sleep(5000); // Attendre 5s avant de réessayer
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
         }
     }
 }
