@@ -163,7 +163,7 @@ public class LstmHelper {
         } else {
             grid = lstmTuningService.generateSwingTradeGrid();
         }
-        lstmTuningService.tuneAllSymbolsMultiThread(symbols, grid, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
+        lstmTuningService.tuneAllSymbols(symbols, grid, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
     }
 
     public void tuneAllSymbolsBis() {
