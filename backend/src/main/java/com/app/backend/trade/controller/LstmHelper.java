@@ -70,7 +70,7 @@ public class LstmHelper {
         boolean useRandomGrid = true;
         List<LstmConfig> grid;
         if (useRandomGrid) {
-            grid = lstmTuningService.generateRandomSwingTradeGrid(10, "");
+            grid = lstmTuningService.generateRandomSwingTradeGrid(10);
         } else {
             grid = lstmTuningService.generateSwingTradeGrid();
         }
@@ -146,7 +146,7 @@ public class LstmHelper {
 
     // Méthode existante conservée pour compatibilité
     public void tuneAllSymbols() {
-        tuneAllSymbols(false, 2);
+        tuneAllSymbols(true, 150);
     }
     /**
      * Lance le tuning automatique pour une liste de symboles.
@@ -159,7 +159,7 @@ public class LstmHelper {
         List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
         List<LstmConfig> grid;
         if (useRandomGrid) {
-            grid = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize, "timeseries");
+            grid = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize, "timeseries", 48);
         } else {
             grid = lstmTuningService.generateSwingTradeGrid();
         }
@@ -167,13 +167,13 @@ public class LstmHelper {
     }
 
     public void tuneAllSymbolsBis() {
-        tuneAllSymbolsBis(false, 1);
+        tuneAllSymbolsBis(true, 150);
     }
     public void tuneAllSymbolsBis(boolean useRandomGrid, int randomGridSize) {
         List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
         List<LstmConfig> grid;
         if (useRandomGrid) {
-            grid = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize, "timeseries");
+            grid = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize, "timeseries", 48);
         } else {
             grid = lstmTuningService.generateSwingTradeGrid();
         }

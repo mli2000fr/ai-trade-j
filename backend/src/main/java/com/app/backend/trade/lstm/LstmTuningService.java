@@ -456,8 +456,52 @@ public class LstmTuningService {
      * @param n nombre de configurations à générer
      * @return liste de LstmConfig aléatoires
      */
-    public List<LstmConfig> generateRandomSwingTradeGrid(int n, String cvMode) {
+    public List<LstmConfig> generateRandomSwingTradeGrid(int n) {
         java.util.Random rand = new java.util.Random();
+        int[] windowSizes = {10, 20, 30};
+        int[] lstmNeurons = {64, 128};
+        double[] dropoutRates = {0.2, 0.3};
+        double[] learningRates = {0.0005, 0.001};
+        double[] l1s = {0.0};
+        double[] l2s = {0.0001, 0.001};
+        int numEpochs = 50;
+        int patience = 5;
+        double minDelta = 0.0005;
+        int kFolds = 3;
+        String optimizer = "adam";
+        String[] scopes = {"window", "global"};
+        String[] swingTypes = {"range", "breakout", "mean_reversion"};
+        List<LstmConfig> grid = new java.util.ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            LstmConfig config = new LstmConfig();
+            config.setWindowSize(windowSizes[rand.nextInt(windowSizes.length)]);
+            config.setLstmNeurons(lstmNeurons[rand.nextInt(lstmNeurons.length)]);
+            config.setDropoutRate(dropoutRates[rand.nextInt(dropoutRates.length)]);
+            config.setLearningRate(learningRates[rand.nextInt(learningRates.length)]);
+            config.setNumEpochs(numEpochs);
+            config.setPatience(patience);
+            config.setMinDelta(minDelta);
+            config.setKFolds(kFolds);
+            config.setOptimizer(optimizer);
+            config.setL1(l1s[rand.nextInt(l1s.length)]);
+            config.setL2(l2s[rand.nextInt(l2s.length)]);
+            config.setNormalizationScope(scopes[rand.nextInt(scopes.length)]);
+            config.setNormalizationMethod("auto");
+            config.setSwingTradeType(swingTypes[rand.nextInt(swingTypes.length)]);
+            grid.add(config);
+        }
+        return grid;
+    }
+
+    /**
+     * Génère une grille aléatoire de configurations adaptée au swing trade avec seed pour reproductibilité.
+     * @param n nombre de configurations à générer
+     * @param cvMode mode de validation croisée
+     * @param seed seed pour la reproductibilité
+     * @return liste de LstmConfig aléatoires
+     */
+    public List<LstmConfig> generateRandomSwingTradeGrid(int n, String cvMode, long seed) {
+        java.util.Random rand = new java.util.Random(seed);
         int[] windowSizes = {10, 20, 30};
         int[] lstmNeurons = {64, 128};
         double[] dropoutRates = {0.2, 0.3};
