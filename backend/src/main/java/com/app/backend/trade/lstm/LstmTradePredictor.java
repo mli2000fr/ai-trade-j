@@ -1104,7 +1104,7 @@ public class LstmTradePredictor {
             return "minmax";
         } else if (f.equals("volume")) {
             return "minmax";
-        } else if (f.equals("day_of_week") || f.equals("month") || f.equals("session")) {
+        } else if (f.equals("day_of_week") || f.equals("month")) {
             return "minmax";
         }
         return "minmax";
@@ -1204,10 +1204,6 @@ public class LstmTradePredictor {
                         break;
                     case "month":
                         matrix[i][f] = series.getBar(i).getEndTime().getMonthValue();
-                        break;
-                    case "session":
-                        int hour = series.getBar(i).getEndTime().getHour();
-                        matrix[i][f] = hour < 8 ? 0 : (hour < 12 ? 1 : (hour < 17 ? 2 : 3));
                         break;
                     default:
                         matrix[i][f] = Double.NaN;

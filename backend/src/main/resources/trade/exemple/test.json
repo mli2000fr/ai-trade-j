@@ -42,3 +42,8 @@ Ajouter une gestion de la seed pour la reproductibilité.
 as de gestion de la mémoire GPU/CPU :
 Si le nombre de symboles est très élevé, il peut y avoir un OOM (out of memory) ou une saturation du GPU.
 Ajouter une gestion mémoire (limiter le nombre de threads, monitoring GPU/CPU).
+
+
+on continue sur Pas de gestion de l’overfitting : Même si la validation croisée est utilisée, il n’y a pas de métrique business (profit factor, drawdown, etc.) dans le critère de sélection final. Ajouter un critère métier (profit factor, drawdown, win rate) dans le choix de la meilleure config, pas seulement le MSE.
+
+Attention, j'ai à la fois de méthode mono sthred et multithread, n'oublie pas de modifier les 2: tuneSymbolMultiThread et tuneSymbol, tuneAllSymbolsMultiThread et tuneAllSymbols

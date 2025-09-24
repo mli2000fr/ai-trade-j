@@ -111,7 +111,7 @@ public class LstmConfig {
         "close", "volume", "rsi", "sma", "ema", "macd",
         "atr", "bollinger_high", "bollinger_low",
         "stochastic", "cci", "momentum",
-        "day_of_week", "month", "session"
+        "day_of_week", "month"
     );
 
     /**
@@ -150,9 +150,9 @@ public class LstmConfig {
     private double limitPredictionPct = 0.0;
 
     /**
-     * Taille du batch pour l'entraînement (par défaut 256)
+     * Taille du batch pour l'entraînement (par défaut 64)
      */
-    private int batchSize = 256;
+    private int batchSize = 128;
 
     /**
      * Mode de validation croisée : split, timeseries, kfold
