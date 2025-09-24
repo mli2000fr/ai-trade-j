@@ -311,6 +311,17 @@ public class LstmTuningService {
                 String stack = org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace(e);
                 tuningExceptionReport.add(new TuningExceptionReportEntry(symbol, config, e.getMessage(), stack, System.currentTimeMillis()));
                 continue;
+            } finally {
+                // Libération proactive mémoire ND4J/DL4J + GC Java + libération explicite du modèle
+                try {
+                    model = null;
+                    trainResult = null;
+                    org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
+                    org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread();
+                } catch (Exception e) {
+                    logger.warn("Erreur lors du nettoyage ND4J/DL4J après entraînement : {}", e.getMessage());
+                }
+                System.gc();
             }
             double rmse = Math.sqrt(score);
             double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model);
