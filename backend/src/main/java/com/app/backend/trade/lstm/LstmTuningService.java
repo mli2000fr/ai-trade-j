@@ -176,10 +176,15 @@ public class LstmTuningService {
             }));
         }
         executor.shutdown();
+        int failedConfigs = 0;
         for (int i = 0; i < futures.size(); i++) {
             try {
                 TuningResult result = futures.get(i).get();
                 logger.info("[TUNING] [{}] Progression : {}/{} configs terminées", symbol, i+1, grid.size());
+                if (result == null || Double.isNaN(result.score) || Double.isInfinite(result.score)) {
+                    failedConfigs++;
+                    continue;
+                }
                 if (result.score < bestScore) {
                     bestScore = result.score;
                     bestConfig = result.config;
@@ -187,6 +192,7 @@ public class LstmTuningService {
                     bestScalers = result.scalers;
                 }
             } catch (Exception e) {
+                failedConfigs++;
                 progress.status = "erreur";
                 progress.lastUpdate = System.currentTimeMillis();
                 logger.error("Erreur lors de la récupération du résultat de tuning : {}", e.getMessage());
@@ -195,6 +201,14 @@ public class LstmTuningService {
             }
         }
         long endSymbol = System.currentTimeMillis();
+        if (failedConfigs == grid.size()) {
+            progress.status = "failed";
+            progress.endTime = endSymbol;
+            progress.lastUpdate = endSymbol;
+            logger.error("[TUNING][EARLY STOP GLOBAL] Toutes les configs ont échoué pour le symbole {}. Tuning stoppé.", symbol);
+            tuningExceptionReport.add(new TuningExceptionReportEntry(symbol, null, "Toutes les configs ont échoué (early stopping global)", "", System.currentTimeMillis()));
+            return null;
+        }
         progress.status = "termine";
         progress.endTime = endSymbol;
         progress.lastUpdate = endSymbol;
@@ -221,7 +235,7 @@ public class LstmTuningService {
         return bestConfig;
     }
 
-    public LstmConfig tuneSymbol(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate, boolean useTimeSeriesCV) {
+    public LstmConfig tuneSymbol(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
         long startSymbol = System.currentTimeMillis();
         // Suivi d'avancement
         TuningProgress progress = new TuningProgress();
@@ -242,6 +256,7 @@ public class LstmTuningService {
         LstmConfig bestConfig = null;
         MultiLayerNetwork bestModel = null;
         LstmTradePredictor.ScalerSet bestScalers = null;
+        int failedConfigs = 0;
         for (int i = 0; i < grid.size(); i++) {
             long startConfig = System.currentTimeMillis();
             LstmConfig config = grid.get(i);
@@ -273,7 +288,12 @@ public class LstmTuningService {
                 );
                 trainResult = lstmTradePredictor.trainLstmWithScalers(series, config, model);
                 model = trainResult.model;
+                if (Double.isNaN(score) || Double.isInfinite(score)) {
+                    failedConfigs++;
+                    continue;
+                }
             } catch (Exception e) {
+                failedConfigs++;
                 logger.error("Erreur lors du tuning config {}/{} : {}", i+1, grid.size(), e.getMessage());
                 String stack = org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace(e);
                 tuningExceptionReport.add(new TuningExceptionReportEntry(symbol, config, e.getMessage(), stack, System.currentTimeMillis()));
@@ -323,6 +343,14 @@ public class LstmTuningService {
         }
 
         long endSymbol = System.currentTimeMillis();
+        if (failedConfigs == grid.size()) {
+            progress.status = "failed";
+            progress.endTime = endSymbol;
+            progress.lastUpdate = endSymbol;
+            logger.error("[TUNING][EARLY STOP GLOBAL] Toutes les configs ont échoué pour le symbole {}. Tuning stoppé.", symbol);
+            tuningExceptionReport.add(new TuningExceptionReportEntry(symbol, null, "Toutes les configs ont échoué (early stopping global)", "", System.currentTimeMillis()));
+            return null;
+        }
         progress.status = "termine";
         progress.endTime = endSymbol;
         progress.lastUpdate = endSymbol;
@@ -468,7 +496,7 @@ public class LstmTuningService {
                 long startSymbol = System.currentTimeMillis();
                 try {
                     BarSeries series = seriesProvider.apply(symbol);
-                    tuneSymbol(symbol, grid, series, jdbcTemplate, true);
+                    tuneSymbol(symbol, grid, series, jdbcTemplate);
                 } catch (Exception e) {
                     logger.error("Erreur dans le tuning du symbole {} : {}", symbol, e.getMessage());
                 }
@@ -507,7 +535,7 @@ public class LstmTuningService {
             long startSymbol = System.currentTimeMillis();
             logger.info("[TUNING] Début tuning symbole {}/{} : {}", i+1, symbols.size(), symbol);
             BarSeries series = seriesProvider.apply(symbol);
-            tuneSymbol(symbol, grid, series, jdbcTemplate, true);
+            tuneSymbol(symbol, grid, series, jdbcTemplate);
             try {
                 org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
                 org.nd4j.linalg.api.memory.MemoryWorkspaceManager wsManager = org.nd4j.linalg.factory.Nd4j.getWorkspaceManager();
