@@ -630,7 +630,7 @@ public class LstmTuningService {
             long startSymbol = System.currentTimeMillis();
             logger.info("[TUNING] Début tuning symbole {}/{} : {}", i+1, symbols.size(), symbol);
             BarSeries series = seriesProvider.apply(symbol);
-            tuneSymbol(symbol, grid, series, jdbcTemplate);
+            tuneSymbolMultiThread(symbol, grid, series, jdbcTemplate);
             try {
                 org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
                 org.nd4j.linalg.api.memory.MemoryWorkspaceManager wsManager = org.nd4j.linalg.factory.Nd4j.getWorkspaceManager();
