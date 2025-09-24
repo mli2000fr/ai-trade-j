@@ -150,6 +150,11 @@ public class LstmConfig {
     private double limitPredictionPct = 0.0;
 
     /**
+     * Taille du batch pour l'entraînement (par défaut 64)
+     */
+    private int batchSize = 64;
+
+    /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
      * @throws RuntimeException si le fichier de configuration ne peut pas être chargé
      */
@@ -179,6 +184,7 @@ public class LstmConfig {
                 thresholdType = props.getProperty("thresholdType", "ATR");
                 thresholdK = Double.parseDouble(props.getProperty("thresholdK", "1.0"));
                 limitPredictionPct = Double.parseDouble(props.getProperty("limitPredictionPct", "0.0"));
+                batchSize = Integer.parseInt(props.getProperty("batchSize", "64"));
             }
             optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
@@ -213,6 +219,7 @@ public class LstmConfig {
         thresholdType = rs.getString("threshold_type") != null ? rs.getString("threshold_type") : "ATR";
         thresholdK = rs.getDouble("threshold_k");
         limitPredictionPct = rs.getDouble("limit_prediction_pct");
+        batchSize = rs.getInt("batch_size");
     }
 
     /**

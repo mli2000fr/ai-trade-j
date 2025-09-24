@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import jakarta.annotation.PostConstruct;
 
 import static com.app.backend.trade.strategy.StrategieBackTest.FEE_PCT;
 import static com.app.backend.trade.strategy.StrategieBackTest.SLIP_PAGE_PCT;
@@ -34,6 +35,19 @@ public class LstmTuningService {
     }
 
     private final ConcurrentHashMap<String, TuningProgress> tuningProgressMap = new ConcurrentHashMap<>();
+
+    @PostConstruct
+    public void initNd4jCuda() {
+        try {
+            org.nd4j.linalg.factory.Nd4jBackend backend = org.nd4j.linalg.factory.Nd4j.getBackend();
+            logger.info("ND4J backend utilisé : {}", backend.getClass().getSimpleName());
+            if (!backend.getClass().getSimpleName().toLowerCase().contains("cuda")) {
+                logger.warn("Le backend ND4J n'est pas CUDA ! Le GPU ne sera pas utilisé.");
+            }
+        } catch (Exception e) {
+            logger.error("Erreur lors de la détection du backend ND4J : {}", e.getMessage());
+        }
+    }
 
     // Structure de reporting centralisé des exceptions tuning
     public static class TuningExceptionReportEntry {
@@ -102,7 +116,7 @@ public class LstmTuningService {
             LstmConfig config = grid.get(i);
             futures.add(executor.submit(() -> {
                 long startConfig = System.currentTimeMillis();
-                logger.info("[TUNING] [{}] {} | Début config {}/{}", symbol, Thread.currentThread().getName(), configIndex, grid.size());
+                logger.info("[TUNING] [{}] | Début config {}/{}", symbol, Thread.currentThread().getName(), configIndex, grid.size());
                 int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
                 MultiLayerNetwork model = lstmTradePredictor.initModel(
                     numFeatures,
@@ -189,6 +203,15 @@ public class LstmTuningService {
             logger.info("[TUNING] Fin tuning pour {} | Meilleure config : windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={}, Test MSE={}, durée totale={} ms", symbol, bestConfig.getWindowSize(), bestConfig.getLstmNeurons(), bestConfig.getDropoutRate(), bestConfig.getLearningRate(), bestConfig.getL1(), bestConfig.getL2(), bestScore, (endSymbol - startSymbol));
         } else {
             logger.warn("[TUNING] Aucun modèle/scaler valide trouvé pour {}", symbol);
+        }
+        // Nettoyage mémoire ND4J/DL4J pour libérer le GPU
+        try {
+            org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
+            org.nd4j.linalg.api.memory.MemoryWorkspaceManager wsManager = org.nd4j.linalg.factory.Nd4j.getWorkspaceManager();
+            wsManager.destroyAllWorkspacesForCurrentThread();
+            logger.info("Nettoyage mémoire ND4J/DL4J effectué après tuning.");
+        } catch (Exception e) {
+            logger.warn("Erreur lors du nettoyage ND4J/DL4J : {}", e.getMessage());
         }
         return bestConfig;
     }
@@ -302,6 +325,15 @@ public class LstmTuningService {
             logger.info("[TUNING] Fin tuning pour {} | Meilleure config : windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={}, CV MSE={}, durée totale={} ms", symbol, bestConfig.getWindowSize(), bestConfig.getLstmNeurons(), bestConfig.getDropoutRate(), bestConfig.getLearningRate(), bestConfig.getL1(), bestConfig.getL2(), bestScore, (endSymbol - startSymbol));
         } else {
             logger.warn("[TUNING] Aucun modèle valide trouvé pour {}", symbol);
+        }
+        // Nettoyage mémoire ND4J/DL4J pour libérer le GPU
+        try {
+            org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
+            org.nd4j.linalg.api.memory.MemoryWorkspaceManager wsManager = org.nd4j.linalg.factory.Nd4j.getWorkspaceManager();
+            wsManager.destroyAllWorkspacesForCurrentThread();
+            logger.info("Nettoyage mémoire ND4J/DL4J effectué après tuning.");
+        } catch (Exception e) {
+            logger.warn("Erreur lors du nettoyage ND4J/DL4J : {}", e.getMessage());
         }
         return bestConfig;
     }
@@ -462,7 +494,7 @@ public class LstmTuningService {
             long startSymbol = System.currentTimeMillis();
             logger.info("[TUNING] Début tuning symbole {}/{} : {}", i+1, symbols.size(), symbol);
             BarSeries series = seriesProvider.apply(symbol);
-            tuneSymbolMultiThread(symbol, grid, series, jdbcTemplate, true);
+            tuneSymbol(symbol, grid, series, jdbcTemplate, true);
             try {
                 org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
                 org.nd4j.linalg.api.memory.MemoryWorkspaceManager wsManager = org.nd4j.linalg.factory.Nd4j.getWorkspaceManager();

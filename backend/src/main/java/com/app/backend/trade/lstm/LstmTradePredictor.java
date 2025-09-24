@@ -304,6 +304,9 @@ public class LstmTradePredictor {
         org.nd4j.linalg.api.ndarray.INDArray valOutput = org.nd4j.linalg.factory.Nd4j.create(valLabel);
         org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(testSeq);
         org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLabel);
+        logger.info("[DEBUG] trainInput shape: {} | nIn attendu: {}", java.util.Arrays.toString(trainInput.shape()), numFeatures);
+        logger.info("[DEBUG] valInput shape: {} | nIn attendu: {}", java.util.Arrays.toString(valInput.shape()), numFeatures);
+        logger.info("[DEBUG] testInput shape: {} | nIn attendu: {}", java.util.Arrays.toString(testInput.shape()), numFeatures);
         if (containsNaN(trainOutput)) {
             logger.error("TrainOutput contient des NaN, impossible d'entraîner le modèle");
             throw new IllegalArgumentException("TrainOutput contient des NaN");
@@ -316,8 +319,13 @@ public class LstmTradePredictor {
             logger.error("TestOutput contient des NaN, impossible d'évaluer le modèle");
             throw new IllegalArgumentException("TestOutput contient des NaN");
         }
-        org.nd4j.linalg.dataset.api.iterator.DataSetIterator trainIterator = new ListDataSetIterator<>(java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput)));
-        org.nd4j.linalg.dataset.api.iterator.DataSetIterator valIterator = new ListDataSetIterator<>(java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(valInput, valOutput)));
+        int batchSize = config.getBatchSize() > 0 ? config.getBatchSize() : 64;
+        org.nd4j.linalg.dataset.api.iterator.DataSetIterator trainIterator = new org.deeplearning4j.datasets.iterator.AsyncDataSetIterator(
+            new ListDataSetIterator<>(java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput)), batchSize), 2
+        );
+        org.nd4j.linalg.dataset.api.iterator.DataSetIterator valIterator = new org.deeplearning4j.datasets.iterator.AsyncDataSetIterator(
+            new ListDataSetIterator<>(java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(valInput, valOutput)), batchSize), 2
+        );
         // EarlyStoppingTrainer
         org.deeplearning4j.earlystopping.EarlyStoppingConfiguration<MultiLayerNetwork> esConf = new org.deeplearning4j.earlystopping.EarlyStoppingConfiguration.Builder<MultiLayerNetwork>()
                 .epochTerminationConditions(new org.deeplearning4j.earlystopping.termination.MaxEpochsTerminationCondition(config.getNumEpochs()),
@@ -330,6 +338,7 @@ public class LstmTradePredictor {
         model = result.getBestModel();
         logger.info("Early stopping terminé. Epochs: {}. Score validation: {}", result.getBestModelEpoch(), result.getBestModelScore());
         // Score final sur le test
+        logger.info("[DEBUG] testInput shape avant model.output: {} | nIn attendu: {}", java.util.Arrays.toString(testInput.shape()), numFeatures);
         org.nd4j.linalg.api.ndarray.INDArray predictions = model.output(testInput);
         double mse = org.nd4j.linalg.ops.transforms.Transforms.pow(predictions.sub(testOutput), 2).meanNumber().doubleValue();
         logger.info("Score final sur le test: MSE={}", mse);
