@@ -583,6 +583,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     if (indiceMixRaw && typeof indiceMixRaw === 'object' && 'type' in indiceMixRaw) {
                       indiceMix = indiceMixRaw as SignalInfo;
                     }
+                    const pctUD = lstmResult && (lstmResult.lastClose && lstmResult.predictedClose) ? ((lstmResult.predictedClose - lstmResult.lastClose) / lstmResult.lastClose) * 100 : null;
 
                     // Vérifie que indice est un objet et non une chaîne
                     if (indice && indice.type === 'BUY') bgColor = 'rgba(76, 175, 80, 0.5)';
@@ -616,7 +617,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                              lstmResults[row.single.symbol] === 'pending'
                                ? (<CircularProgress size={16} />)
                                : (lstmResult && lstmResult.predictedClose
-                                  ? (lstmResult.predictedClose)
+                                  ? (lstmResult.predictedClose + (pctUD !== null ? ' (' + pctUD.toFixed(2) + '%)' : ''))
                                   : '-')
                            }</TableCell>
                         <TableCell align="center">{

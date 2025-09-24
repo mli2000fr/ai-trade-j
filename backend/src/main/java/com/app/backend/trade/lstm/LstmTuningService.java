@@ -154,7 +154,7 @@ public class LstmTuningService {
                         score = lstmTradePredictor.splitScoreLstm(series, config);
                     }
                     double rmse = Math.sqrt(score);
-                    double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model);
+                    double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model, scalers);
                     double[] closes = lstmTradePredictor.extractCloseValues(series);
                     double lastClose = closes[closes.length - 1];
                     double delta = predicted - lastClose;
@@ -351,7 +351,7 @@ public class LstmTuningService {
                 System.gc();
             }
             double rmse = Math.sqrt(score);
-            double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model);
+            double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model, trainResult.scalers);
             double[] closes = lstmTradePredictor.extractCloseValues(series);
             double lastClose = closes[closes.length - 1];
             double delta = predicted - lastClose;
@@ -687,7 +687,7 @@ public class LstmTuningService {
     }
 
     // Limite de threads pour éviter OOM (configurable)
-    private static final int MAX_THREADS = 2; // Peut être ajusté selon la machine
+    private static final int MAX_THREADS = 8; // Peut être ajusté selon la machine
     // Seuil mémoire (80% de la mémoire max JVM)
     private static final double MEMORY_USAGE_THRESHOLD = 0.8;
 

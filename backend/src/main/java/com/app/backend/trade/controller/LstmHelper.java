@@ -146,7 +146,7 @@ public class LstmHelper {
 
     // Méthode existante conservée pour compatibilité
     public void tuneAllSymbols() {
-        tuneAllSymbols(false, 150);
+        tuneAllSymbols(false, 2);
     }
     /**
      * Lance le tuning automatique pour une liste de symboles.
@@ -163,7 +163,7 @@ public class LstmHelper {
         } else {
             grid = lstmTuningService.generateSwingTradeGrid();
         }
-        lstmTuningService.tuneAllSymbols(symbols, grid, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
+        lstmTuningService.tuneAllSymbolsMultiThread(symbols, grid, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
     }
 
     public void tuneAllSymbolsBis() {

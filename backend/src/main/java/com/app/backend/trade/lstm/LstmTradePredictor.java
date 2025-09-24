@@ -651,7 +651,7 @@ public class LstmTradePredictor {
     }
 
     // Prédiction de la prochaine valeur de clôture
-    public double predictNextClose(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model) {
+    public double predictNextClose(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers) {
         java.util.List<String> features = config.getFeatures();
         int numFeatures = features.size();
         model = ensureModelWindowSize(model, numFeatures, config);
@@ -669,13 +669,6 @@ public class LstmTradePredictor {
                 lastWindow[i][f] = normMatrix[barCount - windowSize + i][f];
             }
         }
-        for (int i = 0; i < windowSize; i++) {
-            for (int f = 0; f < numFeatures; f++) {
-                if (Double.isNaN(lastWindow[i][f]) || lastWindow[i][f] == 0.0) {
-                    logger.warn("[LSTM WARNING] Feature anormale dans la fenêtre : i={}, f={}, value={}", i, f, lastWindow[i][f]);
-                }
-            }
-        }
         double[][][] lastSequence = new double[1][windowSize][numFeatures];
         for (int j = 0; j < windowSize; j++) {
             for (int f = 0; f < numFeatures; f++) {
@@ -688,35 +681,20 @@ public class LstmTradePredictor {
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input); // [1,1,windowSize]
         double predictedNorm = output.getDouble(0, 0, windowSize - 1); // dernier pas de temps
 
+        // Ajout de logs pour la dénormalisation
+        logger.debug("[LSTM DEBUG] predictedNorm (model output) = {}", predictedNorm);
+        if (scalers == null || scalers.labelScaler == null) {
+            logger.error("[LSTM ERROR] Scaler ou labelScaler non initialisé !");
+            return extractCloseValues(series)[extractCloseValues(series).length - 1];
+        }
+        double predicted = scalers.labelScaler.inverse(predictedNorm);
+        logger.debug("[LSTM DEBUG] predicted (denormalized) = {}", predicted);
         double[] closes = extractCloseValues(series);
-        double[] lastCloseWindow = new double[windowSize];
-        System.arraycopy(closes, closes.length - windowSize, lastCloseWindow, 0, windowSize);
-        String normScope = config.getNormalizationScope();
-        String normMethod = config.getNormalizationMethod();
-        double min, max;
-        if ("global".equalsIgnoreCase(normScope)) {
-            min = java.util.Arrays.stream(closes).min().orElse(0.0);
-            max = java.util.Arrays.stream(closes).max().orElse(0.0);
-        } else {
-            min = java.util.Arrays.stream(lastCloseWindow).min().orElse(0.0);
-            max = java.util.Arrays.stream(lastCloseWindow).max().orElse(0.0);
-        }
         double lastClose = closes[closes.length - 1];
-        if (Math.abs(lastClose - min) / lastClose > 0.2 || Math.abs(lastClose - max) / lastClose > 0.2) {
-            logger.warn("[LSTM WARNING] min/max trop éloignés du dernier close : min={}, max={}, lastClose={}", min, max, lastClose);
-        }
-        double predicted;
-        if ("zscore".equalsIgnoreCase(normMethod)) {
-            double mean = java.util.Arrays.stream(lastCloseWindow).average().orElse(0.0);
-            double std = Math.sqrt(java.util.Arrays.stream(lastCloseWindow).map(v -> (v - mean) * (v - mean)).average().orElse(0.0));
-            predicted = predictedNorm * std + mean;
-        } else {
-            predicted = predictedNorm * (max - min) + min;
-        }
-        logger.info("[LSTM DEBUG] predictedNorm={}, min={}, max={}, predicted={}, normScope={}, normMethod={}", predictedNorm, min, max, predicted, normScope, normMethod);
-        // Si la prédiction est hors de la plage min/max, log d'alerte
-        if (predicted < min || predicted > max) {
-            logger.warn("[LSTM WARNING] Prédiction hors plage min/max : predicted={}, min={}, max={}", predicted, min, max);
+        // Vérification de la validité de la prédiction
+        if (Double.isNaN(predicted) || Double.isInfinite(predicted)) {
+            logger.error("[LSTM ERROR] Prédiction dénormalisée invalide : {}. Retour du dernier close.", predicted);
+            return lastClose;
         }
         // Limitation de la prédiction à ±X% autour du dernier close si activée
         double predictedLimited = predicted;
@@ -730,9 +708,6 @@ public class LstmTradePredictor {
                 monitorLimitImpact(predicted, predictedLimited, lastClose);
             }
         }
-        String position = analyzePredictionPosition(lastCloseWindow, predictedLimited);
-        logger.info("[PREDICT-NORM] windowSize={}, lastWindow={}, min={}, max={}, predictedNorm={}, predicted={}, predictedLimited={}, normalizationScope={}, position={}",
-            windowSize, java.util.Arrays.toString(lastCloseWindow), min, max, predictedNorm, predicted, predictedLimited, config.getNormalizationScope(), position);
         return predictedLimited;
     }
 
@@ -1050,12 +1025,21 @@ public class LstmTradePredictor {
         org.nd4j.linalg.api.ndarray.INDArray output = model.output(input); // [1,1,windowSize]
         double predictedNorm = output.getDouble(0, 0, windowSize - 1); // dernier pas de temps
 
-        // Dénormalisation avec le scaler du label
-        double predicted = scalers != null && scalers.labelScaler != null
-            ? scalers.labelScaler.inverse(predictedNorm)
-            : Double.NaN;
+        // Ajout de logs pour la dénormalisation
+        logger.debug("[LSTM DEBUG] predictedNorm (model output) = {}", predictedNorm);
+        if (scalers == null || scalers.labelScaler == null) {
+            logger.error("[LSTM ERROR] Scaler ou labelScaler non initialisé !");
+            return extractCloseValues(series)[extractCloseValues(series).length - 1];
+        }
+        double predicted = scalers.labelScaler.inverse(predictedNorm);
+        logger.debug("[LSTM DEBUG] predicted (denormalized) = {}", predicted);
         double[] closes = extractCloseValues(series);
         double lastClose = closes[closes.length - 1];
+        // Vérification de la validité de la prédiction
+        if (Double.isNaN(predicted) || Double.isInfinite(predicted)) {
+            logger.error("[LSTM ERROR] Prédiction dénormalisée invalide : {}. Retour du dernier close.", predicted);
+            return lastClose;
+        }
         // Limitation de la prédiction à ±X% autour du dernier close si activée
         double predictedLimited = predicted;
         double pct = config.getLimitPredictionPct();
@@ -1326,6 +1310,10 @@ public class LstmTradePredictor {
         public enum Type { MINMAX, ZSCORE }
         public Type type;
         public double min, max, mean, std;
+
+        // Constructeur sans argument pour la désérialisation JSON (Jackson)
+        public FeatureScaler() {}
+
         public FeatureScaler(Type type) { this.type = type; }
         public void fit(double[] values) {
             if (type == Type.MINMAX) {
