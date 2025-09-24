@@ -51,12 +51,15 @@ public class LstmController {
 
     @GetMapping("/tuneAllSymbols")
     public boolean tuneAllSymbols() {
-        logger.info("dddddddddddddd -> " + org.nd4j.linalg.factory.Nd4j.getExecutioner().getClass().getSimpleName());
+        //System.setProperty("org.nd4j.linalg.defaultbackend", "org.nd4j.linalg.cpu.nativecpu.CpuBackend");
+        logger.info("start------------------- -> " + org.nd4j.linalg.factory.Nd4j.getExecutioner().getClass().getSimpleName());
         logger.info("Backend: " + Nd4j.getExecutioner().getClass().getSimpleName());
         logger.info("Blas Vendor: " + Nd4j.factory().blas().getBlasVendor());
         org.nd4j.linalg.factory.Nd4j.setDefaultDataTypes(org.nd4j.linalg.api.buffer.DataType.FLOAT, org.nd4j.linalg.api.buffer.DataType.FLOAT);
         org.nd4j.linalg.factory.Nd4j.getAffinityManager().allowCrossDeviceAccess(true);
         lsdmHelper.tuneAllSymbols();
+        logger.info("end------------------- -> " + org.nd4j.linalg.factory.Nd4j.getExecutioner().getClass().getSimpleName());
+
         return true;
     }
 

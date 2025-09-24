@@ -1,76 +1,44 @@
-Points bloquants pour du swing trading pro
 
-LSTM entraîné sans exploiter la séquence: tu n’envoies que le dernier pas de la fenêtre au réseau ([batch, features, 1]) au lieu de toute la séquence ([batch, features, window]). Ça annule l’intérêt du LSTM (il devient quasi dense).
-Incohérences d’entrée modèle (nIn): parfois tu passes windowSize, parfois le nombre de features (numFeatures). Pour un RNN DL4J: nIn = numFeatures, timeSeriesLength = windowSize.
-Normalisation incohérente entre inputs et labels:
-Inputs: normalisés par feature (minmax/zscore).
-Labels (closes): souvent normalisés via minmax global “normalize(closes)” sans respecter la scope/méthode (window vs global, zscore). Ça introduit un biais et potentiellement de la fuite.
-À l’inférence, tu dénormalises avec min/max de la dernière fenêtre, mais pas ceux utilisés à l’entraînement/validation.
-Cible de prédiction pas adaptée au swing: tu prédis la prochaine clôture (t+1) puis transformes en UP/DOWN/STABLE via un seuil ad hoc. Pour le swing, viser un horizon multi-jours (t+H), une probabilité directionnelle, ou un retour cumulé est plus pertinent.
-Seuil de signal non robuste: computeSwingTradeThreshold utilise une volatilité en unités de prix (pas en %) et max(1% prix moyen, avg|Δ|). Mieux vaut ATR ou une volatilité en pourcentage/returns, calibrée par symbole/timeframe.
-Incohérence signaux LSTM vs backtest:
-LSTM renvoie UP/DOWN/STABLE.
-backtestLstm attend BUY/SELL pour entrer/sortir. Résultat: pas d’entrées/sorties.
-CV/entrainement séquence mal formés:
-crossValidateLstm crée [numSeq, window, 1] sans transposition vers [batch, features, time], puis entraîne/évalue sur des tenseurs où le “temps” vaut 1. Même problème: séquence non exploitée.
-Early stopping utilise le “test” interne 80/20 comme validation; mélange des rôles. Pour le pro: split train/val séparé (ou early stopping sur validation), test final strict hors échantillon (walk-forward).
-Absence de scalers persistés: min/max (ou mean/std) utilisés pour normaliser/dénormaliser devraient être appris sur train, stockés et réutilisés à l’inférence (pas recalculés).
-Reproductibilité: pas de seed global (Nd4j/DL4J), tuning potentiellement non déterministe.
-
-1.Faire vraiment du LSTM (séquences complètes)
-Entraînement/éval/inférence: alimenter le réseau avec [batch, numFeatures, windowSize].
-Supprimer lastStepSeq; utiliser sequencesTransposed (features × window) partout (trainLstm, evaluateModel, predictNextClose).
-Toujours initModel(nIn = numFeatures, outputSize = 1).
-
-2.Normalisation cohérente et sans fuite
-Définir un scaler par feature (et un scaler pour le label) appris sur “train” uniquement. Stocker min/max ou mean/std (par feature + label) avec le modèle.
-Utiliser le même scaler pour val/test/inférence (pas recalculer sur les données courantes).
-Respecter la scope choisie (window vs global) à l’entraînement et à l’inférence de manière identique; pour le pro, préférer “window” ou returns normalisés.
-
-3.Cible swing adaptée
-Option A (régression): prédire le retour cumulé à H jours (par ex. 5-10 barres): y = (Close[t+H]-Close[t])/Close[t].
-Option B (classification): 3 classes UP/DOWN/FLAT sur H jours, avec softmax. Les sorties proba facilitent le filtrage et le sizing.
-Calibrer H au style de swing (durée moyenne de trade observée).
-
-4.Seuils de décision robustes
-Basés sur ATR(14) (k×ATR en % du prix) ou sur la volatilité des returns (std des log-returns).
-Éviter la borne arbitraire ±10% autour du close; si conservée, loguer et monitorer l’impact.
-
-5.Harmoniser les signaux
-Mapper UP -> BUY, DOWN -> SELL, STABLE -> HOLD dans le backtest. Ou faire renvoyer BUY/SELL directement par le prédicteur pour éviter l’ambiguïté.
-
-6.Validation chronologique stricte
-Préférer la time series CV (expanding window) pour le score tuning. Garder un test final out-of-sample (derniers 20% comme tu fais déjà, mais sans réutiliser ces données pour early stopping).
-Utiliser EarlyStoppingTrainer (DL4J) avec un vrai set de validation (séquentiel, pas mélangé).
-
-7.Gestion des scalers et méta-données
-Sauvegarder avec le modèle: liste des features, windowSize, méthode de normalisation, et paramètres des scalers (par feature + label). Recharger exactement ces paramètres à l’inférence.
-
-8.Réglages/Perf
-Tuning: privilégier random search ou bayésien; réduire la grille (300 epochs × grosse grille = coût/overfit). Baisser epochs, s’appuyer sur early stopping et scheduler LR.
-Fixer un seed (Nd4j.getRandom().setSeed(...)) et Workspaces pour stabilité.
-
-
-Améliorations secondaires utiles
-Utiliser returns/log-returns comme label et aussi comme certaines features (évite les effets d’échelle).
-Ajouter fees/slippage dans le backtest, exécution sur bar suivante (open) plutôt qu’au close courant.
-Position sizing plus réaliste (ATR sizing, risk-based en unités, non pas valeur nominale pure).
-Gestion des classes déséquilibrées (si classification): pondération, focal loss, etc.
-Monitoring: enregistrer MSE par fold, Sharpes simulés, confusion matrix (classification).
-Correction de logs/messages inversés (ex: “Hyperparamètres existants trouvés” quand config == null).
+Pas de gestion de l’early stopping global :
+Le tuning s’arrête pour chaque config selon la patience, mais il n’y a pas de logique pour stopper le tuning d’un symbole si toutes les configs échouent (ex : data corrompue, NaN, etc.).
+→ Risque de perte de temps sur des symboles problématiques.
+Pas de gestion fine des exceptions :
+Les exceptions sont loggées, mais il n’y a pas de reporting centralisé ou d’alerte si tous les tunings échouent pour un symbole.
+Pas de sauvegarde des résultats intermédiaires :
+Si le tuning est interrompu, les meilleurs résultats intermédiaires peuvent être perdus.
+Pas de gestion de l’overfitting :
+Même si la validation croisée est utilisée, il n’y a pas de métrique business (profit factor, drawdown, etc.) dans le critère de sélection final.
+→ Le tuning optimise le MSE, pas forcément la performance réelle en trading.
+Pas de gestion de la seed/random state :
+Pour la reproductibilité, il serait préférable de fixer une seed lors de la génération de la grille aléatoire.
+Pas de gestion de la mémoire GPU/CPU :
+Si le nombre de symboles est très élevé, il peut y avoir un OOM (out of memory) ou une saturation du GPU.
+Pas de logs métier sur les résultats :
+Les logs sont techniques, il manque un reporting synthétique des meilleures configs trouvées (par exemple, un export CSV automatique).
 
 
 
-Early stopping : Le paramètre patience/minDelta est bien présent dans la config, mais il faudrait vérifier que l’entraînement du modèle l’utilise réellement.
-Gestion mémoire : Si la grille est très large, attention au nombre de modèles chargés simultanément (risque d’OutOfMemory).
-Robustesse exception : Les exceptions dans les threads sont loggées, mais le tuning continue. C’est bien, mais il pourrait être utile d’ajouter une notification ou un reporting centralisé.
-Critère de sélection : Le score utilisé est le MSE. Pour le swing trade, il peut être pertinent d’ajouter d’autres métriques (profitabilité simulée, ratio gain/perte, etc.) pour le choix final.
-Sauvegarde des modèles : Un contrôle sur la taille et la version des modèles sauvegardés peut être utile pour la maintenance.
 
-Early stopping : S’assurer qu’il est bien utilisé dans l’entraînement (paramètres patience/minDelta).
-Métriques trading : Ajouter des métriques de performance trading (profit factor, win rate, drawdown, etc.) pour le choix final, pas seulement RMSE.
-Gestion mémoire : Surveiller le nombre de modèles chargés simultanément (risque OutOfMemory si grille très large).
-Seuil swing trade : Vérifier que le seuil est dynamique et adapté à chaque symbole.
-Robustesse exception : Les erreurs sont loggées, mais il serait utile d’avoir un reporting centralisé.
-Versioning des hyperparamètres : S’assurer que les params sauvegardés sont bien à jour par rapport aux données.
+Ajouter un critère métier (profit factor, drawdown, win rate) dans le choix de la meilleure config, pas seulement le MSE.
+Centraliser le reporting des exceptions et des résultats (table ou fichier CSV).
+Ajouter une gestion de la seed pour la reproductibilité.
+Ajouter une gestion mémoire (limiter le nombre de threads, monitoring GPU/CPU).
+Sauvegarder les meilleurs résultats intermédiaires.
+Ajouter un export automatique des résultats tuning (CSV ou base).
 
+
+Pas de gestion de l’early stopping global :
+Le tuning s’arrête pour chaque config selon la patience, mais il n’y a pas de logique pour stopper le tuning d’un symbole si toutes les configs échouent (ex: data corrompue, NaN, etc.).
+
+
+Pas de gestion de l’overfitting :
+Même si la validation croisée est utilisée, il n’y a pas de métrique business (profit factor, drawdown, etc.) dans le critère de sélection final.
+Ajouter un critère métier (profit factor, drawdown, win rate) dans le choix de la meilleure config, pas seulement le MSE.
+
+Pas de gestion de la seed/random state :
+Pour la reproductibilité, il serait préférable de fixer une seed lors de la génération de la grille aléatoire.
+Ajouter une gestion de la seed pour la reproductibilité.
+
+as de gestion de la mémoire GPU/CPU :
+Si le nombre de symboles est très élevé, il peut y avoir un OOM (out of memory) ou une saturation du GPU.
+Ajouter une gestion mémoire (limiter le nombre de threads, monitoring GPU/CPU).
