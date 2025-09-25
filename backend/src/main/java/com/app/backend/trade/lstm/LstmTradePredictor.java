@@ -76,6 +76,7 @@ public class LstmTradePredictor {
         for (int i = 0; i < nLayers; i++) {
             int inSize = (i == 0) ? inputSize : (bidir ? lstmNeurons * 2 : lstmNeurons);
             LSTM.Builder lstmBuilder = new LSTM.Builder()
+                .nIn(inSize) // FIX: définir nIn pour éviter nIn=0
                 .nOut(lstmNeurons)
                 .activation(Activation.TANH);
             org.deeplearning4j.nn.conf.layers.Layer recurrent = bidir ? new org.deeplearning4j.nn.conf.layers.recurrent.Bidirectional(lstmBuilder.build()) : lstmBuilder.build();
