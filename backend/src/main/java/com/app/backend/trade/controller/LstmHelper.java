@@ -190,7 +190,7 @@ public class LstmHelper {
     public List<String> getSymbolFitredFromTabSingle(String sort) {
         String orderBy = sort == null ? "score_swing_trade" : sort;
         String sql = "select symbol from best_in_out_single_strategy s where s.avg_pnl > 0 AND s.profit_factor > 1 AND s.win_rate > 0.5 AND s.max_drawdown < 0.2 AND s.sharpe_ratio > 1 AND s.rendement > 0.05";
-        sql += " ORDER BY " + orderBy + " DESC";
+        sql += " ORDER BY " + orderBy + " DESC limit 1";
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
