@@ -34,26 +34,6 @@ public class TuningMonitorController {
             jdbcTemplate.queryForList(sql, symbol);
     }
 
-    // Endpoint CSV pour l'export
-    @GetMapping(value = "/metrics/csv", produces = MediaType.TEXT_PLAIN_VALUE)
-    public ResponseEntity<ByteArrayResource> exportTuningMetricsCsv(@RequestParam(required = false) String symbol) throws IOException {
-        String outputPath = "tuning_metrics_export.csv";
-        String filePath = lstmTuningService.hyperparamsRepository.exportTuningMetricsToCsv(symbol, outputPath);
-        if (filePath != null) {
-            java.nio.file.Path path = java.nio.file.Paths.get(filePath);
-            byte[] data = java.nio.file.Files.readAllBytes(path);
-            ByteArrayResource resource = new ByteArrayResource(data);
-            HttpHeaders headers = new HttpHeaders();
-            headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=metrics.csv");
-            headers.add(HttpHeaders.CONTENT_TYPE, "text/csv");
-            return ResponseEntity.ok()
-                    .headers(headers)
-                    .contentLength(data.length)
-                    .body(resource);
-        } else {
-            return ResponseEntity.notFound().build();
-        }
-    }
 
     // Endpoint JSON pour la progression en temps réel
     @GetMapping("/progress")
