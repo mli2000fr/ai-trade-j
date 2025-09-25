@@ -538,6 +538,155 @@ public class LstmTuningService {
         return grid;
     }
 
+    /**
+     * Génère automatiquement une grille de configurations adaptée au swing trade avec plusieurs modes de validation croisée.
+     * @param cvModes liste des modes de validation croisée à tester (ex : split, timeseries, kfold)
+     * @return liste de LstmConfig à tester
+     */
+    public List<LstmConfig> generateSwingTradeGrid(List<String> cvModes) {
+        List<LstmConfig> grid = new java.util.ArrayList<>();
+        int[] windowSizes = {20, 30, 40};
+        int[] lstmNeurons = {64, 128, 256};
+        double[] dropoutRates = {0.2, 0.3};
+        double[] learningRates = {0.0005, 0.001};
+        double[] l1s = {0.0};
+        double[] l2s = {0.0001, 0.001};
+        int numEpochs = 150;
+        int patience = 10;
+        double minDelta = 0.0005;
+        int kFolds = 3;
+        String optimizer = "adam";
+        String[] scopes = {"window"};
+        String[] swingTypes = {"range", "mean_reversion"};
+        for (String swingType : swingTypes) {
+            for (String scope : scopes) {
+                for (int windowSize : windowSizes) {
+                    for (int neurons : lstmNeurons) {
+                        for (double dropout : dropoutRates) {
+                            for (double lr : learningRates) {
+                                for (double l1 : l1s) {
+                                    for (double l2 : l2s) {
+                                        for (String cvMode : cvModes) {
+                                            LstmConfig config = new LstmConfig();
+                                            config.setWindowSize(windowSize);
+                                            config.setLstmNeurons(neurons);
+                                            config.setDropoutRate(dropout);
+                                            config.setLearningRate(lr);
+                                            config.setNumEpochs(numEpochs);
+                                            config.setPatience(patience);
+                                            config.setMinDelta(minDelta);
+                                            config.setKFolds(kFolds);
+                                            config.setOptimizer(optimizer);
+                                            config.setL1(l1);
+                                            config.setL2(l2);
+                                            config.setNormalizationScope(scope);
+                                            config.setNormalizationMethod("auto");
+                                            config.setSwingTradeType(swingType);
+                                            config.setUseScalarV2(true);
+                                            config.setUseWalkForwardV2(true);
+                                            config.setCvMode(cvMode);
+                                            grid.add(config);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return grid;
+    }
+
+    /**
+     * Génère automatiquement une grille de configurations adaptée au swing trade enrichie avec plusieurs modes de validation croisée.
+     * @param features liste des features à utiliser
+     * @param horizonBars tableau des horizons de prédiction à tester
+     * @param numLstmLayers tableau du nombre de couches LSTM
+     * @param batchSizes tableau des batch sizes
+     * @param bidirectionals tableau des valeurs bidirectional
+     * @param attentions tableau des valeurs attention
+     * @param cvModes liste des modes de validation croisée à tester
+     * @return liste de LstmConfig à tester
+     */
+    public List<LstmConfig> generateSwingTradeGrid(List<String> features, int[] horizonBars, int[] numLstmLayers, int[] batchSizes, boolean[] bidirectionals, boolean[] attentions, List<String> cvModes) {
+        List<LstmConfig> grid = new java.util.ArrayList<>();
+        int[] windowSizes = {20, 30, 40};
+        int[] lstmNeurons = {64, 128, 256};
+        double[] dropoutRates = {0.2, 0.3};
+        double[] learningRates = {0.0005, 0.001};
+        double[] l1s = {0.0};
+        double[] l2s = {0.0001, 0.001};
+        int numEpochs = 150;
+        int patience = 10;
+        double minDelta = 0.0005;
+        int kFolds = 3;
+        String optimizer = "adam";
+        String[] scopes = {"window"};
+        String[] swingTypes = {"range", "mean_reversion"};
+        for (String swingType : swingTypes) {
+            for (String scope : scopes) {
+                for (int windowSize : windowSizes) {
+                    for (int neurons : lstmNeurons) {
+                        for (double dropout : dropoutRates) {
+                            for (double lr : learningRates) {
+                                for (double l1 : l1s) {
+                                    for (double l2 : l2s) {
+                                        for (int numLayers : numLstmLayers) {
+                                            for (int batchSize : batchSizes) {
+                                                for (boolean bidir : bidirectionals) {
+                                                    for (boolean att : attentions) {
+                                                        for (int horizon : horizonBars) {
+                                                            for (String cvMode : cvModes) {
+                                                                LstmConfig config = new LstmConfig();
+                                                                config.setWindowSize(windowSize);
+                                                                config.setLstmNeurons(neurons);
+                                                                config.setDropoutRate(dropout);
+                                                                config.setLearningRate(lr);
+                                                                config.setNumEpochs(numEpochs);
+                                                                config.setPatience(patience);
+                                                                config.setMinDelta(minDelta);
+                                                                config.setKFolds(kFolds);
+                                                                config.setOptimizer(optimizer);
+                                                                config.setL1(l1);
+                                                                config.setL2(l2);
+                                                                config.setNormalizationScope(scope);
+                                                                config.setNormalizationMethod("auto");
+                                                                config.setSwingTradeType(swingType);
+                                                                config.setUseScalarV2(true);
+                                                                config.setUseWalkForwardV2(true);
+                                                                config.setNumLstmLayers(numLayers);
+                                                                config.setBatchSize(batchSize);
+                                                                config.setBidirectional(bidir);
+                                                                config.setAttention(att);
+                                                                config.setHorizonBars(horizon);
+                                                                config.setFeatures(features);
+                                                                config.setCvMode(cvMode);
+                                                                grid.add(config);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return grid;
+    }
+
+    /**
+     * Tune automatiquement les hyperparamètres pour tous les symboles donnés.
+     * @param symbols les symboles à tuner
+     * @param grid la liste des configurations à tester
+     * @param jdbcTemplate accès base
+     * @param seriesProvider fournisseur de séries temporelles pour chaque symbole
+     */
     public void tuneAllSymbols(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         long startAll = System.currentTimeMillis();
         logger.info("[TUNING] Début tuning multi-symboles ({} symboles)", symbols.size());
