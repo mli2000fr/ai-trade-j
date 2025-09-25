@@ -278,18 +278,17 @@ public class LstmTradePredictor {
             double[] normCol = scalers.featureScalers.get(features.get(f)).transform(col);
             for(int i=0;i<matrix.length;i++) normMatrix[i][f]=normCol[i];
         }
-        double[][] lastWin = new double[1][windowSize*numFeatures]; // intermediate not used
         double[][][] seq = new double[1][windowSize][numFeatures];
         for(int j=0;j<windowSize;j++) for(int f=0;f<numFeatures;f++) seq[0][j][f]=normMatrix[normMatrix.length-windowSize+j][f];
         seq = transposeTimeFeature(seq); // [1][features][window]
         org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(seq);
-        org.nd4j.linalg.api.ndarray.INDArray out = model.output(input); // [1,1,window]
-        double predNorm = out.getDouble(0,0,windowSize-1);
+        org.nd4j.linalg.api.ndarray.INDArray out = model.output(input); // [1,1]
+        // Pipeline V2 : la sortie est scalaire, donc on prend out.getDouble(0) directement
+        double predNorm = out.getDouble(0); // Simplification : plus besoin d'extraire le dernier step
         double predTarget = scalers.labelScaler.inverse(predNorm);
         double lastClose = series.getLastBar().getClosePrice().doubleValue();
         if(config.isUseLogReturnTarget()) {
-            double predictedClose = lastClose * Math.exp(predTarget); // log-return -> close
-            return predictedClose;
+            return lastClose * Math.exp(predTarget); // log-return -> close
         }
         return predTarget;
     }
