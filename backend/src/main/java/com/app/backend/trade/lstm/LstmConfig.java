@@ -182,6 +182,10 @@ public class LstmConfig {
     private double riskPct = 0.01;
     /** Facteur multiplicateur du sizing (k dans R = capital * riskPct / (ATR*k)) */
     private double sizingK = 1.0;
+    /** Frais de transaction par trade (ex: 0.0005 = 0.05%) */
+    private double feePct = 0.0005;
+    /** Slippage moyen par trade (ex: 0.0002 = 0.02%) */
+    private double slippagePct = 0.0002;
 
     /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
@@ -226,6 +230,8 @@ public class LstmConfig {
                 capital = Double.parseDouble(props.getProperty("capital", "10000.0"));
                 riskPct = Double.parseDouble(props.getProperty("riskPct", "0.01"));
                 sizingK = Double.parseDouble(props.getProperty("sizingK", "1.0"));
+                feePct = Double.parseDouble(props.getProperty("feePct", "0.0005"));
+                slippagePct = Double.parseDouble(props.getProperty("slippagePct", "0.0002"));
             }
             optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
@@ -275,6 +281,8 @@ public class LstmConfig {
         try { this.capital = rs.getDouble("capital"); } catch (Exception ignored) {}
         try { this.riskPct = rs.getDouble("risk_pct"); } catch (Exception ignored) {}
         try { this.sizingK = rs.getDouble("sizing_k"); } catch (Exception ignored) {}
+        try { this.feePct = rs.getDouble("fee_pct"); } catch (Exception ignored) {}
+        try { this.slippagePct = rs.getDouble("slippage_pct"); } catch (Exception ignored) {}
     }
 
     /**

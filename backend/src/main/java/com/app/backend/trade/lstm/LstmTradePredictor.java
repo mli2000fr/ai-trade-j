@@ -15,7 +15,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 
 import com.app.backend.trade.model.PreditLsdm;
 import com.app.backend.trade.model.SignalType;
@@ -29,7 +28,6 @@ import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.util.ModelSerializer;
 import org.nd4j.linalg.activations.Activation;
 import org.deeplearning4j.nn.conf.WorkspaceMode;
-import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
 import org.nd4j.linalg.lossfunctions.LossFunctions;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -37,12 +35,9 @@ import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.app.backend.trade.exception.InsufficientDataException;
 import org.ta4j.core.indicators.ROCIndicator;
 import org.ta4j.core.indicators.statistics.StandardDeviationIndicator;
 import org.ta4j.core.num.Num;
-
-import static com.app.backend.trade.strategy.StrategieBackTest.*;
 
 @Service
 public class LstmTradePredictor {
@@ -371,6 +366,9 @@ public class LstmTradePredictor {
         double sizingK = config.getSizingK();
         double positionSize = 0.0;
         double entryATR = 0.0;
+        double entrySpread = 0.0; // Nouveau : spread moyen à l'entrée
+        double feePct = config.getFeePct();
+        double slippagePct = config.getSlippagePct();
         for(int bar=testStartBar; bar<testEndBar-1; bar++){
             totalBars++;
             BarSeries sub = fullSeries.getSubSeries(0, bar+1); // jusqu'à bar inclus
@@ -387,11 +385,13 @@ public class LstmTradePredictor {
                     inPosition=true; longPos=true; entry=lastClose; barsInPos=0; positionChanges++;
                     entryATR = atr;
                     positionSize = (atr > 0) ? capital * riskPct / (atr * sizingK) : 0.0;
+                    entrySpread = computeMeanSpread(sub); // calcul du spread moyen historique sur la fenêtre sub
                 }
                 else if(predicted < downLevel){
                     inPosition=true; longPos=false; entry=lastClose; barsInPos=0; positionChanges++;
                     entryATR = atr;
                     positionSize = (atr > 0) ? capital * riskPct / (atr * sizingK) : 0.0;
+                    entrySpread = computeMeanSpread(sub); // calcul du spread moyen historique sur la fenêtre sub
                 }
             } else {
                 barsInPos++; timeInPos++;
@@ -408,13 +408,18 @@ public class LstmTradePredictor {
                 }
                 if(!exit && barsInPos>=horizon){ double current= currentClose; pnl = longPos? (current-entry)*positionSize: (entry-current)*positionSize; exit=true; }
                 if(exit){
+                    // Application des coûts dynamiques (spread, slippage, frais)
+                    double spreadCost = entrySpread * positionSize; // coût du spread moyen
+                    double slippageCost = slippagePct * entry * positionSize; // slippage en % du prix d'entrée
+                    double feeCost = feePct * entry * positionSize; // frais en % du prix d'entrée
+                    pnl -= (spreadCost + slippageCost + feeCost); // déduction des coûts du PnL
                     tradePnL.add(pnl);
                     tradeReturns.add(pnl/(entry*positionSize));
                     barsInPositionList.add(barsInPos);
                     positionSizes.add(positionSize); // Stocker la taille de position pour chaque trade
                     equity += pnl;
                     if(equity>peak) {peak=equity; trough=equity;} else if(equity<trough){ trough=equity; }
-                    inPosition=false; longPos=false; entry=0.0; barsInPos=0; positionSize=0.0; entryATR=0.0;
+                    inPosition=false; longPos=false; entry=0.0; barsInPos=0; positionSize=0.0; entryATR=0.0; entrySpread=0.0;
                 }
             }
             barsTested++;
@@ -690,15 +695,6 @@ public class LstmTradePredictor {
     }
 
     /**
-     * Stub pour trainLstmScalarV2 afin d'éviter l'erreur de compilation.
-     * À remplacer par l'implémentation réelle si disponible.
-     */
-    public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config, Object unused) {
-        // Retourne un objet vide pour éviter l'erreur de compilation
-        return new TrainResult(null, null);
-    }
-
-    /**
      * Entraîne le modèle LSTM avec labels scalaires (close_{t+1} ou log-return_{t+1})
      * - Séquences d'entrée : [numSeq][windowSize][numFeatures]
      * - Labels : [numSeq] (scalaire)
@@ -761,15 +757,14 @@ public class LstmTradePredictor {
         // Normalisation des labels
         double[] normLabels = scalers.labelScaler.transform(labelSeq);
         // Conversion en INDArray
-        org.nd4j.linalg.api.ndarray.INDArray X = toINDArray(normSeq); // [numSeq][window][features]
-        X = transposeTimeFeature(new double[][][]{normSeq}); // [numSeq][features][window]
-        X = org.nd4j.linalg.factory.Nd4j.create(normSeq);
+        org.nd4j.linalg.api.ndarray.INDArray X = org.nd4j.linalg.factory.Nd4j.create(normSeq); // [numSeq][window][features]
         org.nd4j.linalg.api.ndarray.INDArray y = org.nd4j.linalg.factory.Nd4j.create(normLabels, new int[]{numSeq, 1});
         // Initialisation du modèle
         MultiLayerNetwork model = initModel(numFeatures, 1, config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getOptimizer(), config.getL1(), config.getL2(), config, false);
         // Entraînement
         org.nd4j.linalg.dataset.DataSet ds = new org.nd4j.linalg.dataset.DataSet(X, y);
-        org.deeplearning4j.datasets.iterator.impl.ListDataSetIterator<org.nd4j.linalg.dataset.DataSet> iterator = new org.deeplearning4j.datasets.iterator.impl.ListDataSetIterator<>(java.util.Collections.singletonList(ds), config.getBatchSize());
+        java.util.List<org.nd4j.linalg.dataset.DataSet> dsList = java.util.Collections.singletonList(ds);
+        org.nd4j.linalg.dataset.api.iterator.DataSetIterator iterator = new ListDataSetIterator(dsList, config.getBatchSize());
         model.fit(iterator, config.getNumEpochs());
         return new TrainResult(model, scalers);
     }
@@ -953,7 +948,7 @@ public class LstmTradePredictor {
             double lastMean = lastStats[0];
             double lastStd = lastStats[1];
             if (Math.abs(mean - lastMean) / (Math.abs(lastMean) + 1e-8) > 0.2 || Math.abs(std - lastStd) / (Math.abs(lastStd) + 1e-8) > 0.2) {
-                logger.warn("[DRIFT] Feature '{}' : drift détecté (mean {:.3f} -> {:.3f}, std {:.3f} -> {:.3f})", featureName, lastMean, mean, lastStd, std);
+                logger.warn("[DRIFT] Feature '{}' : drift détecté (mean {} -> {}, std {} -> {})", featureName, lastMean, mean, lastStd, std);
             }
         }
         driftStats.put(featureName, new double[]{mean, std});
@@ -1151,5 +1146,20 @@ public class LstmTradePredictor {
             // Le seed DL4J doit être passé lors de la création du modèle (déjà fait dans initModel)
             new java.util.Random(seed); // force initialisation
         } catch (Exception ignored) {}
+    }
+
+    /**
+     * Calcule le spread moyen (high-low) sur une fenêtre donnée.
+     */
+    public double computeMeanSpread(BarSeries series) {
+        int n = series.getBarCount();
+        if (n == 0) return 0.0;
+        double sum = 0.0;
+        for (int i = 0; i < n; i++) {
+            double high = series.getBar(i).getHighPrice().doubleValue();
+            double low = series.getBar(i).getLowPrice().doubleValue();
+            sum += (high - low);
+        }
+        return sum / n;
     }
 }
