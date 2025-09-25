@@ -7,11 +7,8 @@ import com.app.backend.trade.lstm.LstmTuningService;
 import com.app.backend.trade.model.*;
 import com.app.backend.trade.util.TradeUtils;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ResponseBody;
 import org.ta4j.core.BarSeries;
 import java.io.IOException;
 import java.util.Arrays;
@@ -24,19 +21,20 @@ import org.slf4j.LoggerFactory;
 public class LstmHelper {
 
 
-    private JdbcTemplate jdbcTemplate;
-    private LstmTradePredictor lstmTradePredictor;
+    private final JdbcTemplate jdbcTemplate;
+    private final LstmTradePredictor lstmTradePredictor;
+    private final LstmTuningService lstmTuningService;
 
     private static final Logger logger = LoggerFactory.getLogger(LstmHelper.class);
 
-    @Autowired
-    public LstmHelper(JdbcTemplate jdbcTemplate, LstmTradePredictor lstmTradePredictor) {
+    // File centralisée des rapports de drift
+    private final java.util.concurrent.ConcurrentLinkedQueue<LstmTradePredictor.DriftReportEntry> driftReports = new java.util.concurrent.ConcurrentLinkedQueue<>();
+
+    public LstmHelper(JdbcTemplate jdbcTemplate, LstmTradePredictor lstmTradePredictor, LstmTuningService lstmTuningService) {
         this.jdbcTemplate = jdbcTemplate;
         this.lstmTradePredictor = lstmTradePredictor;
+        this.lstmTuningService = lstmTuningService;
     }
-
-    @Autowired
-    private LstmTuningService lstmTuningService;
 
     public BarSeries getBarBySymbol(String symbol, Integer limit) {
         String sql = "SELECT date, open, high, low, close, volume, number_of_trades, volume_weighted_average_price " +
@@ -99,17 +97,44 @@ public class LstmHelper {
         MultiLayerNetwork model = loaded != null ? loaded.model : null;
         LstmTradePredictor.ScalerSet scalers = loaded != null ? loaded.scalers : null;
         BarSeries series = getBarBySymbol(symbol, null);
-        // Vérification drift et retrain éventuel
-        boolean retrained = false;
+        // Vérification drift et retrain éventuel + reporting détaillé
         if (model != null && scalers != null) {
-            retrained = lstmTradePredictor.checkDriftAndRetrain(series, config, model, scalers);
-            if (retrained) {
-                // Sauvegarder le nouveau modèle/scalers
-                try {
-                    lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate, config, scalers);
-                } catch (Exception e) {
-                    logger.warn("Erreur lors de la sauvegarde du modèle/scalers après retrain : {}", e.getMessage());
+            try {
+                java.util.List<LstmTradePredictor.DriftReportEntry> reports = lstmTradePredictor.checkDriftAndRetrainWithReport(series, config, model, scalers, symbol);
+                if(!reports.isEmpty()){
+                    for(LstmTradePredictor.DriftReportEntry r : reports){
+                        driftReports.add(r);
+                        // Insertion BD best-effort (table optionnelle lstm_drift_report)
+                        try {
+                            String sql = "INSERT INTO lstm_drift_report (event_date, symbol, feature, drift_type, kl, mean_shift, mse_before, mse_after, retrained) VALUES (?,?,?,?,?,?,?,?,?)";
+                            jdbcTemplate.update(sql,
+                                java.sql.Timestamp.from(r.eventDate),
+                                r.symbol,
+                                r.feature,
+                                r.driftType,
+                                r.kl,
+                                r.meanShift,
+                                r.mseBefore,
+                                r.mseAfter,
+                                r.retrained
+                            );
+                        } catch (Exception ex){
+                            logger.debug("Table lstm_drift_report absente ou insertion échouée: {}", ex.getMessage());
+                        }
+                        logger.info("[DRIFT-REPORT] symbol={} feature={} type={} kl={} meanShift={}σ mseBefore={} mseAfter={} retrained={}", r.symbol, r.feature, r.driftType, r.kl, r.meanShift, r.mseBefore, r.mseAfter, r.retrained);
+                    }
+                    // Sauvegarder le modèle mis à jour si retrain effectué (au moins un retrained true)
+                    boolean retrained = reports.stream().anyMatch(rr -> rr.retrained);
+                    if(retrained){
+                        try {
+                            lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate, config, scalers);
+                        } catch (Exception e) {
+                            logger.warn("Erreur lors de la sauvegarde du modèle/scalers après retrain : {}", e.getMessage());
+                        }
+                    }
                 }
+            } catch (Exception e){
+                logger.warn("Erreur pendant le drift reporting: {}", e.getMessage());
             }
         }
         PreditLsdm preditLsdm = lstmTradePredictor.getPredit(symbol, series, config, model, scalers);
@@ -221,6 +246,11 @@ public class LstmHelper {
 
     public List<LstmTuningService.TuningExceptionReportEntry> getTuningExceptionReport() {
         return lstmTuningService.getTuningExceptionReport();
+    }
+
+    // Accès aux rapports de drift en mémoire
+    public java.util.List<LstmTradePredictor.DriftReportEntry> getDriftReports(){
+        return new java.util.ArrayList<>(driftReports);
     }
 
 }

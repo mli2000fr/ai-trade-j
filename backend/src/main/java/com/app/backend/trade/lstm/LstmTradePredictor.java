@@ -261,7 +261,6 @@ public class LstmTradePredictor {
         if(series.getBarCount() <= windowSize) throw new IllegalArgumentException("Pas assez de barres pour prédire");
         double[][] matrix = extractFeatureMatrix(series, features);
         int numFeatures = features.size();
-        // normaliser via scalers
         double[][] normMatrix = new double[matrix.length][numFeatures];
         for(int f=0; f<numFeatures; f++){
             double[] col = new double[matrix.length];
@@ -274,14 +273,23 @@ public class LstmTradePredictor {
         seq = transposeTimeFeature(seq); // [1][features][window]
         org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(seq);
         org.nd4j.linalg.api.ndarray.INDArray out = model.output(input); // [1,1]
-        // Pipeline V2 : la sortie est scalaire, donc on prend out.getDouble(0) directement
-        double predNorm = out.getDouble(0); // Simplification : plus besoin d'extraire le dernier step
+        double predNorm = out.getDouble(0);
         double predTarget = scalers.labelScaler.inverse(predNorm);
         double lastClose = series.getLastBar().getClosePrice().doubleValue();
+        double predicted;
         if(config.isUseLogReturnTarget()) {
-            return lastClose * Math.exp(predTarget); // log-return -> close
+            predicted = lastClose * Math.exp(predTarget);
+        } else {
+            predicted = predTarget;
         }
-        return predTarget;
+        double limitPct = config.getLimitPredictionPct();
+        if(limitPct > 0) {
+            double min = lastClose * (1 - limitPct);
+            double max = lastClose * (1 + limitPct);
+            if(predicted < min) predicted = min;
+            else if(predicted > max) predicted = max;
+        }
+        return predicted;
     }
 
     /** Walk-forward evaluation V2 */
@@ -929,7 +937,7 @@ public class LstmTradePredictor {
         return filtered;
     }
 
-    private java.util.Map<String, double[]> driftStats = new java.util.HashMap<>();
+    private final java.util.Map<String, double[]> driftStats = new java.util.HashMap<>();
     public void monitorDrift(double[] col, String featureName) {
         double mean = java.util.Arrays.stream(col).average().orElse(0.0);
         double std = Math.sqrt(java.util.Arrays.stream(col).map(v -> (v - mean) * (v - mean)).average().orElse(0.0));
@@ -1068,6 +1076,26 @@ public class LstmTradePredictor {
         return kl;
     }
 
+    // --- Ajouts pour reporting drift/retrain ---
+    public static class DriftDetectionResult {
+        public boolean drift;
+        public String driftType; // KL, MEAN_SHIFT, BOTH
+        public double kl; public double meanShift;
+        public DriftDetectionResult(boolean drift, String driftType, double kl, double meanShift){
+            this.drift = drift; this.driftType = driftType; this.kl = kl; this.meanShift = meanShift;
+        }
+    }
+    public static class DriftReportEntry implements java.io.Serializable {
+        public java.time.Instant eventDate;
+        public String symbol;
+        public String feature;
+        public String driftType;
+        public double kl;
+        public double meanShift;
+        public double mseBefore;
+        public double mseAfter;
+        public boolean retrained;
+    }
     /**
      * Détecte le drift pour une feature donnée (KL divergence ou shift de moyenne).
      * Retourne true si drift détecté.
@@ -1112,14 +1140,48 @@ public class LstmTradePredictor {
         }
         return false;
     }
-
+    // Nouvelle version détaillée retournant les métriques de drift
+    public DriftDetectionResult checkDriftForFeatureDetailed(String feature, double[] currentValues, FeatureScaler scaler, double klThreshold, double meanShiftSigma){
+        int bins = 20;
+        double min = Math.min(java.util.Arrays.stream(currentValues).min().orElse(0.0), scaler.min);
+        double max = Math.max(java.util.Arrays.stream(currentValues).max().orElse(0.0), scaler.max);
+        double[] histCurrent = new double[bins];
+        double[] histTrain = new double[bins];
+        for (double v : currentValues) {
+            int idx = (int) ((v - min) / (max - min + 1e-8) * (bins - 1));
+            histCurrent[idx] += 1.0;
+        }
+        for (int i = 0; i < bins; i++) {
+            double val = min + (max - min) * i / (bins - 1);
+            if (scaler.type == FeatureScaler.Type.MINMAX) {
+                histTrain[i] = 1.0 / bins;
+            } else {
+                double prob = Math.exp(-0.5 * Math.pow((val - scaler.mean) / (scaler.std + 1e-8), 2)) / (scaler.std * Math.sqrt(2 * Math.PI));
+                histTrain[i] = prob;
+            }
+        }
+        double sumCurrent = java.util.Arrays.stream(histCurrent).sum();
+        double sumTrain = java.util.Arrays.stream(histTrain).sum();
+        for (int i = 0; i < bins; i++) { histCurrent[i]/=(sumCurrent+1e-8); histTrain[i]/=(sumTrain+1e-8);}
+        double kl = computeKLDivergence(histCurrent, histTrain);
+        double meanCurrent = java.util.Arrays.stream(currentValues).average().orElse(0.0);
+        double meanTrain = scaler.type == FeatureScaler.Type.MINMAX ? (scaler.min + scaler.max) / 2.0 : scaler.mean;
+        double stdTrain = scaler.type == FeatureScaler.Type.MINMAX ? (scaler.max - scaler.min) / 2.0 : scaler.std;
+        double meanShift = Math.abs(meanCurrent - meanTrain) / (stdTrain + 1e-8);
+        boolean drift = kl > klThreshold || meanShift > meanShiftSigma;
+        String driftType = !drift ? "NONE" : (kl > klThreshold && meanShift > meanShiftSigma ? "BOTH" : (kl > klThreshold ? "KL" : "MEAN_SHIFT"));
+        if(drift){
+            logger.warn("[DRIFT][DETAIL] feature={} driftType={} KL={} meanShift={}σ", feature, driftType, kl, meanShift);
+        }
+        return new DriftDetectionResult(drift, driftType, kl, meanShift);
+    }
     /**
      * Vérifie le drift sur toutes les features et déclenche le retrain si nécessaire.
      * @return true si retrain déclenché
      */
     public boolean checkDriftAndRetrain(BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers) {
-        double klThreshold = 0.15; // seuil KL divergence
-        double meanShiftSigma = 2.0; // seuil shift de moyenne (2 écarts-types)
+        double klThreshold = config.getKlDriftThreshold();
+        double meanShiftSigma = config.getMeanShiftSigmaThreshold();
         java.util.List<String> features = config.getFeatures();
         boolean driftDetected = false;
         for (String feat : features) {
@@ -1135,7 +1197,6 @@ public class LstmTradePredictor {
         if (driftDetected) {
             logger.warn("[DRIFT] Détection drift : retrain du modèle déclenché.");
             TrainResult tr = trainLstmScalarV2(series, config, null);
-            // Mettre à jour le modèle et les scalers
             if (tr.model != null && tr.scalers != null) {
                 model = tr.model;
                 scalers.featureScalers = tr.scalers.featureScalers;
@@ -1147,77 +1208,56 @@ public class LstmTradePredictor {
         return false;
     }
 
-    // Classe utilitaire pour la normalisation cohérente
-    public static class FeatureScaler implements java.io.Serializable {
-        public enum Type { MINMAX, ZSCORE }
-        public Type type;
-        public double min, max, mean, std;
-
-        // Constructeur sans argument pour la désérialisation JSON (Jackson)
-        public FeatureScaler() {}
-
-        public FeatureScaler(Type type) { this.type = type; }
-        public void fit(double[] values) {
-            if (type == Type.MINMAX) {
-                min = java.util.Arrays.stream(values).min().orElse(0.0);
-                max = java.util.Arrays.stream(values).max().orElse(0.0);
-            } else {
-                mean = java.util.Arrays.stream(values).average().orElse(0.0);
-                std = Math.sqrt(java.util.Arrays.stream(values).map(v -> (v - mean) * (v - mean)).average().orElse(0.0));
-            }
-        }
-        public double[] transform(double[] values) {
-            double[] res = new double[values.length];
-            if (type == Type.MINMAX) {
-                if (min == max) {
-                    for (int i = 0; i < values.length; i++) res[i] = 0.5;
-                } else {
-                    for (int i = 0; i < values.length; i++) res[i] = (values[i] - min) / (max - min);
+    // Nouvelle méthode avec reporting détaillé (retourne liste d'entrées)
+    public java.util.List<DriftReportEntry> checkDriftAndRetrainWithReport(BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers, String symbol){
+        java.util.List<DriftReportEntry> reports = new java.util.ArrayList<>();
+        if(model==null || scalers==null || series==null || config==null) return reports; // rien à faire
+        double klThreshold = config.getKlDriftThreshold(); double meanShiftSigma = config.getMeanShiftSigmaThreshold();
+        // Score MSE avant (sur la dernière portion de données)
+        double mseBefore = Double.NaN; double mseAfter = Double.NaN;
+        try {
+            int total = series.getBarCount();
+            int testStart = Math.max(0, total - (config.getWindowSize()*3));
+            mseBefore = computeSplitMse(series, testStart, total, model, scalers, config);
+        } catch (Exception ignored) {}
+        boolean anyDrift=false;
+        java.util.List<String> driftFeatures = new java.util.ArrayList<>();
+        java.util.Map<String, DriftDetectionResult> details = new java.util.HashMap<>();
+        for(String feat: config.getFeatures()){
+            FeatureScaler scaler = scalers.featureScalers.get(feat);
+            if(scaler==null) continue;
+            double[] values = new double[series.getBarCount()];
+            for(int i=0;i<series.getBarCount();i++) values[i] = extractFeatureMatrix(series, java.util.Collections.singletonList(feat))[i][0];
+            DriftDetectionResult res = checkDriftForFeatureDetailed(feat, values, scaler, klThreshold, meanShiftSigma);
+            if(res.drift){ anyDrift=true; driftFeatures.add(feat); details.put(feat,res);}        }
+        if(anyDrift){
+            logger.warn("[DRIFT][GLOBAL] symbol={} features={} => retrain", symbol, driftFeatures);
+            TrainResult tr = trainLstmScalarV2(series, config, null);
+            if(tr.model!=null && tr.scalers!=null){
+                model.setParams(tr.model.params()); // mettre à jour les poids du modèle courant
+                scalers.featureScalers = tr.scalers.featureScalers; scalers.labelScaler = tr.scalers.labelScaler;
+                try {
+                    int total = series.getBarCount(); int testStart = Math.max(0, total - (config.getWindowSize()*3));
+                    mseAfter = computeSplitMse(series, testStart, total, model, scalers, config);
+                } catch (Exception ignored) {}
+                for(String feat: driftFeatures){
+                    DriftDetectionResult d = details.get(feat);
+                    DriftReportEntry entry = new DriftReportEntry();
+                    entry.eventDate = java.time.Instant.now();
+                    entry.symbol = symbol; entry.feature = feat; entry.driftType = d.driftType; entry.kl = d.kl; entry.meanShift = d.meanShift; entry.mseBefore = mseBefore; entry.mseAfter = mseAfter; entry.retrained = true;
+                    reports.add(entry);
                 }
             } else {
-                if (std == 0.0) {
-                    for (int i = 0; i < values.length; i++) res[i] = 0.0;
-                } else {
-                    for (int i = 0; i < values.length; i++) res[i] = (values[i] - mean) / std;
+                for(String feat: driftFeatures){
+                    DriftDetectionResult d = details.get(feat);
+                    DriftReportEntry entry = new DriftReportEntry();
+                    entry.eventDate = java.time.Instant.now();
+                    entry.symbol = symbol; entry.feature = feat; entry.driftType = d.driftType; entry.kl = d.kl; entry.meanShift = d.meanShift; entry.mseBefore = mseBefore; entry.mseAfter = Double.NaN; entry.retrained = false;
+                    reports.add(entry);
                 }
             }
-            return res;
         }
-        public double inverse(double value) {
-            if (type == Type.MINMAX) return value * (max - min) + min;
-            else return value * std + mean;
-        }
-    }
-
-    // Structure pour stocker les scalers de toutes les features + label
-    public static class ScalerSet implements java.io.Serializable {
-        public java.util.Map<String, FeatureScaler> featureScalers = new java.util.HashMap<>();
-        public FeatureScaler labelScaler;
-    }
-
-    /** Structure métriques trading V2 */
-    public static class TradingMetricsV2 {
-        public double totalProfit;
-        public int numTrades;
-        public double profitFactor;
-        public double winRate;
-        public double maxDrawdownPct;
-        public double expectancy;
-        public double sharpe;
-        public double sortino;
-        public double exposure;
-        public double turnover;
-        public double mse; // MSE out-of-sample pour le split
-        public double businessScore;
-        public double avgBarsInPosition; // Ajouté pour suivi moyen durée position
-    }
-    /** Résultat walk-forward V2 */
-    public static class WalkForwardResultV2 {
-        public java.util.List<TradingMetricsV2> splits = new java.util.ArrayList<>();
-        public double meanMse;
-        public double meanBusinessScore;
-        public double mseVariance;
-        public double mseInterModelVariance; // Ajouté pour variance inter-modèles
+        return reports;
     }
 
     /** Applique les seeds globaux (ND4J, DL4J, Java) pour reproductibilité */
@@ -1243,5 +1283,51 @@ public class LstmTradePredictor {
             sum += (high - low);
         }
         return sum / n;
+    }
+
+    // === Classes internes restaurées ===
+    public static class FeatureScaler implements java.io.Serializable {
+        public enum Type { MINMAX, ZSCORE }
+        public double min = Double.POSITIVE_INFINITY;
+        public double max = Double.NEGATIVE_INFINITY;
+        public double mean = 0.0;
+        public double std = 0.0;
+        public Type type;
+        public FeatureScaler(Type type){ this.type = type; }
+        public void fit(double[] data){
+            if(type==Type.MINMAX){
+                for(double v: data){ if(v<min) min=v; if(v>max) max=v; }
+                if(min==Double.POSITIVE_INFINITY){ min=0; max=1; }
+            } else {
+                double s=0; for(double v: data) s+=v; mean = data.length>0? s/data.length:0.0;
+                double var=0; for(double v: data) var += (v-mean)*(v-mean); std = data.length>0? Math.sqrt(var/ data.length):1.0;
+                if(std==0.0) std = 1.0;
+            }
+        }
+        public double[] transform(double[] data){
+            double[] out = new double[data.length];
+            if(type==Type.MINMAX){
+                double range = (max-min)==0? 1e-9: (max-min);
+                for(int i=0;i<data.length;i++) out[i] = (data[i]-min)/range;
+            } else {
+                for(int i=0;i<data.length;i++) out[i] = (data[i]-mean)/(std==0?1e-9:std);
+            }
+            return out;
+        }
+        public double inverse(double v){
+            if(type==Type.MINMAX){ return min + v*(max-min); }
+            return mean + v*std;
+        }
+    }
+    public static class ScalerSet implements java.io.Serializable {
+        public java.util.Map<String, FeatureScaler> featureScalers = new java.util.HashMap<>();
+        public FeatureScaler labelScaler;
+    }
+    public static class TradingMetricsV2 implements java.io.Serializable {
+        public double totalProfit; public double profitFactor; public double winRate; public double maxDrawdownPct; public double expectancy; public double sharpe; public double sortino; public double exposure; public double turnover; public double avgBarsInPosition; public int numTrades; public double mse; public double businessScore;
+    }
+    public static class WalkForwardResultV2 implements java.io.Serializable {
+        public java.util.List<TradingMetricsV2> splits = new java.util.ArrayList<>();
+        public double meanMse; public double meanBusinessScore; public double mseVariance; public double mseInterModelVariance;
     }
 }

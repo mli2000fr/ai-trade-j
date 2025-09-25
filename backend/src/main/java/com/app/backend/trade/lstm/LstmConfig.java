@@ -187,6 +187,11 @@ public class LstmConfig {
     /** Slippage moyen par trade (ex: 0.0002 = 0.02%) */
     private double slippagePct = 0.0002;
 
+    /** Seuil divergence KL pour détection drift (paramétrable) */
+    private double klDriftThreshold = 0.15;
+    /** Seuil shift de moyenne (en sigma) pour détection drift (paramétrable) */
+    private double meanShiftSigmaThreshold = 2.0;
+
     /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
      * @throws RuntimeException si le fichier de configuration ne peut pas être chargé
@@ -232,6 +237,8 @@ public class LstmConfig {
                 sizingK = Double.parseDouble(props.getProperty("sizingK", "1.0"));
                 feePct = Double.parseDouble(props.getProperty("feePct", "0.0005"));
                 slippagePct = Double.parseDouble(props.getProperty("slippagePct", "0.0002"));
+                klDriftThreshold = Double.parseDouble(props.getProperty("klDriftThreshold", "0.15"));
+                meanShiftSigmaThreshold = Double.parseDouble(props.getProperty("meanShiftSigmaThreshold", "2.0"));
             }
             optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
@@ -283,6 +290,8 @@ public class LstmConfig {
         try { this.sizingK = rs.getDouble("sizing_k"); } catch (Exception ignored) {}
         try { this.feePct = rs.getDouble("fee_pct"); } catch (Exception ignored) {}
         try { this.slippagePct = rs.getDouble("slippage_pct"); } catch (Exception ignored) {}
+        try { this.klDriftThreshold = rs.getDouble("kl_drift_threshold"); } catch (Exception ignored) {}
+        try { this.meanShiftSigmaThreshold = rs.getDouble("mean_shift_sigma_threshold"); } catch (Exception ignored) {}
     }
 
     /**
