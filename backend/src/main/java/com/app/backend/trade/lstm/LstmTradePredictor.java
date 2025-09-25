@@ -227,18 +227,6 @@ public class LstmTradePredictor {
         }
     }
     /**
-     * Validation croisée k-fold avec séquences complètes [batch, numFeatures, windowSize].
-     */
-    public double crossValidateLstm(BarSeries series, LstmConfig config) {
-        throw new UnsupportedOperationException("crossValidateLstm legacy supprimé. Utiliser walkForwardEvaluate.");
-    }
-    /**
-     * Validation croisée temporelle (Time Series Split)
-     */
-    public double crossValidateLstmTimeSeriesSplit(BarSeries series, LstmConfig config) {
-        throw new UnsupportedOperationException("crossValidateLstmTimeSeriesSplit legacy supprimé. Utiliser walkForwardEvaluate.");
-    }
-    /**
      * Prédiction de la prochaine valeur de clôture
      */
     public double predictNextClose(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers) {
@@ -1051,7 +1039,7 @@ public class LstmTradePredictor {
         org.nd4j.linalg.api.ndarray.INDArray out = model.output(input);
         double mse = 0.0;
         for (int i = 0; i < numSeq; i++) {
-            double predNorm = out.getDouble(i, 0, windowSize - 1);
+            double predNorm = out.getDouble(i, 0); // Correction : on prend la sortie scalaire
             double predTarget = scalers.labelScaler.inverse(predNorm);
             double trueTarget = targets[i];
             if (config.isUseLogReturnTarget()) {
