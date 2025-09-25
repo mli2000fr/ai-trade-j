@@ -162,7 +162,12 @@ public class LstmHelper {
             return null;
         }
     }
-
+    public List<String> getSymbolFitredFromTabSingle(String sort) {
+        String orderBy = sort == null ? "score_swing_trade" : sort;
+        String sql = "select symbol from best_in_out_single_strategy s where s.avg_pnl > 0 AND s.profit_factor > 1 AND s.win_rate > 0.5 AND s.max_drawdown < 0.2 AND s.sharpe_ratio > 1 AND s.rendement > 0.05";
+        sql += " ORDER BY " + orderBy + " DESC";
+        return jdbcTemplate.queryForList(sql, String.class);
+    }
 
     // Méthode existante conservée pour compatibilité
     public void tuneAllSymbols() {
@@ -177,20 +182,40 @@ public class LstmHelper {
      */
     public void tuneAllSymbols(boolean useRandomGrid, int randomGridSize) {
         List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
-        List<LstmConfig> grid;
-        if (useRandomGrid) {
-            grid = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize, "timeseries", 48);
-        } else {
-            grid = lstmTuningService.generateSwingTradeGrid();
+        int[] horizonBars = {3, 5, 10};
+        int[] numLstmLayers = {1, 2, 3};
+        int[] batchSizes = {64, 128, 256};
+        boolean[] bidirectionals = {true, false};
+        boolean[] attentions = {true, false};
+        for (String symbol : symbols) {
+            List<String> features = getFeaturesForSymbol(symbol);
+            List<LstmConfig> grid;
+            if (useRandomGrid) {
+                grid = lstmTuningService.generateRandomSwingTradeGrid(
+                    randomGridSize, features, horizonBars, numLstmLayers, batchSizes, bidirectionals, attentions
+                );
+            } else {
+                grid = lstmTuningService.generateSwingTradeGrid(
+                    features, horizonBars, numLstmLayers, batchSizes, bidirectionals, attentions
+                );
+            }
+            lstmTuningService.tuneAllSymbols(Collections.singletonList(symbol), grid, jdbcTemplate, s -> getBarBySymbol(s, null));
         }
-        lstmTuningService.tuneAllSymbols(symbols, grid, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
     }
 
-    public List<String> getSymbolFitredFromTabSingle(String sort) {
-        String orderBy = sort == null ? "score_swing_trade" : sort;
-        String sql = "select symbol from best_in_out_single_strategy s where s.avg_pnl > 0 AND s.profit_factor > 1 AND s.win_rate > 0.5 AND s.max_drawdown < 0.2 AND s.sharpe_ratio > 1 AND s.rendement > 0.05";
-        sql += " ORDER BY " + orderBy + " DESC";
-        return jdbcTemplate.queryForList(sql, String.class);
+    /**
+     * Retourne la liste des features à utiliser pour un symbole donné.
+     * Peut être personnalisée selon le secteur, le marché ou le symbole.
+     */
+    public List<String> getFeaturesForSymbol(String symbol) {
+        if (symbol.startsWith("BTC") || symbol.startsWith("ETH")) {
+            return Arrays.asList("close", "volume", "rsi", "macd", "atr", "momentum", "day_of_week", "month");
+        } else if (symbol.startsWith("CAC") || symbol.startsWith("SPX")) {
+            return Arrays.asList("close", "sma", "ema", "rsi", "atr", "bollinger_high", "bollinger_low", "month");
+        } else if (symbol.startsWith("AAPL") || symbol.startsWith("MSFT")) {
+            return Arrays.asList("close", "volume", "rsi", "sma", "ema", "macd", "atr", "bollinger_high", "bollinger_low", "stochastic", "cci", "momentum", "day_of_week", "month");
+        }
+        return Arrays.asList("close", "volume", "rsi", "sma", "ema", "macd", "atr", "bollinger_high", "bollinger_low", "stochastic", "cci", "momentum", "day_of_week", "month");
     }
 
 

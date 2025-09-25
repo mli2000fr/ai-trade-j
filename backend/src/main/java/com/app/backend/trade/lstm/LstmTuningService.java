@@ -313,6 +313,84 @@ public class LstmTuningService {
     }
 
     /**
+     * Génère automatiquement une grille de configurations adaptée au swing trade enrichie.
+     * @param features liste des features à utiliser
+     * @param horizonBars tableau des horizons de prédiction à tester
+     * @param numLstmLayers tableau du nombre de couches LSTM
+     * @param batchSizes tableau des batch sizes
+     * @param bidirectionals tableau des valeurs bidirectional
+     * @param attentions tableau des valeurs attention
+     * @return liste de LstmConfig à tester
+     */
+    public List<LstmConfig> generateSwingTradeGrid(List<String> features, int[] horizonBars, int[] numLstmLayers, int[] batchSizes, boolean[] bidirectionals, boolean[] attentions) {
+        List<LstmConfig> grid = new java.util.ArrayList<>();
+        int[] windowSizes = {20, 30, 40};
+        int[] lstmNeurons = {64, 128, 256};
+        double[] dropoutRates = {0.2, 0.3};
+        double[] learningRates = {0.0005, 0.001};
+        double[] l1s = {0.0};
+        double[] l2s = {0.0001, 0.001};
+        int numEpochs = 150;
+        int patience = 10;
+        double minDelta = 0.0005;
+        int kFolds = 3;
+        String optimizer = "adam";
+        String[] scopes = {"window"};
+        String[] swingTypes = {"range", "mean_reversion"};
+        for (String swingType : swingTypes) {
+            for (String scope : scopes) {
+                for (int windowSize : windowSizes) {
+                    for (int neurons : lstmNeurons) {
+                        for (double dropout : dropoutRates) {
+                            for (double lr : learningRates) {
+                                for (double l1 : l1s) {
+                                    for (double l2 : l2s) {
+                                        for (int numLayers : numLstmLayers) {
+                                            for (int batchSize : batchSizes) {
+                                                for (boolean bidir : bidirectionals) {
+                                                    for (boolean att : attentions) {
+                                                        for (int horizon : horizonBars) {
+                                                            LstmConfig config = new LstmConfig();
+                                                            config.setWindowSize(windowSize);
+                                                            config.setLstmNeurons(neurons);
+                                                            config.setDropoutRate(dropout);
+                                                            config.setLearningRate(lr);
+                                                            config.setNumEpochs(numEpochs);
+                                                            config.setPatience(patience);
+                                                            config.setMinDelta(minDelta);
+                                                            config.setKFolds(kFolds);
+                                                            config.setOptimizer(optimizer);
+                                                            config.setL1(l1);
+                                                            config.setL2(l2);
+                                                            config.setNormalizationScope(scope);
+                                                            config.setNormalizationMethod("auto");
+                                                            config.setSwingTradeType(swingType);
+                                                            config.setUseScalarV2(true);
+                                                            config.setUseWalkForwardV2(true);
+                                                            config.setNumLstmLayers(numLayers);
+                                                            config.setBatchSize(batchSize);
+                                                            config.setBidirectional(bidir);
+                                                            config.setAttention(att);
+                                                            config.setHorizonBars(horizon);
+                                                            config.setFeatures(features);
+                                                            grid.add(config);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return grid;
+    }
+
+    /**
      * Génère une grille aléatoire de configurations adaptée au swing trade.
      * @param n nombre de configurations à générer
      * @return liste de LstmConfig aléatoires
@@ -399,6 +477,62 @@ public class LstmTuningService {
             config.setUseWalkForwardV2(true);
             // Ajout du mode de validation croisée
             config.setCvMode(cvMode);
+            grid.add(config);
+        }
+        return grid;
+    }
+
+    /**
+     * Génère une grille aléatoire de configurations adaptée au swing trade enrichie.
+     * @param n nombre de configurations à générer
+     * @param features liste des features à utiliser
+     * @param horizonBars tableau des horizons de prédiction à tester
+     * @param numLstmLayers tableau du nombre de couches LSTM
+     * @param batchSizes tableau des batch sizes
+     * @param bidirectionals tableau des valeurs bidirectional
+     * @param attentions tableau des valeurs attention
+     * @return liste de LstmConfig aléatoires
+     */
+    public List<LstmConfig> generateRandomSwingTradeGrid(int n, List<String> features, int[] horizonBars, int[] numLstmLayers, int[] batchSizes, boolean[] bidirectionals, boolean[] attentions) {
+        java.util.Random rand = new java.util.Random();
+        int[] windowSizes = {10, 20, 30};
+        int[] lstmNeurons = {64, 128};
+        double[] dropoutRates = {0.2, 0.3};
+        double[] learningRates = {0.0005, 0.001};
+        double[] l1s = {0.0};
+        double[] l2s = {0.0001, 0.001};
+        int numEpochs = 50;
+        int patience = 5;
+        double minDelta = 0.0005;
+        int kFolds = 3;
+        String optimizer = "adam";
+        String[] scopes = {"window"};
+        String[] swingTypes = {"range", "breakout", "mean_reversion"};
+        List<LstmConfig> grid = new java.util.ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            LstmConfig config = new LstmConfig();
+            config.setWindowSize(windowSizes[rand.nextInt(windowSizes.length)]);
+            config.setLstmNeurons(lstmNeurons[rand.nextInt(lstmNeurons.length)]);
+            config.setDropoutRate(dropoutRates[rand.nextInt(dropoutRates.length)]);
+            config.setLearningRate(learningRates[rand.nextInt(learningRates.length)]);
+            config.setNumEpochs(numEpochs);
+            config.setPatience(patience);
+            config.setMinDelta(minDelta);
+            config.setKFolds(kFolds);
+            config.setOptimizer(optimizer);
+            config.setL1(l1s[rand.nextInt(l1s.length)]);
+            config.setL2(l2s[rand.nextInt(l2s.length)]);
+            config.setNormalizationScope(scopes[rand.nextInt(scopes.length)]);
+            config.setNormalizationMethod("auto");
+            config.setSwingTradeType(swingTypes[rand.nextInt(swingTypes.length)]);
+            config.setUseScalarV2(true);
+            config.setUseWalkForwardV2(true);
+            config.setNumLstmLayers(numLstmLayers[rand.nextInt(numLstmLayers.length)]);
+            config.setBatchSize(batchSizes[rand.nextInt(batchSizes.length)]);
+            config.setBidirectional(bidirectionals[rand.nextInt(bidirectionals.length)]);
+            config.setAttention(attentions[rand.nextInt(attentions.length)]);
+            config.setHorizonBars(horizonBars[rand.nextInt(horizonBars.length)]);
+            config.setFeatures(features);
             grid.add(config);
         }
         return grid;
