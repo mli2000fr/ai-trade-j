@@ -362,43 +362,59 @@ public class LstmTradePredictor {
         java.util.List<Double> tradePnL = new java.util.ArrayList<>();
         java.util.List<Double> tradeReturns = new java.util.ArrayList<>();
         java.util.List<Integer> barsInPositionList = new java.util.ArrayList<>();
+        java.util.List<Double> positionSizes = new java.util.ArrayList<>(); // Ajout pour reporting
         double timeInPos=0.0;
         int barsTested = 0;
         int positionChanges = 0;
+        double capital = config.getCapital();
+        double riskPct = config.getRiskPct();
+        double sizingK = config.getSizingK();
+        double positionSize = 0.0;
+        double entryATR = 0.0;
         for(int bar=testStartBar; bar<testEndBar-1; bar++){
             totalBars++;
             BarSeries sub = fullSeries.getSubSeries(0, bar+1); // jusqu'à bar inclus
             if(sub.getBarCount() <= config.getWindowSize()) continue;
             double threshold = computeSwingTradeThreshold(sub, config); // proportion (ATR % ou autre)
+            org.ta4j.core.indicators.ATRIndicator atrInd = new org.ta4j.core.indicators.ATRIndicator(sub, 14);
+            double atr = atrInd.getValue(sub.getEndIndex()).doubleValue();
             if(!inPosition){
                 double predicted = predictNextCloseScalarV2(sub, config, model, scalers);
                 double lastClose = sub.getLastBar().getClosePrice().doubleValue();
                 double upLevel = lastClose * (1+threshold);
                 double downLevel = lastClose * (1-threshold);
-                if(predicted > upLevel){ inPosition=true; longPos=true; entry=lastClose; barsInPos=0; positionChanges++; }
-                else if(predicted < downLevel){ inPosition=true; longPos=false; entry=lastClose; barsInPos=0; positionChanges++; }
+                if(predicted > upLevel){
+                    inPosition=true; longPos=true; entry=lastClose; barsInPos=0; positionChanges++;
+                    entryATR = atr;
+                    positionSize = (atr > 0) ? capital * riskPct / (atr * sizingK) : 0.0;
+                }
+                else if(predicted < downLevel){
+                    inPosition=true; longPos=false; entry=lastClose; barsInPos=0; positionChanges++;
+                    entryATR = atr;
+                    positionSize = (atr > 0) ? capital * riskPct / (atr * sizingK) : 0.0;
+                }
             } else {
                 barsInPos++; timeInPos++;
                 double currentClose = fullSeries.getBar(bar).getClosePrice().doubleValue();
-                double atrBased = threshold; // reuse threshold
                 double stop, target;
-                if(longPos){ stop = entry*(1-atrBased); target = entry*(1+2*atrBased); } else { stop = entry*(1+atrBased); target = entry*(1-2*atrBased); }
+                if(longPos){ stop = entry*(1-threshold); target = entry*(1+2*threshold); } else { stop = entry*(1+threshold); target = entry*(1-2*threshold); }
                 boolean exit=false; double pnl=0.0;
                 if(longPos){
-                    if(currentClose <= stop){ pnl = currentClose-entry; exit=true; }
-                    else if(currentClose >= target){ pnl = currentClose-entry; exit=true; }
+                    if(currentClose <= stop){ pnl = (currentClose-entry) * positionSize; exit=true; }
+                    else if(currentClose >= target){ pnl = (currentClose-entry) * positionSize; exit=true; }
                 } else {
-                    if(currentClose >= stop){ pnl = entry-currentClose; exit=true; }
-                    else if(currentClose <= target){ pnl = entry-currentClose; exit=true; }
+                    if(currentClose >= stop){ pnl = (entry-currentClose) * positionSize; exit=true; }
+                    else if(currentClose <= target){ pnl = (entry-currentClose) * positionSize; exit=true; }
                 }
-                if(!exit && barsInPos>=horizon){ double current= currentClose; pnl = longPos? current-entry: entry-current; exit=true; }
+                if(!exit && barsInPos>=horizon){ double current= currentClose; pnl = longPos? (current-entry)*positionSize: (entry-current)*positionSize; exit=true; }
                 if(exit){
                     tradePnL.add(pnl);
-                    tradeReturns.add(pnl/entry);
+                    tradeReturns.add(pnl/(entry*positionSize));
                     barsInPositionList.add(barsInPos);
+                    positionSizes.add(positionSize); // Stocker la taille de position pour chaque trade
                     equity += pnl;
                     if(equity>peak) {peak=equity; trough=equity;} else if(equity<trough){ trough=equity; }
-                    inPosition=false; longPos=false; entry=0.0; barsInPos=0;
+                    inPosition=false; longPos=false; entry=0.0; barsInPos=0; positionSize=0.0; entryATR=0.0;
                 }
             }
             barsTested++;
@@ -680,6 +696,82 @@ public class LstmTradePredictor {
     public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config, Object unused) {
         // Retourne un objet vide pour éviter l'erreur de compilation
         return new TrainResult(null, null);
+    }
+
+    /**
+     * Entraîne le modèle LSTM avec labels scalaires (close_{t+1} ou log-return_{t+1})
+     * - Séquences d'entrée : [numSeq][windowSize][numFeatures]
+     * - Labels : [numSeq] (scalaire)
+     * - Normalisation fit uniquement sur train
+     * - nOut=1
+     */
+    public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config, Object unused) {
+        java.util.List<String> features = config.getFeatures();
+        int windowSize = config.getWindowSize();
+        int numFeatures = features.size();
+        int barCount = series.getBarCount();
+        if (barCount <= windowSize + 1) return new TrainResult(null, null);
+        // Extraction des features
+        double[][] matrix = extractFeatureMatrix(series, features);
+        // Extraction des closes
+        double[] closes = extractCloseValues(series);
+        // Construction des labels scalaires
+        int numSeq = barCount - windowSize - 1;
+        double[][][] inputSeq = new double[numSeq][windowSize][numFeatures];
+        double[] labelSeq = new double[numSeq];
+        for (int i = 0; i < numSeq; i++) {
+            for (int j = 0; j < windowSize; j++) {
+                for (int f = 0; f < numFeatures; f++) {
+                    inputSeq[i][j][f] = matrix[i + j][f];
+                }
+            }
+            // Label = close_{i+windowSize} ou log-return
+            if (config.isUseLogReturnTarget()) {
+                double prev = closes[i + windowSize - 1];
+                double next = closes[i + windowSize];
+                labelSeq[i] = Math.log(next / prev);
+            } else {
+                labelSeq[i] = closes[i + windowSize];
+            }
+        }
+        // Fit des scalers sur train uniquement
+        ScalerSet scalers = new ScalerSet();
+        for (int f = 0; f < numFeatures; f++) {
+            double[] col = new double[numSeq + windowSize];
+            for (int i = 0; i < numSeq + windowSize; i++) col[i] = matrix[i][f];
+            FeatureScaler.Type type = getFeatureNormalizationType(features.get(f)).equals("zscore") ? FeatureScaler.Type.ZSCORE : FeatureScaler.Type.MINMAX;
+            FeatureScaler scaler = new FeatureScaler(type);
+            scaler.fit(col);
+            scalers.featureScalers.put(features.get(f), scaler);
+        }
+        // Fit scaler label sur train
+        FeatureScaler.Type labelType = FeatureScaler.Type.MINMAX;
+        FeatureScaler labelScaler = new FeatureScaler(labelType);
+        labelScaler.fit(labelSeq);
+        scalers.labelScaler = labelScaler;
+        // Normalisation des séquences
+        double[][][] normSeq = new double[numSeq][windowSize][numFeatures];
+        for (int i = 0; i < numSeq; i++) {
+            for (int j = 0; j < windowSize; j++) {
+                for (int f = 0; f < numFeatures; f++) {
+                    normSeq[i][j][f] = scalers.featureScalers.get(features.get(f)).transform(new double[]{inputSeq[i][j][f]})[0];
+                }
+            }
+        }
+        // Normalisation des labels
+        double[] normLabels = scalers.labelScaler.transform(labelSeq);
+        // Conversion en INDArray
+        org.nd4j.linalg.api.ndarray.INDArray X = toINDArray(normSeq); // [numSeq][window][features]
+        X = transposeTimeFeature(new double[][][]{normSeq}); // [numSeq][features][window]
+        X = org.nd4j.linalg.factory.Nd4j.create(normSeq);
+        org.nd4j.linalg.api.ndarray.INDArray y = org.nd4j.linalg.factory.Nd4j.create(normLabels, new int[]{numSeq, 1});
+        // Initialisation du modèle
+        MultiLayerNetwork model = initModel(numFeatures, 1, config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getOptimizer(), config.getL1(), config.getL2(), config, false);
+        // Entraînement
+        org.nd4j.linalg.dataset.DataSet ds = new org.nd4j.linalg.dataset.DataSet(X, y);
+        org.deeplearning4j.datasets.iterator.impl.ListDataSetIterator<org.nd4j.linalg.dataset.DataSet> iterator = new org.deeplearning4j.datasets.iterator.impl.ListDataSetIterator<>(java.util.Collections.singletonList(ds), config.getBatchSize());
+        model.fit(iterator, config.getNumEpochs());
+        return new TrainResult(model, scalers);
     }
 
     public boolean containsNaN(org.nd4j.linalg.api.ndarray.INDArray array) {

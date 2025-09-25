@@ -135,6 +135,7 @@ Calibration (Platt ou isotonic) si passage à classification directionnelle mult
 Penalité complexité: ajouter λ * (#params / taille_train) au score interne (éviter sur-ajustement).
 Phase 3 (amélioration trading)
 Position sizing: risk-based (R = capital * riskPct / (ATR*k)).
+
 Fees & slippage dynamiques (spread moyen historique).
 Détection drift: déclencher retrain si KL divergence distribution features > seuil ou shift moyenne > X σ.
 Modifications de code clés (résumé technique) A. trainLstmWithScalers:

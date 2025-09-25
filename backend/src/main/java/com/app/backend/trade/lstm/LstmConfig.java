@@ -176,6 +176,13 @@ public class LstmConfig {
     /** Gamma pour pénalisation drawdown dans businessScore V2 */
     private double businessDrawdownGamma = 1.2;
 
+    /** Capital de trading pour le sizing risk-based */
+    private double capital = 10000.0;
+    /** Pourcentage du capital risqué par trade (ex: 0.01 = 1%) */
+    private double riskPct = 0.01;
+    /** Facteur multiplicateur du sizing (k dans R = capital * riskPct / (ATR*k)) */
+    private double sizingK = 1.0;
+
     /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
      * @throws RuntimeException si le fichier de configuration ne peut pas être chargé
@@ -216,6 +223,9 @@ public class LstmConfig {
                 seed = Long.parseLong(props.getProperty("seed", "42"));
                 businessProfitFactorCap = Double.parseDouble(props.getProperty("businessProfitFactorCap", "3.0"));
                 businessDrawdownGamma = Double.parseDouble(props.getProperty("businessDrawdownGamma", "1.2"));
+                capital = Double.parseDouble(props.getProperty("capital", "10000.0"));
+                riskPct = Double.parseDouble(props.getProperty("riskPct", "0.01"));
+                sizingK = Double.parseDouble(props.getProperty("sizingK", "1.0"));
             }
             optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
@@ -262,6 +272,9 @@ public class LstmConfig {
         try { this.seed = rs.getLong("seed"); } catch (Exception ignored) {}
         try { this.businessProfitFactorCap = rs.getDouble("business_profit_factor_cap"); } catch (Exception ignored) {}
         try { this.businessDrawdownGamma = rs.getDouble("business_drawdown_gamma"); } catch (Exception ignored) {}
+        try { this.capital = rs.getDouble("capital"); } catch (Exception ignored) {}
+        try { this.riskPct = rs.getDouble("risk_pct"); } catch (Exception ignored) {}
+        try { this.sizingK = rs.getDouble("sizing_k"); } catch (Exception ignored) {}
     }
 
     /**
