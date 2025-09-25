@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value; // ajout
 
 import static com.app.backend.trade.strategy.StrategieBackTest.FEE_PCT;
 import static com.app.backend.trade.strategy.StrategieBackTest.SLIP_PAGE_PCT;
@@ -22,6 +23,39 @@ public class LstmTuningService {
     private static final Logger logger = LoggerFactory.getLogger(LstmTuningService.class);
     public final LstmTradePredictor lstmTradePredictor;
     public final LstmHyperparamsRepository hyperparamsRepository;
+
+    // --- Nouveau: configuration dynamique du parallélisme ---
+    @Value("${lstm.tuning.maxThreads:0}")
+    private int configuredMaxThreads; // 0 => auto
+    private int effectiveMaxThreads = 2; // valeur par défaut de secours
+    private boolean cudaBackend = false; // détecté dans initNd4jCuda
+
+    /** Met à jour et recalcule le parallélisme effectif (ex: via endpoint admin). */
+    public synchronized void setMaxParallelTuningThreads(int maxThreads){
+        this.configuredMaxThreads = maxThreads;
+        computeEffectiveMaxThreads();
+    }
+    public int getEffectiveMaxThreads(){ return effectiveMaxThreads; }
+
+    private synchronized void computeEffectiveMaxThreads(){
+        int procs = Runtime.getRuntime().availableProcessors();
+        int base;
+        if(configuredMaxThreads > 0){
+            base = configuredMaxThreads;
+        } else {
+            // Heuristique: laisser 1 coeur libre
+            base = Math.max(1, procs - 1);
+        }
+        if(cudaBackend){
+            // Sur GPU, limiter la pression CPU: moitié des coeurs, cap 4
+            int gpuCap = Math.max(1, Math.min(4, procs / 2 == 0 ? 1 : procs / 2));
+            base = Math.min(base, gpuCap);
+        }
+        // Sécurité mémoire: ne pas dépasser 8 par défaut
+        base = Math.max(1, Math.min(base, 8));
+        this.effectiveMaxThreads = base;
+        logger.info("[TUNING] Parallélisme effectif (auto) = {} (configuré={}, cpuCores={}, cuda={})", effectiveMaxThreads, configuredMaxThreads, procs, cudaBackend);
+    }
 
     // Structure de suivi d'avancement
     public static class TuningProgress {
@@ -39,18 +73,22 @@ public class LstmTuningService {
     @PostConstruct
     public void initNd4jCuda() {
         try {
-            // Activation cuDNN si disponible
             System.setProperty("org.deeplearning4j.cudnn.enabled", "true");
             org.nd4j.linalg.factory.Nd4jBackend backend = org.nd4j.linalg.factory.Nd4j.getBackend();
-            logger.info("ND4J backend utilisé : {}", backend.getClass().getSimpleName());
-            if (!backend.getClass().getSimpleName().toLowerCase().contains("cuda")) {
-                logger.warn("Le backend ND4J n'est pas CUDA ! Le GPU ne sera pas utilisé.");
-                logger.warn("Pour forcer CUDA, lancez la JVM avec : -Dorg.nd4j.linalg.defaultbackend=org.nd4j.linalg.jcublas.JCublasBackend");
+            String backendName = backend.getClass().getSimpleName();
+            logger.info("ND4J backend utilisé : {}", backendName);
+            cudaBackend = backendName.toLowerCase().contains("cuda") || backendName.toLowerCase().contains("jcublas");
+            if (!cudaBackend) {
+                logger.warn("Le backend ND4J n'est pas CUDA. Utilisation CPU uniquement.");
+                logger.warn("Pour forcer CUDA : -Dorg.nd4j.linalg.defaultbackend=org.nd4j.linalg.jcublas.JCublasBackend");
             } else {
-                logger.info("Backend CUDA détecté. Pour de meilleures performances, vérifiez que cuDNN est activé et que la version CUDA/cuDNN est compatible avec ND4J/DL4J.");
+                logger.info("Backend CUDA détecté (optimization parallélisme ajustée).");
             }
         } catch (Exception e) {
             logger.error("Erreur lors de la détection du backend ND4J : {}", e.getMessage());
+        } finally {
+            // Calcul du parallélisme effectif (même en cas d'erreur)
+            computeEffectiveMaxThreads();
         }
     }
 
@@ -98,7 +136,6 @@ public class LstmTuningService {
         }
         waitForMemory();
         long startSymbol = System.currentTimeMillis();
-        // Suivi d'avancement
         TuningProgress progress = new TuningProgress();
         progress.symbol = symbol;
         progress.totalConfigs = grid.size();
@@ -107,8 +144,8 @@ public class LstmTuningService {
         progress.startTime = startSymbol;
         progress.lastUpdate = startSymbol;
         tuningProgressMap.put(symbol, progress);
-        logger.info("[TUNING] Début du tuning V2 pour le symbole {} ({} configs)", symbol, grid.size());
-        double bestScore = Double.POSITIVE_INFINITY; // MSE moyen walk-forward
+        logger.info("[TUNING] Début du tuning V2 pour le symbole {} ({} configs) | maxThreadsEffectif={} (configuré={})", symbol, grid.size(), effectiveMaxThreads, configuredMaxThreads);
+        double bestScore = Double.POSITIVE_INFINITY;
         LstmConfig existing = hyperparamsRepository.loadHyperparams(symbol);
         if(existing != null){
             logger.info("Hyperparamètres existants trouvés pour {}. Ignorer le tuning.", symbol);
@@ -117,14 +154,14 @@ public class LstmTuningService {
         LstmConfig bestConfig = null;
         MultiLayerNetwork bestModel = null;
         LstmTradePredictor.ScalerSet bestScalers = null;
-        int numThreads = Math.min(Math.min(grid.size(), Runtime.getRuntime().availableProcessors()), MAX_THREADS);
+        // --- Utilisation du parallélisme effectif calculé ---
+        int numThreads = Math.min(Math.min(grid.size(), Runtime.getRuntime().availableProcessors()), effectiveMaxThreads);
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
         java.util.List<java.util.concurrent.Future<TuningResult>> futures = new java.util.ArrayList<>();
         for (int i = 0; i < grid.size(); i++) {
             waitForMemory();
             final int configIndex = i + 1;
             LstmConfig config = grid.get(i);
-            // Forcer pipeline V2
             config.setUseScalarV2(true);
             config.setUseWalkForwardV2(true);
             futures.add(executor.submit(() -> {
@@ -730,7 +767,7 @@ public class LstmTuningService {
     }
 
     // Limite de threads pour éviter OOM (configurable)
-    private static final int MAX_THREADS = 2; // Peut être ajusté selon la machine
+    // private static final int MAX_THREADS = 2; // supprimé (remplacé par parallélisme dynamique)
     // Seuil mémoire (80% de la mémoire max JVM)
     private static final double MEMORY_USAGE_THRESHOLD = 0.8;
 
