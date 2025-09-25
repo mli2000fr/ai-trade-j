@@ -344,8 +344,13 @@ public class LstmTradePredictor {
             double mean = result.meanMse;
             double var = mseList.stream().mapToDouble(m->(m-mean)*(m-mean)).sum()/mseList.size();
             result.mseVariance = var;
+            // Calcul et stockage de la variance inter-modèles
+            double interVar = 0.0;
+            for (double mse : mseList) interVar += Math.pow(mse - mean, 2);
+            result.mseInterModelVariance = interVar / mseList.size();
         } else {
             result.mseVariance = 0.0;
+            result.mseInterModelVariance = 0.0;
         }
         return result;
     }
@@ -356,8 +361,10 @@ public class LstmTradePredictor {
         double equity = 0.0; double peak = 0.0; double trough=0.0; boolean inPosition=false; boolean longPos=false; double entry=0.0; int barsInPos=0; int totalBars=0; int horizon = Math.max(3, config.getHorizonBars());
         java.util.List<Double> tradePnL = new java.util.ArrayList<>();
         java.util.List<Double> tradeReturns = new java.util.ArrayList<>();
+        java.util.List<Integer> barsInPositionList = new java.util.ArrayList<>();
         double timeInPos=0.0;
         int barsTested = 0;
+        int positionChanges = 0;
         for(int bar=testStartBar; bar<testEndBar-1; bar++){
             totalBars++;
             BarSeries sub = fullSeries.getSubSeries(0, bar+1); // jusqu'à bar inclus
@@ -368,8 +375,8 @@ public class LstmTradePredictor {
                 double lastClose = sub.getLastBar().getClosePrice().doubleValue();
                 double upLevel = lastClose * (1+threshold);
                 double downLevel = lastClose * (1-threshold);
-                if(predicted > upLevel){ inPosition=true; longPos=true; entry=lastClose; barsInPos=0; }
-                else if(predicted < downLevel){ inPosition=true; longPos=false; entry=lastClose; barsInPos=0; }
+                if(predicted > upLevel){ inPosition=true; longPos=true; entry=lastClose; barsInPos=0; positionChanges++; }
+                else if(predicted < downLevel){ inPosition=true; longPos=false; entry=lastClose; barsInPos=0; positionChanges++; }
             } else {
                 barsInPos++; timeInPos++;
                 double currentClose = fullSeries.getBar(bar).getClosePrice().doubleValue();
@@ -388,6 +395,7 @@ public class LstmTradePredictor {
                 if(exit){
                     tradePnL.add(pnl);
                     tradeReturns.add(pnl/entry);
+                    barsInPositionList.add(barsInPos);
                     equity += pnl;
                     if(equity>peak) {peak=equity; trough=equity;} else if(equity<trough){ trough=equity; }
                     inPosition=false; longPos=false; entry=0.0; barsInPos=0;
@@ -409,9 +417,10 @@ public class LstmTradePredictor {
         tm.sharpe = stdRet>0? meanRet/stdRet * Math.sqrt(Math.max(1, tradeReturns.size())):0.0;
         double downsideStd = Math.sqrt(tradeReturns.stream().filter(r->r<0).mapToDouble(r-> { double dr = r-meanRet; return dr*dr; }).average().orElse(0.0));
         tm.sortino = downsideStd>0? meanRet/downsideStd:0.0;
-        // Correction du calcul d'exposition et turnover
+        // Amélioration du calcul d'exposition et turnover
         tm.exposure = barsTested>0? timeInPos/barsTested:0.0;
-        tm.turnover = barsTested>0? (double)tm.numTrades/barsTested:0.0;
+        tm.turnover = barsTested>0? (double)positionChanges/barsTested:0.0;
+        tm.avgBarsInPosition = barsInPositionList.size()>0 ? barsInPositionList.stream().mapToInt(Integer::intValue).average().orElse(0.0) : 0.0;
         // Business score calculé plus tard (besoin config) -> placeholder
         return tm;
     }
@@ -1031,6 +1040,7 @@ public class LstmTradePredictor {
         public double turnover;
         public double mse; // MSE out-of-sample pour le split
         public double businessScore;
+        public double avgBarsInPosition; // Ajouté pour suivi moyen durée position
     }
     /** Résultat walk-forward V2 */
     public static class WalkForwardResultV2 {
@@ -1038,6 +1048,7 @@ public class LstmTradePredictor {
         public double meanMse;
         public double meanBusinessScore;
         public double mseVariance;
+        public double mseInterModelVariance; // Ajouté pour variance inter-modèles
     }
 
     /** Applique les seeds globaux (ND4J, DL4J, Java) pour reproductibilité */
