@@ -1,49 +1,177 @@
+Analyse ciblée de tuneSymbolMultiThread et adéquation au swing trade professionnel.
+Objectif et flux actuel
+Pour chaque config: initialisation modèle → entraînement (trainLstmWithScalers) → puis (re)validation séparée selon cvMode (split / kfold / timeseries) → prédiction next close → calcul métriques trading → scoring business → sélection meilleure config.
+Exécution parallèle (pool fixe) avec limite mémoire rudimentaire.
+Points positifs
+Journalisation détaillée (logs progression, métriques, erreurs).
+Early stopping intégré (patience + minDelta) via EarlyStoppingTrainer (mieux que fit fixe).
+Multi‑validation (split / kfold / time series).
+Séparation businessScore vs métrique pure (MSE/RMSE).
+Sauvegarde hyperparamètres + modèle + scalers (traçabilité partielle).
+Limitation du parallélisme (prévention OutOfMemory).
+Inclusion de features techniques variées + horizon configurable ailleurs (classification swing distincte).
+Mesures de profit factor, win rate, drawdown max (basique).
+Limites majeures (professionnel / robustesse) a) Fuites de données (data leakage)
+calculateTradingMetricsAdvanced utilise model entraîné puis applique output sur l’ENTIÈRE série (séquences englobant zones futures) sans séparation stricte train/validation/test → contamination massive.
+Prédictions multi‑pas: le modèle produit [batch,1,window] (séquence-à-séquence) mais le backtest lit predictions.getDouble(i) (flatten ND4J) → indexation ambiguë; ne cible pas explicitement le dernier pas prévu (next step). Risque d'utiliser valeurs intermédiaires incohérentes.
+Pour la décision trading (pred > 0.5 / < -0.5) le modèle a été entraîné pour prédire des closes normalisés, pas un signal directionnel ni un delta → seuil arbitraire conduisant à biais structurel.
+b) Méthodologie de validation inadaptée aux séries temporelles
+crossValidateLstm (kfold classique) réordonne implicitement (ou mélange segments non causaux) → look‑ahead structurel (pas de purge).
+splitScoreLstm et early stopping : la normalisation (scalers features + label) fit sur train mais les séquences (labelSeq) utilisent normCloses calculé sur toute la série (labelScaler.fit sur train, OK) mais evaluation MSE sur fenêtre multi-step interne, pas sur véritable next-step hors échantillon.
+businessScore sélectionne sur mélange métriques entachées de fuite.
+c) Incohérence objectif / architecture
+Architecture séquence-à-séquence (produit window de sorties) alors que l’usage final veut une seule prévision next close. Augmentation du bruit + gaspillage capacité.
+Pour swing trade pro on cherche souvent: direction (classification), probabilité calibrée, amplitude (expected move), risque (volatilité conditionnelle). Non représenté.
+d) Backtest simpliste et irréaliste
+Boucle trade: entre entrée et sortie on parcourt les closes futurs jusqu’à SL/TP — mais on suppose connaissance d’un signal unique initial sans recalcul glissant; pas de gestion position simultanée; pas de latence bar-close → exagère performances.
+stopLoss/takeProfit fixes (constants globaux) pas calibrés par ATR/horizon.
+Pas de capital dynamique ni sizing (R position, Kelly fraction, volatilité).
+Slippage/frais constants; pas de spread bid/ask ni partielle exécution.
+Pas de métriques pro: Sharpe, Sortino, MAR, Ulcer, expectancy, turnover, exposure temps.
+e) Sélection modèle biaisée
+bestBusinessScore mis à jour mais log final affiche Test MSE (bestScore) qui n’est pas forcément celui du businessScore retenu.
+Absence de conservation simultanée des deux (risque confusion).
+f) Concurrence / Reproductibilité
+Pas de seed global fixé (Nd4j / Java / Random / backend CUDA) → résultats non déterministes.
+Exécutions parallèles créent contention GC + warmup; pas de queue adaptative ni cancellation early quand config dominée.
+g) Gestion mémoire
+waitForMemory surveille mémoire heap mais ignore mémoire off-heap (ND4J / GPU VRAM). Peut produire OOM natifs.
+Pas de gradient detachment explicite; rely sur GC.
+h) Scoring métrique
+MSE/ RMSE direct sur valeurs normalisées de fenêtres multi‑pas; pas converti en métrique pertinente pour swing (ex: direction accuracy, precision/recall sur breakouts, hit ratio amplitude > coûts).
+computeBusinessScore = profitFactor * winRate / (1 + maxDrawdown) → dimensionnellement fragile (drawdown en valeur absolue vs normalisation). Pas robustifié (log scaling, clamp).
+i) Normalisation / Features
+Normalisation mixte par feature mais pas recalculée dans pipeline backtest glissant (utilisation du même scaler sur toute la série quand on backteste, amplifie fuite).
+Pas de gestion de drift adaptative (malgré monitorDrift log only, aucune action).
+Pas de différenciation de régimes (vol/range) ou segmentation (market regimes clustering).
+j) Risques statistiques
+Absence d’intervalle de confiance / bootstrap out-of-sample.
+Pas d’ensemble “test final verrouillé”.
+Absence de pénalisation complexité (nombre de neurones / couches) dans businessScore (risque sur‑ajustement).
+Conséquences pratiques
+Résultats issus de tuneSymbolMultiThread ne sont pas fiables pour un déploiement de trading réel (probable sur‑estimation).
+Modèle optimise un proxy biaisé (fuite + mauvais mapping sortie→signal) donc sa valeur opérationnelle faible.
+Possibilité d’exécuter stratégies perdantes en production car pas de calibration vs coûts réels.
+Améliorations prioritaires (ordre) Critiques (indispensables):
+Refondre pipeline évaluation: walk‑forward (rolling) ou purged k‑fold temporel (embargo) sans chevauchement futur.
+Reconcevoir sortie modèle:
+Option A: prédire log-return horizon H (régression)
+Option B: classification multi-classes (DOWN/FLAT/UP) avec softmax + calibration (Platt / isotonic).
+Backtest réaliste: glissant bar par bar, décision recalculée seulement à T+1, utilisation de la sortie du modèle disponible uniquement après close courant.
+Séparer strictement data pour tuning (train/val), sélection finale, test verrouillé (jamais utilisé pendant tuning).
+Recalculer trading metrics uniquement sur partie strictement out-of-sample (jamais vue).
+Corriger extraction prédiction: utiliser explicitement dernier pas predit ou produire sortie scalaire (nOut=1).
+Supprimer usage direct predictions.getDouble(i) ambigu; map dimension clair (batch,time,features) ou passer à RnnOutputLayer avec timeDistributed=false (masquer time).
+Intégrer seeds déterministes (Nd4j.getRandom().setSeed, System.setProperty, Random, CUDA).
 
-Pas de gestion de l’early stopping global :
-Le tuning s’arrête pour chaque config selon la patience, mais il n’y a pas de logique pour stopper le tuning d’un symbole si toutes les configs échouent (ex : data corrompue, NaN, etc.).
-→ Risque de perte de temps sur des symboles problématiques.
-Pas de gestion fine des exceptions :
-Les exceptions sont loggées, mais il n’y a pas de reporting centralisé ou d’alerte si tous les tunings échouent pour un symbole.
-Pas de sauvegarde des résultats intermédiaires :
-Si le tuning est interrompu, les meilleurs résultats intermédiaires peuvent être perdus.
-Pas de gestion de l’overfitting :
-Même si la validation croisée est utilisée, il n’y a pas de métrique business (profit factor, drawdown, etc.) dans le critère de sélection final.
-→ Le tuning optimise le MSE, pas forcément la performance réelle en trading.
-Pas de gestion de la seed/random state :
-Pour la reproductibilité, il serait préférable de fixer une seed lors de la génération de la grille aléatoire.
-Pas de gestion de la mémoire GPU/CPU :
-Si le nombre de symboles est très élevé, il peut y avoir un OOM (out of memory) ou une saturation du GPU.
-Pas de logs métier sur les résultats :
-Les logs sont techniques, il manque un reporting synthétique des meilleures configs trouvées (par exemple, un export CSV automatique).
+Importantes:
+Introduire métriques risque: Sharpe annualisé, Sortino, Max DD %, Calmar/MAR, expectancy par trade, exposure, turnover.
+Intégrer coûts dynamiques (spread variable, impact).
+Enrichir score business: combiner expectancy * (1 - drawdownRatio) * prob_upside calibrée; appliquer pénalité complexité.
+Implémenter early stopping sur validation temporelle externe (rolling) plutôt que internal DataSetLossCalculator sur unique split.
+Implémenter détection drift → re-fit scalers / modèle (trigger).
+Stocker versioning modèle (hash dataset + hyperparams).
+Avancées:
+Hyperparameter search : Bayesian (Optuna), Hyperband, ou évolution différentielle (réduit configs inutiles).
+Multi-objective (Pareto profitFactor vs drawdown vs turnover).
+Feature engineering adaptative (volatility scaling, regime flags, volume imbalance).
+Probabilistic outputs (MC Dropout ou ensembles) pour gérer incertitude décisionnelle (skip trade si entropy élevée).
+Intégrer ATR adaptatif pour SL/TP paramétrés (k1 ATR stop, k2 ATR target).
+Ajustements de code concrets (résumé)
+Simplifier label: pour chaque fenêtre prédire close_{t+1} (pas séquence complète) → réduire sortie à nOut=1; adapter trainLstmWithScalers (labels 1D).
+Replacer calculateTradingMetricsAdvanced par simulateWalkForward(model, scalers, series, config) qui:
+a) glisse fenêtre;
+b) génère prédiction seulement après fit sur historique antérieur (option: incremental update / retrain par tranche);
+c) applique logique décisionnelle basée sur proba direction > seuil adaptatif (coûts).
+Introduire classe DataSplitPlan (trainStart, trainEnd, valEnd, testEnd) + générateur rolling.
+CV temps: PurgedKFold (exclusion zone = windowSize + horizon).
+BusinessScore: (expectancy * profitFactorAdj) / (1 + maxDDPct) avec profitFactorAdj = min(profitFactor, cap).
+Risques si non corrigé
+Sur-optimisme → sur-exposition capital réel.
+Effondrement performance live (regime shift non géré).
+Décisions bruitées (seuil ±0.5 arbitraire) → churn trades non profitables.
+Évaluation finale Actuel: adapté à un prototype exploratoire académique; NON adapté à un environnement de swing trading professionnel (fuites de données, méthodologie de backtest insuffisante, sélection de modèle non robuste, absence de calibration et de gestion du risque réaliste).
+Nécessite refonte des étapes d’évaluation, du format de sortie modèle, de la simulation trading et du scoring.
+Priorisation (roadmap courte) Phase 1 (fiabilisation): refactor labels nOut=1, walk-forward, backtest propre, seeds, suppression fuites.
+Phase 2 (robustesse): probabilités directionnelles, risk metrics, improved businessScore, regime features.
+Phase 3 (optimisation): Bayesian search, ensembles / incertitude, drift handling automatisé.
+Indicateurs de validation post-refonte
+Gap performance tuning vs test verrouillé < 15%.
+Drawdown max % capital < seuil défini (ex 12%).
+ProfitFactor test > 1.3 et expectancy > 0 après coûts.
+Classification: Brier score et calibration slope acceptables.
+Stabilité: variance métriques < seuil sur 5 réplicas seeds différents.
+Conclusion: tuneSymbolMultiThread doit être significativement ré-architecturé pour répondre aux standards professionnels du swing trading.
 
 
 
 
-Ajouter un critère métier (profit factor, drawdown, win rate) dans le choix de la meilleure config, pas seulement le MSE.
-Centraliser le reporting des exceptions et des résultats (table ou fichier CSV).
-Ajouter une gestion de la seed pour la reproductibilité.
-Ajouter une gestion mémoire (limiter le nombre de threads, monitoring GPU/CPU).
-Sauvegarder les meilleurs résultats intermédiaires.
-Ajouter un export automatique des résultats tuning (CSV ou base).
 
 
-Pas de gestion de l’early stopping global :
-Le tuning s’arrête pour chaque config selon la patience, mais il n’y a pas de logique pour stopper le tuning d’un symbole si toutes les configs échouent (ex: data corrompue, NaN, etc.).
 
-
-Pas de gestion de l’overfitting :
-Même si la validation croisée est utilisée, il n’y a pas de métrique business (profit factor, drawdown, etc.) dans le critère de sélection final.
-Ajouter un critère métier (profit factor, drawdown, win rate) dans le choix de la meilleure config, pas seulement le MSE.
-
-Pas de gestion de la seed/random state :
-Pour la reproductibilité, il serait préférable de fixer une seed lors de la génération de la grille aléatoire.
-Ajouter une gestion de la seed pour la reproductibilité.
-
-as de gestion de la mémoire GPU/CPU :
-Si le nombre de symboles est très élevé, il peut y avoir un OOM (out of memory) ou une saturation du GPU.
-Ajouter une gestion mémoire (limiter le nombre de threads, monitoring GPU/CPU).
-
-
-on continue sur Pas de gestion de l’overfitting : Même si la validation croisée est utilisée, il n’y a pas de métrique business (profit factor, drawdown, etc.) dans le critère de sélection final. Ajouter un critère métier (profit factor, drawdown, win rate) dans le choix de la meilleure config, pas seulement le MSE.
-
-Attention, j'ai à la fois de méthode mono sthred et multithread, n'oublie pas de modifier les 2: tuneSymbolMultiThread et tuneSymbol, tuneAllSymbolsMultiThread et tuneAllSymbols
+Plan de refactor pour rendre tuneSymbolMultiThread adapté au swing trade pro (priorisation + actions concrètes).
+Phase 1 (critique – suppression fuites & clarification objectif)
+Objectif sortie
+Passer du schéma séquence→séquence (labels [window]) à séquence→scalaire (close_{t+1} ou log-return_{t+1}).
+Modifs: dans trainLstmWithScalers: générer labelSeq[i] = normClose[i+windowSize] (une valeur). Adapter RnnOutputLayer nOut=1 et supprimer boucle t.
+Normalisation sans fuite
+Fitter chaque FeatureScaler uniquement sur la portion train (jusqu’à trainEnd+windowSize-1) puis transformer train/val/test.
+Pour les labels: close ou return uniquement jusqu’au dernier index train avant création de labels.
+Walk-forward / purged split
+Remplacer crossValidateLstm et splitScoreLstm par une fonction walkForwardEvaluate(series, config, nSplits, embargo=windowSize) : a) Pour chaque split: train = [0:split_i], test = (split_i + embargo : split_{i+1}]. b) Refit complet modèle à chaque étape (ou warm restart optionnel).
+Backtest propre
+Nouveau simulateTradingWalkForward(model, scalers, series, config): a) Itération bar par bar après phase initiale windowSize. b) À chaque pas: construire fenêtre passée seulement → prédire → décider (UP/DOWN/NO TRADE). c) Trade suivant seulement après clôture (pas d’accès futur). d) SL/TP dynamiques basés sur ATR (k1,k2) ou multiple de volatility (std returns).
+Business metrics robustes
+Calculer: expectancy = (avgGainwinRate - avgLoss(1-winRate)), profitFactor, maxDrawdownPct, Sharpe (returnBar / std), Sortino, exposure (% temps investi), turnover.
+BusinessScore proposé: (expectancyPos * profitFactorAdj * winRate) / (1 + maxDDPct^γ) avec: profitFactorAdj = min(profitFactor, cap=3), γ=1.2, expectancyPos = max(expectancy, 0).
+Détermination direction
+Remplacer seuil delta brute par: a) Modèle régression sur log-return → signal si proba(|return|>threshold) > pMin (via distribution bootstrap ou ensemble). (Étape ultérieure si incertitude ajoutée.)
+Seeds reproductibles
+Ajouter setSeed(config.seed) + Nd4j.getRandom().setSeed + System.setProperty("org.deeplearning4j.defaultSeed", ...).
+Phase 2 (robustesse statistique)
+Ensemble / MC Dropout pour intervalle de confiance → filtrer trades si incertitude haute (écart-type prédiction > σMax).
+Calibration (Platt ou isotonic) si passage à classification directionnelle multi-classes.
+Penalité complexité: ajouter λ * (#params / taille_train) au score interne (éviter sur-ajustement).
+Phase 3 (amélioration trading)
+Position sizing: risk-based (R = capital * riskPct / (ATR*k)).
+Fees & slippage dynamiques (spread moyen historique).
+Détection drift: déclencher retrain si KL divergence distribution features > seuil ou shift moyenne > X σ.
+Modifications de code clés (résumé technique) A. trainLstmWithScalers:
+Construire label scalar: double[] normLabels = normCloses[windowSize .. windowSize+numSeq-1].
+Créer INDArray labels shape [numSeq,1,1] ou [numSeq,1] (simplifier via RnnOutputLayer TimeDistributed=false).
+Ajuster output layer: new RnnOutputLayer.Builder().nOut(1).activation(IDENTITY).loss(MSE). B. predictNextClose:
+Plus besoin de prendre dernier step d’une séquence prédite; model.output renvoie scalaire → getDouble(0). C. crossValidate…:
+Supprimer kfold “classique”; implémenter walkForwardEvaluate avec embargo. D. calculateTradingMetricsAdvanced:
+Remplacer par simulateTradingWalkForward sans réutiliser predictions globales pré-labellisées; appel model.output à chaque bar. E. computeBusinessScore: nouvelle formule + clamp profitFactor.
+Nouveaux objets (suggestion)
+class WalkForwardResult { List<splitstats> splits; double meanMse; double meanBusinessScore; }</splitstats>
+class Trade { entryIndex, exitIndex, direction, entryPrice, exitPrice, pnl }
+class TradingMetrics { expectancy, profitFactor, winRate, maxDrawdownPct, sharpe, sortino, exposure, turnover, businessScore }
+Seuils recommandés (initialisation)
+Min trades par test split: >= 30 sinon split ignoré.
+Acceptation modèle: profitFactor ≥ 1.3, maxDrawdownPct ≤ 15%, expectancy > 0, Sharpe ≥ 0.8 sur test verrouillé.
+Early stop tuning: si après N configs aucune amélioration businessScore > baseline simple (buy&hold vs cash).
+Transition progressive
+Ajouter nouveau pipeline (suffixe V2) sans casser l’actuel.
+Comparer performances anciennes vs V2 sur mêmes données.
+Migrer tuneSymbolMultiThread pour utiliser pipeline V2 après validation.
+Checklist migration rapide (ordre implémentation)
+Implémenter labels scalaires + adapt predict.
+Implémenter walkForwardEvaluate.
+Implémenter simulateTradingWalkForward + nouvelles métriques.
+Intégrer nouveau businessScore.
+Mettre à jour tuneSymbolMultiThread pour utiliser V2 (flag config useV2=true).
+Ajouter seeds.
+Ajouter test rapide unitaires (construction labels, absence fuite: dernière valeur train pas dans scalers test).
+Livrables tests minimaux
+TestLabelShape: vérifie outputLayer nOut=1 et label dimension.
+TestNoLeak: scaler.min/max diffèrent entre train et full (si drift).
+TestWalkForwardMonotonicité: indices train < indices test.
+TestBacktestChronology: aucune référence prix futur avant décision.
+Prochaines actions si vous voulez le patch initial:
+Créer nouvelles méthodes trainLstmScalarV2, walkForwardEvaluate, simulateTradingWalkForward.
+Modifier tuneSymbolMultiThread pour option useScalarV2.
+Indiquez si vous souhaitez:
+Patch code minimal Phase 1 (je le prépare).
+Ou génération d’un rapport d’audit plus formel.
+Réponse courte: La méthode actuelle n’est pas adaptée pro; le plan ci-dessus remet le pipeline aux normes swing trade. Souhaitez-vous que j’applique le patch Phase 1 maintenant ?
