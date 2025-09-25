@@ -46,6 +46,7 @@ import java.time.DayOfWeek;
 import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.Arrays;
+import org.deeplearning4j.nn.conf.inputs.InputType;
 
 @Service
 public class LstmTradePredictor {
@@ -76,7 +77,7 @@ public class LstmTradePredictor {
         for (int i = 0; i < nLayers; i++) {
             int inSize = (i == 0) ? inputSize : (bidir ? lstmNeurons * 2 : lstmNeurons);
             LSTM.Builder lstmBuilder = new LSTM.Builder()
-                .nIn(inSize) // FIX: définir nIn pour éviter nIn=0
+                .nIn(inSize)
                 .nOut(lstmNeurons)
                 .activation(Activation.TANH);
             org.deeplearning4j.nn.conf.layers.Layer recurrent = bidir ? new org.deeplearning4j.nn.conf.layers.recurrent.Bidirectional(lstmBuilder.build()) : lstmBuilder.build();
@@ -116,7 +117,8 @@ public class LstmTradePredictor {
             .nOut(outputSize)
             .activation(outAct)
             .build());
-
+        // Force l'input type pour éviter nIn=0 quand LastTimeStep est la couche0
+        listBuilder.setInputType(InputType.recurrent(inputSize));
         MultiLayerConfiguration conf = listBuilder.build();
         MultiLayerNetwork model = new MultiLayerNetwork(conf);
         model.init();
@@ -271,8 +273,16 @@ public class LstmTradePredictor {
 
     public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config, Object unused) {
         List<String> features = config.getFeatures();
+        if (features == null || features.isEmpty()) {
+            logger.error("[TRAIN] Liste de features vide/null -> fallback ['close']");
+            features = java.util.List.of("close");
+            config.setFeatures(new java.util.ArrayList<>(features));
+        }
         int windowSize = config.getWindowSize();
         int numFeatures = features.size();
+        if (numFeatures <= 0) {
+            throw new IllegalStateException("numFeatures=0 après fallback, config=" + config.getWindowSize());
+        }
         int barCount = series.getBarCount();
         if (barCount <= windowSize + 1) return new TrainResult(null, null);
         double[][] matrix = extractFeatureMatrix(series, features);
