@@ -96,7 +96,7 @@ public class LstmTuningService {
         if(isSymbolAlreydyTuned(symbol, jdbcTemplate)){
             return null;
         }
-        waitForMemory(); // Protection mémoire avant de lancer le tuning
+        waitForMemory();
         long startSymbol = System.currentTimeMillis();
         // Suivi d'avancement
         TuningProgress progress = new TuningProgress();
@@ -107,89 +107,79 @@ public class LstmTuningService {
         progress.startTime = startSymbol;
         progress.lastUpdate = startSymbol;
         tuningProgressMap.put(symbol, progress);
-        logger.info("[TUNING] Début du tuning pour le symbole {} ({} configs)", symbol, grid.size());
-        double bestScore = Double.MAX_VALUE;
-        LstmConfig conf = hyperparamsRepository.loadHyperparams(symbol);
-        if(conf != null){
+        logger.info("[TUNING] Début du tuning V2 pour le symbole {} ({} configs)", symbol, grid.size());
+        double bestScore = Double.POSITIVE_INFINITY; // MSE moyen walk-forward
+        LstmConfig existing = hyperparamsRepository.loadHyperparams(symbol);
+        if(existing != null){
             logger.info("Hyperparamètres existants trouvés pour {}. Ignorer le tuning.", symbol);
-            return conf;
+            return existing;
         }
         LstmConfig bestConfig = null;
         MultiLayerNetwork bestModel = null;
         LstmTradePredictor.ScalerSet bestScalers = null;
         int numThreads = Math.min(Math.min(grid.size(), Runtime.getRuntime().availableProcessors()), MAX_THREADS);
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
-        List<java.util.concurrent.Future<TuningResult>> futures = new java.util.ArrayList<>();
+        java.util.List<java.util.concurrent.Future<TuningResult>> futures = new java.util.ArrayList<>();
         for (int i = 0; i < grid.size(); i++) {
-            waitForMemory(); // Protection mémoire avant chaque tâche
+            waitForMemory();
             final int configIndex = i + 1;
             LstmConfig config = grid.get(i);
+            // Forcer pipeline V2
+            config.setUseScalarV2(true);
+            config.setUseWalkForwardV2(true);
             futures.add(executor.submit(() -> {
                 MultiLayerNetwork model = null;
                 try {
                     long startConfig = System.currentTimeMillis();
-                    logger.info("[TUNING] [{}] | Début config {}/{}", symbol, Thread.currentThread().getName(), configIndex);
-                    int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
-                    model = lstmTradePredictor.initModel(
-                        numFeatures,
-                        1,
-                        config.getLstmNeurons(),
-                        config.getDropoutRate(),
-                        config.getLearningRate(),
-                        config.getOptimizer(),
-                        config.getL1(),
-                        config.getL2(),
-                        config, true
-                    );
-                    LstmTradePredictor.TrainResult trainResult = lstmTradePredictor.trainLstmWithScalers(series, config, model);
-                    model = trainResult.model;
-                    LstmTradePredictor.ScalerSet scalers = trainResult.scalers;
-                    double score = Double.POSITIVE_INFINITY;
-                    String cvMode = config.getCvMode() != null ? config.getCvMode() : "split";
-                    if ("timeseries".equalsIgnoreCase(cvMode)) {
-                        score = lstmTradePredictor.crossValidateLstmTimeSeriesSplit(series, config);
-                    } else if ("kfold".equalsIgnoreCase(cvMode)) {
-                        score = lstmTradePredictor.crossValidateLstm(series, config);
-                    } else { // split simple
-                        score = lstmTradePredictor.splitScoreLstm(series, config);
+                    lstmTradePredictor.setGlobalSeeds(config.getSeed());
+                    logger.info("[TUNING][V2] [{}] Début config {}/{}", symbol, configIndex, grid.size());
+                    // Entraînement sur toute la série pour la prédiction finale (après WF pour sélection)
+                    LstmTradePredictor.TrainResult trFull = lstmTradePredictor.trainLstmScalarV2(series, config, null);
+                    model = trFull.model;
+                    LstmTradePredictor.ScalerSet scalers = trFull.scalers;
+                    // Walk-forward evaluation
+                    LstmTradePredictor.WalkForwardResultV2 wf = lstmTradePredictor.walkForwardEvaluate(series, config);
+                    double meanMse = wf.meanMse;
+                    // Agrégation métriques trading
+                    double sumPF=0, sumWin=0, sumExp=0, maxDDPct=0, sumBusiness=0, sumProfit=0; int splits=0; int totalTrades=0;
+                    for(LstmTradePredictor.TradingMetricsV2 m : wf.splits){
+                        if(Double.isFinite(m.profitFactor)) sumPF += m.profitFactor; else sumPF += 0;
+                        sumWin += m.winRate;
+                        sumExp += m.expectancy;
+                        if(m.maxDrawdownPct > maxDDPct) maxDDPct = m.maxDrawdownPct;
+                        sumBusiness += (Double.isFinite(m.businessScore)? m.businessScore:0);
+                        sumProfit += m.totalProfit;
+                        totalTrades += m.numTrades;
+                        splits++;
                     }
-                    double rmse = Math.sqrt(score);
-                    double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model, scalers);
-                    double[] closes = lstmTradePredictor.extractCloseValues(series);
-                    double lastClose = closes[closes.length - 1];
-                    double delta = predicted - lastClose;
+                    if(splits==0){
+                        // Pas de splits valides; on marque échec
+                        throw new IllegalStateException("Aucun split valide walk-forward");
+                    }
+                    double meanPF = sumPF / splits;
+                    double meanWinRate = sumWin / splits;
+                    double meanExpectancy = sumExp / splits;
+                    double meanBusinessScore = sumBusiness / splits;
+                    // Direction instantanée sur la série complète (optionnel)
+                    double predicted = lstmTradePredictor.predictNextCloseScalarV2(series, config, model, scalers);
+                    double lastClose = series.getLastBar().getClosePrice().doubleValue();
                     double th = lstmTradePredictor.computeSwingTradeThreshold(series, config);
-                    String direction;
-                    if (delta > th) {
-                        direction = "up";
-                    } else if (delta < -th) {
-                        direction = "down";
-                    } else {
-                        direction = "stable";
-                    }
-                    // Calcul des métriques trading sur le jeu de test
-                    double[] tradingMetrics = lstmTradePredictor.calculateTradingMetricsAdvanced(series, config, model,  FEE_PCT, SLIP_PAGE_PCT);
-                    double profitTotal = tradingMetrics[0];
-                    int numTrades = (int) tradingMetrics[1];
-                    double profitFactor = tradingMetrics[2];
-                    double winRate = tradingMetrics[3];
-                    double maxDrawdown = tradingMetrics[4];
-                    // Sauvegarde des métriques
-                    hyperparamsRepository.saveTuningMetrics(symbol, config, score, rmse, direction,
-                        profitTotal, profitFactor, winRate, maxDrawdown, numTrades);
+                    String direction = (predicted - lastClose) > th ? "up" : ((predicted - lastClose) < -th ? "down" : "stable");
+                    // Sauvegarde métriques tuning (mse, rmse, profitTotal= somme profits splits, profitFactor moyen, winRate moyen, drawdown max pct, numTrades total)
+                    double rmse = Double.isFinite(meanMse) && meanMse>=0? Math.sqrt(meanMse): Double.NaN;
+                    hyperparamsRepository.saveTuningMetrics(symbol, config, meanMse, rmse, direction,
+                            sumProfit, meanPF, meanWinRate, maxDDPct, totalTrades);
                     long endConfig = System.currentTimeMillis();
-                    logger.info("[TUNING] [{}] Fin config {}/{} | MSE={}, RMSE={}, direction={}, durée={} ms", symbol, configIndex, grid.size(), score, rmse, direction, (endConfig - startConfig));
-                    // Mise à jour du suivi d'avancement
+                    logger.info("[TUNING][V2] [{}] Fin config {}/{} | meanMSE={}, PF={}, winRate={}, DD%={}, expectancy={}, businessScore={}, trades={} durée={} ms", symbol, configIndex, grid.size(), meanMse, meanPF, meanWinRate, maxDDPct, meanExpectancy, meanBusinessScore, totalTrades, (endConfig-startConfig));
                     TuningProgress p = tuningProgressMap.get(symbol);
-                    if (p != null) {
-                        p.testedConfigs.incrementAndGet();
-                        p.lastUpdate = System.currentTimeMillis();
-                    }
-                    // Calcul du score métier
-                    double businessScore = computeBusinessScore(profitFactor, winRate, maxDrawdown);
-                    return new TuningResult(config, model, score, scalers, profitFactor, winRate, maxDrawdown, businessScore);
+                    if (p != null) { p.testedConfigs.incrementAndGet(); p.lastUpdate = System.currentTimeMillis(); }
+                    return new TuningResult(config, model, scalers, meanMse, meanPF, meanWinRate, maxDDPct, meanBusinessScore);
+                } catch (Exception e){
+                    logger.error("[TUNING][V2] Erreur config {} : {}", configIndex, e.getMessage());
+                    String stack = org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace(e);
+                    tuningExceptionReport.add(new TuningExceptionReportEntry(symbol, config, e.getMessage(), stack, System.currentTimeMillis()));
+                    return null;
                 } finally {
-                    // Libération mémoire GPU/CPU
                     model = null;
                     org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
                     org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread();
@@ -203,8 +193,8 @@ public class LstmTuningService {
         for (int i = 0; i < futures.size(); i++) {
             try {
                 TuningResult result = futures.get(i).get();
-                logger.info("[TUNING] [{}] Progression : {}/{} configs terminées", symbol, i+1, grid.size());
-                if (result == null || Double.isNaN(result.score) || Double.isInfinite(result.score)) {
+                logger.info("[TUNING][V2] [{}] Progression : {}/{} configs terminées", symbol, i+1, grid.size());
+                if (result == null || Double.isNaN(result.businessScore) || Double.isInfinite(result.businessScore)) {
                     failedConfigs++;
                     continue;
                 }
@@ -213,6 +203,7 @@ public class LstmTuningService {
                     bestConfig = result.config;
                     bestModel = result.model;
                     bestScalers = result.scalers;
+                    bestScore = result.score; // meanMSE
                 }
             } catch (Exception e) {
                 failedConfigs++;
@@ -228,8 +219,7 @@ public class LstmTuningService {
             progress.status = "failed";
             progress.endTime = endSymbol;
             progress.lastUpdate = endSymbol;
-            logger.error("[TUNING][EARLY STOP GLOBAL] Toutes les configs ont échoué pour le symbole {}. Tuning stoppé.", symbol);
-            tuningExceptionReport.add(new TuningExceptionReportEntry(symbol, null, "Toutes les configs ont échoué (early stopping global)", "", System.currentTimeMillis()));
+            logger.error("[TUNING][V2][EARLY STOP] Toutes les configs ont échoué pour le symbole {}.", symbol);
             return null;
         }
         progress.status = "termine";
@@ -242,19 +232,15 @@ public class LstmTuningService {
             } catch (Exception e) {
                 logger.error("Erreur lors de la sauvegarde du meilleur modèle : {}", e.getMessage());
             }
-            logger.info("[TUNING] Fin tuning pour {} | Meilleure config : windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={}, Test MSE={}, durée totale={} ms", symbol, bestConfig.getWindowSize(), bestConfig.getLstmNeurons(), bestConfig.getDropoutRate(), bestConfig.getLearningRate(), bestConfig.getL1(), bestConfig.getL2(), bestScore, (endSymbol - startSymbol));
+            logger.info("[TUNING][V2] Fin tuning {} | Best businessScore={} | windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={}, meanMSE={}, durée={} ms", symbol, bestBusinessScore, bestConfig.getWindowSize(), bestConfig.getLstmNeurons(), bestConfig.getDropoutRate(), bestConfig.getLearningRate(), bestConfig.getL1(), bestConfig.getL2(), bestScore, (endSymbol - startSymbol));
         } else {
-            logger.warn("[TUNING] Aucun modèle/scaler valide trouvé pour {}", symbol);
+            logger.warn("[TUNING][V2] Aucun modèle/scaler valide trouvé pour {}", symbol);
         }
-        // Nettoyage mémoire ND4J/DL4J pour libérer le GPU
         try {
             org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
             org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread();
             System.gc();
-            logger.info("Nettoyage mémoire ND4J/DL4J effectué après tuning.");
-        } catch (Exception e) {
-            logger.warn("Erreur lors du nettoyage ND4J/DL4J : {}", e.getMessage());
-        }
+        } catch (Exception e) { logger.warn("Nettoyage ND4J échec : {}", e.getMessage()); }
         return bestConfig;
     }
 
@@ -268,174 +254,6 @@ public class LstmTuningService {
             return false;
         }
     }
-
-    public LstmConfig tuneSymbol(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
-        if(isSymbolAlreydyTuned(symbol, jdbcTemplate)){
-            return null;
-        }
-
-        waitForMemory(); // Protection mémoire avant de lancer le tuning
-        long startSymbol = System.currentTimeMillis();
-        // Suivi d'avancement
-        TuningProgress progress = new TuningProgress();
-        progress.symbol = symbol;
-        progress.totalConfigs = grid.size();
-        progress.testedConfigs.set(0);
-        progress.status = "en_cours";
-        progress.startTime = startSymbol;
-        progress.lastUpdate = startSymbol;
-        tuningProgressMap.put(symbol, progress);
-        logger.info("[TUNING] Début du tuning pour le symbole {} ({} configs)", symbol, grid.size());
-        double bestScore = Double.MAX_VALUE;
-        LstmConfig conf = hyperparamsRepository.loadHyperparams(symbol);
-        if(conf != null){
-            logger.info("Hyperparamètres existants trouvés pour {}. Ignorer le tuning.", symbol);
-            return conf;
-        }
-        LstmConfig bestConfig = null;
-        MultiLayerNetwork bestModel = null;
-        LstmTradePredictor.ScalerSet bestScalers = null;
-        int failedConfigs = 0;
-        double bestBusinessScore = Double.NEGATIVE_INFINITY;
-        for (int i = 0; i < grid.size(); i++) {
-            long startConfig = System.currentTimeMillis();
-            LstmConfig config = grid.get(i);
-            logger.info("[TUNING] [{}] Début config {}/{}", symbol, i+1, grid.size());
-            double score = Double.POSITIVE_INFINITY;
-            MultiLayerNetwork model = null;
-            LstmTradePredictor.TrainResult trainResult = null;
-            try {
-                // Sélection du mode de validation selon cvMode
-                String cvMode = config.getCvMode() != null ? config.getCvMode() : "split";
-                if ("timeseries".equalsIgnoreCase(cvMode)) {
-                    score = lstmTradePredictor.crossValidateLstmTimeSeriesSplit(series, config);
-                } else if ("kfold".equalsIgnoreCase(cvMode)) {
-                    score = lstmTradePredictor.crossValidateLstm(series, config);
-                } else { // split simple
-                    score = lstmTradePredictor.splitScoreLstm(series, config);
-                }
-                int numFeatures = config.getFeatures() != null ? config.getFeatures().size() : 1;
-                model = lstmTradePredictor.initModel(
-                    numFeatures,
-                    1,
-                    config.getLstmNeurons(),
-                    config.getDropoutRate(),
-                    config.getLearningRate(),
-                    config.getOptimizer(),
-                    config.getL1(),
-                    config.getL2(),
-                    config, true
-                );
-                trainResult = lstmTradePredictor.trainLstmWithScalers(series, config, model);
-                model = trainResult.model;
-                if (Double.isNaN(score) || Double.isInfinite(score)) {
-                    failedConfigs++;
-                    continue;
-                }
-            } catch (Exception e) {
-                failedConfigs++;
-                logger.error("Erreur lors du tuning config {}/{} : {}", i+1, grid.size(), e.getMessage());
-                String stack = org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace(e);
-                tuningExceptionReport.add(new TuningExceptionReportEntry(symbol, config, e.getMessage(), stack, System.currentTimeMillis()));
-                continue;
-            } finally {
-                // Libération proactive mémoire ND4J/DL4J + GC Java + libération explicite du modèle
-                try {
-                    model = null;
-                    trainResult = null;
-                    org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
-                    org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread();
-                } catch (Exception e) {
-                    logger.warn("Erreur lors du nettoyage ND4J/DL4J après entraînement : {}", e.getMessage());
-                }
-                System.gc();
-            }
-            double rmse = Math.sqrt(score);
-            double predicted = lstmTradePredictor.predictNextClose(symbol, series, config, model, trainResult.scalers);
-            double[] closes = lstmTradePredictor.extractCloseValues(series);
-            double lastClose = closes[closes.length - 1];
-            double delta = predicted - lastClose;
-            double th = lstmTradePredictor.computeSwingTradeThreshold(series, config);
-            String direction;
-            if (delta > th) {
-                direction = "up";
-            } else if (delta < -th) {
-                direction = "down";
-            } else {
-                direction = "stable";
-            }
-            // Calcul des métriques trading sur le jeu de test
-            double[] tradingMetrics = lstmTradePredictor.calculateTradingMetricsAdvanced(series, config, model,  FEE_PCT, SLIP_PAGE_PCT);
-            double profitTotal = tradingMetrics[0];
-            int numTrades = (int) tradingMetrics[1];
-            double profitFactor = tradingMetrics[2];
-            double winRate = tradingMetrics[3];
-            double maxDrawdown = tradingMetrics[4];
-            // Sauvegarde des métriques
-            hyperparamsRepository.saveTuningMetrics(symbol, config, score, rmse, direction,
-                profitTotal, profitFactor, winRate, maxDrawdown, numTrades);
-            long endConfig = System.currentTimeMillis();
-            logger.info("[TUNING] [{}] Fin config {} | MSE={}, RMSE={}, direction={}, durée={} ms", symbol, grid.size(), score, rmse, direction, (endConfig - startConfig));
-            // Mise à jour du suivi d'avancement
-            TuningProgress p = tuningProgressMap.get(symbol);
-            if (p != null) {
-                p.testedConfigs.incrementAndGet();
-                p.lastUpdate = System.currentTimeMillis();
-            }
-
-            logger.info("[TUNING] [{}] Fin config {}/{} | MSE={}, RMSE={}, direction={}, durée={} ms", symbol, i+1, grid.size(), score, rmse, direction, (endConfig - startConfig));
-            if (score < bestScore) {
-                bestScore = score;
-                bestConfig = config;
-                bestModel = model;
-                bestScalers = trainResult.scalers;
-            }
-            double businessScore = computeBusinessScore(profitFactor, winRate, maxDrawdown);
-            if (businessScore > bestBusinessScore) {
-                bestBusinessScore = businessScore;
-                bestConfig = config;
-                bestModel = model;
-                bestScalers = trainResult.scalers;
-            }
-            logger.info("[TUNING] [{}] Progression : {}/{} configs terminées", symbol, i+1, grid.size());
-        }
-
-        long endSymbol = System.currentTimeMillis();
-        if (failedConfigs == grid.size()) {
-            progress.status = "failed";
-            progress.endTime = endSymbol;
-            progress.lastUpdate = endSymbol;
-            logger.error("[TUNING][EARLY STOP GLOBAL] Toutes les configs ont échoué pour le symbole {}. Tuning stoppé.", symbol);
-            tuningExceptionReport.add(new TuningExceptionReportEntry(symbol, null, "Toutes les configs ont échoué (early stopping global)", "", System.currentTimeMillis()));
-            return null;
-        }
-        progress.status = "termine";
-        progress.endTime = endSymbol;
-        progress.lastUpdate = endSymbol;
-        if (bestConfig != null && bestModel != null && bestScalers != null) {
-            hyperparamsRepository.saveHyperparams(symbol, bestConfig);
-            try {
-                lstmTradePredictor.saveModelToDb(symbol, bestModel, jdbcTemplate, bestConfig, bestScalers);
-            } catch (Exception e) {
-                logger.error("Erreur lors de la sauvegarde du meilleur modèle : {}", e.getMessage());
-            }
-            logger.info("[TUNING] Fin tuning pour {} | Meilleure config : windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={}, CV MSE={}, durée totale={} ms", symbol, bestConfig.getWindowSize(), bestConfig.getLstmNeurons(), bestConfig.getDropoutRate(), bestConfig.getLearningRate(), bestConfig.getL1(), bestConfig.getL2(), bestScore, (endSymbol - startSymbol));
-        } else {
-            logger.warn("[TUNING] Aucun modèle valide trouvé pour {}", symbol);
-        }
-        // Nettoyage mémoire ND4J/DL4J pour libérer le GPU
-        try {
-            org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
-            org.nd4j.linalg.api.memory.MemoryWorkspaceManager wsManager = org.nd4j.linalg.factory.Nd4j.getWorkspaceManager();
-            wsManager.destroyAllWorkspacesForCurrentThread();
-            logger.info("Nettoyage mémoire ND4J/DL4J effectué après tuning.");
-        } catch (Exception e) {
-            logger.warn("Erreur lors du nettoyage ND4J/DL4J : {}", e.getMessage());
-        }
-        return bestConfig;
-    }
-
-
 
 
     /**
@@ -480,6 +298,8 @@ public class LstmTuningService {
                                         config.setNormalizationScope(scope);
                                         config.setNormalizationMethod("auto");
                                         config.setSwingTradeType(swingType);
+                                        config.setUseScalarV2(true);
+                                        config.setUseWalkForwardV2(true);
                                         grid.add(config);
                                     }
                                 }
@@ -510,7 +330,7 @@ public class LstmTuningService {
         double minDelta = 0.0005;
         int kFolds = 3;
         String optimizer = "adam";
-        String[] scopes = {"window", "global"};
+        String[] scopes = {"window"};
         String[] swingTypes = {"range", "breakout", "mean_reversion"};
         List<LstmConfig> grid = new java.util.ArrayList<>();
         for (int i = 0; i < n; i++) {
@@ -529,6 +349,8 @@ public class LstmTuningService {
             config.setNormalizationScope(scopes[rand.nextInt(scopes.length)]);
             config.setNormalizationMethod("auto");
             config.setSwingTradeType(swingTypes[rand.nextInt(swingTypes.length)]);
+            config.setUseScalarV2(true);
+            config.setUseWalkForwardV2(true);
             grid.add(config);
         }
         return grid;
@@ -554,7 +376,7 @@ public class LstmTuningService {
         double minDelta = 0.0005;
         int kFolds = 3;
         String optimizer = "adam";
-        String[] scopes = {"window", "global"};
+        String[] scopes = {"window"};
         String[] swingTypes = {"range", "breakout", "mean_reversion"};
         List<LstmConfig> grid = new java.util.ArrayList<>();
         for (int i = 0; i < n; i++) {
@@ -573,61 +395,13 @@ public class LstmTuningService {
             config.setNormalizationScope(scopes[rand.nextInt(scopes.length)]);
             config.setNormalizationMethod("auto");
             config.setSwingTradeType(swingTypes[rand.nextInt(swingTypes.length)]);
+            config.setUseScalarV2(true);
+            config.setUseWalkForwardV2(true);
             // Ajout du mode de validation croisée
             config.setCvMode(cvMode);
             grid.add(config);
         }
         return grid;
-    }
-
-    /**
-     * Lance le tuning automatique pour une liste de symboles.
-     * @param symbols liste des symboles à tuner
-     * @param jdbcTemplate accès base
-     * @param seriesProvider fonction pour obtenir BarSeries par symbole
-     */
-    public void tuneAllSymbolsMultiThread(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
-        int numThreads = Math.min(Math.min(symbols.size(), Runtime.getRuntime().availableProcessors()), MAX_THREADS);
-        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
-        java.util.concurrent.CompletionService<Void> completionService = new java.util.concurrent.ExecutorCompletionService<>(executor);
-        int submitted = 0;
-        long startAll = System.currentTimeMillis();
-        logger.info("[TUNING] Début tuning multi-symboles ({} symboles)", symbols.size());
-        for (String symbol : symbols) {
-            waitForMemory(); // Protection mémoire avant chaque soumission de tâche
-            completionService.submit(() -> {
-                long startSymbol = System.currentTimeMillis();
-                try {
-                    BarSeries series = seriesProvider.apply(symbol);
-                    tuneSymbol(symbol, grid, series, jdbcTemplate);
-                } catch (Exception e) {
-                    logger.error("Erreur dans le tuning du symbole {} : {}", symbol, e.getMessage());
-                }
-                long endSymbol = System.currentTimeMillis();
-                logger.info("[TUNING] Fin tuning symbole {} | durée={} ms", symbol, (endSymbol - startSymbol));
-                return null;
-            });
-            submitted++;
-        }
-        for (int i = 0; i < submitted; i++) {
-            try {
-                completionService.take();
-            } catch (Exception e) {
-                logger.error("Erreur lors de la récupération d'une tâche de tuning : {}", e.getMessage());
-            }
-        }
-        executor.shutdown();
-        try {
-            if (!executor.awaitTermination(10, java.util.concurrent.TimeUnit.MINUTES)) {
-                executor.shutdownNow();
-                logger.warn("Arrêt forcé du pool de threads tuning");
-            }
-        } catch (InterruptedException e) {
-            executor.shutdownNow();
-            logger.error("Interruption lors de l'arrêt du pool de threads tuning : {}", e.getMessage());
-        }
-        long endAll = System.currentTimeMillis();
-        logger.info("[TUNING] Fin tuning multi-symboles | durée totale={} ms", (endAll - startAll));
     }
 
     public void tuneAllSymbols(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
@@ -654,36 +428,17 @@ public class LstmTuningService {
         logger.info("[TUNING] Fin tuning multi-symboles | durée totale={} ms", (endAll - startAll));
     }
 
-    /**
-     * Calcule un score métier pour le swing trade en combinant profit factor, win rate et drawdown.
-     * Plus le score est élevé, mieux c'est.
-     */
-    private double computeBusinessScore(double profitFactor, double winRate, double maxDrawdown) {
-        // Exemple de formule : maximise profitFactor et winRate, pénalise le drawdown
-        return profitFactor * winRate / (1.0 + maxDrawdown);
+    /** Nouveau business score V2 */
+    private double computeBusinessScoreV2(double profitFactor, double winRate, double maxDrawdownPct, double expectancy, LstmConfig config){
+        double pfAdj = Math.min(profitFactor, config.getBusinessProfitFactorCap());
+        double expPos = Math.max(expectancy, 0.0);
+        double denom = 1.0 + Math.pow(Math.max(maxDrawdownPct, 0.0), config.getBusinessDrawdownGamma());
+        return (expPos * pfAdj * winRate) / (denom + 1e-9);
     }
 
-    // Classe interne pour stocker le résultat du tuning
     private static class TuningResult {
-        LstmConfig config;
-        MultiLayerNetwork model;
-        double score;
-        LstmTradePredictor.ScalerSet scalers;
-        double profitFactor;
-        double winRate;
-        double maxDrawdown;
-        double businessScore;
-        TuningResult(LstmConfig config, MultiLayerNetwork model, double score, LstmTradePredictor.ScalerSet scalers,
-                     double profitFactor, double winRate, double maxDrawdown, double businessScore) {
-            this.config = config;
-            this.model = model;
-            this.score = score;
-            this.scalers = scalers;
-            this.profitFactor = profitFactor;
-            this.winRate = winRate;
-            this.maxDrawdown = maxDrawdown;
-            this.businessScore = businessScore;
-        }
+        LstmConfig config; MultiLayerNetwork model; LstmTradePredictor.ScalerSet scalers; double score; double profitFactor; double winRate; double maxDrawdown; double businessScore;
+        TuningResult(LstmConfig c, MultiLayerNetwork m, LstmTradePredictor.ScalerSet s, double score, double pf, double wr, double dd, double bs){ this.config=c; this.model=m; this.scalers=s; this.score=score; this.profitFactor=pf; this.winRate=wr; this.maxDrawdown=dd; this.businessScore=bs; }
     }
 
     // Limite de threads pour éviter OOM (configurable)

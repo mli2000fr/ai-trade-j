@@ -146,7 +146,7 @@ public class LstmHelper {
 
     // Méthode existante conservée pour compatibilité
     public void tuneAllSymbols() {
-        tuneAllSymbols(false, 2);
+        tuneAllSymbols(true, 5);
     }
     /**
      * Lance le tuning automatique pour une liste de symboles.
@@ -165,21 +165,6 @@ public class LstmHelper {
         }
         lstmTuningService.tuneAllSymbols(symbols, grid, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
     }
-
-    public void tuneAllSymbolsBis() {
-        tuneAllSymbolsBis(false, 150);
-    }
-    public void tuneAllSymbolsBis(boolean useRandomGrid, int randomGridSize) {
-        List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
-        List<LstmConfig> grid;
-        if (useRandomGrid) {
-            grid = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize, "timeseries", 48);
-        } else {
-            grid = lstmTuningService.generateSwingTradeGrid();
-        }
-        lstmTuningService.tuneAllSymbols(symbols, grid, jdbcTemplate, symbol -> getBarBySymbol(symbol, null));
-    }
-
 
     public List<String> getSymbolFitredFromTabSingle(String sort) {
         String orderBy = sort == null ? "score_swing_trade" : sort;

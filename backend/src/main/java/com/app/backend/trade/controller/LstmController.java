@@ -64,12 +64,6 @@ public class LstmController {
     }
 
 
-    @GetMapping("/tuneAllSymbolsBis")
-    public boolean tuneAllSymbolsBis() {
-        lsdmHelper.tuneAllSymbolsBis();
-        return true;
-    }
-
     /**
      * Endpoint REST pour récupérer le reporting centralisé des erreurs de tuning LSTM
      */

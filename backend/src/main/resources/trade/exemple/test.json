@@ -128,6 +128,7 @@ Détermination direction
 Remplacer seuil delta brute par: a) Modèle régression sur log-return → signal si proba(|return|>threshold) > pMin (via distribution bootstrap ou ensemble). (Étape ultérieure si incertitude ajoutée.)
 Seeds reproductibles
 Ajouter setSeed(config.seed) + Nd4j.getRandom().setSeed + System.setProperty("org.deeplearning4j.defaultSeed", ...).
+
 Phase 2 (robustesse statistique)
 Ensemble / MC Dropout pour intervalle de confiance → filtrer trades si incertitude haute (écart-type prédiction > σMax).
 Calibration (Platt ou isotonic) si passage à classification directionnelle multi-classes.

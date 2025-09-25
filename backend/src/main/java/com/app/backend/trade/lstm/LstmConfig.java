@@ -159,6 +159,23 @@ public class LstmConfig {
      */
     private String cvMode = "split";
 
+    /** Pipeline V2 : active labels scalaires next-step + walk-forward */
+    private boolean useScalarV2 = false;
+    /** Utiliser log-return comme target (sinon close brut normalisé) */
+    private boolean useLogReturnTarget = false;
+    /** Active l'évaluation walk-forward (si useScalarV2=true) */
+    private boolean useWalkForwardV2 = true;
+    /** Nombre de splits walk-forward (par défaut 4) */
+    private int walkForwardSplits = 4;
+    /** Barres d'embargo entre train et test pour éviter fuite (purge) */
+    private int embargoBars = 0;
+    /** Seed global pour reproductibilité */
+    private long seed = 42L;
+    /** Cap pour profitFactor dans businessScore V2 */
+    private double businessProfitFactorCap = 3.0;
+    /** Gamma pour pénalisation drawdown dans businessScore V2 */
+    private double businessDrawdownGamma = 1.2;
+
     /**
      * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
      * @throws RuntimeException si le fichier de configuration ne peut pas être chargé
@@ -191,6 +208,14 @@ public class LstmConfig {
                 limitPredictionPct = Double.parseDouble(props.getProperty("limitPredictionPct", "0.0"));
                 batchSize = Integer.parseInt(props.getProperty("batchSize", "256"));
                 cvMode = props.getProperty("cvMode", "split");
+                useScalarV2 = Boolean.parseBoolean(props.getProperty("useScalarV2", "false"));
+                useLogReturnTarget = Boolean.parseBoolean(props.getProperty("useLogReturnTarget", "false"));
+                useWalkForwardV2 = Boolean.parseBoolean(props.getProperty("useWalkForwardV2", "true"));
+                walkForwardSplits = Integer.parseInt(props.getProperty("walkForwardSplits", "4"));
+                embargoBars = Integer.parseInt(props.getProperty("embargoBars", "0"));
+                seed = Long.parseLong(props.getProperty("seed", "42"));
+                businessProfitFactorCap = Double.parseDouble(props.getProperty("businessProfitFactorCap", "3.0"));
+                businessDrawdownGamma = Double.parseDouble(props.getProperty("businessDrawdownGamma", "1.2"));
             }
             optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
@@ -227,6 +252,16 @@ public class LstmConfig {
         limitPredictionPct = rs.getDouble("limit_prediction_pct");
         batchSize = rs.getInt("batch_size");
         cvMode = rs.getString("cv_mode") != null ? rs.getString("cv_mode") : "split";
+        try {
+            this.useScalarV2 = rs.getBoolean("use_scalar_v2");
+        } catch (Exception ignored) {}
+        try { this.useLogReturnTarget = rs.getBoolean("use_log_return_target"); } catch (Exception ignored) {}
+        try { this.useWalkForwardV2 = rs.getBoolean("use_walk_forward_v2"); } catch (Exception ignored) {}
+        try { this.walkForwardSplits = rs.getInt("walk_forward_splits"); } catch (Exception ignored) {}
+        try { this.embargoBars = rs.getInt("embargo_bars"); } catch (Exception ignored) {}
+        try { this.seed = rs.getLong("seed"); } catch (Exception ignored) {}
+        try { this.businessProfitFactorCap = rs.getDouble("business_profit_factor_cap"); } catch (Exception ignored) {}
+        try { this.businessDrawdownGamma = rs.getDouble("business_drawdown_gamma"); } catch (Exception ignored) {}
     }
 
     /**
