@@ -42,9 +42,9 @@ public class LstmHyperparamsRepository {
             config.isBidirectional(),
             config.isAttention(),
             new Gson().toJson(config.getFeatures()),
-                    config.getThresholdType(),
-                    config.getThresholdK(),
-                config.getLimitPredictionPct()
+            config.getThresholdType(),
+            config.getThresholdK(),
+            config.getLimitPredictionPct()
         );
     }
 
@@ -87,10 +87,11 @@ public class LstmHyperparamsRepository {
         return config;
     }
 
-    // Sauvegarde des métriques de tuning pour chaque config testée (nouvelle version avec businessScore)
+    // Sauvegarde des métriques de tuning étendue avec Sortino, Calmar, turnover, avgBarsInPosition
     public void saveTuningMetrics(String symbol, LstmConfig config, double mse, double rmse, String direction,
-                                  double profitTotal, double profitFactor, double winRate, double maxDrawdown, int numTrades, double businessScore) {
-        String sql = "INSERT INTO lstm_tuning_metrics (symbol, window_size, lstm_neurons, dropout_rate, learning_rate, l1, l2, num_epochs, patience, min_delta, optimizer, normalization_scope, normalization_method, swing_trade_type, features, mse, rmse, direction, horizon_bars, profit_total, profit_factor, win_rate, max_drawdown, num_trades, business_score, tested_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+                                  double profitTotal, double profitFactor, double winRate, double maxDrawdown, int numTrades, double businessScore,
+                                  double sortino, double calmar, double turnover, double avgBarsInPosition) {
+        String sql = "INSERT INTO lstm_tuning_metrics (symbol, window_size, lstm_neurons, dropout_rate, learning_rate, l1, l2, num_epochs, patience, min_delta, optimizer, normalization_scope, normalization_method, swing_trade_type, features, mse, rmse, direction, horizon_bars, profit_total, profit_factor, win_rate, max_drawdown, num_trades, business_score, sortino, calmar, turnover, avg_bars_in_position, tested_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
         jdbcTemplate.update(sql,
             symbol,
             config.getWindowSize(),
@@ -116,7 +117,11 @@ public class LstmHyperparamsRepository {
             winRate,
             maxDrawdown,
             numTrades,
-            businessScore
+            businessScore,
+            sortino,
+            calmar,
+            turnover,
+            avgBarsInPosition
         );
     }
 

@@ -440,6 +440,9 @@ public class LstmTradePredictor {
         tm.exposure = barsTested>0? timeInPos/barsTested:0.0;
         tm.turnover = barsTested>0? (double)positionChanges/barsTested:0.0;
         tm.avgBarsInPosition = barsInPositionList.size()>0 ? barsInPositionList.stream().mapToInt(Integer::intValue).average().orElse(0.0) : 0.0;
+        // Calcul Calmar (approx): (totalProfit / capital) / maxDrawdownPct (éviter division par 0)
+        double capitalBase = config.getCapital() > 0 ? config.getCapital() : 1.0;
+        tm.calmar = tm.maxDrawdownPct > 0 ? ((tm.totalProfit / capitalBase) / tm.maxDrawdownPct) : 0.0;
         // Business score calculé plus tard (besoin config) -> placeholder
         return tm;
     }
@@ -1324,7 +1327,7 @@ public class LstmTradePredictor {
         public FeatureScaler labelScaler;
     }
     public static class TradingMetricsV2 implements java.io.Serializable {
-        public double totalProfit; public double profitFactor; public double winRate; public double maxDrawdownPct; public double expectancy; public double sharpe; public double sortino; public double exposure; public double turnover; public double avgBarsInPosition; public int numTrades; public double mse; public double businessScore;
+        public double totalProfit; public double profitFactor; public double winRate; public double maxDrawdownPct; public double expectancy; public double sharpe; public double sortino; public double exposure; public double turnover; public double avgBarsInPosition; public int numTrades; public double mse; public double businessScore; public double calmar;
     }
     public static class WalkForwardResultV2 implements java.io.Serializable {
         public java.util.List<TradingMetricsV2> splits = new java.util.ArrayList<>();

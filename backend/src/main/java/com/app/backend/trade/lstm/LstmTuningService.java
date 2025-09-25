@@ -168,7 +168,12 @@ public class LstmTuningService {
                     // Sauvegarde métriques tuning (mse, rmse, profitTotal= somme profits splits, profitFactor moyen, winRate moyen, drawdown max pct, numTrades total)
                     double rmse = Double.isFinite(meanMse) && meanMse>=0? Math.sqrt(meanMse): Double.NaN;
                     hyperparamsRepository.saveTuningMetrics(symbol, config, meanMse, rmse, direction,
-                            sumProfit, meanPF, meanWinRate, maxDDPct, totalTrades, meanBusinessScore);
+                            sumProfit, meanPF, meanWinRate, maxDDPct, totalTrades, meanBusinessScore,
+                            // Aggregation des nouvelles métriques
+                            wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0),
+                            wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0),
+                            wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0),
+                            wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0));
                     long endConfig = System.currentTimeMillis();
                     logger.info("[TUNING][V2] [{}] Fin config {}/{} | meanMSE={}, PF={}, winRate={}, DD%={}, expectancy={}, businessScore={}, trades={} durée={} ms", symbol, configIndex, grid.size(), meanMse, meanPF, meanWinRate, maxDDPct, meanExpectancy, meanBusinessScore, totalTrades, (endConfig-startConfig));
                     TuningProgress p = tuningProgressMap.get(symbol);
