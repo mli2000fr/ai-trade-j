@@ -74,8 +74,8 @@ public class LstmTradePredictor {
         boolean attention = config != null && config.isAttention();
 
         for (int i = 0; i < nLayers; i++) {
+            int inSize = (i == 0) ? inputSize : (bidir ? lstmNeurons * 2 : lstmNeurons);
             LSTM.Builder lstmBuilder = new LSTM.Builder()
-                .nIn(i == 0 ? inputSize : lstmNeurons)
                 .nOut(lstmNeurons)
                 .activation(Activation.TANH);
             org.deeplearning4j.nn.conf.layers.Layer recurrent = bidir ? new org.deeplearning4j.nn.conf.layers.recurrent.Bidirectional(lstmBuilder.build()) : lstmBuilder.build();
@@ -315,7 +315,12 @@ public class LstmTradePredictor {
         }
         double[] normLabels = scalers.labelScaler.transform(labelSeq);
         org.nd4j.linalg.api.ndarray.INDArray y = Nd4j.create(normLabels, new long[]{numSeq, 1});
-        MultiLayerNetwork model = initModel(numFeatures, 1, config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getOptimizer(), config.getL1(), config.getL2(), config, false);
+
+        int effectiveFeatures = (int) X.size(1);
+        if (effectiveFeatures != numFeatures) {
+            logger.warn("[INIT][ADAPT] numFeatures déclaré={} mais tensor features={} => reconstruction modèle", numFeatures, effectiveFeatures);
+        }
+        MultiLayerNetwork model = initModel(effectiveFeatures, 1, config.getLstmNeurons(), config.getDropoutRate(), config.getLearningRate(), config.getOptimizer(), config.getL1(), config.getL2(), config, false);
         logger.debug("[TRAIN] X shape={} (batch={} features={} time={}) y shape={} expectedFeatures={} lstmNeurons={}", Arrays.toString(X.shape()), X.size(0), X.size(1), X.size(2), Arrays.toString(y.shape()), numFeatures, config.getLstmNeurons());
         org.nd4j.linalg.dataset.DataSet ds = new org.nd4j.linalg.dataset.DataSet(X, y);
         org.nd4j.linalg.dataset.api.iterator.DataSetIterator iterator = new ListDataSetIterator<>(ds.asList(), config.getBatchSize());
