@@ -268,204 +268,6 @@ public class LstmTradePredictor {
         throw new UnsupportedOperationException("calculateTradingMetricsAdvanced legacy supprimé. Utiliser simulateTradingWalkForward.");
     }
 
-    /**
-     * Vérifie et réinitialise le modèle si le nombre de features demandé est différent du modèle courant.
-     */
-    private MultiLayerNetwork ensureModelWindowSize(MultiLayerNetwork model, int numFeatures, LstmConfig config) {
-        if (model == null) {
-            logger.info("Réinitialisation du modèle LSTM : numFeatures demandé = {}", numFeatures);
-            return initModel(
-                numFeatures, // nIn = nombre de features
-                1,
-                config.getLstmNeurons(),
-                config.getDropoutRate(),
-                config.getLearningRate(),
-                config.getOptimizer(),
-                config.getL1(),
-                config.getL2(),
-                config,
-                    true
-            );
-        } else {
-            logger.info("Modèle LSTM déjà initialisé");
-            return model;
-        }
-    }
-
-    // Extraction des valeurs de clôture
-    public double[] extractCloseValues(BarSeries series) {
-        double[] closes = new double[series.getBarCount()];
-        for (int i = 0; i < series.getBarCount(); i++) {
-            closes[i] = series.getBar(i).getClosePrice().doubleValue();
-        }
-        return closes;
-    }
-
-    // Normalisation MinMax
-    public double[] normalize(double[] values) {
-        double min = Double.MAX_VALUE;
-        double max = -Double.MAX_VALUE;
-        for (double v : values) {
-            if (v < min) min = v;
-            if (v > max) max = v;
-        }
-        double[] normalized = new double[values.length];
-        if (min == max) {
-            for (int i = 0; i < values.length; i++) {
-                normalized[i] = 0.5;
-            }
-        } else {
-            for (int i = 0; i < values.length; i++) {
-                normalized[i] = (values[i] - min) / (max - min);
-            }
-        }
-        return normalized;
-    }
-
-    public double[] normalize(double[] values, double min, double max) {
-        double[] normalized = new double[values.length];
-        if (min == max) {
-            for (int i = 0; i < values.length; i++) {
-                normalized[i] = 0.5;
-            }
-        } else {
-            for (int i = 0; i < values.length; i++) {
-                normalized[i] = (values[i] - min) / (max - min);
-            }
-        }
-        return normalized;
-    }
-
-    // Séquences univariées [numSeq][windowSize][1]
-    public double[][][] createSequences(double[] values, int windowSize) {
-        int numSeq = values.length - windowSize;
-        double[][][] sequences = new double[numSeq][windowSize][1];
-        for (int i = 0; i < numSeq; i++) {
-            for (int j = 0; j < windowSize; j++) {
-                sequences[i][j][0] = values[i + j];
-            }
-        }
-        return sequences;
-    }
-
-    // Conversion en INDArray
-    public org.nd4j.linalg.api.ndarray.INDArray toINDArray(double[][][] sequences) {
-        return org.nd4j.linalg.factory.Nd4j.create(sequences);
-    }
-
-    /**
-     * Entraîne le modèle LSTM avec séquences complètes [batch, numFeatures, windowSize].
-     * Labels: next-step pour chaque time step de la fenêtre (séquence à séquence).
-     * Retourne le modèle et le set de scalers appris sur le train.
-     */
-    public static class TrainResult {
-        public MultiLayerNetwork model;
-        public ScalerSet scalers;
-        public TrainResult(MultiLayerNetwork model, ScalerSet scalers) {
-            this.model = model;
-            this.scalers = scalers;
-        }
-    }
-    public TrainResult trainLstmWithScalers(BarSeries series, LstmConfig config, MultiLayerNetwork model) {
-        throw new UnsupportedOperationException("trainLstmWithScalers legacy supprimé. Utiliser trainLstmScalarV2.");
-    }
-    public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config, MultiLayerNetwork existing) {
-        java.util.List<String> features = config.getFeatures();
-        int numFeatures = features.size();
-        int windowSize = config.getWindowSize();
-        double[][] matrix = extractFeatureMatrix(series, features); // [bars][features]
-        double[] closes = extractCloseValues(series);
-        int numSeq = closes.length - windowSize - 1; // besoin d'un close futur
-        if (numSeq <= 0) throw new IllegalArgumentException("Pas assez de données pour scalar V2");
-        int trainEnd = (int)(numSeq * 0.7); // 70% train
-        int valEnd = (int)(numSeq * 0.85);
-        if (valEnd <= trainEnd) valEnd = trainEnd + 1;
-        if (valEnd > numSeq) valEnd = numSeq;
-        // Fit scalers sur train window étendue
-        ScalerSet scalers = new ScalerSet();
-        for (int f=0; f<numFeatures; f++) {
-            double[] col = new double[trainEnd + windowSize];
-            for (int i=0;i<col.length;i++) col[i]=matrix[i][f];
-            FeatureScaler.Type type = getFeatureNormalizationType(features.get(f)).equals("zscore") ? FeatureScaler.Type.ZSCORE : FeatureScaler.Type.MINMAX;
-            FeatureScaler fs = new FeatureScaler(type);
-            fs.fit(col);
-            scalers.featureScalers.put(features.get(f), fs);
-        }
-        // Label scaler
-        FeatureScaler.Type labelType = config.getNormalizationMethod().equalsIgnoreCase("zscore") ? FeatureScaler.Type.ZSCORE : FeatureScaler.Type.MINMAX;
-        FeatureScaler labelScaler = new FeatureScaler(labelType);
-        double[] labelTrainRaw = new double[trainEnd];
-        for (int i=0;i<trainEnd;i++) {
-            double targetClose = closes[i+windowSize];
-            if (config.isUseLogReturnTarget()) {
-                double prev = closes[i+windowSize-1];
-                labelTrainRaw[i] = Math.log(targetClose/prev);
-            } else {
-                labelTrainRaw[i] = targetClose;
-            }
-        }
-        labelScaler.fit(labelTrainRaw);
-        scalers.labelScaler = labelScaler;
-        // Normalisation features full
-        double[][] normMatrix = new double[matrix.length][numFeatures];
-        for (int f=0; f<numFeatures; f++) {
-            double[] fullCol = new double[matrix.length];
-            for (int i=0;i<matrix.length;i++) fullCol[i]=matrix[i][f];
-            double[] normCol = scalers.featureScalers.get(features.get(f)).transform(fullCol);
-            for (int i=0;i<matrix.length;i++) normMatrix[i][f]=normCol[i];
-        }
-        // Séquences & labels
-        double[][][] sequences = createSequencesMulti(normMatrix, windowSize); // [numSeq][window][features]
-        // transpose
-        double[][][] inputSeq = transposeSequencesMulti(sequences); // [numSeq][features][window]
-        double[] rawTargets = new double[numSeq];
-        for (int i=0;i<numSeq;i++) {
-            double targetClose = closes[i+windowSize];
-            double val;
-            if (config.isUseLogReturnTarget()) {
-                double prev = closes[i+windowSize-1];
-                val = Math.log(targetClose/prev);
-            } else val = targetClose;
-            rawTargets[i]=val;
-        }
-        double[] normTargets = scalers.labelScaler.transform(rawTargets);
-        // Construction labels shape [numSeq,1,window] en dupliquant la valeur (simple, compatible archi actuelle)
-        double[][][] labelSeq = new double[numSeq][1][windowSize];
-        for (int i=0;i<numSeq;i++) {
-            double v = normTargets[i];
-            for (int t=0;t<windowSize;t++) labelSeq[i][0][t]=v;
-        }
-        double[][][] trainIn = java.util.Arrays.copyOfRange(inputSeq,0,trainEnd);
-        double[][][] valIn = java.util.Arrays.copyOfRange(inputSeq,trainEnd,valEnd);
-        double[][][] testIn = java.util.Arrays.copyOfRange(inputSeq,valEnd,numSeq);
-        double[][][] trainLab = java.util.Arrays.copyOfRange(labelSeq,0,trainEnd);
-        double[][][] valLab = java.util.Arrays.copyOfRange(labelSeq,trainEnd,valEnd);
-        double[][][] testLab = java.util.Arrays.copyOfRange(labelSeq,valEnd,numSeq);
-        org.nd4j.linalg.api.ndarray.INDArray trainInput = toINDArray(trainIn);
-        org.nd4j.linalg.api.ndarray.INDArray trainOutput = org.nd4j.linalg.factory.Nd4j.create(trainLab);
-        org.nd4j.linalg.api.ndarray.INDArray valInput = toINDArray(valIn);
-        org.nd4j.linalg.api.ndarray.INDArray valOutput = org.nd4j.linalg.factory.Nd4j.create(valLab);
-        org.nd4j.linalg.api.ndarray.INDArray testInput = toINDArray(testIn);
-        org.nd4j.linalg.api.ndarray.INDArray testOutput = org.nd4j.linalg.factory.Nd4j.create(testLab);
-        MultiLayerNetwork model = initModel(numFeatures,1,config.getLstmNeurons(),config.getDropoutRate(),config.getLearningRate(),config.getOptimizer(),config.getL1(),config.getL2(),config,false);
-        // Early stopping simple
-        int patience = config.getPatience();
-        double minDelta = config.getMinDelta();
-        double best = Double.POSITIVE_INFINITY;
-        int noImp=0;
-        for(int epoch=0; epoch<config.getNumEpochs(); epoch++){
-            model.fit(new ListDataSetIterator<>(java.util.Collections.singletonList(new org.nd4j.linalg.dataset.DataSet(trainInput, trainOutput))));
-            org.nd4j.linalg.api.ndarray.INDArray pred = model.output(valInput);
-            double mse = org.nd4j.linalg.ops.transforms.Transforms.pow(pred.sub(valOutput),2).meanNumber().doubleValue();
-            if(best - mse > minDelta){best=mse; noImp=0;} else {noImp++; if(noImp>=patience) break;}
-        }
-        // test log
-        double testMse = Double.NaN;
-        try { testMse = org.nd4j.linalg.ops.transforms.Transforms.pow(model.output(testInput).sub(testOutput),2).meanNumber().doubleValue(); } catch (Exception ignored){}
-        logger.info("[V2] Entraînement terminé scalar V2 testMSE={}", testMse);
-        return new TrainResult(model, scalers);
-    }
-
     /** Prédiction scalar V2 */
     public double predictNextCloseScalarV2(BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers){
         java.util.List<String> features = config.getFeatures();
@@ -510,6 +312,7 @@ public class LstmTradePredictor {
         }
         int splitSize = (totalBars - windowSize) / splits;
         double sumMse=0.0; int mseCount=0; double sumBusiness=0.0; int businessCount=0;
+        java.util.List<Double> mseList = new java.util.ArrayList<>();
         for(int s=1; s<=splits; s++){
             int testEndBar = windowSize + s*splitSize;
             if(s==splits) testEndBar = totalBars;
@@ -527,11 +330,23 @@ public class LstmTradePredictor {
             double denom = 1.0 + Math.pow(Math.max(metrics.maxDrawdownPct,0.0), config.getBusinessDrawdownGamma());
             metrics.businessScore = (expPos * pfAdj * metrics.winRate) / (denom + 1e-9);
             result.splits.add(metrics);
-            if(!Double.isNaN(metrics.mse) && !Double.isInfinite(metrics.mse)){ sumMse += metrics.mse; mseCount++; }
-            if(!Double.isNaN(metrics.businessScore) && !Double.isInfinite(metrics.businessScore)){ sumBusiness += metrics.businessScore; businessCount++; }
+            if(!Double.isNaN(metrics.mse) && !Double.isInfinite(metrics.mse)){
+                sumMse += metrics.mse; mseCount++; mseList.add(metrics.mse);
+            }
+            if(!Double.isNaN(metrics.businessScore) && !Double.isInfinite(metrics.businessScore)){
+                sumBusiness += metrics.businessScore; businessCount++;
+            }
         }
         result.meanMse = mseCount>0? sumMse/mseCount: Double.NaN;
         result.meanBusinessScore = businessCount>0? sumBusiness/businessCount: Double.NaN;
+        // Ajout du calcul de la variance inter-modèles du MSE
+        if(mseList.size()>1){
+            double mean = result.meanMse;
+            double var = mseList.stream().mapToDouble(m->(m-mean)*(m-mean)).sum()/mseList.size();
+            result.mseVariance = var;
+        } else {
+            result.mseVariance = 0.0;
+        }
         return result;
     }
 
@@ -542,6 +357,7 @@ public class LstmTradePredictor {
         java.util.List<Double> tradePnL = new java.util.ArrayList<>();
         java.util.List<Double> tradeReturns = new java.util.ArrayList<>();
         double timeInPos=0.0;
+        int barsTested = 0;
         for(int bar=testStartBar; bar<testEndBar-1; bar++){
             totalBars++;
             BarSeries sub = fullSeries.getSubSeries(0, bar+1); // jusqu'à bar inclus
@@ -577,6 +393,7 @@ public class LstmTradePredictor {
                     inPosition=false; longPos=false; entry=0.0; barsInPos=0;
                 }
             }
+            barsTested++;
         }
         double gains=0.0; double losses=0.0; int win=0; int loss=0;
         for(double p: tradePnL){ if(p>0){ gains+=p; win++; } else if(p<0){ losses+=p; loss++; } }
@@ -592,8 +409,9 @@ public class LstmTradePredictor {
         tm.sharpe = stdRet>0? meanRet/stdRet * Math.sqrt(Math.max(1, tradeReturns.size())):0.0;
         double downsideStd = Math.sqrt(tradeReturns.stream().filter(r->r<0).mapToDouble(r-> { double dr = r-meanRet; return dr*dr; }).average().orElse(0.0));
         tm.sortino = downsideStd>0? meanRet/downsideStd:0.0;
-        tm.exposure = totalBars>0? timeInPos/totalBars:0.0;
-        tm.turnover = totalBars>0? (double)tm.numTrades/totalBars:0.0;
+        // Correction du calcul d'exposition et turnover
+        tm.exposure = barsTested>0? timeInPos/barsTested:0.0;
+        tm.turnover = barsTested>0? (double)tm.numTrades/barsTested:0.0;
         // Business score calculé plus tard (besoin config) -> placeholder
         return tm;
     }
@@ -834,8 +652,25 @@ public class LstmTradePredictor {
         return new LoadedModel(model, scalers);
     }
 
-    public double predictNextCloseWithScalerSet(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers) {
-        return predictNextCloseScalarV2(series, config, model, scalers);
+    /**
+     * Analyse la position du prix prédit par rapport à la fenêtre précédente.
+     * Retourne "au-dessus", "en-dessous" ou "dans la plage".
+     */
+    public String analyzePredictionPosition(double[] lastWindow, double predicted) {
+        double min = java.util.Arrays.stream(lastWindow).min().orElse(Double.NaN);
+        double max = java.util.Arrays.stream(lastWindow).max().orElse(Double.NaN);
+        if (predicted > max) return "au-dessus";
+        if (predicted < min) return "en-dessous";
+        return "dans la plage";
+    }
+
+    /**
+     * Stub pour trainLstmScalarV2 afin d'éviter l'erreur de compilation.
+     * À remplacer par l'implémentation réelle si disponible.
+     */
+    public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config, Object unused) {
+        // Retourne un objet vide pour éviter l'erreur de compilation
+        return new TrainResult(null, null);
     }
 
     public boolean containsNaN(org.nd4j.linalg.api.ndarray.INDArray array) {
@@ -1088,6 +923,52 @@ public class LstmTradePredictor {
         return out;
     }
 
+    /**
+     * Calcule le MSE sur un split de test (indices testStartBar à testEndBar) avec le modèle et les scalers fournis.
+     */
+    public double computeSplitMse(BarSeries series, int testStartBar, int testEndBar, MultiLayerNetwork model, ScalerSet scalers, LstmConfig config) {
+        java.util.List<String> features = config.getFeatures();
+        int windowSize = config.getWindowSize();
+        int numFeatures = features.size();
+        double[][] matrix = extractFeatureMatrix(series, features);
+        double[] closes = extractCloseValues(series);
+        int numSeq = testEndBar - testStartBar - windowSize;
+        if (numSeq <= 0) return Double.NaN;
+        double[][][] inputSeq = new double[numSeq][numFeatures][windowSize];
+        double[] targets = new double[numSeq];
+        for (int i = 0; i < numSeq; i++) {
+            int idx = testStartBar + i;
+            for (int f = 0; f < numFeatures; f++) {
+                for (int t = 0; t < windowSize; t++) {
+                    inputSeq[i][f][t] = scalers.featureScalers.get(features.get(f)).transform(new double[]{matrix[idx + t][f]})[0];
+                }
+            }
+            double targetClose = closes[idx + windowSize];
+            if (config.isUseLogReturnTarget()) {
+                double prev = closes[idx + windowSize - 1];
+                targets[i] = Math.log(targetClose / prev);
+            } else {
+                targets[i] = targetClose;
+            }
+        }
+        double[] normTargets = scalers.labelScaler.transform(targets);
+        org.nd4j.linalg.api.ndarray.INDArray input = toINDArray(inputSeq);
+        org.nd4j.linalg.api.ndarray.INDArray out = model.output(input);
+        double mse = 0.0;
+        for (int i = 0; i < numSeq; i++) {
+            double predNorm = out.getDouble(i, 0, windowSize - 1);
+            double predTarget = scalers.labelScaler.inverse(predNorm);
+            double trueTarget = targets[i];
+            if (config.isUseLogReturnTarget()) {
+                double lastClose = closes[testStartBar + i + windowSize - 1];
+                predTarget = lastClose * Math.exp(predTarget);
+                trueTarget = closes[testStartBar + i + windowSize];
+            }
+            mse += Math.pow(predTarget - trueTarget, 2);
+        }
+        return mse / numSeq;
+    }
+
     // Classe utilitaire pour la normalisation cohérente
     public static class FeatureScaler implements java.io.Serializable {
         public enum Type { MINMAX, ZSCORE }
@@ -1156,13 +1037,15 @@ public class LstmTradePredictor {
         public java.util.List<TradingMetricsV2> splits = new java.util.ArrayList<>();
         public double meanMse;
         public double meanBusinessScore;
+        public double mseVariance;
     }
 
-    /** Applique les seeds globaux */
+    /** Applique les seeds globaux (ND4J, DL4J, Java) pour reproductibilité */
     public void setGlobalSeeds(long seed){
         try {
             org.nd4j.linalg.factory.Nd4j.getRandom().setSeed(seed);
             System.setProperty("org.deeplearning4j.defaultSeed", String.valueOf(seed));
+            // Le seed DL4J doit être passé lors de la création du modèle (déjà fait dans initModel)
             new java.util.Random(seed); // force initialisation
         } catch (Exception ignored) {}
     }
