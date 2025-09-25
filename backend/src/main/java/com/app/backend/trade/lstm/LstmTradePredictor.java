@@ -246,9 +246,12 @@ public class LstmTradePredictor {
     }
     /**
      * Calcule les métriques de trading avancées
+     * Remplacé par simulateTradingWalkForward : simulation bar par bar, sans fuite de données.
      */
     public double[] calculateTradingMetricsAdvanced(BarSeries series, LstmConfig config, MultiLayerNetwork model, double feePct, double slippagePct) {
-        throw new UnsupportedOperationException("calculateTradingMetricsAdvanced legacy supprimé. Utiliser simulateTradingWalkForward.");
+        TradingMetricsV2 metrics = simulateTradingWalkForward(series, series.getWindowSize(), series.getWindowSize(), series.getBarCount(), model, null, config);
+        // Retourne les principales métriques sous forme de tableau (pour compatibilité)
+        return new double[]{metrics.totalProfit, metrics.profitFactor, metrics.winRate, metrics.maxDrawdownPct, metrics.expectancy, metrics.sharpe, metrics.sortino, metrics.exposure, metrics.turnover};
     }
 
     /** Prédiction scalar V2 */
