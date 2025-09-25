@@ -118,9 +118,9 @@ public class LstmTradePredictor {
         }
         listBuilder.layer(new RnnOutputLayer.Builder()
             .nIn(Math.max(16, lstmNeurons / 4))
-            .nOut(outputSize)
-            .activation(outputActivation)
-            .lossFunction(outputLoss)
+            .nOut(1)
+            .activation(Activation.IDENTITY)
+            .lossFunction(LossFunctions.LossFunction.MSE)
             .build());
         MultiLayerConfiguration conf = listBuilder.build();
         MultiLayerNetwork model = new MultiLayerNetwork(conf);
