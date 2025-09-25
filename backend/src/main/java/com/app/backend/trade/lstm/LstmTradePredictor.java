@@ -1065,6 +1065,98 @@ public class LstmTradePredictor {
         return mse / numSeq;
     }
 
+    /**
+     * Calcule la divergence de Kullback-Leibler (KL) entre deux distributions (histogrammes).
+     */
+    public double computeKLDivergence(double[] p, double[] q) {
+        double kl = 0.0;
+        for (int i = 0; i < p.length; i++) {
+            if (p[i] > 0 && q[i] > 0) {
+                kl += p[i] * Math.log(p[i] / q[i]);
+            }
+        }
+        return kl;
+    }
+
+    /**
+     * Détecte le drift pour une feature donnée (KL divergence ou shift de moyenne).
+     * Retourne true si drift détecté.
+     */
+    public boolean checkDriftForFeature(String feature, double[] currentValues, FeatureScaler scaler, double klThreshold, double meanShiftSigma) {
+        // Calcul histogramme (binned)
+        int bins = 20;
+        double min = Math.min(java.util.Arrays.stream(currentValues).min().orElse(0.0), scaler.min);
+        double max = Math.max(java.util.Arrays.stream(currentValues).max().orElse(0.0), scaler.max);
+        double[] histCurrent = new double[bins];
+        double[] histTrain = new double[bins];
+        for (double v : currentValues) {
+            int idx = (int) ((v - min) / (max - min + 1e-8) * (bins - 1));
+            histCurrent[idx] += 1.0;
+        }
+        // Histogramme training (approx via min/max)
+        for (int i = 0; i < bins; i++) {
+            double val = min + (max - min) * i / (bins - 1);
+            if (scaler.type == FeatureScaler.Type.MINMAX) {
+                histTrain[i] = 1.0 / bins; // Uniforme
+            } else {
+                // Gaussienne approx
+                double prob = Math.exp(-0.5 * Math.pow((val - scaler.mean) / (scaler.std + 1e-8), 2)) / (scaler.std * Math.sqrt(2 * Math.PI));
+                histTrain[i] = prob;
+            }
+        }
+        // Normalisation
+        double sumCurrent = java.util.Arrays.stream(histCurrent).sum();
+        double sumTrain = java.util.Arrays.stream(histTrain).sum();
+        for (int i = 0; i < bins; i++) {
+            histCurrent[i] /= (sumCurrent + 1e-8);
+            histTrain[i] /= (sumTrain + 1e-8);
+        }
+        double kl = computeKLDivergence(histCurrent, histTrain);
+        double meanCurrent = java.util.Arrays.stream(currentValues).average().orElse(0.0);
+        double meanTrain = scaler.type == FeatureScaler.Type.MINMAX ? (scaler.min + scaler.max) / 2.0 : scaler.mean;
+        double stdTrain = scaler.type == FeatureScaler.Type.MINMAX ? (scaler.max - scaler.min) / 2.0 : scaler.std;
+        double meanShift = Math.abs(meanCurrent - meanTrain) / (stdTrain + 1e-8);
+        if (kl > klThreshold || meanShift > meanShiftSigma) {
+            logger.warn("[DRIFT] Feature '{}' : KL={}, meanShift={} (> {} σ)", feature, kl, meanShift, meanShiftSigma);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Vérifie le drift sur toutes les features et déclenche le retrain si nécessaire.
+     * @return true si retrain déclenché
+     */
+    public boolean checkDriftAndRetrain(BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers) {
+        double klThreshold = 0.15; // seuil KL divergence
+        double meanShiftSigma = 2.0; // seuil shift de moyenne (2 écarts-types)
+        java.util.List<String> features = config.getFeatures();
+        boolean driftDetected = false;
+        for (String feat : features) {
+            double[] values = new double[series.getBarCount()];
+            for (int i = 0; i < series.getBarCount(); i++) {
+                values[i] = extractFeatureMatrix(series, java.util.Collections.singletonList(feat))[i][0];
+            }
+            FeatureScaler scaler = scalers.featureScalers.get(feat);
+            if (scaler != null && checkDriftForFeature(feat, values, scaler, klThreshold, meanShiftSigma)) {
+                driftDetected = true;
+            }
+        }
+        if (driftDetected) {
+            logger.warn("[DRIFT] Détection drift : retrain du modèle déclenché.");
+            TrainResult tr = trainLstmScalarV2(series, config, null);
+            // Mettre à jour le modèle et les scalers
+            if (tr.model != null && tr.scalers != null) {
+                model = tr.model;
+                scalers.featureScalers = tr.scalers.featureScalers;
+                scalers.labelScaler = tr.scalers.labelScaler;
+                logger.info("[DRIFT] Nouveau modèle et scalers entraînés après drift.");
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Classe utilitaire pour la normalisation cohérente
     public static class FeatureScaler implements java.io.Serializable {
         public enum Type { MINMAX, ZSCORE }

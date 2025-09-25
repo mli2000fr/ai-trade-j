@@ -89,10 +89,30 @@ public class LstmHelper {
             logger.info("Hyperparamètres existants trouvés pour {}. Ignorer le tuning.", symbol);
             return PreditLsdm.builder().lastClose(0).predictedClose(0).signal(SignalType.NONE).position("").lastDate("").build();
         }
-        MultiLayerNetwork model = lstmTradePredictor.loadModelFromDb(symbol, jdbcTemplate);
-
+        // Charger modèle + scalers
+        LstmTradePredictor.LoadedModel loaded = null;
+        try {
+            loaded = lstmTradePredictor.loadModelAndScalersFromDb(symbol, jdbcTemplate);
+        } catch (Exception e) {
+            logger.warn("Impossible de charger le modèle/scalers depuis la base : {}", e.getMessage());
+        }
+        MultiLayerNetwork model = loaded != null ? loaded.model : null;
+        LstmTradePredictor.ScalerSet scalers = loaded != null ? loaded.scalers : null;
         BarSeries series = getBarBySymbol(symbol, null);
-        PreditLsdm preditLsdm = lstmTradePredictor.getPredit(symbol, series, config, model);
+        // Vérification drift et retrain éventuel
+        boolean retrained = false;
+        if (model != null && scalers != null) {
+            retrained = lstmTradePredictor.checkDriftAndRetrain(series, config, model, scalers);
+            if (retrained) {
+                // Sauvegarder le nouveau modèle/scalers
+                try {
+                    lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate, config, scalers);
+                } catch (Exception e) {
+                    logger.warn("Erreur lors de la sauvegarde du modèle/scalers après retrain : {}", e.getMessage());
+                }
+            }
+        }
+        PreditLsdm preditLsdm = lstmTradePredictor.getPredit(symbol, series, config, model, scalers);
         saveSignalHistory(symbol, preditLsdm);
         return preditLsdm;
     }
