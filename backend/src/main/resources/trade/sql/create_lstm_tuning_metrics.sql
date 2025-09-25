@@ -24,6 +24,7 @@ CREATE TABLE trade_ai.lstm_tuning_metrics (
     win_rate DOUBLE NOT NULL,
     max_drawdown DOUBLE NOT NULL,
     num_trades INT NOT NULL,
+    business_score DOUBLE NULL,
     tested_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX(symbol),
     INDEX(tested_date)
