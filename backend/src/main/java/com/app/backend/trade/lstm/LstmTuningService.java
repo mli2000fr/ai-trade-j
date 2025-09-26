@@ -11,6 +11,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value; // ajout
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static com.app.backend.trade.strategy.StrategieBackTest.FEE_PCT;
 import static com.app.backend.trade.strategy.StrategieBackTest.SLIP_PAGE_PCT;
@@ -69,6 +72,7 @@ public class LstmTuningService {
     }
 
     private final ConcurrentHashMap<String, TuningProgress> tuningProgressMap = new ConcurrentHashMap<>();
+    private ScheduledExecutorService progressLoggerExecutor; // heartbeat
 
     @PostConstruct
     public void initNd4jCuda() {
@@ -87,9 +91,24 @@ public class LstmTuningService {
         } catch (Exception e) {
             logger.error("Erreur lors de la détection du backend ND4J : {}", e.getMessage());
         } finally {
-            // Calcul du parallélisme effectif (même en cas d'erreur)
             computeEffectiveMaxThreads();
         }
+        // Démarrage heartbeat logging (toutes les 30s)
+        progressLoggerExecutor = Executors.newSingleThreadScheduledExecutor();
+        progressLoggerExecutor.scheduleAtFixedRate(() -> {
+            try {
+                if (tuningProgressMap.isEmpty()) return;
+                long now = System.currentTimeMillis();
+                tuningProgressMap.forEach((sym, p) -> {
+                    double pct = p.totalConfigs > 0 ? (100.0 * p.testedConfigs.get() / p.totalConfigs) : 0.0;
+                    long idleMs = now - p.lastUpdate;
+                    String pctStr = String.format("%.2f", pct);
+                    logger.info("[TUNING][HEARTBEAT] {} status={} {}/{} ({}%) idle={}s", sym, p.status, p.testedConfigs.get(), p.totalConfigs, pctStr, idleMs/1000);
+                });
+            } catch (Exception ex) {
+                logger.debug("Heartbeat tuning erreur: {}", ex.getMessage());
+            }
+        }, 10, 30, TimeUnit.SECONDS);
     }
 
     // Structure de reporting centralisé des exceptions tuning

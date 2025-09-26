@@ -335,7 +335,23 @@ public class LstmTradePredictor {
         logger.debug("[TRAIN] X shape={} (batch={} features={} time={}) y shape={} expectedFeatures={} lstmNeurons={}", Arrays.toString(X.shape()), X.size(0), X.size(1), X.size(2), Arrays.toString(y.shape()), numFeatures, config.getLstmNeurons());
         org.nd4j.linalg.dataset.DataSet ds = new org.nd4j.linalg.dataset.DataSet(X, y);
         org.nd4j.linalg.dataset.api.iterator.DataSetIterator iterator = new ListDataSetIterator<>(ds.asList(), config.getBatchSize());
-        model.fit(iterator, config.getNumEpochs());
+        // Entraînement avec logging par epoch
+        int epochs = config.getNumEpochs();
+        long t0 = System.currentTimeMillis();
+        double bestScore = Double.POSITIVE_INFINITY;
+        for (int epoch = 1; epoch <= epochs; epoch++) {
+            iterator.reset();
+            model.fit(iterator);
+            double score = model.score();
+            if (score < bestScore) bestScore = score;
+            if (epoch == 1 || epoch == epochs || epoch % Math.max(1, epochs/10) == 0) {
+                Runtime rt = Runtime.getRuntime();
+                long used = (rt.totalMemory() - rt.freeMemory()) / (1024*1024);
+                long max = rt.maxMemory() / (1024*1024);
+                long elapsed = System.currentTimeMillis() - t0;
+                logger.info("[TRAIN][EPOCH] {}/{} score={} best={} elapsedMs={} memUsedMB={}/{}", epoch, epochs, String.format("%.6f", score), String.format("%.6f", bestScore), elapsed, used, max);
+            }
+        }
         return new TrainResult(model, scalers);
     }
 
@@ -344,6 +360,10 @@ public class LstmTradePredictor {
         List<String> features = config.getFeatures();
         int windowSize = config.getWindowSize();
         if (series.getBarCount() <= windowSize) throw new IllegalArgumentException("Pas assez de barres");
+        if (scalers == null || scalers.featureScalers == null || scalers.featureScalers.size() != features.size() || scalers.labelScaler == null) {
+            logger.warn("[PREDICT] Scalers null/incomplets -> rebuild");
+            scalers = rebuildScalers(series, config);
+        }
         double[][] matrix = extractFeatureMatrix(series, features);
         int numFeatures = features.size();
         double[][] normMatrix = new double[matrix.length][numFeatures];
@@ -567,7 +587,17 @@ public class LstmTradePredictor {
 
     /* ===================== PREDIT ===================== */
     public PreditLsdm getPredit(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers) {
+        int window = config.getWindowSize();
+        if (series.getBarCount() <= window + 1) {
+            double last = series.getLastBar().getClosePrice().doubleValue();
+            return PreditLsdm.builder().lastClose(last).predictedClose(last).signal(SignalType.STABLE)
+                .lastDate(series.getLastBar().getEndTime().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM")))
+                .position("insuffisant").build();
+        }
         model = ensureModelWindowSize(model, config.getFeatures().size(), config);
+        if (scalers == null) {
+            scalers = rebuildScalers(series, config);
+        }
         double th = computeSwingTradeThreshold(series, config);
         double predicted = predictNextCloseWithScalerSet(symbol, series, config, model, scalers);
         predicted = Math.round(predicted * 1000.0) / 1000.0;
@@ -648,5 +678,29 @@ public class LstmTradePredictor {
         Nd4j.getRandom().setSeed(seed);
         org.deeplearning4j.nn.api.OptimizationAlgorithm.valueOf("STOCHASTIC_GRADIENT_DESCENT"); // force load classes
         logger.debug("Seeds fixés seed={}", seed);
+    }
+
+    public ScalerSet rebuildScalers(BarSeries series, LstmConfig config){
+        List<String> features = config.getFeatures();
+        ScalerSet set = new ScalerSet();
+        double[][] matrix = extractFeatureMatrix(series, features);
+        int n = matrix.length;
+        for (int f = 0; f < features.size(); f++) {
+            double[] col = new double[n];
+            for (int i = 0; i < n; i++) col[i] = matrix[i][f];
+            FeatureScaler.Type type = getFeatureNormalizationType(features.get(f)).equals("zscore") ? FeatureScaler.Type.ZSCORE : FeatureScaler.Type.MINMAX;
+            FeatureScaler sc = new FeatureScaler(type); sc.fit(col); set.featureScalers.put(features.get(f), sc);
+        }
+        // Label scaler basé sur close (approx) ou log-return si demandé
+        double[] closes = extractCloseValues(series);
+        if (config.isUseLogReturnTarget() && closes.length > 1) {
+            double[] lr = new double[closes.length-1];
+            for(int i=1;i<closes.length;i++) lr[i-1] = Math.log(closes[i]/closes[i-1]);
+            FeatureScaler lab = new FeatureScaler(FeatureScaler.Type.MINMAX); lab.fit(lr); set.labelScaler = lab;
+        } else {
+            FeatureScaler lab = new FeatureScaler(FeatureScaler.Type.MINMAX); lab.fit(closes); set.labelScaler = lab;
+        }
+        logger.warn("[SCALERS][REBUILD] Reconstruction ad-hoc des scalers (peut diverger de l'entraînement initial).");
+        return set;
     }
 }
