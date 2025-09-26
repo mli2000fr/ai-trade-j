@@ -196,7 +196,7 @@ public class LstmHelper {
 
     // Méthode existante conservée pour compatibilité
     public void tuneAllSymbols() {
-        tuneAllSymbols(true, 1);
+        tuneAllSymbols(true, 60);
     }
     /**
      * Lance le tuning automatique pour une liste de symboles.

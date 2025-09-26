@@ -30,7 +30,7 @@ public class LstmTuningService {
     // --- Nouveau: configuration dynamique du parallélisme ---
     @Value("${lstm.tuning.maxThreads:0}")
     private int configuredMaxThreads; // 0 => auto
-    private int effectiveMaxThreads = 2; // valeur par défaut de secours
+    private int effectiveMaxThreads = 12; // valeur par défaut de secours
     private boolean cudaBackend = false; // détecté dans initNd4jCuda
 
     /** Met à jour et recalcule le parallélisme effectif (ex: via endpoint admin). */
