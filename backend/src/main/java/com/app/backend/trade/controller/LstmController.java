@@ -171,8 +171,4 @@ public class LstmController {
         return lsdmHelper.getTuningExceptionReport();
     }
 
-    // TODO (non urgent) :
-    // - Ajouter un endpoint de santé (ex: /api/lstm/health) pour indiquer si un entraînement est en cours.
-    // - Centraliser la gestion des exceptions avec @ControllerAdvice pour formater les erreurs JSON.
-    // - Ajouter des métriques (Micrometer / Prometheus) pour mesurer temps d'entraînement moyen.
 }
