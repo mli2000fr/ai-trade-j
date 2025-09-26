@@ -6,106 +6,129 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import lombok.Builder;
+// Lombok génère automatiquement getters et setters via @Getter/@Setter ci-dessous.
+// Aucun code manuel de getter/setter n'est nécessaire, mais gardez bien les annotations.
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.stereotype.Component;
 
 /**
- * Classe de configuration pour les hyperparamètres du modèle LSTM.
- * <p>
- * Les paramètres sont chargés dynamiquement depuis le fichier lstm-config.properties
- * situé dans le dossier resources. Permet de centraliser et modifier facilement
- * les hyperparamètres du modèle sans changer le code source.
- * </p>
+ * ===================================== DESCRIPTION GENERALE =====================================
+ * Classe de configuration centralisant tous les hyperparamètres utilisés par le modèle LSTM.
+ *
+ *  RAPIDE (TL;DR débutant) :
+ *   - Modifier un paramètre pour l'entraînement ? => fichier resources/lstm-config.properties
+ *   - Ajouter un nouveau paramètre ? => (1) champ + getter/setter (Lombok déjà OK) (2) lire valeur
+ *       dans le constructeur fichier (avec valeur par défaut) (3) idem dans constructeur ResultSet
+ *       avec try/catch si colonne optionnelle (4) mettre à jour ce bloc de doc.
+ *   - Accéder à la config dans un service Spring ? => @Autowired LstmConfig config;
+ *   - Méthode de normalisation effective ? => config.getNormalizationMethod(); (gère 'auto').
+ *
+ *  OBJECTIFS : centralisation, lisibilité, reproductibilité.
+ *  NE PAS MODIFIER L'ORDRE DES AFFECTATIONS sans raison technique claire (risque régression).
+ *
+ * ================================================================================================
+ * DETAILS (déjà commentés champ par champ plus bas) :
+ *  - Chargement depuis fichier properties OU depuis une ligne SQL (ResultSet)
+ *  - Valeurs par défaut robustes si fichier absent
+ *  - Filet de sécurité supplémentaire pour l'optimiseur
+ *  - Méthode utilitaire getNormalizationMethod() applique heuristique quand 'auto'
+ * ================================================================================================
  */
 @Setter
 @Getter
 @Component
 public class LstmConfig {
+    // =============================== Fenêtre & Structure du réseau ===============================
     /**
-     * Nombre de périodes utilisées pour chaque séquence d'entrée du LSTM.
-     * Représente la taille de la fenêtre glissante (ex : 20 jours).
+     * Taille de la séquence d'entrée (longueur de la fenêtre glissante) utilisée comme contexte
+     * pour prédire la valeur future. Exemple : 20 => on regarde les 20 dernières barres.
      */
     private int windowSize;
 
     /**
-     * Nombre de neurones dans la couche LSTM.
-     * Plus ce nombre est élevé, plus le modèle peut apprendre des patterns complexes.
+     * Nombre de neurones (unités) dans la (ou les) couche(s) LSTM. Plus il est élevé, plus la
+     * capacité de représentation est grande (mais risque de sur-apprentissage + temps de calcul).
      */
     private int lstmNeurons;
 
     /**
-     * Taux de dropout pour la régularisation.
-     * Pourcentage de neurones désactivés aléatoirement à chaque itération afin d'éviter le sur-apprentissage.
+     * Taux de dropout (0.0 à 1.0). Pour chaque batch d'entraînement, un pourcentage de neurones
+     * est désactivé aléatoirement pour réduire le sur-apprentissage (regularisation).
      */
     private double dropoutRate;
 
+    // =============================== Optimisation & Entraînement ===============================
     /**
-     * Taux d'apprentissage du modèle.
-     * Contrôle la vitesse d'ajustement des poids lors de l'entraînement.
+     * Taux d'apprentissage (learning rate). Contrôle la vitesse d'ajustement des poids.
+     * Trop haut => divergence / instabilité. Trop bas => entraînement très lent.
      */
     private double learningRate;
 
     /**
-     * Nombre d'époques d'entraînement.
-     * Définit combien de fois le modèle parcourt l'ensemble des données.
+     * Nombre total de passes (époques/epochs) sur l'ensemble des données d'entraînement.
      */
     private int numEpochs;
 
     /**
-     * Patience pour l'arrêt anticipé (early stopping).
-     * Nombre d'époques sans amélioration avant d'arrêter l'entraînement.
+     * Patience pour l'Early Stopping : nombre d'époques sans amélioration avant arrêt anticipé.
      */
     private int patience;
 
     /**
-     * Amélioration minimale pour l'arrêt anticipé.
-     * Seuil de progression requis pour considérer qu'il y a amélioration.
+     * Amélioration minimale (min_delta) exigée pour considérer qu'il y a progrès (early stopping).
      */
     private double minDelta;
 
     /**
-     * Nombre de folds pour la validation croisée (cross-validation).
-     * Permet d'évaluer la robustesse du modèle sur plusieurs sous-ensembles.
+     * Nombre de folds pour la validation croisée (k-fold). Permet de mieux évaluer la robustesse
+     * (attention : coûteux en temps). Non utilisé si cvMode ne l'exige pas.
      */
     private int kFolds;
 
     /**
-     * Algorithme d'optimisation utilisé pour l'entraînement.
-     * Exemple : "adam", "sgd", "rmsprop".
+     * Nom de l'optimiseur utilisé (ex: adam, sgd, rmsprop). C'est une chaîne car le framework
+     * d'entraînement peut mapper ce texte vers une implémentation concrète.
      */
     private String optimizer;
 
+    // =============================== Régularisation (L1 / L2) ===============================
     /**
-     * Coefficient de régularisation L1.
-     * Contrôle la pénalité appliquée aux poids pour éviter le sur-apprentissage.
+     * Coefficient L1 : pénalise la somme des valeurs absolues des poids => favorise la sparsité.
      */
     private double l1;
 
     /**
-     * Coefficient de régularisation L2.
-     * Contrôle la pénalité appliquée aux poids pour éviter le sur-apprentissage.
+     * Coefficient L2 : pénalise la somme des carrés des poids => favorise des poids plus petits.
      */
     private double l2;
 
+    // =============================== Normalisation / Prétraitement ===============================
     /**
-     * Portée de la normalisation : "window" (fenêtre locale) ou "global" (toute la série).
+     * Portée (scope) de la normalisation : "window" = recalcul sur chaque sous-séquence,
+     * "global" = une seule transformation pour toute la série.
      */
     private String normalizationScope = "window";
 
     /**
-     * Méthode de normalisation utilisée : "minmax", "zscore", etc.
+     * Méthode de normalisation demandée. Valeurs possibles : "minmax", "zscore", "auto" (détermine
+     * automatiquement selon swingTradeType). Voir getNormalizationMethod().
      */
     private String normalizationMethod = "minmax";
 
+    // =============================== Type de stratégie swing ===============================
     /**
-     * Type de swing trade : "range", "breakout", "mean_reversion", etc.
+     * Type de swing trade ciblé (ex: range, breakout, mean_reversion). Influence parfois la
+     * normalisation ou la construction des labels.
      */
     private String swingTradeType = "range";
 
+    // =============================== Features (Entrées du modèle) ===============================
     /**
-     * Liste des features à inclure dans la séquence d'entrée (ex : close, volume, rsi, sma, ema, macd, atr, bollinger_high, bollinger_low, stochastic, cci, momentum, day_of_week, month, session).
+     * Liste des noms de colonnes/features incluses dans chaque vecteur temporel. L'ordre est
+     * significatif : il doit correspondre au pipeline de préparation des tenseurs.
+     * IMPORTANT : Si on ajoute une feature côté data engineering, il faut la rajouter ici ET
+     * adapter le code de construction des tenseurs.
      */
     private java.util.List<String> features = java.util.Arrays.asList(
         "close", "volume", "rsi", "sma", "ema", "macd",
@@ -114,93 +137,86 @@ public class LstmConfig {
         "day_of_week", "month"
     );
 
-    /**
-     * Nombre de couches LSTM empilées (stacked LSTM)
-     */
+    // =============================== Architecture avancée ===============================
+    /** Nombre de couches LSTM empilées (stack). */
     private int numLstmLayers = 2;
-
-    /**
-     * Active le mode bidirectionnel (Bidirectional LSTM)
-     */
+    /** Active (true) ou non (false) un LSTM bidirectionnel (avant + arrière). */
     private boolean bidirectional = false;
-
-    /**
-     * Active la couche d'attention (si supportée)
-     */
+    /** Active une couche d'attention au-dessus des sorties LSTM (si supportée par le backend). */
     private boolean attention = false;
 
-    /**
-     * Horizon de prédiction pour la classification swing (nombre de barres à l'avance)
-     */
-    private int horizonBars = 5; // Par défaut 5, configurable
-
-    /**
-     * Type de seuil swing trade : "ATR" ou "returns" (volatilité des log-returns)
-     */
+    // =============================== Labeling & Prédiction ===============================
+    /** Horizon temporel (nombre de barres à l'avance) pour lequel on veut prédire la dynamique. */
+    private int horizonBars = 5; // Valeur par défaut modifiable dans properties
+    /** Type de seuil utilisé pour définir zones / signaux (ATR ou returns). */
     private String thresholdType = "ATR";
-
-    /**
-     * Coefficient multiplicateur pour le seuil (k)
-     */
+    /** Multiplicateur k appliqué au seuil de volatilité / amplitude. */
     private double thresholdK = 1.0;
-
-    /**
-     * Pourcentage de limitation de la prédiction autour du close (ex: 0.1 pour ±10%). 0 = désactivé.
-     */
+    /** Limitation relative de la prédiction autour du cours de clôture. 0 = pas de limitation. */
     private double limitPredictionPct = 0.0;
 
-    /**
-     * Taille du batch pour l'entraînement (par défaut 64)
-     */
-    private int batchSize = 128;
-
-    /**
-     * Mode de validation croisée : split, timeseries, kfold
-     */
+    // =============================== Entraînement (Batch / Validation) ===============================
+    /** Taille des mini-lots (batch) durant l'entraînement. */
+    private int batchSize = 128; // Remplacé si override dans les properties
+    /** Mode de validation croisée : split, timeseries, kfold. */
     private String cvMode = "split";
 
-    /** Pipeline V2 : active labels scalaires next-step + walk-forward */
+    // =============================== Pipeline V2 (options évoluées) ===============================
+    /** Active pipeline étiquettes scalaires + walk-forward. */
     private boolean useScalarV2 = false;
-    /** Utiliser log-return comme target (sinon close brut normalisé) */
+    /** Utilise le log-return comme cible (target) plutôt que le prix normalisé. */
     private boolean useLogReturnTarget = false;
-    /** Active l'évaluation walk-forward (si useScalarV2=true) */
+    /** Active la validation walk-forward (utilisé si useScalarV2 = true). */
     private boolean useWalkForwardV2 = true;
-    /** Nombre de splits walk-forward (par défaut 4) */
+    /** Nombre de segments (splits) dans la validation walk-forward. */
     private int walkForwardSplits = 4;
-    /** Barres d'embargo entre train et test pour éviter fuite (purge) */
+    /** Barres d'embargo (séparation temporelle) pour éviter la fuite entre train/test. */
     private int embargoBars = 0;
-    /** Seed global pour reproductibilité */
+    /** Graine (seed) pour reproductibilité (initialisation aléatoire). */
     private long seed = 42L;
-    /** Cap pour profitFactor dans businessScore V2 */
+    /** Cap (plafond) du profit factor dans le score métier V2. */
     private double businessProfitFactorCap = 3.0;
-    /** Gamma pour pénalisation drawdown dans businessScore V2 */
+    /** Paramètre gamma pour pénaliser le drawdown dans le score métier V2. */
     private double businessDrawdownGamma = 1.2;
 
-    /** Capital de trading pour le sizing risk-based */
+    // =============================== Paramètres Trading (Simulation / Backtest) ===============================
+    /** Capital total simulé pour calculer la taille de position. */
     private double capital = 10000.0;
-    /** Pourcentage du capital risqué par trade (ex: 0.01 = 1%) */
+    /** Pourcentage du capital risqué par trade (ex: 0.01 = 1%). */
     private double riskPct = 0.01;
-    /** Facteur multiplicateur du sizing (k dans R = capital * riskPct / (ATR*k)) */
+    /** Facteur multiplicateur dans la formule de sizing basée sur l'ATR. */
     private double sizingK = 1.0;
-    /** Frais de transaction par trade (ex: 0.0005 = 0.05%) */
+    /** Frais (commission) proportionnels par trade (ex: 0.0005 = 0.05%). */
     private double feePct = 0.0005;
-    /** Slippage moyen par trade (ex: 0.0002 = 0.02%) */
+    /** Slippage moyen estimé par trade (ex: 0.0002 = 0.02%). */
     private double slippagePct = 0.0002;
 
-    /** Seuil divergence KL pour détection drift (paramétrable) */
+    // =============================== Détection de dérive (Drift) ===============================
+    /** Seuil de divergence KL (Kullback-Leibler) pour signaler un drift de distribution. */
     private double klDriftThreshold = 0.15;
-    /** Seuil shift de moyenne (en sigma) pour détection drift (paramétrable) */
+    /** Seuil de shift de moyenne exprimé en nombre d'écarts-types. */
     private double meanShiftSigmaThreshold = 2.0;
 
     /**
-     * Constructeur. Charge les hyperparamètres depuis le fichier lstm-config.properties.
-     * @throws RuntimeException si le fichier de configuration ne peut pas être chargé
+     * Constructeur par défaut : charge les hyperparamètres depuis le fichier
+     * resources/lstm-config.properties si présent. Chaque paramètre possède une valeur de secours
+     * (fallback) afin de fonctionner même si une clé manque dans le fichier.
+     *
+     * NOTE IMPORTANTE : Ne pas supprimer la seconde affectation de 'optimizer' en fin de bloc,
+     * elle assure que même si aucune propriété n'est chargée (input == null), on a "adam" par défaut.
+     * (Ceci est un filet de sécurité supplémentaire.)
+     *
+     * En cas d'erreur d'I/O, on remonte une RuntimeException pour signaler l'impossibilité de
+     * poursuivre (erreur de configuration critique).
      */
     public LstmConfig() {
         Properties props = new Properties();
         try (InputStream input = getClass().getClassLoader().getResourceAsStream("lstm-config.properties")) {
             if (input != null) {
+                // Chargement du fichier de propriétés
                 props.load(input);
+                // Lecture des propriétés avec valeurs par défaut. IMPORTANT : Ne pas changer l'ordre
+                // sauf nécessité. Chaque conversion parse la chaîne vers le type désiré.
                 windowSize = Integer.parseInt(props.getProperty("windowSize", "20"));
                 lstmNeurons = Integer.parseInt(props.getProperty("lstmNeurons", "50"));
                 dropoutRate = Double.parseDouble(props.getProperty("dropoutRate", "0.2"));
@@ -240,6 +256,7 @@ public class LstmConfig {
                 klDriftThreshold = Double.parseDouble(props.getProperty("klDriftThreshold", "0.15"));
                 meanShiftSigmaThreshold = Double.parseDouble(props.getProperty("meanShiftSigmaThreshold", "2.0"));
             }
+            // FILET DE SECURITE : même si le fichier n'existe pas, on veut un optimizer par défaut.
             optimizer = props.getProperty("optimizer", "adam");
         } catch (IOException e) {
             throw new RuntimeException("Impossible de charger lstm-config.properties", e);
@@ -247,11 +264,16 @@ public class LstmConfig {
     }
 
     /**
-     * Constructeur. Initialise les hyperparamètres à partir d'un ResultSet.
-     * @param rs ResultSet contenant les valeurs des hyperparamètres
-     * @throws SQLException si une erreur se produit lors de l'accès aux données du ResultSet
+     * Constructeur basé sur un ResultSet (lecture depuis base de données). On suppose que les
+     * colonnes existent. Pour les colonnes optionnelles, on encapsule dans des try/catch afin de
+     * ne pas provoquer d'erreur si la colonne n'est pas encore déployée. Ceci permet une migration
+     * progressive du schéma. Ne modifiez pas les noms de colonnes sans aligner la BDD.
+     *
+     * @param rs ResultSet pointant sur une ligne contenant une configuration complète.
+     * @throws SQLException en cas d'échec d'accès aux colonnes obligatoires.
      */
     public LstmConfig(ResultSet rs) throws SQLException {
+        // Champs obligatoires (présumés toujours disponibles)
         windowSize = rs.getInt("window_size");
         lstmNeurons = rs.getInt("lstm_neurons");
         dropoutRate = rs.getDouble("dropout_rate");
@@ -264,6 +286,7 @@ public class LstmConfig {
         l1 = rs.getDouble("l1");
         l2 = rs.getDouble("l2");
         normalizationScope = rs.getString("normalization_scope");
+        // Valeur de repli si champ NULL (ex: champ non renseigné)
         normalizationMethod = rs.getString("normalization_method") != null ? rs.getString("normalization_method") : "auto";
         swingTradeType = rs.getString("swing_trade_type") != null ? rs.getString("swing_trade_type") : "range";
         numLstmLayers = rs.getInt("num_lstm_layers");
@@ -275,9 +298,8 @@ public class LstmConfig {
         limitPredictionPct = rs.getDouble("limit_prediction_pct");
         batchSize = rs.getInt("batch_size");
         cvMode = rs.getString("cv_mode") != null ? rs.getString("cv_mode") : "split";
-        try {
-            this.useScalarV2 = rs.getBoolean("use_scalar_v2");
-        } catch (Exception ignored) {}
+        // Champs optionnels : on tente, sinon on ignore silencieusement (retro-compatibilité schéma)
+        try { this.useScalarV2 = rs.getBoolean("use_scalar_v2"); } catch (Exception ignored) {}
         try { this.useLogReturnTarget = rs.getBoolean("use_log_return_target"); } catch (Exception ignored) {}
         try { this.useWalkForwardV2 = rs.getBoolean("use_walk_forward_v2"); } catch (Exception ignored) {}
         try { this.walkForwardSplits = rs.getInt("walk_forward_splits"); } catch (Exception ignored) {}
@@ -295,14 +317,20 @@ public class LstmConfig {
     }
 
     /**
-     * Retourne la méthode de normalisation adaptée selon le type de swing trade si "auto".
+     * Fournit la méthode de normalisation effectivement utilisée. Si l'utilisateur a mis
+     * "auto" dans le fichier de configuration ou la base, on applique une heuristique :
+     *  - mean_reversion => zscore (centrage-réduction adapté aux écarts autour d'une moyenne)
+     *  - sinon => minmax (mise à l'échelle dans [0,1])
+     *
+     * Cette méthode ne modifie pas l'état interne : elle renvoie juste la valeur choisie.
+     * @return la chaîne représentant la méthode de normalisation effective.
      */
     public String getNormalizationMethod() {
         if ("auto".equalsIgnoreCase(normalizationMethod)) {
             if ("mean_reversion".equalsIgnoreCase(swingTradeType)) {
                 return "zscore";
             } else {
-                // Par défaut : range, breakout, etc.
+                // Pour range, breakout, etc. => défaut minmax
                 return "minmax";
             }
         }
