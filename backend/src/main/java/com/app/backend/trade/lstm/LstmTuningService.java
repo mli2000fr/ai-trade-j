@@ -134,7 +134,7 @@ public class LstmTuningService {
      *  - Démarrage d'une tâche planifiée pour logguer périodiquement l'avancement des tunings
      *
      * Ne pas retirer les blocs try/finally: robustesse critique.
-     */
+     *
     @PostConstruct
     public void initNd4jCuda() {
         try {
