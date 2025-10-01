@@ -286,7 +286,7 @@ public class LstmTuningService {
         LstmTradePredictor.ScalerSet bestScalers = null;
 
         // 4. Dimensionnement du pool threads (sécurité: min entre taille grille, coeurs et limite effective)
-        int numThreads = Math.min(Math.min(grid.size(), Runtime.getRuntime().availableProcessors()), effectiveMaxThreads);
+        int numThreads = 4;//Math.min(Math.min(grid.size(), Runtime.getRuntime().availableProcessors()), effectiveMaxThreads);
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
         java.util.List<java.util.concurrent.Future<TuningResult>> futures = new java.util.ArrayList<>();
 
@@ -953,24 +953,45 @@ public class LstmTuningService {
      */
     public void tuneAllSymbols(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         long startAll = System.currentTimeMillis();
-        logger.info("[TUNING] Début tuning multi-symboles ({} symboles)", symbols.size());
+        logger.info("[TUNING] Début tuning multi-symboles ({} symboles, parallélisé)", symbols.size());
+        // Pool limité pour tuning de symboles en parallèle (max moitié des threads effectifs, au moins 1)
+        int maxParallelSymbols = 3;//Math.max(1, effectiveMaxThreads / 2);
+        java.util.concurrent.ExecutorService symbolExecutor = java.util.concurrent.Executors.newFixedThreadPool(maxParallelSymbols);
+        java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
         for (int i = 0; i < symbols.size(); i++) {
-            waitForMemory(); // Protection mémoire avant chaque tuning de symbole
-            String symbol = symbols.get(i);
-            long startSymbol = System.currentTimeMillis();
-            logger.info("[TUNING] Début tuning symbole {}/{} : {}", i+1, symbols.size(), symbol);
-            BarSeries series = seriesProvider.apply(symbol);
-            tuneSymbolMultiThread(symbol, grid, series, jdbcTemplate);
-            try {
-                org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
-                org.nd4j.linalg.api.memory.MemoryWorkspaceManager wsManager = org.nd4j.linalg.factory.Nd4j.getWorkspaceManager();
-                wsManager.destroyAllWorkspacesForCurrentThread();
-            } catch (Exception e) {
-                logger.warn("Erreur lors du nettoyage ND4J/DL4J après le tuning du symbole {} : {}", symbol, e.getMessage());
-            }
-            long endSymbol = System.currentTimeMillis();
-            logger.info("[TUNING] Fin tuning symbole {} | durée={} ms", symbol, (endSymbol - startSymbol));
+            final int symbolIndex = i;
+            futures.add(symbolExecutor.submit(() -> {
+                waitForMemory(); // Protection mémoire avant chaque tuning de symbole
+                String symbol = symbols.get(symbolIndex);
+                long startSymbol = System.currentTimeMillis();
+                logger.info("[TUNING] Début tuning symbole {}/{} : {} (thread={})", symbolIndex+1, symbols.size(), symbol, Thread.currentThread().getName());
+                try {
+                    BarSeries series = seriesProvider.apply(symbol);
+                    tuneSymbolMultiThread(symbol, grid, series, jdbcTemplate);
+                } catch (Exception e) {
+                    logger.error("[TUNING] Erreur tuning symbole {} : {}", symbol, e.getMessage());
+                } finally {
+                    try {
+                        org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
+                        org.nd4j.linalg.api.memory.MemoryWorkspaceManager wsManager = org.nd4j.linalg.factory.Nd4j.getWorkspaceManager();
+                        wsManager.destroyAllWorkspacesForCurrentThread();
+                    } catch (Exception e) {
+                        logger.warn("Erreur lors du nettoyage ND4J/DL4J après le tuning du symbole {} : {}", symbol, e.getMessage());
+                    }
+                    long endSymbol = System.currentTimeMillis();
+                    logger.info("[TUNING] Fin tuning symbole {} | durée={} ms", symbol, (endSymbol - startSymbol));
+                }
+            }));
         }
+        // Attendre la fin de toutes les tâches
+        for (java.util.concurrent.Future<?> f : futures) {
+            try {
+                f.get();
+            } catch (Exception e) {
+                logger.error("[TUNING] Erreur lors de l'attente de la fin d'un tuning symbole : {}", e.getMessage());
+            }
+        }
+        symbolExecutor.shutdown();
         long endAll = System.currentTimeMillis();
         logger.info("[TUNING] Fin tuning multi-symboles | durée totale={} ms", (endAll - startAll));
     }
