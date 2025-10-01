@@ -76,9 +76,9 @@ public class LstmHyperparamsRepository {
     private static final String SQL_SAVE_TUNING_METRICS =
             "INSERT INTO lstm_tuning_metrics (" +
                     "symbol, window_size, lstm_neurons, dropout_rate, learning_rate, l1, l2, num_epochs, patience, min_delta, optimizer, " +
-                    "normalization_scope, normalization_method, swing_trade_type, features, mse, rmse, direction, horizon_bars, " +
+                    "normalization_scope, normalization_method, swing_trade_type, features, mse, rmse, horizon_bars, " +
                     "profit_total, profit_factor, win_rate, max_drawdown, num_trades, business_score, sortino, calmar, turnover, avg_bars_in_position, tested_date" +
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
 
     // =========================================================
     // Constructeur
@@ -193,7 +193,6 @@ public class LstmHyperparamsRepository {
             LstmConfig config,
             double mse,
             double rmse,
-            String direction,
             double profitTotal,
             double profitFactor,
             double winRate,
@@ -224,7 +223,6 @@ public class LstmHyperparamsRepository {
                 gson.toJson(config.getFeatures()),
                 mse,
                 rmse,
-                direction,
                 config.getHorizonBars(),
                 profitTotal,
                 profitFactor,

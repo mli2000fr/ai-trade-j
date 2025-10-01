@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS lstm_tuning_metrics (
   features TEXT,
   mse DOUBLE,
   rmse DOUBLE,
-  direction VARCHAR(16),
   horizon_bars INT,
   profit_total DOUBLE,
   profit_factor DOUBLE,

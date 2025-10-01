@@ -384,7 +384,8 @@ public class LstmTuningService {
                     // ===== VALIDATION WALK-FORWARD =====
                     // Évalue la performance du modèle via validation temporelle séquentielle
                     // Simule le trading réel: entraîne sur passé, teste sur futur, avance dans le temps
-                    LstmTradePredictor.WalkForwardResultV2 wf = lstmTradePredictor.walkForwardEvaluate(series, config);
+                    // CORRECTION: Utilise le modèle pré-entraîné au lieu de re-entraîner pour chaque split
+                    LstmTradePredictor.WalkForwardResultV2 wf = lstmTradePredictor.walkForwardEvaluate(series, config, model, scalers);
                     double meanMse = wf.meanMse;            // Erreur quadratique moyenne sur tous les splits
 
                     // ===== AGRÉGATION DES MÉTRIQUES DE TRADING =====
@@ -430,17 +431,9 @@ public class LstmTuningService {
                     double meanPF = sumPF / splits;              // Profit Factor moyen
                     double meanWinRate = sumWin / splits;        // Taux de réussite moyen
                     double meanExpectancy = sumExp / splits;     // Expectancy moyenne
-                    double meanBusinessScore = sumBusiness / splits; // Score business moyen (critère de sélection)
+                    // Score business moyen (critère de sélection)
+                    double meanBusinessScore = sumBusiness / splits;
 
-                    // ===== PRÉDICTION INDICATIVE =====
-                    // Génère une prédiction sur le dernier point pour indicateur directionnel
-                    double predicted = lstmTradePredictor.predictNextCloseScalarV2(series, config, model, scalers);
-                    double lastClose = series.getLastBar().getClosePrice().doubleValue(); // Prix de clôture actuel
-                    double th = lstmTradePredictor.computeSwingTradeThreshold(series, config); // Seuil de signal
-
-                    // Classification directionnelle basée sur l'écart prédiction vs prix actuel
-                    String direction = (predicted - lastClose) > th ? "up" :
-                                     ((predicted - lastClose) < -th ? "down" : "stable");
 
                     // ===== CALCUL DE LA RMSE =====
                     // Root Mean Square Error: racine carrée de la MSE (plus interprétable)
@@ -451,7 +444,7 @@ public class LstmTuningService {
                     // Permet comparaisons, debug, et optimisations futures
                     hyperparamsRepository.saveTuningMetrics(
                             symbol, config,                    // Identifiant + configuration
-                            meanMse, rmse, direction,          // Métriques de prédiction
+                            meanMse, rmse,          // Métriques de prédiction
                             sumProfit, meanPF, meanWinRate, maxDDPct, totalTrades, meanBusinessScore, // Trading metrics
                             // Métriques avancées (moyennes des splits)
                             wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0),      // Ratio de Sortino

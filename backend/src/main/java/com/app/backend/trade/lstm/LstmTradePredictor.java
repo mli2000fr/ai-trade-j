@@ -897,8 +897,12 @@ public class LstmTradePredictor {
         // Timestamp de début pour mesure de performance globale
         long t0 = System.currentTimeMillis();
 
-        // Variable de suivi du meilleur score atteint (pour monitoring)
+        // Variables pour Early Stopping et sauvegarde du meilleur modèle
         double bestScore = Double.POSITIVE_INFINITY;
+        MultiLayerNetwork bestModel = null;              // Sauvegarde du meilleur modèle
+        int patience = config.getPatience();             // Nombre d'époques sans amélioration tolérées
+        double minDelta = config.getMinDelta();          // Amélioration minimale considérée comme significative
+        int epochsWithoutImprovement = 0;               // Compteur pour early stopping
 
         // Boucle d'entraînement epoch par epoch
         for (int epoch = 1; epoch <= epochs; epoch++) {
@@ -912,9 +916,38 @@ public class LstmTradePredictor {
             // Récupération du score (loss) après cette époque
             double score = model.score(); // Généralement MSE pour la régression
 
-            // Mise à jour du meilleur score si amélioration
-            if (score < bestScore) {
+            // ===== GESTION DU MEILLEUR MODÈLE ET EARLY STOPPING =====
+            // Vérification si on a une amélioration significative
+            boolean hasImproved = (bestScore - score) > minDelta;
+
+            if (hasImproved) {
+                // Nouvelle meilleure performance trouvée !
                 bestScore = score;
+                epochsWithoutImprovement = 0; // Reset du compteur de patience
+
+                // ===== SAUVEGARDE DU MEILLEUR MODÈLE =====
+                // Clone profond des paramètres du modèle pour préserver l'état optimal
+                if (bestModel == null) {
+                    // Première initialisation : crée une copie de l'architecture
+                    bestModel = model.clone();
+                } else {
+                    // Copie uniquement les paramètres (plus efficace que clone complet)
+                    bestModel.setParams(model.params().dup());
+                }
+
+                logger.debug("[TRAIN][BEST] Époque {} - Nouveau meilleur score: {} (amélioration: {})",
+                           epoch, String.format("%.6f", bestScore), String.format("%.6f", bestScore - score + minDelta));
+            } else {
+                // Pas d'amélioration significative
+                epochsWithoutImprovement++;
+
+                // ===== EARLY STOPPING =====
+                // Arrêt anticipé si pas d'amélioration depuis patience époques
+                if (patience > 0 && epochsWithoutImprovement >= patience) {
+                    logger.info("[TRAIN][EARLY-STOP] Arrêt anticipé à l'époque {}/{} après {} époques sans amélioration (patience={})",
+                              epoch, epochs, epochsWithoutImprovement, patience);
+                    break; // Sort de la boucle d'entraînement
+                }
             }
 
             // ===== LOGGING PÉRIODIQUE ET MONITORING MÉMOIRE =====
@@ -928,12 +961,14 @@ public class LstmTradePredictor {
                 // Calcul du temps écoulé depuis le début
                 long elapsed = System.currentTimeMillis() - t0;
 
-                // Log informatif avec métriques clés de l'entraînement
-                logger.info("[TRAIN][EPOCH] {}/{} score={} best={} elapsedMs={} memUsedMB={}/{}",
+                // Log informatif avec métriques clés de l'entraînement + early stopping info
+                logger.info("[TRAIN][EPOCH] {}/{} score={} best={} noImprove={}/{} elapsedMs={} memUsedMB={}/{}",
                     epoch,                                  // Époque actuelle
                     epochs,                                 // Total d'époques
                     String.format("%.6f", score),         // Score actuel (6 décimales)
                     String.format("%.6f", bestScore),     // Meilleur score atteint
+                    epochsWithoutImprovement,              // Époques sans amélioration
+                    patience,                              // Patience maximale
                     elapsed,                               // Temps écoulé en ms
                     used,                                  // Mémoire utilisée en MB
                     max                                    // Mémoire max en MB
@@ -941,10 +976,22 @@ public class LstmTradePredictor {
             }
         }
 
-        // ===== PHASE 10: RETOUR DU RÉSULTAT FINAL =====
-        // Encapsulation du modèle entraîné et des scalers dans un objet résultat
+        // ===== PHASE 10: SÉLECTION DU MODÈLE FINAL =====
+        // Utilise le meilleur modèle trouvé pendant l'entraînement (pas le dernier)
+        MultiLayerNetwork finalModel = bestModel != null ? bestModel : model;
+
+        // Log de confirmation du modèle retourné
+        if (bestModel != null) {
+            logger.info("[TRAIN][FINAL] Retour du meilleur modèle (score={}) au lieu du modèle final",
+                       String.format("%.6f", bestScore));
+        } else {
+            logger.warn("[TRAIN][FINAL] Aucune amélioration détectée, retour du modèle final (peut-être sous-optimal)");
+        }
+
+        // ===== PHASE 11: RETOUR DU RÉSULTAT FINAL =====
+        // Encapsulation du MEILLEUR modèle entraîné et des scalers dans un objet résultat
         // Les scalers sont critiques pour la dénormalisation lors des prédictions
-        return new TrainResult(model, scalers);
+        return new TrainResult(finalModel, scalers);
     }
 
     /* =========================================================
@@ -1211,223 +1258,121 @@ public class LstmTradePredictor {
     }
 
     /**
-     * Exécute une validation walk-forward (multi-splits) pour évaluer la robustesse temporelle d'un modèle LSTM.
+     * Évalue un modèle LSTM pré-entraîné via validation walk-forward.
+     * Cette surcharge utilise le modèle déjà entraîné au lieu de re-entraîner pour chaque split.
+     * Plus efficace et cohérent : on évalue exactement le modèle qu'on a entraîné.
      *
-     * La validation walk-forward est une technique de validation temporelle spécialement conçue pour les séries chronologiques :
-     * - Elle respecte l'ordre temporel des données (pas de fuite d'information du futur vers le passé)
-     * - Elle simule le processus réel de trading : entraîner sur le passé, tester sur le futur
-     * - Elle divise la série en segments successifs où chaque segment sert alternativement d'entraînement puis de test
-     * - Elle fournit une estimation plus réaliste des performances qu'une validation croisée classique
-     *
-     * Architecture du processus :
-     * 1. Division de la série temporelle en plusieurs "splits" (segments)
-     * 2. Pour chaque split :
-     *    - Entraînement sur toutes les données antérieures (respect chronologique)
-     *    - Test/évaluation sur le segment courant (simulation trading réel)
-     *    - Calcul des métriques de performance (MSE + métriques business)
-     * 3. Agrégation des résultats pour obtenir une performance moyenne robuste
-     *
-     * Métriques calculées :
-     * - MSE (Mean Squared Error) : précision des prédictions
-     * - Métriques de trading : profit factor, win rate, drawdown, expectancy
-     * - Business Score : métrique composite pondérant performance vs risque
-     * - Variance inter-modèles : mesure de stabilité entre les splits
-     *
-     * Avantages par rapport à la validation croisée classique :
-     * - Respect de la causalité temporelle (pas de look-ahead bias)
-     * - Simulation réaliste des conditions de déploiement
-     * - Détection de l'instabilité temporelle du modèle
-     * - Évaluation de la dégradation des performances dans le temps
-     *
-     * Points critiques :
-     * - L'embargo entre train/test évite le data leakage
-     * - Chaque modèle est réentraîné from scratch (pas de réutilisation)
-     * - La taille des splits doit être suffisante pour des statistiques fiables
-     *
-     * @param series Série temporelle complète (historique OHLCV)
-     * @param config Configuration LSTM (hyperparamètres, splits, embargo, etc.)
-     * @return Résultat agrégé avec métriques par split + statistiques globales
+     * @param series série temporelle complète
+     * @param config configuration LSTM
+     * @param preTrainedModel modèle déjà entraîné sur toute la série (ou une partie)
+     * @param preTrainedScalers scalers associés au modèle pré-entraîné
+     * @return résultats d'évaluation walk-forward
      */
-    public WalkForwardResultV2 walkForwardEvaluate(BarSeries series, LstmConfig config) {
+    public WalkForwardResultV2 walkForwardEvaluate(BarSeries series, LstmConfig config,
+                                                   MultiLayerNetwork preTrainedModel,
+                                                   ScalerSet preTrainedScalers) {
         // ===== PHASE 1: INITIALISATION ET VALIDATION DES PARAMÈTRES =====
 
-        // Création du conteneur de résultats qui agrégera toutes les métriques
         WalkForwardResultV2 result = new WalkForwardResultV2();
 
-        // Récupération du nombre de splits depuis la configuration (minimum 2 pour validation)
-        // Plus de splits = validation plus robuste mais coût computationnel plus élevé
+        // Validation des paramètres d'entrée
+        if (preTrainedModel == null || preTrainedScalers == null) {
+            logger.error("[WALK-FORWARD-PRETRAINED] Modèle ou scalers pré-entraînés manquants");
+            return result;
+        }
+
         int splits = Math.max(2, config.getWalkForwardSplits());
-
-        // Taille de la fenêtre temporelle utilisée par le modèle LSTM
         int windowSize = config.getWindowSize();
-
-        // Nombre total de barres (chandelles) disponibles dans la série
         int totalBars = series.getBarCount();
 
-        // ===== VÉRIFICATION DES DONNÉES SUFFISANTES =====
-        // Il faut au minimum windowSize + 50 barres pour faire une validation sensée
-        // windowSize pour le modèle + marge pour entraînement et test séparés
         if (totalBars < windowSize + 50) {
-            logger.warn("[WALK-FORWARD] Données insuffisantes: {} barres pour windowSize={}", totalBars, windowSize);
-            return result; // Retourne un résultat vide si pas assez de données
+            logger.warn("[WALK-FORWARD-PRETRAINED] Données insuffisantes: {} barres pour windowSize={}", totalBars, windowSize);
+            return result;
         }
 
         // ===== PHASE 2: CALCUL DE LA SEGMENTATION TEMPORELLE =====
 
-        // Calcul de la taille de chaque segment de test
-        // (totalBars - windowSize) = données utilisables après réservation de la fenêtre initiale
         int splitSize = (totalBars - windowSize) / splits;
+        double sumMse = 0, sumBusiness = 0;
+        int mseCount = 0, businessCount = 0;
+        List<Double> mseList = new ArrayList<>();
 
-        // Variables d'accumulation pour le calcul des moyennes finales
-        double sumMse = 0, sumBusiness = 0;          // Sommes des métriques
-        int mseCount = 0, businessCount = 0;         // Compteurs de valeurs valides
-        List<Double> mseList = new ArrayList<>();    // Liste pour calcul de variance
+        logger.info("[WALK-FORWARD-PRETRAINED] Début évaluation avec modèle pré-entraîné: {} splits", splits);
 
         // ===== PHASE 3: BOUCLE PRINCIPALE SUR CHAQUE SPLIT =====
 
-        // Itération sur chaque segment temporel (split)
         for (int s = 1; s <= splits; s++) {
-            // ===== CALCUL DES BORNES TEMPORELLES DU SPLIT COURANT =====
-
-            // Calcul de la barre de fin du segment de test courant
-            // Pour le dernier split, on utilise toutes les barres restantes
             int testEndBar = (s == splits) ? totalBars : windowSize + s * splitSize;
-
-            // Calcul de la barre de début du segment de test
-            // Inclut l'embargo pour éviter le data leakage entre train et test
             int testStartBar = windowSize + (s - 1) * splitSize + config.getEmbargoBars();
 
-            // ===== VALIDATION DE LA TAILLE DU SEGMENT =====
-            // Vérification qu'il reste suffisamment de barres pour un test significatif
-            // Il faut au moins windowSize + 5 barres pour construire des séquences
             if (testStartBar + windowSize + 5 >= testEndBar) {
-                logger.debug("[WALK-FORWARD] Split {} trop petit, ignoré", s);
-                continue; // Passe au split suivant si segment trop petit
+                logger.debug("[WALK-FORWARD-PRETRAINED] Split {} trop petit, ignoré", s);
+                continue;
             }
 
-            // ===== PHASE 4: PRÉPARATION DES DONNÉES D'ENTRAÎNEMENT =====
+            logger.debug("[WALK-FORWARD-PRETRAINED] Split {}/{}: test=[{},{}[",
+                        s, splits, testStartBar, testEndBar);
 
-            // Extraction de la série d'entraînement : de 0 à testStartBar (exclus)
-            // Respecte la chronologie : on n'utilise que les données antérieures au test
-            BarSeries trainSeries = series.getSubSeries(0, testStartBar);
+            // ===== ÉVALUATION DIRECTE AVEC LE MODÈLE PRÉ-ENTRAÎNÉ =====
+            // On utilise le modèle pré-entraîné au lieu de re-entraîner
 
-            logger.debug("[WALK-FORWARD] Split {}/{}: train=[0,{}[ test=[{},{}[",
-                        s, splits, testStartBar, testStartBar, testEndBar);
-
-            // ===== PHASE 5: ENTRAÎNEMENT DU MODÈLE SPÉCIFIQUE AU SPLIT =====
-
-            // Entraînement d'un nouveau modèle LSTM sur les données d'entraînement
-            // Chaque split a son propre modèle pour éviter la contamination
-            TrainResult tr = trainLstmScalarV2(trainSeries, config, null);
-
-            // Vérification que l'entraînement a réussi
-            if (tr.model == null) {
-                logger.warn("[WALK-FORWARD] Échec entraînement split {}, ignoré", s);
-                continue; // Passe au split suivant si entraînement échoué
-            }
-
-            // ===== PHASE 6: ÉVALUATION DU MODÈLE SUR LE SEGMENT DE TEST =====
-
-            // Simulation de trading sur la période de test avec le modèle entraîné
-            // Simule les conditions réelles : prédictions successives + décisions de trading
             TradingMetricsV2 metrics = simulateTradingWalkForward(
-                series,                    // Série complète (pour contexte)
-                trainSeries.getBarCount(), // Nombre de barres d'entraînement
+                series,                    // Série complète
                 testStartBar,              // Début de la période de test
                 testEndBar,                // Fin de la période de test
-                tr.model,                  // Modèle LSTM entraîné
-                tr.scalers,                // Scalers de normalisation associés
-                config                     // Configuration complète
+                preTrainedModel,           // Modèle pré-entraîné (pas de re-entraînement)
+                preTrainedScalers,         // Scalers pré-entraînés
+                config                     // Configuration
             );
 
-            // Calcul de l'erreur quadratique moyenne (MSE) sur le segment de test
-            // Mesure la précision pure des prédictions (sans considération trading)
-            metrics.mse = computeSplitMse(series, testStartBar, testEndBar, tr.model, tr.scalers, config);
+            // Calcul MSE sur ce split avec le modèle pré-entraîné
+            metrics.mse = computeSplitMse(series, testStartBar, testEndBar,
+                                        preTrainedModel, preTrainedScalers, config);
 
-            // ===== PHASE 7: CALCUL DU BUSINESS SCORE COMPOSITE =====
+            // ===== CALCUL DU BUSINESS SCORE =====
 
-            // Le business score combine plusieurs métriques de trading en un score unique
-            // Il pondère la performance vs le risque selon des paramètres configurables
+            double businessScore = computeBusinessScore(
+                metrics.profitFactor, metrics.winRate,
+                metrics.maxDrawdownPct, metrics.expectancy, config
+            );
+            metrics.businessScore = businessScore;
 
-            // Plafonnement du profit factor pour éviter les valeurs extrêmes
-            // Un PF très élevé peut être dû au hasard et fausser l'évaluation
-            double pfAdj = Math.min(metrics.profitFactor, config.getBusinessProfitFactorCap());
+            // ===== AGRÉGATION DES RÉSULTATS =====
 
-            // Expectancy positive uniquement (les pertes ne comptent pas dans le numérateur)
-            double expPos = Math.max(metrics.expectancy, 0.0);
-
-            // Pénalisation du drawdown avec un exposant configurable (gamma)
-            // Plus gamma est élevé, plus le drawdown est fortement pénalisé
-            double denom = 1.0 + Math.pow(Math.max(metrics.maxDrawdownPct, 0.0), config.getBusinessDrawdownGamma());
-
-            // Formule du business score : (expectancy * profitFactor * winRate) / (1 + drawdown^gamma)
-            // Favorise les stratégies profitables avec drawdown limité
-            metrics.businessScore = (expPos * pfAdj * metrics.winRate) / (denom + 1e-9);
-
-            // ===== PHASE 8: STOCKAGE DES RÉSULTATS DU SPLIT =====
-
-            // Ajout des métriques de ce split à la collection globale
             result.splits.add(metrics);
 
-            logger.info("[WALK-FORWARD] Split {}/{} terminé: MSE={}, PF={}, WR={}, DD%={}, BusinessScore={}",
-                       s, splits,
-                       String.format("%.6f", metrics.mse),
-                       String.format("%.2f", metrics.profitFactor),
-                       String.format("%.1f%%", metrics.winRate * 100),
-                       String.format("%.1f%%", metrics.maxDrawdownPct * 100),
-                       String.format("%.4f", metrics.businessScore));
-
-            // ===== ACCUMULATION POUR STATISTIQUES GLOBALES =====
-
-            // Accumulation des valeurs MSE valides (non NaN/Infinite)
             if (Double.isFinite(metrics.mse)) {
-                sumMse += metrics.mse;           // Somme pour moyenne finale
-                mseCount++;                      // Compteur pour moyenne finale
-                mseList.add(metrics.mse);       // Liste pour calcul de variance
+                sumMse += metrics.mse;
+                mseList.add(metrics.mse);
+                mseCount++;
             }
 
-            // Accumulation des valeurs business score valides
-            if (Double.isFinite(metrics.businessScore)) {
-                sumBusiness += metrics.businessScore;  // Somme pour moyenne finale
-                businessCount++;                       // Compteur pour moyenne finale
+            if (Double.isFinite(businessScore)) {
+                sumBusiness += businessScore;
+                businessCount++;
             }
+
+            logger.debug("[WALK-FORWARD-PRETRAINED] Split {}: MSE={}, PF={}, WR={}, BS={}",
+                        s, metrics.mse, metrics.profitFactor, metrics.winRate, businessScore);
         }
 
-        // ===== PHASE 9: CALCUL DES STATISTIQUES AGRÉGÉES =====
+        // ===== PHASE 4: CALCUL DES MOYENNES FINALES =====
 
-        // Calcul de la MSE moyenne sur tous les splits valides
-        // Utilise NaN si aucune valeur valide trouvée
         result.meanMse = mseCount > 0 ? sumMse / mseCount : Double.NaN;
-
-        // Calcul du business score moyen sur tous les splits valides
         result.meanBusinessScore = businessCount > 0 ? sumBusiness / businessCount : Double.NaN;
 
-        // ===== CALCUL DE LA VARIANCE ET STABILITÉ =====
-
-        // Calcul de la variance des MSE entre les différents splits
-        // Mesure la stabilité du modèle dans le temps
+        // Calcul de la variance MSE
         if (mseList.size() > 1) {
-            double mean = result.meanMse;                    // Moyenne des MSE
-
-            // Calcul de la variance : somme des carrés des écarts à la moyenne
-            double var = mseList.stream()
-                .mapToDouble(m -> (m - mean) * (m - mean))   // Carré de l'écart à la moyenne
-                .sum() / mseList.size();                     // Moyenne des carrés des écarts
-
-            result.mseVariance = var;                        // Variance des MSE
-            result.mseInterModelVariance = var;             // Alias pour compatibilité
+            double variance = mseList.stream()
+                .mapToDouble(mse -> Math.pow(mse - result.meanMse, 2))
+                .average().orElse(0.0);
+            result.mseVariance = variance;
+            result.mseInterModelVariance = variance;
         }
 
-        // ===== PHASE 10: LOG FINAL ET RETOUR =====
+        logger.info("[WALK-FORWARD-PRETRAINED] Fin évaluation: meanMSE={}, meanBusinessScore={}, {} splits valides",
+                   result.meanMse, result.meanBusinessScore, result.splits.size());
 
-        // Log de synthèse avec les résultats agrégés
-        logger.info("[WALK-FORWARD] Évaluation terminée: {} splits, MSE moyenne={}, Business Score moyen={}, Variance MSE={}",
-                   result.splits.size(),
-                   String.format("%.6f", result.meanMse),
-                   String.format("%.4f", result.meanBusinessScore),
-                   String.format("%.8f", result.mseVariance));
-
-        // Retour du résultat complet avec toutes les métriques agrégées
         return result;
     }
 
@@ -1440,7 +1385,6 @@ public class LstmTradePredictor {
      */
     public TradingMetricsV2 simulateTradingWalkForward(
         BarSeries fullSeries,
-        int trainBarCount,
         int testStartBar,
         int testEndBar,
         MultiLayerNetwork model,
@@ -2152,5 +2096,30 @@ public class LstmTradePredictor {
 
         logger.warn("[SCALERS][REBUILD] Reconstruction ad-hoc des scalers (peut diverger de l'entraînement initial).");
         return set;
+    }
+
+    /**
+     * Calcule le business score composite basé sur les métriques de trading.
+     * Formule: (expectancy * profitFactor * winRate) / (1 + drawdown^gamma)
+     *
+     * @param profitFactor rapport gains/pertes
+     * @param winRate taux de réussite (0-1)
+     * @param maxDrawdownPct drawdown maximum (0-1)
+     * @param expectancy gain moyen par trade
+     * @param config configuration pour les paramètres du calcul
+     * @return score business composite
+     */
+    public double computeBusinessScore(double profitFactor, double winRate, double maxDrawdownPct, double expectancy, LstmConfig config) {
+        // Plafonnement du profit factor pour éviter les valeurs extrêmes
+        double pfAdj = Math.min(profitFactor, config.getBusinessProfitFactorCap());
+
+        // Expectancy positive uniquement
+        double expPos = Math.max(expectancy, 0.0);
+
+        // Pénalisation du drawdown avec exposant configurable
+        double denom = 1.0 + Math.pow(Math.max(maxDrawdownPct, 0.0), config.getBusinessDrawdownGamma());
+
+        // Formule finale du business score
+        return (expPos * pfAdj * winRate) / (denom + 1e-9);
     }
 }
