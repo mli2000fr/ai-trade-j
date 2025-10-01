@@ -1069,77 +1069,223 @@ public class LstmTradePredictor {
     }
 
     /**
-     * Exécute une validation walk-forward (multi-splits).
-     * @param series Série complète
-     * @param config Config LSTM
-     * @return Résultat avec métriques par split
+     * Exécute une validation walk-forward (multi-splits) pour évaluer la robustesse temporelle d'un modèle LSTM.
+     *
+     * La validation walk-forward est une technique de validation temporelle spécialement conçue pour les séries chronologiques :
+     * - Elle respecte l'ordre temporel des données (pas de fuite d'information du futur vers le passé)
+     * - Elle simule le processus réel de trading : entraîner sur le passé, tester sur le futur
+     * - Elle divise la série en segments successifs où chaque segment sert alternativement d'entraînement puis de test
+     * - Elle fournit une estimation plus réaliste des performances qu'une validation croisée classique
+     *
+     * Architecture du processus :
+     * 1. Division de la série temporelle en plusieurs "splits" (segments)
+     * 2. Pour chaque split :
+     *    - Entraînement sur toutes les données antérieures (respect chronologique)
+     *    - Test/évaluation sur le segment courant (simulation trading réel)
+     *    - Calcul des métriques de performance (MSE + métriques business)
+     * 3. Agrégation des résultats pour obtenir une performance moyenne robuste
+     *
+     * Métriques calculées :
+     * - MSE (Mean Squared Error) : précision des prédictions
+     * - Métriques de trading : profit factor, win rate, drawdown, expectancy
+     * - Business Score : métrique composite pondérant performance vs risque
+     * - Variance inter-modèles : mesure de stabilité entre les splits
+     *
+     * Avantages par rapport à la validation croisée classique :
+     * - Respect de la causalité temporelle (pas de look-ahead bias)
+     * - Simulation réaliste des conditions de déploiement
+     * - Détection de l'instabilité temporelle du modèle
+     * - Évaluation de la dégradation des performances dans le temps
+     *
+     * Points critiques :
+     * - L'embargo entre train/test évite le data leakage
+     * - Chaque modèle est réentraîné from scratch (pas de réutilisation)
+     * - La taille des splits doit être suffisante pour des statistiques fiables
+     *
+     * @param series Série temporelle complète (historique OHLCV)
+     * @param config Configuration LSTM (hyperparamètres, splits, embargo, etc.)
+     * @return Résultat agrégé avec métriques par split + statistiques globales
      */
     public WalkForwardResultV2 walkForwardEvaluate(BarSeries series, LstmConfig config) {
+        // ===== PHASE 1: INITIALISATION ET VALIDATION DES PARAMÈTRES =====
+
+        // Création du conteneur de résultats qui agrégera toutes les métriques
         WalkForwardResultV2 result = new WalkForwardResultV2();
+
+        // Récupération du nombre de splits depuis la configuration (minimum 2 pour validation)
+        // Plus de splits = validation plus robuste mais coût computationnel plus élevé
         int splits = Math.max(2, config.getWalkForwardSplits());
+
+        // Taille de la fenêtre temporelle utilisée par le modèle LSTM
         int windowSize = config.getWindowSize();
+
+        // Nombre total de barres (chandelles) disponibles dans la série
         int totalBars = series.getBarCount();
 
-        if (totalBars < windowSize + 50) return result;
+        // ===== VÉRIFICATION DES DONNÉES SUFFISANTES =====
+        // Il faut au minimum windowSize + 50 barres pour faire une validation sensée
+        // windowSize pour le modèle + marge pour entraînement et test séparés
+        if (totalBars < windowSize + 50) {
+            logger.warn("[WALK-FORWARD] Données insuffisantes: {} barres pour windowSize={}", totalBars, windowSize);
+            return result; // Retourne un résultat vide si pas assez de données
+        }
 
+        // ===== PHASE 2: CALCUL DE LA SEGMENTATION TEMPORELLE =====
+
+        // Calcul de la taille de chaque segment de test
+        // (totalBars - windowSize) = données utilisables après réservation de la fenêtre initiale
         int splitSize = (totalBars - windowSize) / splits;
-        double sumMse = 0, sumBusiness = 0;
-        int mseCount = 0, businessCount = 0;
-        List<Double> mseList = new ArrayList<>();
 
+        // Variables d'accumulation pour le calcul des moyennes finales
+        double sumMse = 0, sumBusiness = 0;          // Sommes des métriques
+        int mseCount = 0, businessCount = 0;         // Compteurs de valeurs valides
+        List<Double> mseList = new ArrayList<>();    // Liste pour calcul de variance
+
+        // ===== PHASE 3: BOUCLE PRINCIPALE SUR CHAQUE SPLIT =====
+
+        // Itération sur chaque segment temporel (split)
         for (int s = 1; s <= splits; s++) {
+            // ===== CALCUL DES BORNES TEMPORELLES DU SPLIT COURANT =====
+
+            // Calcul de la barre de fin du segment de test courant
+            // Pour le dernier split, on utilise toutes les barres restantes
             int testEndBar = (s == splits) ? totalBars : windowSize + s * splitSize;
+
+            // Calcul de la barre de début du segment de test
+            // Inclut l'embargo pour éviter le data leakage entre train et test
             int testStartBar = windowSize + (s - 1) * splitSize + config.getEmbargoBars();
 
-            // Vérifie qu'il y a assez de barres pour test
-            if (testStartBar + windowSize + 5 >= testEndBar) continue;
+            // ===== VALIDATION DE LA TAILLE DU SEGMENT =====
+            // Vérification qu'il reste suffisamment de barres pour un test significatif
+            // Il faut au moins windowSize + 5 barres pour construire des séquences
+            if (testStartBar + windowSize + 5 >= testEndBar) {
+                logger.debug("[WALK-FORWARD] Split {} trop petit, ignoré", s);
+                continue; // Passe au split suivant si segment trop petit
+            }
 
+            // ===== PHASE 4: PRÉPARATION DES DONNÉES D'ENTRAÎNEMENT =====
+
+            // Extraction de la série d'entraînement : de 0 à testStartBar (exclus)
+            // Respecte la chronologie : on n'utilise que les données antérieures au test
             BarSeries trainSeries = series.getSubSeries(0, testStartBar);
 
-            // Entraînement sur le segment passé
-            TrainResult tr = trainLstmScalarV2(trainSeries, config, null);
-            if (tr.model == null) continue;
+            logger.debug("[WALK-FORWARD] Split {}/{}: train=[0,{}[ test=[{},{}[",
+                        s, splits, testStartBar, testStartBar, testEndBar);
 
-            // Simulation + MSE
+            // ===== PHASE 5: ENTRAÎNEMENT DU MODÈLE SPÉCIFIQUE AU SPLIT =====
+
+            // Entraînement d'un nouveau modèle LSTM sur les données d'entraînement
+            // Chaque split a son propre modèle pour éviter la contamination
+            TrainResult tr = trainLstmScalarV2(trainSeries, config, null);
+
+            // Vérification que l'entraînement a réussi
+            if (tr.model == null) {
+                logger.warn("[WALK-FORWARD] Échec entraînement split {}, ignoré", s);
+                continue; // Passe au split suivant si entraînement échoué
+            }
+
+            // ===== PHASE 6: ÉVALUATION DU MODÈLE SUR LE SEGMENT DE TEST =====
+
+            // Simulation de trading sur la période de test avec le modèle entraîné
+            // Simule les conditions réelles : prédictions successives + décisions de trading
             TradingMetricsV2 metrics = simulateTradingWalkForward(
-                series,
-                trainSeries.getBarCount(),
-                testStartBar,
-                testEndBar,
-                tr.model,
-                tr.scalers,
-                config
+                series,                    // Série complète (pour contexte)
+                trainSeries.getBarCount(), // Nombre de barres d'entraînement
+                testStartBar,              // Début de la période de test
+                testEndBar,                // Fin de la période de test
+                tr.model,                  // Modèle LSTM entraîné
+                tr.scalers,                // Scalers de normalisation associés
+                config                     // Configuration complète
             );
+
+            // Calcul de l'erreur quadratique moyenne (MSE) sur le segment de test
+            // Mesure la précision pure des prédictions (sans considération trading)
             metrics.mse = computeSplitMse(series, testStartBar, testEndBar, tr.model, tr.scalers, config);
 
-            // Calcul d'un score "business" (pondération heuristique)
+            // ===== PHASE 7: CALCUL DU BUSINESS SCORE COMPOSITE =====
+
+            // Le business score combine plusieurs métriques de trading en un score unique
+            // Il pondère la performance vs le risque selon des paramètres configurables
+
+            // Plafonnement du profit factor pour éviter les valeurs extrêmes
+            // Un PF très élevé peut être dû au hasard et fausser l'évaluation
             double pfAdj = Math.min(metrics.profitFactor, config.getBusinessProfitFactorCap());
+
+            // Expectancy positive uniquement (les pertes ne comptent pas dans le numérateur)
             double expPos = Math.max(metrics.expectancy, 0.0);
+
+            // Pénalisation du drawdown avec un exposant configurable (gamma)
+            // Plus gamma est élevé, plus le drawdown est fortement pénalisé
             double denom = 1.0 + Math.pow(Math.max(metrics.maxDrawdownPct, 0.0), config.getBusinessDrawdownGamma());
+
+            // Formule du business score : (expectancy * profitFactor * winRate) / (1 + drawdown^gamma)
+            // Favorise les stratégies profitables avec drawdown limité
             metrics.businessScore = (expPos * pfAdj * metrics.winRate) / (denom + 1e-9);
 
+            // ===== PHASE 8: STOCKAGE DES RÉSULTATS DU SPLIT =====
+
+            // Ajout des métriques de ce split à la collection globale
             result.splits.add(metrics);
 
+            logger.info("[WALK-FORWARD] Split {}/{} terminé: MSE={}, PF={}, WR={}, DD%={}, BusinessScore={}",
+                       s, splits,
+                       String.format("%.6f", metrics.mse),
+                       String.format("%.2f", metrics.profitFactor),
+                       String.format("%.1f%%", metrics.winRate * 100),
+                       String.format("%.1f%%", metrics.maxDrawdownPct * 100),
+                       String.format("%.4f", metrics.businessScore));
+
+            // ===== ACCUMULATION POUR STATISTIQUES GLOBALES =====
+
+            // Accumulation des valeurs MSE valides (non NaN/Infinite)
             if (Double.isFinite(metrics.mse)) {
-                sumMse += metrics.mse;
-                mseCount++;
-                mseList.add(metrics.mse);
+                sumMse += metrics.mse;           // Somme pour moyenne finale
+                mseCount++;                      // Compteur pour moyenne finale
+                mseList.add(metrics.mse);       // Liste pour calcul de variance
             }
+
+            // Accumulation des valeurs business score valides
             if (Double.isFinite(metrics.businessScore)) {
-                sumBusiness += metrics.businessScore;
-                businessCount++;
+                sumBusiness += metrics.businessScore;  // Somme pour moyenne finale
+                businessCount++;                       // Compteur pour moyenne finale
             }
         }
 
+        // ===== PHASE 9: CALCUL DES STATISTIQUES AGRÉGÉES =====
+
+        // Calcul de la MSE moyenne sur tous les splits valides
+        // Utilise NaN si aucune valeur valide trouvée
         result.meanMse = mseCount > 0 ? sumMse / mseCount : Double.NaN;
+
+        // Calcul du business score moyen sur tous les splits valides
         result.meanBusinessScore = businessCount > 0 ? sumBusiness / businessCount : Double.NaN;
 
+        // ===== CALCUL DE LA VARIANCE ET STABILITÉ =====
+
+        // Calcul de la variance des MSE entre les différents splits
+        // Mesure la stabilité du modèle dans le temps
         if (mseList.size() > 1) {
-            double mean = result.meanMse;
-            double var = mseList.stream().mapToDouble(m -> (m - mean) * (m - mean)).sum() / mseList.size();
-            result.mseVariance = var;
-            result.mseInterModelVariance = var; // alias simple
+            double mean = result.meanMse;                    // Moyenne des MSE
+
+            // Calcul de la variance : somme des carrés des écarts à la moyenne
+            double var = mseList.stream()
+                .mapToDouble(m -> (m - mean) * (m - mean))   // Carré de l'écart à la moyenne
+                .sum() / mseList.size();                     // Moyenne des carrés des écarts
+
+            result.mseVariance = var;                        // Variance des MSE
+            result.mseInterModelVariance = var;             // Alias pour compatibilité
         }
+
+        // ===== PHASE 10: LOG FINAL ET RETOUR =====
+
+        // Log de synthèse avec les résultats agrégés
+        logger.info("[WALK-FORWARD] Évaluation terminée: {} splits, MSE moyenne={}, Business Score moyen={}, Variance MSE={}",
+                   result.splits.size(),
+                   String.format("%.6f", result.meanMse),
+                   String.format("%.4f", result.meanBusinessScore),
+                   String.format("%.8f", result.mseVariance));
+
+        // Retour du résultat complet avec toutes les métriques agrégées
         return result;
     }
 
