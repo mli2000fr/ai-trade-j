@@ -266,11 +266,11 @@ public class LstmTradePredictor {
      */
 
     /**
-     * Extrait une matrice de features depuis une série TA4J.
+     * Extrait une matrice de features depuis une série TA4J optimisée pour le swing trade professionnel.
      * Chaque feature est indexée dans l'ordre fourni par la liste features.
      *
      * @param series   Série temporelle de barres (TA4J)
-     * @param features Liste ordonnée des features à extraire (ex: ["close","rsi","sma"])
+     * @param features Liste ordonnée des features à extraire
      * @return Matrice double[barCount][featuresCount]
      */
     public double[][] extractFeatureMatrix(BarSeries series, List<String> features) {
@@ -284,50 +284,124 @@ public class LstmTradePredictor {
         HighPriceIndicator high = new HighPriceIndicator(series);
         LowPriceIndicator low = new LowPriceIndicator(series);
         VolumeIndicator vol = new VolumeIndicator(series);
+        org.ta4j.core.indicators.helpers.OpenPriceIndicator open = new org.ta4j.core.indicators.helpers.OpenPriceIndicator(series);
 
-        // Instanciations conditionnelles (calculées seulement si nécessaires)
+        // RSI variants pour swing trade
         RSIIndicator rsi = features.contains("rsi") ? new RSIIndicator(close, 14) : null;
-        SMAIndicator sma14 = features.contains("sma") ? new SMAIndicator(close, 14) : null;
-        EMAIndicator ema14 = features.contains("ema") ? new EMAIndicator(close, 14) : null;
+        RSIIndicator rsi14 = features.contains("rsi_14") ? new RSIIndicator(close, 14) : null;
+        RSIIndicator rsi21 = features.contains("rsi_21") ? new RSIIndicator(close, 21) : null;
+
+        // SMA variants pour swing trade
+        SMAIndicator sma = features.contains("sma") ? new SMAIndicator(close, 14) : null;
+        SMAIndicator sma20 = (features.contains("sma_20") || features.contains("bollinger_high") || features.contains("bollinger_low") || features.contains("bollinger_width"))
+            ? new SMAIndicator(close, 20) : null;
+        SMAIndicator sma50 = features.contains("sma_50") ? new SMAIndicator(close, 50) : null;
+
+        // EMA variants pour swing trade
+        EMAIndicator ema = features.contains("ema") ? new EMAIndicator(close, 14) : null;
+        EMAIndicator ema12 = features.contains("ema_12") ? new EMAIndicator(close, 12) : null;
+        EMAIndicator ema26 = features.contains("ema_26") ? new EMAIndicator(close, 26) : null;
+        EMAIndicator ema50 = features.contains("ema_50") ? new EMAIndicator(close, 50) : null;
+
+        // MACD complet pour swing trade
         MACDIndicator macd = features.contains("macd") ? new MACDIndicator(close, 12, 26) : null;
+        org.ta4j.core.indicators.EMAIndicator macdSignal = features.contains("macd_signal") && macd != null
+            ? new org.ta4j.core.indicators.EMAIndicator(macd, 9) : null;
+
+        // ATR variants pour swing trade
         ATRIndicator atr = features.contains("atr") ? new ATRIndicator(series, 14) : null;
+        ATRIndicator atr14 = features.contains("atr_14") ? new ATRIndicator(series, 14) : null;
+        ATRIndicator atr21 = features.contains("atr_21") ? new ATRIndicator(series, 21) : null;
+
+        // Bollinger Bands complets
+        StandardDeviationIndicator sd20 = (features.contains("bollinger_high") || features.contains("bollinger_low") || features.contains("bollinger_width"))
+            ? new StandardDeviationIndicator(close, 20) : null;
+
+        // Stochastic complet
         StochasticOscillatorKIndicator stoch = features.contains("stochastic") ? new StochasticOscillatorKIndicator(series, 14) : null;
+        org.ta4j.core.indicators.StochasticOscillatorDIndicator stochD = features.contains("stochastic_d")
+            ? new org.ta4j.core.indicators.StochasticOscillatorDIndicator(stoch != null ? stoch : new StochasticOscillatorKIndicator(series, 14)) : null;
+
+        // Williams %R pour swing trade
+        org.ta4j.core.indicators.WilliamsRIndicator williamsR = features.contains("williams_r")
+            ? new org.ta4j.core.indicators.WilliamsRIndicator(series, 14) : null;
+
+        // CCI pour swing trade
         CCIIndicator cci = features.contains("cci") ? new CCIIndicator(series, 20) : null;
-        StandardDeviationIndicator sd20 =
-            (features.contains("bollinger_high") || features.contains("bollinger_low"))
-                ? new StandardDeviationIndicator(close, 20) : null;
-        SMAIndicator sma20 =
-            (features.contains("bollinger_high") || features.contains("bollinger_low"))
-                ? new SMAIndicator(close, 20) : null;
+
+        // ROC (Rate of Change) pour swing trade
+        org.ta4j.core.indicators.ROCIndicator roc = features.contains("roc")
+            ? new org.ta4j.core.indicators.ROCIndicator(close, 12) : null;
+
+        // ADX et DI pour trend strength
+        org.ta4j.core.indicators.adx.ADXIndicator adx = features.contains("adx")
+            ? new org.ta4j.core.indicators.adx.ADXIndicator(series, 14) : null;
+        org.ta4j.core.indicators.adx.PlusDIIndicator diPlus = features.contains("di_plus")
+            ? new org.ta4j.core.indicators.adx.PlusDIIndicator(series, 14) : null;
+        org.ta4j.core.indicators.adx.MinusDIIndicator diMinus = features.contains("di_minus")
+            ? new org.ta4j.core.indicators.adx.MinusDIIndicator(series, 14) : null;
+
+        // OBV pour volume analysis
+        org.ta4j.core.indicators.volume.OnBalanceVolumeIndicator obv = features.contains("obv")
+            ? new org.ta4j.core.indicators.volume.OnBalanceVolumeIndicator(series) : null;
 
         boolean needMomentum = features.contains("momentum");
+        boolean needVolumeRatio = features.contains("volume_ratio");
+        boolean needPricePosition = features.contains("price_position");
+        boolean needVolatilityRegime = features.contains("volatility_regime");
 
         // Parcours de chaque barre
         for (int i = 0; i < n; i++) {
             double closeVal = close.getValue(i).doubleValue();
             double highVal = high.getValue(i).doubleValue();
             double lowVal = low.getValue(i).doubleValue();
+            double openVal = open.getValue(i).doubleValue();
+            double volVal = vol.getValue(i).doubleValue();
             ZonedDateTime t = series.getBar(i).getEndTime();
 
             for (int f = 0; f < fCount; f++) {
                 String feat = features.get(f);
                 double val = 0.0;
 
-                // Switch exhaustif : toute feature inconnue => fallback sur close (comportement actuel conservé)
+                // Switch exhaustif pour toutes les features de swing trade
                 switch (feat) {
                     case "close" -> val = closeVal;
-                    case "volume" -> val = vol.getValue(i).doubleValue();
+                    case "high" -> val = highVal;
+                    case "low" -> val = lowVal;
+                    case "open" -> val = openVal;
+                    case "volume" -> val = volVal;
+
+                    // RSI variants
                     case "rsi" -> val = rsi != null ? rsi.getValue(i).doubleValue() : 0.0;
-                    case "sma" -> val = sma14 != null ? sma14.getValue(i).doubleValue() : 0.0;
-                    case "ema" -> val = ema14 != null ? ema14.getValue(i).doubleValue() : 0.0;
+                    case "rsi_14" -> val = rsi14 != null ? rsi14.getValue(i).doubleValue() : 0.0;
+                    case "rsi_21" -> val = rsi21 != null ? rsi21.getValue(i).doubleValue() : 0.0;
+
+                    // SMA variants
+                    case "sma" -> val = sma != null ? sma.getValue(i).doubleValue() : 0.0;
+                    case "sma_20" -> val = sma20 != null ? sma20.getValue(i).doubleValue() : 0.0;
+                    case "sma_50" -> val = sma50 != null ? sma50.getValue(i).doubleValue() : 0.0;
+
+                    // EMA variants
+                    case "ema" -> val = ema != null ? ema.getValue(i).doubleValue() : 0.0;
+                    case "ema_12" -> val = ema12 != null ? ema12.getValue(i).doubleValue() : 0.0;
+                    case "ema_26" -> val = ema26 != null ? ema26.getValue(i).doubleValue() : 0.0;
+                    case "ema_50" -> val = ema50 != null ? ema50.getValue(i).doubleValue() : 0.0;
+
+                    // MACD complet
                     case "macd" -> val = macd != null ? macd.getValue(i).doubleValue() : 0.0;
+                    case "macd_signal" -> val = macdSignal != null ? macdSignal.getValue(i).doubleValue() : 0.0;
+                    case "macd_histogram" -> {
+                        if (macd != null && macdSignal != null) {
+                            val = macd.getValue(i).doubleValue() - macdSignal.getValue(i).doubleValue();
+                        } else val = 0.0;
+                    }
+
+                    // ATR variants
                     case "atr" -> val = atr != null ? atr.getValue(i).doubleValue() : 0.0;
-                    case "stochastic" -> val = stoch != null ? stoch.getValue(i).doubleValue() : 0.0;
-                    case "cci" -> val = cci != null ? cci.getValue(i).doubleValue() : 0.0;
-                    case "momentum" -> val =
-                        (needMomentum && i >= 10)
-                            ? (close.getValue(i).doubleValue() - close.getValue(i - 10).doubleValue())
-                            : 0.0;
+                    case "atr_14" -> val = atr14 != null ? atr14.getValue(i).doubleValue() : 0.0;
+                    case "atr_21" -> val = atr21 != null ? atr21.getValue(i).doubleValue() : 0.0;
+
+                    // Bollinger Bands
                     case "bollinger_high" -> {
                         if (sma20 != null && sd20 != null) {
                             double mid = sma20.getValue(i).doubleValue();
@@ -342,9 +416,78 @@ public class LstmTradePredictor {
                             val = mid - 2 * sdv;
                         } else val = 0.0;
                     }
+                    case "bollinger_width" -> {
+                        if (sma20 != null && sd20 != null) {
+                            double sdv = sd20.getValue(i).doubleValue();
+                            val = 4 * sdv; // Width = Upper - Lower = 4 * stddev
+                        } else val = 0.0;
+                    }
+
+                    // Stochastic
+                    case "stochastic" -> val = stoch != null ? stoch.getValue(i).doubleValue() : 0.0;
+                    case "stochastic_d" -> val = stochD != null ? stochD.getValue(i).doubleValue() : 0.0;
+                    case "williams_r" -> val = williamsR != null ? williamsR.getValue(i).doubleValue() : 0.0;
+
+                    // Autres oscillateurs
+                    case "cci" -> val = cci != null ? cci.getValue(i).doubleValue() : 0.0;
+                    case "roc" -> val = roc != null ? roc.getValue(i).doubleValue() : 0.0;
+
+                    // Momentum
+                    case "momentum" -> val = (needMomentum && i >= 10)
+                        ? (close.getValue(i).doubleValue() - close.getValue(i - 10).doubleValue()) : 0.0;
+
+                    // ADX et Directional Indicators
+                    case "adx" -> val = adx != null ? adx.getValue(i).doubleValue() : 0.0;
+                    case "di_plus" -> val = diPlus != null ? diPlus.getValue(i).doubleValue() : 0.0;
+                    case "di_minus" -> val = diMinus != null ? diMinus.getValue(i).doubleValue() : 0.0;
+
+                    // Volume indicators
+                    case "obv" -> val = obv != null ? obv.getValue(i).doubleValue() : 0.0;
+                    case "volume_ratio" -> {
+                        if (needVolumeRatio && i >= 20) {
+                            double avgVol = 0;
+                            for (int j = i - 19; j <= i; j++) {
+                                avgVol += vol.getValue(j).doubleValue();
+                            }
+                            avgVol /= 20;
+                            val = avgVol > 0 ? volVal / avgVol : 1.0;
+                        } else val = 1.0;
+                    }
+
+                    // Position relative dans la range
+                    case "price_position" -> {
+                        if (needPricePosition && i >= 20) {
+                            double minPrice = Double.MAX_VALUE;
+                            double maxPrice = Double.MIN_VALUE;
+                            for (int j = i - 19; j <= i; j++) {
+                                double h = high.getValue(j).doubleValue();
+                                double l = low.getValue(j).doubleValue();
+                                if (h > maxPrice) maxPrice = h;
+                                if (l < minPrice) minPrice = l;
+                            }
+                            val = (maxPrice > minPrice) ? (closeVal - minPrice) / (maxPrice - minPrice) : 0.5;
+                        } else val = 0.5;
+                    }
+
+                    // Régime de volatilité
+                    case "volatility_regime" -> {
+                        if (needVolatilityRegime && atr14 != null && i >= 50) {
+                            double currentATR = atr14.getValue(i).doubleValue();
+                            double avgATR = 0;
+                            for (int j = i - 49; j <= i; j++) {
+                                avgATR += atr14.getValue(j).doubleValue();
+                            }
+                            avgATR /= 50;
+                            val = avgATR > 0 ? currentATR / avgATR : 1.0;
+                        } else val = 1.0;
+                    }
+
+                    // Features temporelles
                     case "day_of_week" -> val = t.getDayOfWeek().getValue(); // 1=Lundi .. 7=Dimanche
                     case "month" -> val = t.getMonthValue();
-                    default -> val = closeVal; // fallback inert sans changer logique existante
+                    case "quarter" -> val = (t.getMonthValue() - 1) / 3 + 1;
+
+                    default -> val = closeVal; // fallback
                 }
 
                 // Nettoyage valeurs invalides
@@ -867,8 +1010,9 @@ public class LstmTradePredictor {
     }
 
     /**
-     * Simule une stratégie basique "swing" sur un intervalle de test
-     * en utilisant les prédictions successives du modèle.
+     * Simule une stratégie swing trade optimisée (LONG ONLY - pas de short selling)
+     * sur un intervalle de test en utilisant les prédictions successives du modèle.
+     * Adaptée pour Alpaca avec frais réalistes et logique swing trade professionnelle.
      *
      * @return TradingMetricsV2 métriques remplies.
      */
@@ -884,24 +1028,26 @@ public class LstmTradePredictor {
         TradingMetricsV2 tm = new TradingMetricsV2();
 
         double equity = 0, peak = 0, trough = 0;
-        boolean inPos = false, longPos = false;
+        boolean inPos = false; // Pas de longPos/shortPos - LONG ONLY
         double entry = 0;
         int barsInPos = 0;
-        int horizon = Math.max(3, config.getHorizonBars());
+        int horizon = Math.max(5, config.getHorizonBars()); // Minimum 5 pour swing trade
 
         List<Double> tradePnL = new ArrayList<>();
         List<Double> tradeReturns = new ArrayList<>();
         List<Integer> barsInPosList = new ArrayList<>();
 
-        double timeInPos = 0;
-        int positionChanges = 0;
         double capital = config.getCapital();
         double riskPct = config.getRiskPct();
         double sizingK = config.getSizingK();
-        double feePct = config.getFeePct();
-        double slippagePct = config.getSlippagePct();
+        // Alpaca : commission-free mais spread et slippage réalistes
+        double feePct = 0.0; // Alpaca commission-free
+        double slippagePct = config.getSlippagePct(); // 0.05% slippage réaliste
         double positionSize = 0;
-        double entrySpread = 0;
+
+        // Variables pour swing trade optimization
+        double consecutiveLosses = 0;
+        double maxConsecutiveLosses = 3; // Protection contre séries de pertes
 
         // Boucle sur les barres de test
         for (int bar = testStartBar; bar < testEndBar - 1; bar++) {
@@ -913,64 +1059,120 @@ public class LstmTradePredictor {
             double atr = atrInd.getValue(sub.getEndIndex()).doubleValue();
 
             if (!inPos) {
+                // Protection contre trop de pertes consécutives
+                if (consecutiveLosses >= maxConsecutiveLosses) {
+                    if (bar % 5 == 0) consecutiveLosses = Math.max(0, consecutiveLosses - 1); // Réduction progressive
+                    continue;
+                }
+
                 double predicted = predictNextCloseScalarV2(sub, config, model, scalers);
                 double lastClose = sub.getLastBar().getClosePrice().doubleValue();
 
-                double up = lastClose * (1 + threshold);
-                double down = lastClose * (1 - threshold);
+                // Calcul de la force du signal
+                double signalStrength = (predicted - lastClose) / lastClose;
 
-                // Signal d'entrée
-                if (predicted > up || predicted < down) {
+                // Signal d'entrée LONG ONLY avec seuils adaptatifs
+                double entryThreshold = threshold * 1.2; // Seuil plus élevé pour swing trade
+
+                if (signalStrength > entryThreshold) {
+                    // Vérifications supplémentaires pour swing trade professionnel
+
+                    // 1. Vérifier que ce n'est pas un faux signal (RSI pas en zone extrême)
+                    RSIIndicator rsi = new RSIIndicator(new ClosePriceIndicator(sub), 14);
+                    double currentRsi = rsi.getValue(sub.getEndIndex()).doubleValue();
+                    if (currentRsi > 75) continue; // Éviter les zones de surachat extrême
+
+                    // 2. Vérifier le volume (doit être au-dessus de la moyenne)
+                    VolumeIndicator vol = new VolumeIndicator(sub);
+                    double currentVol = vol.getValue(sub.getEndIndex()).doubleValue();
+                    double avgVol = 0;
+                    int volPeriod = Math.min(20, sub.getBarCount() - 1);
+                    for (int i = sub.getEndIndex() - volPeriod + 1; i <= sub.getEndIndex(); i++) {
+                        avgVol += vol.getValue(i).doubleValue();
+                    }
+                    avgVol /= volPeriod;
+                    if (currentVol < avgVol * 0.8) continue; // Volume insuffisant
+
+                    // 3. Entrée confirmée
                     inPos = true;
-                    longPos = predicted > up;
                     entry = lastClose;
                     barsInPos = 0;
-                    positionChanges++;
 
-                    // Calcul taille position (ATR risk-based)
-                    positionSize = atr > 0 ? capital * riskPct / (atr * sizingK) : 0.0;
-                    entrySpread = computeMeanSpread(sub);
+                    // Calcul taille position optimisée pour swing trade
+                    // Utilise ATR pour sizing basé sur volatilité
+                    double atrPct = atr / lastClose;
+                    double riskAmount = capital * riskPct;
+                    double stopDistance = atrPct * sizingK; // Distance stop basée sur ATR
+                    positionSize = riskAmount / (lastClose * stopDistance);
+
+                    // Limite la taille de position (max 10% du capital)
+                    double maxPositionValue = capital * 0.1;
+                    if (positionSize * lastClose > maxPositionValue) {
+                        positionSize = maxPositionValue / lastClose;
+                    }
                 }
             } else {
                 barsInPos++;
-                timeInPos++;
-
                 double current = fullSeries.getBar(bar).getClosePrice().doubleValue();
-                double stop = entry * (1 - threshold * (longPos ? 1 : -1));
-                double target = entry * (1 + 2 * threshold * (longPos ? 1 : -1));
 
+                // Gestion des sorties pour swing trade professionnel
                 boolean exit = false;
                 double pnl = 0;
 
-                // Gestion long / short symétrique
-                if (longPos) {
-                    if (current <= stop || current >= target) {
-                        pnl = (current - entry) * positionSize;
-                        exit = true;
-                    }
-                } else {
-                    if (current >= stop || current <= target) {
-                        pnl = (entry - current) * positionSize;
-                        exit = true;
-                    }
-                }
+                // 1. Stop Loss dynamique basé sur ATR
+                double atrStop = entry - (atr * sizingK * 1.5); // Stop plus large pour swing
 
-                // Sortie si horizon dépassé (prise de profit / limitation du temps)
-                if (!exit && barsInPos >= horizon) {
-                    pnl = longPos ? (current - entry) * positionSize : (entry - current) * positionSize;
+                // 2. Take Profit progressif
+                double basicTarget = entry * (1 + threshold * 3); // Target à 3x le threshold
+                double atrTarget = entry + (atr * sizingK * 2.5); // Target basé sur ATR
+                double target = Math.max(basicTarget, atrTarget);
+
+                // 3. Trailing stop pour swing trade
+                double trailingStop = Math.max(atrStop, current * 0.95); // Trail à 5%
+
+                // Conditions de sortie
+                if (current <= trailingStop) {
+                    // Stop loss ou trailing stop
+                    pnl = (current - entry) * positionSize;
                     exit = true;
+                } else if (current >= target) {
+                    // Take profit
+                    pnl = (current - entry) * positionSize;
+                    exit = true;
+                } else if (barsInPos >= horizon) {
+                    // Sortie temporelle
+                    pnl = (current - entry) * positionSize;
+                    exit = true;
+                } else if (barsInPos >= 3) {
+                    // Sortie si prédiction devient négative après 3 jours minimum
+                    try {
+                        BarSeries currentSub = fullSeries.getSubSeries(0, bar + 1);
+                        double newPredicted = predictNextCloseScalarV2(currentSub, config, model, scalers);
+                        if (newPredicted < current * 0.98) { // Prédiction baissière > 2%
+                            pnl = (current - entry) * positionSize;
+                            exit = true;
+                        }
+                    } catch (Exception ignored) {} // Continue si erreur de prédiction
                 }
 
                 if (exit) {
-                    // Coûts de trading
-                    double cost = entrySpread * positionSize
-                        + slippagePct * entry * positionSize
-                        + feePct * entry * positionSize;
-                    pnl -= cost;
+                    // Coûts de trading Alpaca (pas de commission mais slippage)
+                    double entrySlippage = slippagePct * entry * positionSize;
+                    double exitSlippage = slippagePct * current * positionSize;
+                    double totalCosts = entrySlippage + exitSlippage;
+
+                    pnl -= totalCosts;
 
                     tradePnL.add(pnl);
-                    tradeReturns.add(pnl / (entry * Math.max(positionSize, 1e-9)));
+                    tradeReturns.add(pnl / (entry * positionSize));
                     barsInPosList.add(barsInPos);
+
+                    // Gestion séries de pertes
+                    if (pnl < 0) {
+                        consecutiveLosses++;
+                    } else {
+                        consecutiveLosses = 0;
+                    }
 
                     equity += pnl;
                     if (equity > peak) {
@@ -980,12 +1182,11 @@ public class LstmTradePredictor {
                         trough = equity;
                     }
 
+                    // Reset position
                     inPos = false;
-                    longPos = false;
                     entry = 0;
                     barsInPos = 0;
                     positionSize = 0;
-                    entrySpread = 0;
                 }
             }
         }
@@ -1010,6 +1211,7 @@ public class LstmTradePredictor {
         double avgLoss = loss > 0 ? Math.abs(losses) / loss : 0;
         tm.expectancy = (win + loss) > 0 ? (tm.winRate * avgGain - (1 - tm.winRate) * avgLoss) : 0;
 
+        // Calcul Sharpe et Sortino optimisés
         double meanRet = tradeReturns.stream().mapToDouble(d -> d).average().orElse(0);
         double stdRet = Math.sqrt(tradeReturns.stream().mapToDouble(d -> {
             double m = d - meanRet;
@@ -1017,18 +1219,25 @@ public class LstmTradePredictor {
         }).average().orElse(0));
 
         tm.sharpe = stdRet > 0 ? meanRet / stdRet * Math.sqrt(Math.max(1, tradeReturns.size())) : 0;
-        double downsideStd = Math.sqrt(tradeReturns.stream().filter(r -> r < 0).mapToDouble(r -> {
-            double dr = r - meanRet;
-            return dr * dr;
-        }).average().orElse(0));
+
+        // Sortino : uniquement downside deviation
+        double downsideStd = Math.sqrt(tradeReturns.stream()
+            .filter(r -> r < meanRet)
+            .mapToDouble(r -> {
+                double dr = r - meanRet;
+                return dr * dr;
+            }).average().orElse(0));
         tm.sortino = downsideStd > 0 ? meanRet / downsideStd : 0;
 
-        tm.exposure = 0; // Non implémenté ici
-        tm.turnover = 0; // Non implémenté ici
+        // Exposure et turnover pour swing trade
+        tm.exposure = barsInPosList.isEmpty() ? 0.0 :
+            barsInPosList.stream().mapToInt(i -> i).sum() / (double)(testEndBar - testStartBar);
+        tm.turnover = tm.numTrades > 0 ? (double)tm.numTrades / ((testEndBar - testStartBar) / 252.0) : 0; // Annualisé
         tm.avgBarsInPosition = barsInPosList.stream().mapToInt(i -> i).average().orElse(0);
 
         double capitalBase = config.getCapital() > 0 ? config.getCapital() : 1.0;
-        tm.calmar = tm.maxDrawdownPct > 0 ? ((tm.totalProfit / capitalBase) / tm.maxDrawdownPct) : 0.0;
+        double annualizedReturn = tm.totalProfit / capitalBase;
+        tm.calmar = tm.maxDrawdownPct > 0 ? (annualizedReturn / tm.maxDrawdownPct) : 0.0;
 
         return tm;
     }

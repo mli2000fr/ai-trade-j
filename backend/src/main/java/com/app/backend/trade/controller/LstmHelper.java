@@ -359,7 +359,7 @@ public class LstmHelper {
 
     // Méthode conservée (signature legacy)
     public void tuneAllSymbols() {
-        tuneAllSymbols(true, 60);
+        tuneAllSymbols(true, 10);
     }
 
     /**
@@ -391,15 +391,14 @@ public class LstmHelper {
 
         for (String symbol : symbols) {
             // Features dynamiques selon type de symbole
-            List<String> features = getFeaturesForSymbol(symbol);
+            //List<String> features = getFeaturesForSymbol(symbol);
             List<LstmConfig> grid;
             if (useRandomGrid) {
                 grid = lstmTuningService.generateRandomSwingTradeGrid(
-                        randomGridSize, features, horizonBars, numLstmLayers, batchSizes, bidirectionals, attentions
+                        randomGridSize, horizonBars, numLstmLayers, batchSizes, bidirectionals, attentions
                 );
             } else {
-                grid = lstmTuningService.generateSwingTradeGrid(
-                        features, horizonBars, numLstmLayers, batchSizes, bidirectionals, attentions
+                grid = lstmTuningService.generateSwingTradeGrid(horizonBars, numLstmLayers, batchSizes, bidirectionals, attentions
                 );
             }
             // Appel pour ce symbole uniquement (singleton list)

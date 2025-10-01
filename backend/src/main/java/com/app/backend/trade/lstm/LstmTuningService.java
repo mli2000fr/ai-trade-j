@@ -134,7 +134,7 @@ public class LstmTuningService {
      *  - Démarrage d'une tâche planifiée pour logguer périodiquement l'avancement des tunings
      *
      * Ne pas retirer les blocs try/finally: robustesse critique.
-     *
+     */
     @PostConstruct
     public void initNd4jCuda() {
         try {
@@ -496,24 +496,29 @@ public class LstmTuningService {
     }
 
     /**
-     * Génère automatiquement une grille de configurations adaptée au swing trade.
+     * Génère automatiquement une grille de configurations optimisée pour le swing trade professionnel.
+     * Adaptée pour 1200 bougies par symbole avec paramètres réalistes.
      * @return liste de LstmConfig à tester
      */
     public List<LstmConfig> generateSwingTradeGrid() {
         List<LstmConfig> grid = new java.util.ArrayList<>();
-        int[] windowSizes = {20, 30, 40}; // Fenêtres typiques swing
-        int[] lstmNeurons = {64, 128, 256}; // Taille raisonnable pour swing
-        double[] dropoutRates = {0.2, 0.3};
-        double[] learningRates = {0.0005, 0.001};
-        double[] l1s = {0.0};
-        double[] l2s = {0.0001, 0.001};
-        int numEpochs = 150;
-        int patience = 10;
-        double minDelta = 0.0005;
-        int kFolds = 3;
+
+        // Paramètres optimisés pour swing trade professionnel (3-10 jours)
+        int[] windowSizes = {30, 40, 50}; // Fenêtres plus larges pour swing trade
+        int[] lstmNeurons = {128, 192, 256}; // Plus de neurones pour capturer patterns complexes
+        double[] dropoutRates = {0.25, 0.3, 0.35}; // Dropout adapté pour éviter overfitting
+        double[] learningRates = {0.0002, 0.0003, 0.0005}; // LR plus faibles pour stabilité
+        double[] l1s = {0.0}; // Pas de L1 pour swing trade
+        double[] l2s = {0.003, 0.005, 0.008}; // L2 plus élevé pour généralisation
+
+        int numEpochs = 200; // Plus d'époques pour swing trade
+        int patience = 25; // Patience plus élevée
+        double minDelta = 0.00012; // MinDelta plus fin
+        int kFolds = 5;
         String optimizer = "adam";
         String[] scopes = {"window"};
-        String[] swingTypes = {"range", "mean_reversion"};
+        String[] swingTypes = {"range", "breakout", "mean_reversion"}; // Tous les types swing
+
         for (String swingType : swingTypes) {
             for (String scope : scopes) {
                 for (int windowSize : windowSizes) {
@@ -539,6 +544,28 @@ public class LstmTuningService {
                                         config.setSwingTradeType(swingType);
                                         config.setUseScalarV2(true);
                                         config.setUseWalkForwardV2(true);
+
+                                        // Paramètres swing trade spécifiques
+                                        config.setNumLstmLayers(3); // 3 couches pour plus de profondeur
+                                        config.setBidirectional(false); // Pas bidirectionnel pour swing
+                                        config.setAttention(true); // Attention activée
+                                        config.setHorizonBars(7); // Horizon 7 jours pour swing
+                                        config.setThresholdK(1.5); // Seuil plus élevé
+                                        config.setBatchSize(64); // Batch size optimisé
+                                        config.setWalkForwardSplits(5); // Plus de splits
+                                        config.setEmbargoBars(3); // Embargo pour éviter leakage
+
+                                        // Paramètres trading Alpaca
+                                        config.setCapital(10000.0);
+                                        config.setRiskPct(0.02); // 2% de risque par trade
+                                        config.setSizingK(1.2);
+                                        config.setFeePct(0.0); // Commission-free Alpaca
+                                        config.setSlippagePct(0.0005); // Slippage réaliste
+
+                                        // Business score optimisé
+                                        config.setBusinessProfitFactorCap(4.0);
+                                        config.setBusinessDrawdownGamma(1.5);
+
                                         grid.add(config);
                                     }
                                 }
@@ -561,7 +588,7 @@ public class LstmTuningService {
      * @param attentions tableau des valeurs attention
      * @return liste de LstmConfig à tester
      */
-    public List<LstmConfig> generateSwingTradeGrid(List<String> features, int[] horizonBars, int[] numLstmLayers, int[] batchSizes, boolean[] bidirectionals, boolean[] attentions) {
+    public List<LstmConfig> generateSwingTradeGrid(int[] horizonBars, int[] numLstmLayers, int[] batchSizes, boolean[] bidirectionals, boolean[] attentions) {
         List<LstmConfig> grid = new java.util.ArrayList<>();
         int[] windowSizes = {20, 30, 40};
         int[] lstmNeurons = {64, 128, 256};
@@ -611,7 +638,6 @@ public class LstmTuningService {
                                                             config.setBidirectional(bidir);
                                                             config.setAttention(att);
                                                             config.setHorizonBars(horizon);
-                                                            config.setFeatures(features);
                                                             grid.add(config);
                                                         }
                                                     }
@@ -732,7 +758,7 @@ public class LstmTuningService {
      * @param attentions tableau des valeurs attention
      * @return liste de LstmConfig aléatoires
      */
-    public List<LstmConfig> generateRandomSwingTradeGrid(int n, List<String> features, int[] horizonBars, int[] numLstmLayers, int[] batchSizes, boolean[] bidirectionals, boolean[] attentions) {
+    public List<LstmConfig> generateRandomSwingTradeGrid(int n, int[] horizonBars, int[] numLstmLayers, int[] batchSizes, boolean[] bidirectionals, boolean[] attentions) {
         java.util.Random rand = new java.util.Random();
         int[] windowSizes = {10, 20, 30};
         int[] lstmNeurons = {64, 128};
@@ -771,7 +797,6 @@ public class LstmTuningService {
             config.setBidirectional(bidirectionals[rand.nextInt(bidirectionals.length)]);
             config.setAttention(attentions[rand.nextInt(attentions.length)]);
             config.setHorizonBars(horizonBars[rand.nextInt(horizonBars.length)]);
-            config.setFeatures(features);
             grid.add(config);
         }
         return grid;
