@@ -652,6 +652,26 @@ public class LstmTradePredictor {
     /**
      * Entraîne un modèle LSTM pour prédire la prochaine clôture (ou log-return).
      *
+     * Cette méthode implémente le pipeline complet d'entraînement d'un réseau LSTM :
+     * - Validation et préparation des données d'entrée
+     * - Construction de séquences temporelles glissantes (sliding windows)
+     * - Création des labels de prédiction (prix futurs ou log-returns)
+     * - Normalisation feature par feature avec scalers dédiés
+     * - Transformation en tenseurs ND4J avec permutation des dimensions
+     * - Initialisation et configuration du modèle neuronal
+     * - Boucle d'entraînement avec monitoring des performances
+     *
+     * Architecture des données :
+     * - Input : séquences de longueur windowSize avec numFeatures par pas de temps
+     * - Output : prédiction scalaire (prix futur ou log-return)
+     * - Normalisation : MinMax pour prix/volumes, ZScore pour oscillateurs
+     * - Dimensions finales : [batch, features, time] (après permutation)
+     *
+     * Points critiques :
+     * - L'ordre des permutations doit être cohérent avec initModel & LastTimeStep
+     * - Chaque feature a son scaler dédié pour une normalisation optimale
+     * - La reproductibilité dépend des seeds globales fixées en amont
+     *
      * Pipeline:
      *  1. Validation features (fallback 'close' si vide)
      *  2. Construction de séquences glissantes (fenêtres)
@@ -664,152 +684,266 @@ public class LstmTradePredictor {
      * ATTENTION: Toute modification de l'ordre des dimensions doit être
      * alignée avec initModel & LastTimeStep.
      *
-     * @param series Série d'entraînement
-     * @param config Configuration LSTM
-     * @param unused Paramètre non utilisé (maintenu pour compat compat)
-     * @return Résultat contenant modèle + scalers
+     * @param series Série d'entraînement (historique OHLCV complet)
+     * @param config Configuration LSTM (hyperparamètres, features, normalisation)
+     * @param unused Paramètre non utilisé (maintenu pour compatibilité legacy)
+     * @return Résultat contenant modèle entraîné + scalers pour inversion/prédiction
      */
     public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config, Object unused) {
+        // ===== PHASE 1: VALIDATION ET PRÉPARATION DES FEATURES =====
+
+        // Récupération de la liste des features à utiliser pour l'entraînement
+        // Features = indicateurs techniques (close, rsi, sma, macd, etc.)
         List<String> features = config.getFeatures();
+
+        // Sécurité : si aucune feature spécifiée, utilise 'close' par défaut
+        // Évite les erreurs fatales et garantit au minimum le prix de clôture
         if (features == null || features.isEmpty()) {
             logger.error("[TRAIN] Liste de features vide/null -> fallback ['close']");
-            features = java.util.List.of("close");
-            config.setFeatures(new java.util.ArrayList<>(features));
+            features = java.util.List.of("close"); // Fallback sécurisé sur le prix de clôture
+            config.setFeatures(new java.util.ArrayList<>(features)); // Mise à jour de la config
         }
 
-        int windowSize = config.getWindowSize();
-        int numFeatures = features.size();
+        // Extraction des paramètres de base depuis la configuration
+        int windowSize = config.getWindowSize();    // Taille de la fenêtre temporelle (ex: 30 bars)
+        int numFeatures = features.size();          // Nombre d'indicateurs à utiliser
+
+        // Validation critique : vérifier qu'on a au moins une feature
         if (numFeatures <= 0) {
             throw new IllegalStateException("numFeatures=0 après fallback, config=" + config.getWindowSize());
         }
 
+        // Nombre total de barres (chandelles) dans la série historique
         int barCount = series.getBarCount();
-        // Pas assez de données pour constituer au moins une séquence complète
-        if (barCount <= windowSize + 1) return new TrainResult(null, null);
 
-        // 1) Matrice de features + vecteur des prix
+        // Vérification des données suffisantes pour construire au moins une séquence complète
+        // Il faut windowSize barres pour l'input + au moins 1 barre pour le label
+        if (barCount <= windowSize + 1) {
+            logger.warn("[TRAIN] Données insuffisantes: {} barres pour windowSize={}", barCount, windowSize);
+            return new TrainResult(null, null); // Échec : pas assez de données
+        }
+
+        // ===== PHASE 2: EXTRACTION DES DONNÉES BRUTES =====
+
+        // Construction de la matrice complète des features [barCount][numFeatures]
+        // Chaque ligne = une barre temporelle, chaque colonne = une feature (close, rsi, etc.)
         double[][] matrix = extractFeatureMatrix(series, features);
+
+        // Extraction séparée des prix de clôture pour construction des labels
         double[] closes = extractCloseValues(series);
 
-        // 2) Construction des séquences d'entrée (sliding window)
+        // ===== PHASE 3: CONSTRUCTION DES SÉQUENCES D'ENTRAÎNEMENT =====
+
+        // Calcul du nombre de séquences d'entraînement possibles
+        // On a besoin de windowSize barres pour l'input + 1 barre pour le label
         int numSeq = barCount - windowSize - 1;
+
+        // Création des tenseurs d'entrée : [numSeq][windowSize][numFeatures]
+        // Chaque séquence = windowSize pas de temps avec numFeatures par pas
         double[][][] inputSeq = new double[numSeq][windowSize][numFeatures];
+
+        // Création du vecteur des labels : [numSeq]
+        // Chaque label = valeur à prédire pour la séquence correspondante
         double[] labelSeq = new double[numSeq];
 
+        // Construction des séquences par fenêtre glissante (sliding window)
         for (int i = 0; i < numSeq; i++) {
+            // Pour chaque séquence i, copier windowSize barres consécutives
             for (int j = 0; j < windowSize; j++) {
+                // Copie toutes les features de la barre (i+j) vers la position [i][j]
+                // System.arraycopy = copie efficace de tableau Java
                 System.arraycopy(matrix[i + j], 0, inputSeq[i][j], 0, numFeatures);
             }
-            // Label: soit log-return soit prix direct (selon config)
+
+            // ===== CONSTRUCTION DU LABEL (CIBLE DE PRÉDICTION) =====
+            // Le label correspond à la valeur à prédire après la séquence d'entrée
             if (config.isUseLogReturnTarget()) {
-                double prev = closes[i + windowSize - 1];
-                double next = closes[i + windowSize];
-                labelSeq[i] = Math.log(next / prev);
+                // Mode log-return : on prédit le rendement logarithmique
+                // Plus stable pour l'entraînement car centré autour de 0
+                double prev = closes[i + windowSize - 1];  // Dernier prix de la séquence
+                double next = closes[i + windowSize];       // Prix à prédire (barre suivante)
+                labelSeq[i] = Math.log(next / prev);       // Log-return = ln(P_t+1 / P_t)
             } else {
-                labelSeq[i] = closes[i + windowSize];
+                // Mode prix direct : on prédit directement le prix futur
+                // Plus intuitif mais peut être moins stable pour l'entraînement
+                labelSeq[i] = closes[i + windowSize];      // Prix de clôture à prédire
             }
         }
 
-        // 3) Apprentissage des scalers
+        // ===== PHASE 4: APPRENTISSAGE DES SCALERS (NORMALISATION) =====
+
+        // Création du conteneur pour tous les scalers de normalisation
         ScalerSet scalers = new ScalerSet();
+
+        // Construction d'un scaler dédié pour chaque feature
         for (int f = 0; f < numFeatures; f++) {
+            // Extraction de toutes les valeurs historiques pour cette feature
+            // Utilise toutes les barres disponibles (pas seulement les séquences)
             double[] col = new double[numSeq + windowSize];
-            for (int i = 0; i < numSeq + windowSize; i++) col[i] = matrix[i][f];
+            for (int i = 0; i < numSeq + windowSize; i++) {
+                col[i] = matrix[i][f]; // Toutes les valeurs de la feature f
+            }
+
+            // Sélection du type de normalisation selon la nature de la feature
+            // RSI, MACD, momentum -> Z-Score (centré-réduit)
+            // Prix, volumes, ATR -> Min-Max (0-1)
             FeatureScaler.Type type =
                 getFeatureNormalizationType(features.get(f)).equals("zscore")
-                    ? FeatureScaler.Type.ZSCORE
-                    : FeatureScaler.Type.MINMAX;
+                    ? FeatureScaler.Type.ZSCORE    // Normalisation (x - mean) / std
+                    : FeatureScaler.Type.MINMAX;   // Normalisation (x - min) / (max - min)
+
+            // Création et apprentissage du scaler sur les données historiques
             FeatureScaler scaler = new FeatureScaler(type);
-            scaler.fit(col);
+            scaler.fit(col); // Calcule min/max ou mean/std selon le type
+
+            // Stockage du scaler avec le nom de la feature comme clé
             scalers.featureScalers.put(features.get(f), scaler);
         }
-        FeatureScaler labelScaler = new FeatureScaler(FeatureScaler.Type.MINMAX);
-        labelScaler.fit(labelSeq);
-        scalers.labelScaler = labelScaler;
 
-        // 4) Normalisation des séquences
+        // Création du scaler pour les labels (toujours MinMax pour faciliter l'inversion)
+        FeatureScaler labelScaler = new FeatureScaler(FeatureScaler.Type.MINMAX);
+        labelScaler.fit(labelSeq); // Apprend min/max sur tous les labels
+        scalers.labelScaler = labelScaler; // Stockage pour utilisation ultérieure
+
+        // ===== PHASE 5: NORMALISATION DES SÉQUENCES D'ENTRAÎNEMENT =====
+
+        // Création du tenseur normalisé avec mêmes dimensions que l'original
         double[][][] normSeq = new double[numSeq][windowSize][numFeatures];
-        for (int i = 0; i < numSeq; i++) {
-            for (int j = 0; j < windowSize; j++) {
-                for (int f = 0; f < numFeatures; f++) {
+
+        // Application de la normalisation séquence par séquence
+        for (int i = 0; i < numSeq; i++) {          // Pour chaque séquence
+            for (int j = 0; j < windowSize; j++) {   // Pour chaque pas de temps
+                for (int f = 0; f < numFeatures; f++) { // Pour chaque feature
+                    // Application du scaler spécifique à cette feature
+                    // transform() retourne un tableau, on prend le premier élément [0]
                     normSeq[i][j][f] =
                         scalers.featureScalers
-                            .get(features.get(f))
-                            .transform(new double[]{inputSeq[i][j][f]})[0];
+                            .get(features.get(f))                                    // Récupère le scaler
+                            .transform(new double[]{inputSeq[i][j][f]})[0];         // Normalise la valeur
                 }
             }
         }
 
-        // 5) Conversion en INDArray + permutation: [batch, time, features] -> [batch, features, time]
-        org.nd4j.linalg.api.ndarray.INDArray X = Nd4j.create(normSeq);
-        X = X.permute(0, 2, 1).dup('c');
+        // ===== PHASE 6: CONVERSION EN TENSEURS ND4J =====
 
+        // Conversion du tableau Java en tenseur ND4J (format DeepLearning4J)
+        // Dimensions initiales : [batch, time, features] (format standard séquentiel)
+        org.nd4j.linalg.api.ndarray.INDArray X = Nd4j.create(normSeq);
+
+        // PERMUTATION CRITIQUE : [batch, time, features] -> [batch, features, time]
+        // Cette permutation est nécessaire pour la compatibilité avec l'architecture LSTM
+        // et la couche LastTimeStep utilisée dans initModel()
+        X = X.permute(0, 2, 1).dup('c'); // dup('c') = copie contiguë en mémoire
+
+        // Vérification de cohérence des dimensions après permutation
+        // Détection précoce d'erreurs de shape qui causeraient des échecs silencieux
         if (X.size(1) != numFeatures || X.size(2) != windowSize) {
             logger.warn("[SHAPE][TRAIN] Incohérence shape après permute: expected features={} time={} got features={} time={}",
                 numFeatures, windowSize, X.size(1), X.size(2));
         }
 
+        // Normalisation des labels avec le scaler dédié
         double[] normLabels = scalers.labelScaler.transform(labelSeq);
+
+        // Conversion des labels en tenseur ND4J : [numSeq, 1] (régression scalaire)
         org.nd4j.linalg.api.ndarray.INDArray y = Nd4j.create(normLabels, new long[]{numSeq, 1});
 
-        // 6) Initialisation modèle
+        // ===== PHASE 7: INITIALISATION DU MODÈLE NEURONAL =====
+
+        // Récupération du nombre effectif de features après permutation
+        // (sécurité au cas où la permutation aurait altéré les dimensions)
         int effectiveFeatures = (int) X.size(1);
+
+        // Détection et log des incohérences de dimensions
         if (effectiveFeatures != numFeatures) {
             logger.warn("[INIT][ADAPT] numFeatures déclaré={} mais tensor features={} => reconstruction modèle",
                 numFeatures, effectiveFeatures);
         }
 
+        // Construction du modèle LSTM avec l'architecture spécifiée dans la config
         MultiLayerNetwork model = initModel(
-            effectiveFeatures,
-            1,
-            config.getLstmNeurons(),
-            config.getDropoutRate(),
-            config.getLearningRate(),
-            config.getOptimizer(),
-            config.getL1(),
-            config.getL2(),
-            config,
-            false
+            effectiveFeatures,              // Nombre de features d'entrée (après vérification)
+            1,                             // Taille de sortie (1 pour régression scalaire)
+            config.getLstmNeurons(),       // Nombre de neurones par couche LSTM
+            config.getDropoutRate(),       // Taux de dropout pour régularisation
+            config.getLearningRate(),      // Taux d'apprentissage de l'optimiseur
+            config.getOptimizer(),         // Type d'optimiseur (Adam, RMSprop, SGD)
+            config.getL1(),                // Régularisation L1 (sparsité)
+            config.getL2(),                // Régularisation L2 (poids petits)
+            config,                        // Configuration complète (couches, attention, etc.)
+            false                          // Mode régression (pas classification)
         );
 
+        // Log détaillé des dimensions pour debug et monitoring
         logger.debug("[TRAIN] X shape={} (batch={} features={} time={}) y shape={} expectedFeatures={} lstmNeurons={}",
             Arrays.toString(X.shape()), X.size(0), X.size(1), X.size(2),
             Arrays.toString(y.shape()), numFeatures, config.getLstmNeurons());
 
-        // 7) Création DataSetIterator (batching)
+        // ===== PHASE 8: PRÉPARATION DES DONNÉES POUR L'ENTRAÎNEMENT =====
+
+        // Création du DataSet DeepLearning4J (associe inputs X et labels y)
         org.nd4j.linalg.dataset.DataSet ds = new org.nd4j.linalg.dataset.DataSet(X, y);
+
+        // Création de l'itérateur avec batching pour l'entraînement
+        // ListDataSetIterator découpe le dataset en mini-batches de taille config.getBatchSize()
         org.nd4j.linalg.dataset.api.iterator.DataSetIterator iterator =
             new ListDataSetIterator<>(ds.asList(), config.getBatchSize());
 
-        // 8) Boucle d'entraînement (simple, sans early stopping)
+        // ===== PHASE 9: BOUCLE D'ENTRAÎNEMENT PRINCIPALE =====
+
+        // Récupération du nombre d'époques depuis la configuration
         int epochs = config.getNumEpochs();
+
+        // Timestamp de début pour mesure de performance globale
         long t0 = System.currentTimeMillis();
+
+        // Variable de suivi du meilleur score atteint (pour monitoring)
         double bestScore = Double.POSITIVE_INFINITY;
 
+        // Boucle d'entraînement epoch par epoch
         for (int epoch = 1; epoch <= epochs; epoch++) {
+            // Remise à zéro de l'itérateur pour réutiliser les données
             iterator.reset();
-            model.fit(iterator);
-            double score = model.score();
-            if (score < bestScore) bestScore = score;
 
-            // Logging périodique + mesure mémoire
+            // Exécution d'une époque complète d'entraînement
+            // fit() effectue la forward pass + backward pass (gradient descent)
+            model.fit(iterator);
+
+            // Récupération du score (loss) après cette époque
+            double score = model.score(); // Généralement MSE pour la régression
+
+            // Mise à jour du meilleur score si amélioration
+            if (score < bestScore) {
+                bestScore = score;
+            }
+
+            // ===== LOGGING PÉRIODIQUE ET MONITORING MÉMOIRE =====
+            // Log seulement sur certaines époques pour éviter le spam
             if (epoch == 1 || epoch == epochs || epoch % Math.max(1, epochs / 10) == 0) {
+                // Récupération des statistiques mémoire JVM
                 Runtime rt = Runtime.getRuntime();
-                long used = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
-                long max = rt.maxMemory() / (1024 * 1024);
+                long used = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);  // MB utilisées
+                long max = rt.maxMemory() / (1024 * 1024);                         // MB max disponibles
+
+                // Calcul du temps écoulé depuis le début
                 long elapsed = System.currentTimeMillis() - t0;
+
+                // Log informatif avec métriques clés de l'entraînement
                 logger.info("[TRAIN][EPOCH] {}/{} score={} best={} elapsedMs={} memUsedMB={}/{}",
-                    epoch,
-                    epochs,
-                    String.format("%.6f", score),
-                    String.format("%.6f", bestScore),
-                    elapsed,
-                    used,
-                    max
+                    epoch,                                  // Époque actuelle
+                    epochs,                                 // Total d'époques
+                    String.format("%.6f", score),         // Score actuel (6 décimales)
+                    String.format("%.6f", bestScore),     // Meilleur score atteint
+                    elapsed,                               // Temps écoulé en ms
+                    used,                                  // Mémoire utilisée en MB
+                    max                                    // Mémoire max en MB
                 );
             }
         }
 
+        // ===== PHASE 10: RETOUR DU RÉSULTAT FINAL =====
+        // Encapsulation du modèle entraîné et des scalers dans un objet résultat
+        // Les scalers sont critiques pour la dénormalisation lors des prédictions
         return new TrainResult(model, scalers);
     }
 
