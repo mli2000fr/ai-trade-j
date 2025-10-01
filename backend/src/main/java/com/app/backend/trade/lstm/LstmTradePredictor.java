@@ -920,7 +920,7 @@ public class LstmTradePredictor {
             // ===== LOGGING PÉRIODIQUE ET MONITORING MÉMOIRE =====
             // Log seulement sur certaines époques pour éviter le spam
             if (epoch == 1 || epoch == epochs || epoch % Math.max(1, epochs / 10) == 0) {
-                // Récupération des statistiques mémoire JVM
+                // Récupération des statistiques mémoire
                 Runtime rt = Runtime.getRuntime();
                 long used = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);  // MB utilisées
                 long max = rt.maxMemory() / (1024 * 1024);                         // MB max disponibles
@@ -1112,10 +1112,13 @@ public class LstmTradePredictor {
         // Utilise le label scaler qui a été appris sur les targets d'entraînement
         double predTarget = scalers.labelScaler.inverse(predNorm);
 
-        // ===== PHASE 9: RÉCUPÉRATION DU PRIX DE RÉFÉRENCE =====
+        // ===== PHASE 9: RÉCUPÉRATION DU PRIX DE RÉFÉRENCE COHÉRENT =====
 
-        // Prix de clôture de la dernière barre disponible (point de référence)
-        double lastClose = series.getLastBar().getClosePrice().doubleValue();
+        // CORRECTION: Pour cohérence avec l'entraînement, utilise le dernier prix de la séquence d'entrée
+        // Pendant l'entraînement: prev = closes[i + windowSize - 1] (dernier prix de la fenêtre)
+        // Pendant la prédiction: doit utiliser le même principe
+        double[] closes = extractCloseValues(series);
+        double referencePrice = closes[closes.length - 1]; // Dernier prix de la série (équivalent au "prev" de l'entraînement)
 
         // ===== PHASE 10: RECONVERSION VERS LE DOMAINE DES PRIX =====
 
@@ -1123,8 +1126,15 @@ public class LstmTradePredictor {
         double predicted;
         if (config.isUseLogReturnTarget()) {
             // Mode log-return: reconversion exponentielle vers prix absolu
-            // predTarget = log(prix_futur / prix_actuel) donc prix_futur = prix_actuel * exp(predTarget)
-            predicted = lastClose * Math.exp(predTarget);
+            // predTarget = log(prix_futur / prix_référence) donc prix_futur = prix_référence * exp(predTarget)
+            // CORRECTION: Utilise referencePrice au lieu de lastClose pour cohérence temporelle
+            predicted = referencePrice * Math.exp(predTarget);
+
+            logger.debug("[PREDICT][LOG-RETURN] referencePrice={}, predTarget={}, exp(predTarget)={}, predicted={}",
+                        String.format("%.3f", referencePrice),
+                        String.format("%.6f", predTarget),
+                        String.format("%.6f", Math.exp(predTarget)),
+                        String.format("%.3f", predicted));
         } else {
             // Mode prix direct: la prédiction est déjà dans le domaine des prix
             predicted = predTarget;
@@ -1136,10 +1146,11 @@ public class LstmTradePredictor {
         double limitPct = config.getLimitPredictionPct();
 
         // Application des bornes si limitation activée (limitPct > 0)
+        // Note: Les limitations utilisent referencePrice comme base pour cohérence
         if (limitPct > 0) {
-            // Calcul des bornes relative au prix actuel
-            double min = lastClose * (1 - limitPct);    // Borne inférieure (ex: -20%)
-            double max = lastClose * (1 + limitPct);    // Borne supérieure (ex: +20%)
+            // Calcul des bornes relative au prix de référence
+            double min = referencePrice * (1 - limitPct);    // Borne inférieure (ex: -20%)
+            double max = referencePrice * (1 + limitPct);    // Borne supérieure (ex: +20%)
 
             // Écrêtage de la prédiction dans les bornes calculées
             if (predicted < min) {
@@ -1154,8 +1165,8 @@ public class LstmTradePredictor {
         // ===== PHASE 12: LOG DE DEBUG ET RETOUR =====
 
         // Log détaillé pour debug et monitoring des prédictions
-        logger.debug("[PREDICT] Prédiction: lastClose={}, predicted={}, predNorm={}, predTarget={}, limitPct={}",
-                    String.format("%.3f", lastClose),
+        logger.debug("[PREDICT] Prédiction: referencePrice={}, predicted={}, predNorm={}, predTarget={}, limitPct={}",
+                    String.format("%.3f", referencePrice),
                     String.format("%.3f", predicted),
                     String.format("%.6f", predNorm),
                     String.format("%.6f", predTarget),

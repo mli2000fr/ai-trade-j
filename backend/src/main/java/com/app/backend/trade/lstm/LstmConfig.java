@@ -175,7 +175,7 @@ public class LstmConfig {
     /** Active pipeline étiquettes scalaires + walk-forward. */
     private boolean useScalarV2 = false;
     /** Utilise le log-return comme cible (target) plutôt que le prix normalisé. */
-    private boolean useLogReturnTarget = false;
+    private boolean useLogReturnTarget = true;
     /** Active la validation walk-forward (utilisé si useScalarV2 = true). */
     private boolean useWalkForwardV2 = true;
     /** Nombre de segments (splits) dans la validation walk-forward. */
@@ -251,7 +251,7 @@ public class LstmConfig {
                 batchSize = Integer.parseInt(props.getProperty("batchSize", "256"));
                 cvMode = props.getProperty("cvMode", "split");
                 useScalarV2 = Boolean.parseBoolean(props.getProperty("useScalarV2", "false"));
-                useLogReturnTarget = Boolean.parseBoolean(props.getProperty("useLogReturnTarget", "false"));
+                useLogReturnTarget = Boolean.parseBoolean(props.getProperty("useLogReturnTarget", "true"));
                 useWalkForwardV2 = Boolean.parseBoolean(props.getProperty("useWalkForwardV2", "true"));
                 walkForwardSplits = Integer.parseInt(props.getProperty("walkForwardSplits", "4"));
                 embargoBars = Integer.parseInt(props.getProperty("embargoBars", "0"));

@@ -329,7 +329,7 @@ public class LstmTuningService {
         // Calcul du nombre optimal de threads pour ce tuning
         // Équilibrage entre: taille de grille, nombre de coeurs CPU, limite effective
         // Note: actuellement forcé à 4 pour stabilité (ligne commentée montre le calcul automatique)
-        int numThreads = 4; // Math.min(Math.min(grid.size(), Runtime.getRuntime().availableProcessors()), effectiveMaxThreads);
+        int numThreads = 1; // Math.min(Math.min(grid.size(), Runtime.getRuntime().availableProcessors()), effectiveMaxThreads);
 
         // Création du pool de threads à taille fixe pour traitement parallèle
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
@@ -1117,7 +1117,7 @@ public class LstmTuningService {
         long startAll = System.currentTimeMillis();
         logger.info("[TUNING] Début tuning multi-symboles ({} symboles, parallélisé)", symbols.size());
         // Pool limité pour tuning de symboles en parallèle (max moitié des threads effectifs, au moins 1)
-        int maxParallelSymbols = 3;//Math.max(1, effectiveMaxThreads / 2);
+        int maxParallelSymbols = 1;//Math.max(1, effectiveMaxThreads / 2);
         java.util.concurrent.ExecutorService symbolExecutor = java.util.concurrent.Executors.newFixedThreadPool(maxParallelSymbols);
         java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
         for (int i = 0; i < symbols.size(); i++) {
