@@ -214,6 +214,18 @@ public class LstmTuningService {
     /**
      * Méthode principale: tuning multi-threadé d'un symbole unique.
      *
+     * Cette méthode orchestre le processus complet d'optimisation des hyperparamètres LSTM:
+     * - Teste une grille de configurations en parallèle pour maximiser l'utilisation CPU/GPU
+     * - Évalue chaque configuration via entraînement + validation walk-forward
+     * - Sélectionne la meilleure configuration basée sur des métriques de trading business
+     * - Persiste les résultats (hyperparamètres + modèle) pour utilisation ultérieure
+     *
+     * Architecture multi-thread:
+     * - Pool de threads limité par effectiveMaxThreads (auto-calculé selon CPU/GPU)
+     * - Chaque thread traite une configuration indépendamment
+     * - Synchronisation via Future pour collecte des résultats
+     * - Protection mémoire active pour éviter les OutOfMemoryError
+     *
      * Flux détaillé:
      *  1. Vérifie si le symbole a déjà un modèle en base (évite recalcul inutile).
      *  2. Protection mémoire: waitForMemory() avant de démarrer.
@@ -239,241 +251,393 @@ public class LstmTuningService {
      *
      * Choix de scoring:
      *  - Sélection basée sur businessScore (métrique composite) et non sur meanMSE direct.
+     *  - businessScore combine: profitFactor, winRate, drawdown, expectancy
+     *
+     * Gestion d'erreurs:
+     *  - Exceptions par configuration collectées dans tuningExceptionReport
+     *  - Échec d'une config n'arrête pas le processus global
+     *  - Si toutes les configs échouent => return null
      *
      * Important:
      *  - Ne pas modifier l'ordre des nettoyages mémoire (risque de fuite ou fragmentation).
      *  - Ne pas supprimer les catch/return null => ils préviennent les arrêts brutaux.
+     *  - Les seeds garantissent la reproductibilité des résultats
      *
-     * @param symbol symbole à tuner
-     * @param grid liste de configurations LstmConfig
-     * @param series série temporelle (historique prix) nécessaire à l'entraînement/évaluation
-     * @param jdbcTemplate accès base de données pour persistance du modèle
-     * @return la meilleure configuration trouvée ou null si aucune valide
+     * @param symbol symbole à tuner (ex: "AAPL", "BTCUSDT")
+     * @param grid liste de configurations LstmConfig à tester (grille d'hyperparamètres)
+     * @param series série temporelle (historique prix OHLCV) nécessaire à l'entraînement/évaluation
+     * @param jdbcTemplate accès base de données pour persistance du modèle et vérifications
+     * @return la meilleure configuration trouvée ou null si aucune valide ou déjà existante
      */
     public LstmConfig tuneSymbolMultiThread(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate) {
-        // 1. Vérifier si déjà tuné (évite duplication)
+        // ===== PHASE 1: VÉRIFICATIONS PRÉLIMINAIRES =====
+
+        // Vérifier si un modèle existe déjà pour ce symbole (évite duplication coûteuse)
+        // Consultation rapide en base: SELECT COUNT(*) FROM lstm_models WHERE symbol = ?
         if(isSymbolAlreydyTuned(symbol, jdbcTemplate)){
-            return null;
+            logger.info("[TUNING] Symbole {} déjà tuné, abandon du processus", symbol);
+            return null; // Aucun tuning nécessaire
         }
 
-        // 2. Attendre si mémoire saturée
+        // Protection mémoire préventive: attendre que l'usage RAM descende sous le seuil
+        // Évite de lancer un tuning coûteux quand la JVM est proche de la limite
         waitForMemory();
 
+        // Capture du timestamp de début pour mesure de performance globale
         long startSymbol = System.currentTimeMillis();
 
-        // 3. Initialisation progression
+        // ===== PHASE 2: INITIALISATION DU SUIVI DE PROGRESSION =====
+
+        // Création de la structure de monitoring thread-safe pour ce symbole
         TuningProgress progress = new TuningProgress();
-        progress.symbol = symbol;
-        progress.totalConfigs = grid.size();
-        progress.testedConfigs.set(0);
-        progress.status = "en_cours";
-        progress.startTime = startSymbol;
-        progress.lastUpdate = startSymbol;
+        progress.symbol = symbol;                    // Identifiant du symbole en cours
+        progress.totalConfigs = grid.size();         // Nombre total de configurations à tester
+        progress.testedConfigs.set(0);              // Compteur atomique des configs terminées
+        progress.status = "en_cours";               // État initial du processus
+        progress.startTime = startSymbol;           // Timestamp de début
+        progress.lastUpdate = startSymbol;          // Dernière mise à jour (heartbeat)
+
+        // Enregistrement dans la map globale pour monitoring externe (APIs, logs heartbeat)
         tuningProgressMap.put(symbol, progress);
 
+        // Log informatif du démarrage avec paramètres de parallélisme
         logger.info("[TUNING] Début du tuning V2 pour le symbole {} ({} configs) | maxThreadsEffectif={} (configuré={})",
                 symbol, grid.size(), effectiveMaxThreads, configuredMaxThreads);
 
-        double bestScore = Double.POSITIVE_INFINITY; // (Ici retenu pour trace; sélection réelle basée sur businessScore)
+        // ===== PHASE 3: VÉRIFICATION DOUBLE SÉCURITÉ =====
+
+        // Variable de trace pour le meilleur score MSE (information, pas utilisée pour sélection)
+        double bestScore = Double.POSITIVE_INFINITY;
+
+        // Double vérification: chercher des hyperparamètres existants en base
+        // (redondant avec isSymbolAlreydyTuned mais protection supplémentaire)
         LstmConfig existing = hyperparamsRepository.loadHyperparams(symbol);
         if(existing != null){
             logger.info("Hyperparamètres existants trouvés pour {}. Ignorer le tuning.", symbol);
-            return existing;
+            return existing; // Retourner la config existante
         }
 
-        LstmConfig bestConfig = null;
-        MultiLayerNetwork bestModel = null;
-        LstmTradePredictor.ScalerSet bestScalers = null;
+        // ===== PHASE 4: INITIALISATION DES VARIABLES DE RÉSULTATS =====
 
-        // 4. Dimensionnement du pool threads (sécurité: min entre taille grille, coeurs et limite effective)
-        int numThreads = 4;//Math.min(Math.min(grid.size(), Runtime.getRuntime().availableProcessors()), effectiveMaxThreads);
+        // Variables pour stocker la meilleure configuration trouvée
+        LstmConfig bestConfig = null;              // Configuration gagnante
+        MultiLayerNetwork bestModel = null;        // Modèle neuronal correspondant
+        LstmTradePredictor.ScalerSet bestScalers = null; // Normalisateurs/scalers associés
+
+        // ===== PHASE 5: CRÉATION DU POOL DE THREADS =====
+
+        // Calcul du nombre optimal de threads pour ce tuning
+        // Équilibrage entre: taille de grille, nombre de coeurs CPU, limite effective
+        // Note: actuellement forcé à 4 pour stabilité (ligne commentée montre le calcul automatique)
+        int numThreads = 4; // Math.min(Math.min(grid.size(), Runtime.getRuntime().availableProcessors()), effectiveMaxThreads);
+
+        // Création du pool de threads à taille fixe pour traitement parallèle
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
+
+        // Liste des Future pour récupération asynchrone des résultats
         java.util.List<java.util.concurrent.Future<TuningResult>> futures = new java.util.ArrayList<>();
 
-        // 5. Soumission des tâches par configuration
+        // ===== PHASE 6: SOUMISSION DES TÂCHES DE TUNING =====
+
+        // Itération sur chaque configuration de la grille d'hyperparamètres
         for (int i = 0; i < grid.size(); i++) {
-            waitForMemory(); // Protection mémoire avant chaque tâche
+            // Protection mémoire avant chaque nouvelle tâche (évite accumulation)
+            waitForMemory();
+
+            // Index de configuration (1-based pour logs lisibles)
             final int configIndex = i + 1;
+
+            // Configuration courante à tester
             LstmConfig config = grid.get(i);
 
-            // Activation explicite de certains modes (garantie pour ce pipeline)
-            config.setUseScalarV2(true);
-            config.setUseWalkForwardV2(true);
+            // ===== ACTIVATION DES MODES AVANCÉS =====
+            // Force l'utilisation des versions optimisées des algorithmes
+            config.setUseScalarV2(true);        // Version améliorée du traitement scalaire
+            config.setUseWalkForwardV2(true);   // Version optimisée de la validation walk-forward
 
+            // Soumission de la tâche asynchrone au pool de threads
             futures.add(executor.submit(() -> {
+                // Variable locale pour référence au modèle (nettoyage dans finally)
                 MultiLayerNetwork model = null;
+
                 try {
+                    // ===== DÉBUT DE TRAITEMENT D'UNE CONFIGURATION =====
+
+                    // Timestamp de début pour mesure de performance par config
                     long startConfig = System.currentTimeMillis();
 
-                    // a. Seed global
+                    // ===== REPRODUCTIBILITÉ: INITIALISATION DES SEEDS =====
+                    // Fixe les générateurs aléatoires pour résultats reproductibles
+                    // Critique pour pouvoir recréer exactement les mêmes résultats
                     lstmTradePredictor.setGlobalSeeds(config.getSeed());
+
+                    // Log de début de traitement de cette configuration
                     logger.info("[TUNING][V2] [{}] Début config {}/{}", symbol, configIndex, grid.size());
 
-                    // b. Entraînement sur la série complète (train principal)
+                    // ===== ENTRAÎNEMENT DU MODÈLE PRINCIPAL =====
+                    // Entraîne un modèle LSTM complet sur toute la série temporelle
+                    // Retourne: modèle neuronal + scalers (normalisateurs) + métriques d'entraînement
                     LstmTradePredictor.TrainResult trFull = lstmTradePredictor.trainLstmScalarV2(series, config, null);
-                    model = trFull.model;
-                    LstmTradePredictor.ScalerSet scalers = trFull.scalers;
+                    model = trFull.model;                    // Modèle neuronal entraîné
+                    LstmTradePredictor.ScalerSet scalers = trFull.scalers; // Normalisateurs (min/max, z-score, etc.)
 
-                    // c. Évaluation walk-forward
+                    // ===== VALIDATION WALK-FORWARD =====
+                    // Évalue la performance du modèle via validation temporelle séquentielle
+                    // Simule le trading réel: entraîne sur passé, teste sur futur, avance dans le temps
                     LstmTradePredictor.WalkForwardResultV2 wf = lstmTradePredictor.walkForwardEvaluate(series, config);
-                    double meanMse = wf.meanMse;
+                    double meanMse = wf.meanMse;            // Erreur quadratique moyenne sur tous les splits
 
-                    // d. Agrégation métriques trading
-                    double sumPF=0, sumWin=0, sumExp=0, maxDDPct=0, sumBusiness=0, sumProfit=0;
-                    int splits=0;
-                    int totalTrades=0;
+                    // ===== AGRÉGATION DES MÉTRIQUES DE TRADING =====
+                    // Collecte et moyenne des métriques business sur tous les splits walk-forward
+                    double sumPF=0, sumWin=0, sumExp=0, maxDDPct=0, sumBusiness=0, sumProfit=0; // Accumulateurs
+                    int splits=0;           // Compteur de splits valides
+                    int totalTrades=0;      // Nombre total de trades sur tous les splits
 
+                    // Parcours de tous les résultats de split pour agrégation
                     for(LstmTradePredictor.TradingMetricsV2 m : wf.splits){
+                        // Profit Factor: rapport gains/pertes (garde 0 si infini/NaN)
                         if(Double.isFinite(m.profitFactor)) sumPF += m.profitFactor; else sumPF += 0;
+
+                        // Win Rate: pourcentage de trades gagnants
                         sumWin += m.winRate;
+
+                        // Expectancy: gain moyen par trade
                         sumExp += m.expectancy;
+
+                        // Max Drawdown: pire perte cumulée (garde le maximum)
                         if(m.maxDrawdownPct > maxDDPct) maxDDPct = m.maxDrawdownPct;
+
+                        // Business Score: métrique composite (garde 0 si infini/NaN)
                         sumBusiness += (Double.isFinite(m.businessScore)? m.businessScore:0);
+
+                        // Profit total: somme des gains/pertes
                         sumProfit += m.totalProfit;
+
+                        // Nombre de trades: pour calcul de statistiques
                         totalTrades += m.numTrades;
+
+                        // Compteur de splits traités
                         splits++;
                     }
 
+                    // Sécurité: vérifier qu'au moins un split est valide
                     if(splits==0){
-                        // Sécurité: aucun split valide => config invalide
                         throw new IllegalStateException("Aucun split valide walk-forward");
                     }
 
-                    double meanPF = sumPF / splits;
-                    double meanWinRate = sumWin / splits;
-                    double meanExpectancy = sumExp / splits;
-                    double meanBusinessScore = sumBusiness / splits;
+                    // ===== CALCUL DES MOYENNES =====
+                    // Moyennes des métriques sur tous les splits (normalisation)
+                    double meanPF = sumPF / splits;              // Profit Factor moyen
+                    double meanWinRate = sumWin / splits;        // Taux de réussite moyen
+                    double meanExpectancy = sumExp / splits;     // Expectancy moyenne
+                    double meanBusinessScore = sumBusiness / splits; // Score business moyen (critère de sélection)
 
-                    // e. Prédiction "instantanée" sur dernier bar (utilisée pour direction indicative)
+                    // ===== PRÉDICTION INDICATIVE =====
+                    // Génère une prédiction sur le dernier point pour indicateur directionnel
                     double predicted = lstmTradePredictor.predictNextCloseScalarV2(series, config, model, scalers);
-                    double lastClose = series.getLastBar().getClosePrice().doubleValue();
-                    double th = lstmTradePredictor.computeSwingTradeThreshold(series, config);
-                    String direction = (predicted - lastClose) > th ? "up" : ((predicted - lastClose) < -th ? "down" : "stable");
+                    double lastClose = series.getLastBar().getClosePrice().doubleValue(); // Prix de clôture actuel
+                    double th = lstmTradePredictor.computeSwingTradeThreshold(series, config); // Seuil de signal
 
-                    // f. Calcul RMSE
+                    // Classification directionnelle basée sur l'écart prédiction vs prix actuel
+                    String direction = (predicted - lastClose) > th ? "up" :
+                                     ((predicted - lastClose) < -th ? "down" : "stable");
+
+                    // ===== CALCUL DE LA RMSE =====
+                    // Root Mean Square Error: racine carrée de la MSE (plus interprétable)
                     double rmse = Double.isFinite(meanMse) && meanMse>=0? Math.sqrt(meanMse): Double.NaN;
 
-                    // g. Persistance métriques complètes pour analyse ultérieure
+                    // ===== PERSISTANCE DES MÉTRIQUES COMPLÈTES =====
+                    // Sauvegarde en base de toutes les métriques pour analyse post-tuning
+                    // Permet comparaisons, debug, et optimisations futures
                     hyperparamsRepository.saveTuningMetrics(
-                            symbol, config, meanMse, rmse, direction,
-                            sumProfit, meanPF, meanWinRate, maxDDPct, totalTrades, meanBusinessScore,
-                            wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0),
-                            wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0),
-                            wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0),
-                            wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0)
+                            symbol, config,                    // Identifiant + configuration
+                            meanMse, rmse, direction,          // Métriques de prédiction
+                            sumProfit, meanPF, meanWinRate, maxDDPct, totalTrades, meanBusinessScore, // Trading metrics
+                            // Métriques avancées (moyennes des splits)
+                            wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0),      // Ratio de Sortino
+                            wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0),       // Ratio de Calmar
+                            wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0),     // Rotation du portefeuille
+                            wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0) // Durée moyenne des positions
                     );
 
+                    // ===== MESURE DE PERFORMANCE ET LOG =====
                     long endConfig = System.currentTimeMillis();
                     logger.info("[TUNING][V2] [{}] Fin config {}/{} | meanMSE={}, PF={}, winRate={}, DD%={}, expectancy={}, businessScore={}, trades={} durée={} ms",
                             symbol, configIndex, grid.size(), meanMse, meanPF, meanWinRate, maxDDPct,
                             meanExpectancy, meanBusinessScore, totalTrades, (endConfig-startConfig));
 
-                    // h. Mise à jour progression (thread-safe)
+                    // ===== MISE À JOUR DU PROGRÈS (THREAD-SAFE) =====
+                    // Incrémente le compteur de configurations terminées
                     TuningProgress p = tuningProgressMap.get(symbol);
                     if (p != null) {
-                        p.testedConfigs.incrementAndGet();
-                        p.lastUpdate = System.currentTimeMillis();
+                        p.testedConfigs.incrementAndGet(); // Atomique: thread-safe
+                        p.lastUpdate = System.currentTimeMillis(); // Heartbeat pour monitoring
                     }
 
-                    // i. Retour résultat encapsulé
+                    // ===== RETOUR DU RÉSULTAT ENCAPSULÉ =====
+                    // Création d'un objet résultat contenant toutes les informations nécessaires
                     return new TuningResult(config, model, scalers, meanMse, meanPF, meanWinRate, maxDDPct, meanBusinessScore);
 
                 } catch (Exception e){
-                    // Gestion centralisée des erreurs par config
+                    // ===== GESTION CENTRALISÉE DES ERREURS =====
+                    // Log l'erreur sans interrompre le processus global
                     logger.error("[TUNING][V2] Erreur config {} : {}", configIndex, e.getMessage());
+
+                    // Capture de la stack trace complète pour debug
                     String stack = org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace(e);
+
+                    // Ajout dans le rapport d'exceptions pour analyse post-mortem
                     tuningExceptionReport.add(new TuningExceptionReportEntry(symbol, config, e.getMessage(), stack, System.currentTimeMillis()));
+
+                    // Retourne null pour signaler l'échec (sera ignoré dans la sélection)
                     return null;
+
                 } finally {
-                    // j. Libération références + GC ND4J
+                    // ===== NETTOYAGE MÉMOIRE CRITIQUE =====
+                    // Libération explicite des références pour aider le GC
                     model = null;
+
+                    // Nettoyage spécifique ND4J: libération des buffers GPU/CPU
                     org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
+
+                    // Destruction des workspaces ND4J du thread courant
                     org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread();
+
+                    // GC système pour libération immédiate (optionnel mais utile ici)
                     System.gc();
                 }
             }));
         }
 
-        // 6. Fermeture soumissions
+        // ===== PHASE 7: FERMETURE DU POOL DE SOUMISSIONS =====
+        // Empêche la soumission de nouvelles tâches (les existantes continuent)
         executor.shutdown();
 
-        int failedConfigs = 0;
-        double bestBusinessScore = Double.NEGATIVE_INFINITY;
+        // ===== PHASE 8: COLLECTE ET ANALYSE DES RÉSULTATS =====
 
-        // Récupération séquentielle des résultats (ordre des Future conservé)
+        // Compteurs pour statistiques finales
+        int failedConfigs = 0;                                    // Nombre de configs échouées
+        double bestBusinessScore = Double.NEGATIVE_INFINITY;      // Meilleur score business trouvé
+
+        // ===== RÉCUPÉRATION SÉQUENTIELLE DES RÉSULTATS =====
+        // Parcours des Future dans l'ordre de soumission (maintien de la séquence)
         for (int i = 0; i < futures.size(); i++) {
             try {
-                TuningResult result = futures.get(i).get(); // Bloquant
+                // Récupération bloquante du résultat (attente si pas encore terminé)
+                TuningResult result = futures.get(i).get();
+
+                // Log de progression pour monitoring
                 logger.info("[TUNING][V2] [{}] Progression : {}/{} configs terminées", symbol, i+1, grid.size());
 
-                // Ignorer configs échouées / invalides
+                // ===== FILTRAGE DES RÉSULTATS INVALIDES =====
+                // Ignore les configs qui ont échoué ou produit des scores invalides
                 if (result == null || Double.isNaN(result.businessScore) || Double.isInfinite(result.businessScore)) {
                     failedConfigs++;
-                    continue;
+                    continue; // Passe à la config suivante
                 }
 
-                // Sélection basée sur businessScore
+                // ===== SÉLECTION DU MEILLEUR CANDIDAT =====
+                // Critère: maximisation du businessScore (métrique composite business)
                 if (result.businessScore > bestBusinessScore) {
-                    bestBusinessScore = result.businessScore;
-                    bestConfig = result.config;
-                    bestModel = result.model;
-                    bestScalers = result.scalers;
-                    bestScore = result.score; // Conservation du meanMSE pour info
+                    bestBusinessScore = result.businessScore;   // Nouveau record
+                    bestConfig = result.config;                 // Configuration gagnante
+                    bestModel = result.model;                   // Modèle associé
+                    bestScalers = result.scalers;               // Scalers correspondants
+                    bestScore = result.score;                   // MSE pour information
                 }
+
             } catch (Exception e) {
+                // ===== GESTION D'ERREUR DE RÉCUPÉRATION =====
                 failedConfigs++;
-                progress.status = "erreur";
+                progress.status = "erreur"; // Marque le processus en erreur
                 progress.lastUpdate = System.currentTimeMillis();
-                logger.error("Erreur lors de la récup��ration du résultat de tuning : {}", e.getMessage());
+
+                // Log de l'erreur de récupération (différent de l'erreur d'exécution)
+                logger.error("Erreur lors de la récupération du résultat de tuning : {}", e.getMessage());
+
+                // Extraction de la stack trace (cause racine si disponible)
                 String stack = e.getCause() != null
                         ? org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace(e.getCause())
                         : org.apache.commons.lang3.exception.ExceptionUtils.getStackTrace(e);
+
+                // Ajout au rapport d'exceptions (config = null car erreur de récupération)
                 tuningExceptionReport.add(new TuningExceptionReportEntry(symbol, null, e.getMessage(), stack, System.currentTimeMillis()));
             }
         }
 
+        // ===== PHASE 9: ANALYSE DU SUCCÈS/ÉCHEC GLOBAL =====
+
+        // Timestamp de fin pour calcul de durée totale
         long endSymbol = System.currentTimeMillis();
 
-        // 7. Cas d'échec total
+        // ===== CAS D'ÉCHEC TOTAL =====
+        // Si toutes les configurations ont échoué, abandon du processus
         if (failedConfigs == grid.size()) {
-            progress.status = "failed";
-            progress.endTime = endSymbol;
-            progress.lastUpdate = endSymbol;
+            progress.status = "failed";                 // Marquage d'échec
+            progress.endTime = endSymbol;               // Timestamp de fin
+            progress.lastUpdate = endSymbol;            // Dernière mise à jour
+
             logger.error("[TUNING][V2][EARLY STOP] Toutes les configs ont échoué pour le symbole {}.", symbol);
-            return null;
+            return null; // Aucun résultat utilisable
         }
 
-        // 8. Succès global
+        // ===== PHASE 10: SUCCÈS - PERSISTANCE DES RÉSULTATS =====
+
+        // Marquage du succès du processus
         progress.status = "termine";
         progress.endTime = endSymbol;
         progress.lastUpdate = endSymbol;
 
+        // Vérification que nous avons un résultat valide complet
         if (bestConfig != null && bestModel != null && bestScalers != null) {
-            // Sauvegarde hyperparamètres gagnants
+
+            // ===== SAUVEGARDE DES HYPERPARAMÈTRES GAGNANTS =====
+            // Persistance de la configuration optimale pour réutilisation
             hyperparamsRepository.saveHyperparams(symbol, bestConfig);
+
             try {
-                // Sauvegarde modèle (sera rechargé pour prédictions)
+                // ===== SAUVEGARDE DU MODÈLE COMPLET =====
+                // Sérialisation du modèle + scalers en base pour prédictions futures
+                // Comprend: architecture neuronale, poids entraînés, normalisateurs
                 lstmTradePredictor.saveModelToDb(symbol, bestModel, jdbcTemplate, bestConfig, bestScalers);
+
             } catch (Exception e) {
+                // Log d'erreur non-bloquante (les hyperparamètres sont sauvés)
                 logger.error("Erreur lors de la sauvegarde du meilleur modèle : {}", e.getMessage());
             }
+
+            // ===== LOG FINAL DE SUCCÈS =====
+            // Résumé complet des meilleurs résultats trouvés
             logger.info("[TUNING][V2] Fin tuning {} | Best businessScore={} | windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={}, meanMSE={}, durée={} ms",
                     symbol, bestBusinessScore, bestConfig.getWindowSize(), bestConfig.getLstmNeurons(),
                     bestConfig.getDropoutRate(), bestConfig.getLearningRate(), bestConfig.getL1(), bestConfig.getL2(),
                     bestScore, (endSymbol - startSymbol));
+
         } else {
+            // ===== CAS D'ÉCHEC PARTIEL =====
+            // Certaines configs ont réussi mais aucun résultat valide récupéré
             logger.warn("[TUNING][V2] Aucun modèle/scaler valide trouvé pour {}", symbol);
         }
 
-        // 9. Nettoyage global mémoire (sécurité)
+        // ===== PHASE 11: NETTOYAGE FINAL =====
+        // Nettoyage global de sécurité pour libérer toute mémoire résiduelle
         try {
+            // Garbage collection ND4J forcé
             org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc();
+
+            // Destruction des workspaces du thread principal
             org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread();
+
+            // GC système final
             System.gc();
+
         } catch (Exception e) {
+            // Log non-critique: échec de nettoyage n'affecte pas le résultat
             logger.warn("Nettoyage ND4J échec : {}", e.getMessage());
         }
 
+        // ===== RETOUR DU RÉSULTAT FINAL =====
+        // Retourne la meilleure configuration trouvée (null si aucune valide)
         return bestConfig;
     }
 
