@@ -960,77 +960,208 @@ public class LstmTradePredictor {
      */
 
     /**
-     * Prédit la prochaine clôture (ou log-return reconverti en prix).
+     * Prédit la prochaine clôture (ou log-return reconverti en prix) en utilisant un modèle LSTM entraîné.
      *
-     * @param series  Série complète (la dernière barre = point courant)
-     * @param config  Configuration (fenêtre, normalisation, etc.)
-     * @param model   Modèle LSTM déjà entraîné
-     * @param scalers Scalers adaptés au modèle
-     * @return Prix prédit (ajusté).
+     * Cette méthode implémente le pipeline complet d'inférence LSTM pour prédire le prix futur :
+     * - Validation des données d'entrée et des paramètres
+     * - Reconstruction/validation des scalers de normalisation
+     * - Extraction et normalisation des features sur toute la série
+     * - Construction de la dernière séquence temporelle (fenêtre de prédiction)
+     * - Transformation en tenseur ND4J avec permutation des dimensions
+     * - Exécution du forward pass (inférence neuronale)
+     * - Dénormalisation et reconversion vers le domaine des prix
+     * - Application de limitations pour éviter les prédictions aberrantes
+     *
+     * Architecture du processus :
+     * 1. Validation des prérequis (données, scalers, taille)
+     * 2. Extraction complète des features sur la série
+     * 3. Normalisation feature par feature avec les scalers d'entraînement
+     * 4. Construction de la séquence d'inférence (derniers windowSize points)
+     * 5. Permutation des dimensions : [batch, time, features] -> [batch, features, time]
+     * 6. Forward pass neuronal pour obtenir la prédiction normalisée
+     * 7. Dénormalisation avec le label scaler
+     * 8. Reconversion log-return -> prix si nécessaire
+     * 9. Application des limites de sécurité
+     *
+     * Points critiques :
+     * - Les scalers doivent être cohérents avec ceux utilisés à l'entraînement
+     * - La permutation des dimensions doit correspondre à l'architecture du modèle
+     * - La reconversion log-return/prix doit être cohérente avec l'entraînement
+     * - Les limitations évitent les prédictions économiquement impossibles
+     *
+     * Gestion d'erreurs :
+     * - Reconstruction automatique des scalers si incohérents
+     * - Validation des dimensions après permutation
+     * - Limitation des prédictions aberrantes
+     *
+     * @param series  Série temporelle complète (la dernière barre = point de prédiction actuel)
+     * @param config  Configuration LSTM (fenêtre, features, normalisation, limitations)
+     * @param model   Modèle LSTM déjà entraîné et prêt pour l'inférence
+     * @param scalers Scalers de normalisation utilisés lors de l'entraînement
+     * @return Prix prédit ajusté et limité pour éviter les aberrations
      */
     public double predictNextCloseScalarV2(BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers) {
+        // ===== PHASE 1: EXTRACTION DES PARAMÈTRES DE CONFIGURATION =====
+
+        // Récupération de la liste des features utilisées par le modèle
+        // Doit être identique à celle utilisée lors de l'entraînement
         List<String> features = config.getFeatures();
+
+        // Taille de la fenêtre temporelle (nombre de pas de temps en entrée)
         int windowSize = config.getWindowSize();
 
-        if (series.getBarCount() <= windowSize)
-            throw new IllegalArgumentException("Pas assez de barres");
+        // ===== VALIDATION DES DONNÉES SUFFISANTES =====
+        // Vérification qu'on a assez de barres pour construire une séquence complète
+        // Il faut au minimum windowSize + 1 barres (windowSize pour l'input + contexte)
+        if (series.getBarCount() <= windowSize) {
+            throw new IllegalArgumentException("Pas assez de barres: " + series.getBarCount() + " <= " + windowSize);
+        }
 
-        // Reconstruction des scalers si incohérents (sécurité)
-        if (scalers == null
-            || scalers.featureScalers == null
-            || scalers.featureScalers.size() != features.size()
-            || scalers.labelScaler == null) {
-            logger.warn("[PREDICT] Scalers null/incomplets -> rebuild");
+        // ===== PHASE 2: VALIDATION ET RECONSTRUCTION DES SCALERS =====
+
+        // Vérification de la cohérence des scalers avec la configuration actuelle
+        // Les scalers sont critiques car ils doivent être identiques à ceux de l'entraînement
+        if (scalers == null                                              // Scalers complètement absents
+            || scalers.featureScalers == null                          // Map des scalers de features nulle
+            || scalers.featureScalers.size() != features.size()        // Nombre de scalers != nombre de features
+            || scalers.labelScaler == null) {                          // Scaler de label absent
+
+            logger.warn("[PREDICT] Scalers null/incomplets -> rebuild automatique");
+
+            // Reconstruction d'urgence des scalers basée sur la série actuelle
+            // ATTENTION: peut différer des scalers d'entraînement original
             scalers = rebuildScalers(series, config);
         }
 
+        // ===== PHASE 3: EXTRACTION DE LA MATRICE DE FEATURES COMPLÈTE =====
+
+        // Calcul de toutes les features sur l'intégralité de la série temporelle
+        // Nécessaire car la normalisation s'applique sur toute la série
         double[][] matrix = extractFeatureMatrix(series, features);
+
+        // Nombre de features à traiter (doit correspondre aux scalers)
         int numFeatures = features.size();
 
-        // Normalisation colonne par colonne
+        // ===== PHASE 4: NORMALISATION FEATURE PAR FEATURE =====
+
+        // Création de la matrice normalisée avec mêmes dimensions que l'originale
         double[][] normMatrix = new double[matrix.length][numFeatures];
+
+        // Normalisation colonne par colonne (une feature = une colonne)
         for (int f = 0; f < numFeatures; f++) {
+            // Extraction de toutes les valeurs historiques pour cette feature
             double[] col = new double[matrix.length];
-            for (int i = 0; i < matrix.length; i++) col[i] = matrix[i][f];
+            for (int i = 0; i < matrix.length; i++) {
+                col[i] = matrix[i][f]; // Copie de la colonne f dans un tableau temporaire
+            }
+
+            // Application du scaler spécifique à cette feature
+            // Le scaler a été appris lors de l'entraînement avec fit()
             double[] normCol = scalers.featureScalers.get(features.get(f)).transform(col);
-            for (int i = 0; i < matrix.length; i++) normMatrix[i][f] = normCol[i];
+
+            // Recopie de la colonne normalisée dans la matrice finale
+            for (int i = 0; i < matrix.length; i++) {
+                normMatrix[i][f] = normCol[i];
+            }
         }
 
-        // Construction dernière séquence
+        // ===== PHASE 5: CONSTRUCTION DE LA SÉQUENCE D'INFÉRENCE =====
+
+        // Création du tenseur d'entrée : [1 batch][windowSize time][numFeatures]
+        // Batch size = 1 car on prédit un seul point à la fois
         double[][][] seq = new double[1][windowSize][numFeatures];
-        for (int j = 0; j < windowSize; j++)
-            System.arraycopy(normMatrix[normMatrix.length - windowSize + j], 0, seq[0][j], 0, numFeatures);
 
-        // Permutation vers [1, features, time]
+        // Extraction des derniers windowSize points normalisés pour la prédiction
+        for (int j = 0; j < windowSize; j++) {
+            // Copie des features de la barre (length - windowSize + j)
+            // Utilise les dernières barres disponibles comme contexte de prédiction
+            System.arraycopy(
+                normMatrix[normMatrix.length - windowSize + j], // Source: barre j dans la fenêtre
+                0,                                              // Index source de départ
+                seq[0][j],                                      // Destination: séquence batch 0, temps j
+                0,                                              // Index destination de départ
+                numFeatures                                     // Nombre d'éléments à copier
+            );
+        }
+
+        // ===== PHASE 6: TRANSFORMATION EN TENSEUR ND4J AVEC PERMUTATION =====
+
+        // Conversion en tenseur ND4J : [batch, time, features] (format initial)
+        // Puis permutation vers [batch, features, time] pour compatibilité modèle
         org.nd4j.linalg.api.ndarray.INDArray input =
-            Nd4j.create(seq).permute(0, 2, 1).dup('c');
+            Nd4j.create(seq)                    // Création tenseur initial [1, windowSize, numFeatures]
+                .permute(0, 2, 1)              // Permutation: [batch, time, features] -> [batch, features, time]
+                .dup('c');                     // Copie contiguë en mémoire pour performance
 
+        // ===== VALIDATION DES DIMENSIONS APRÈS PERMUTATION =====
+        // Vérification critique pour détecter les erreurs de shape
         if (input.size(1) != numFeatures || input.size(2) != windowSize) {
             logger.warn("[SHAPE][PRED] Incohérence shape input: expected features={} time={} got features={} time={}",
                 numFeatures, windowSize, input.size(1), input.size(2));
         }
 
-        // Forward pass
-        double predNorm = model.output(input).getDouble(0);
+        // ===== PHASE 7: EXÉCUTION DU FORWARD PASS (INFÉRENCE) =====
 
-        // Inversion normalisation
+        // Passage des données dans le réseau neuronal pour obtenir la prédiction
+        // model.output() effectue la forward pass complète : LSTM + Dense + Output
+        double predNorm = model.output(input).getDouble(0); // Index 0 car sortie scalaire
+
+        // ===== PHASE 8: DÉNORMALISATION DE LA PRÉDICTION =====
+
+        // Inversion de la normalisation pour repasser dans le domaine original
+        // Utilise le label scaler qui a été appris sur les targets d'entraînement
         double predTarget = scalers.labelScaler.inverse(predNorm);
 
+        // ===== PHASE 9: RÉCUPÉRATION DU PRIX DE RÉFÉRENCE =====
+
+        // Prix de clôture de la dernière barre disponible (point de référence)
         double lastClose = series.getLastBar().getClosePrice().doubleValue();
 
-        // Si on a entraîné sur log-return => reconversion en prix
-        double predicted = config.isUseLogReturnTarget()
-            ? lastClose * Math.exp(predTarget)
-            : predTarget;
+        // ===== PHASE 10: RECONVERSION VERS LE DOMAINE DES PRIX =====
 
-        // Limitation relative (anti explosion)
-        double limitPct = config.getLimitPredictionPct();
-        if (limitPct > 0) {
-            double min = lastClose * (1 - limitPct);
-            double max = lastClose * (1 + limitPct);
-            if (predicted < min) predicted = min;
-            else if (predicted > max) predicted = max;
+        // Gestion des deux modes de prédiction selon le type d'entraînement
+        double predicted;
+        if (config.isUseLogReturnTarget()) {
+            // Mode log-return: reconversion exponentielle vers prix absolu
+            // predTarget = log(prix_futur / prix_actuel) donc prix_futur = prix_actuel * exp(predTarget)
+            predicted = lastClose * Math.exp(predTarget);
+        } else {
+            // Mode prix direct: la prédiction est déjà dans le domaine des prix
+            predicted = predTarget;
         }
+
+        // ===== PHASE 11: APPLICATION DES LIMITATIONS DE SÉCURITÉ =====
+
+        // Récupération du pourcentage de limitation depuis la configuration
+        double limitPct = config.getLimitPredictionPct();
+
+        // Application des bornes si limitation activée (limitPct > 0)
+        if (limitPct > 0) {
+            // Calcul des bornes relative au prix actuel
+            double min = lastClose * (1 - limitPct);    // Borne inférieure (ex: -20%)
+            double max = lastClose * (1 + limitPct);    // Borne supérieure (ex: +20%)
+
+            // Écrêtage de la prédiction dans les bornes calculées
+            if (predicted < min) {
+                logger.debug("[PREDICT] Limitation basse appliquée: {} -> {}", predicted, min);
+                predicted = min;
+            } else if (predicted > max) {
+                logger.debug("[PREDICT] Limitation haute appliquée: {} -> {}", predicted, max);
+                predicted = max;
+            }
+        }
+
+        // ===== PHASE 12: LOG DE DEBUG ET RETOUR =====
+
+        // Log détaillé pour debug et monitoring des prédictions
+        logger.debug("[PREDICT] Prédiction: lastClose={}, predicted={}, predNorm={}, predTarget={}, limitPct={}",
+                    String.format("%.3f", lastClose),
+                    String.format("%.3f", predicted),
+                    String.format("%.6f", predNorm),
+                    String.format("%.6f", predTarget),
+                    limitPct);
+
+        // Retour de la prédiction finale ajustée et limitée
         return predicted;
     }
 
