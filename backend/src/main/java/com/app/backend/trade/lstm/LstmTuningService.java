@@ -744,7 +744,6 @@ public class LstmTuningService {
 
     /**
      * Génère automatiquement une grille de configurations adaptée au swing trade enrichie.
-     * @param features liste des features à utiliser
      * @param horizonBars tableau des horizons de prédiction à tester
      * @param numLstmLayers tableau du nombre de couches LSTM
      * @param batchSizes tableau des batch sizes
@@ -914,7 +913,6 @@ public class LstmTuningService {
     /**
      * Génère une grille aléatoire de configurations adaptée au swing trade enrichie.
      * @param n nombre de configurations à générer
-     * @param features liste des features à utiliser
      * @param horizonBars tableau des horizons de prédiction à tester
      * @param numLstmLayers tableau du nombre de couches LSTM
      * @param batchSizes tableau des batch sizes
