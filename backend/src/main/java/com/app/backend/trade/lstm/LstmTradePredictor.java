@@ -926,10 +926,28 @@ public class LstmTradePredictor {
             scalers.featureScalers.put(features.get(f), scaler);
         }
 
-        // Création du scaler pour les labels (toujours MinMax pour faciliter l'inversion)
-        FeatureScaler labelScaler = new FeatureScaler(FeatureScaler.Type.MINMAX);
-        labelScaler.fit(labelSeq); // Apprend min/max sur tous les labels
+        // Création du scaler pour les labels:
+        //  - Si prédiction de log-return => ZSCORE (évite compression extrême autour de 0)
+        //  - Sinon (prix direct) => MINMAX
+        FeatureScaler.Type labelType = config.isUseLogReturnTarget()
+            ? FeatureScaler.Type.ZSCORE
+            : FeatureScaler.Type.MINMAX;
+        FeatureScaler labelScaler = new FeatureScaler(labelType);
+        labelScaler.fit(labelSeq);
         scalers.labelScaler = labelScaler; // Stockage pour utilisation ultérieure
+
+        // Vérification qualité normalisation label (std ≈ 1 si ZSCORE)
+        double[] normLabels = scalers.labelScaler.transform(labelSeq);
+        if (labelType == FeatureScaler.Type.ZSCORE) {
+            double m=0, v=0; int n=normLabels.length;
+            for(double d: normLabels) m += d; m = n>0? m/n:0;
+            for(double d: normLabels) v += (d-m)*(d-m); v = n>0? v/n:0; double std = Math.sqrt(v);
+            if (std < 1e-3) {
+                logger.warn("[TRAIN][LABEL][WARN] Std normalisée très faible (<1e-3) => plateau potentiel. std={}", std);
+            } else {
+                logger.debug("[TRAIN][LABEL] Normalisation label ZSCORE ok. mean={} std={}", String.format("%.4f", m), String.format("%.4f", std));
+            }
+        }
 
         // ===== PHASE 5: NORMALISATION DES SÉQUENCES D'ENTRAÎNEMENT =====
 
@@ -969,7 +987,8 @@ public class LstmTradePredictor {
         }
 
         // Normalisation des labels avec le scaler dédié
-        double[] normLabels = scalers.labelScaler.transform(labelSeq);
+        // (normLabels déjà calculé ci-dessus si besoin mais recalcul léger ok)
+        normLabels = scalers.labelScaler.transform(labelSeq);
 
         // Conversion des labels en tenseur ND4J : [numSeq, 1] (régression scalaire)
         org.nd4j.linalg.api.ndarray.INDArray y = Nd4j.create(normLabels, new long[]{numSeq, 1});
@@ -1205,6 +1224,17 @@ public class LstmTradePredictor {
             // Reconstruction d'urgence des scalers basée sur la série actuelle
             // ATTENTION: peut différer des scalers d'entraînement original
             scalers = rebuildScalers(series, config);
+        }
+
+        // Migration rétro-compatible: anciens modèles log-return avec labelScaler MINMAX -> reconstruire ZSCORE
+        if (config.isUseLogReturnTarget() && scalers != null && scalers.labelScaler != null &&
+            scalers.labelScaler.type == FeatureScaler.Type.MINMAX) {
+            try {
+                logger.warn("[MIGRATION][LABEL_SCALER] Ancien labelScaler MINMAX détecté pour log-return -> reconstruction ZSCORE");
+                scalers.labelScaler = rebuildLabelScalerForLogReturn(series, config);
+            } catch (Exception e) {
+                logger.error("[MIGRATION][LABEL_SCALER][FAIL] {}", e.getMessage());
+            }
         }
 
         // ===== PHASE 3: EXTRACTION DE LA MATRICE DE FEATURES COMPLÈTE =====
@@ -2347,16 +2377,11 @@ public class LstmTradePredictor {
             set.featureScalers.put(features.get(f), sc);
         }
 
-        // Label scaler basé sur close ou log-return si demandé
-        double[] closes = extractCloseValues(series);
-        if (config.isUseLogReturnTarget() && closes.length > 1) {
-            double[] lr = new double[closes.length - 1];
-            for(int i = 1; i < closes.length; i++)
-                lr[i - 1] = Math.log(closes[i] / closes[i - 1]);
-            FeatureScaler lab = new FeatureScaler(FeatureScaler.Type.MINMAX);
-            lab.fit(lr);
-            set.labelScaler = lab;
+        // Label scaler: ZSCORE si log-return, sinon MINMAX (prix direct)
+        if (config.isUseLogReturnTarget()) {
+            set.labelScaler = rebuildLabelScalerForLogReturn(series, config);
         } else {
+            double[] closes = extractCloseValues(series);
             FeatureScaler lab = new FeatureScaler(FeatureScaler.Type.MINMAX);
             lab.fit(closes);
             set.labelScaler = lab;
@@ -2366,24 +2391,54 @@ public class LstmTradePredictor {
         return set;
     }
 
-    /**
-     * Calcule le business score composite basé sur les métriques de trading.
-     * Formule: (expectancy * profitFactor * winRate) / (1 + drawdown^gamma)
-     *
-     * @param profitFactor rapport gains/pertes
-     * @param winRate taux de réussite (0-1)
-     * @param maxDrawdownPct drawdown maximum (0-1)
-     * @param expectancy gain moyen par trade
-     * @param config configuration pour les paramètres du calcul
-     * @return score business composite
-     */
+    // Reconstruit un label scaler ZSCORE pour log-return (avec gestion multi-horizon) pour migration.
+    private FeatureScaler rebuildLabelScalerForLogReturn(BarSeries series, LstmConfig config) {
+        double[] closes = extractCloseValues(series);
+        if (closes.length < 2) {
+            FeatureScaler fallback = new FeatureScaler(FeatureScaler.Type.ZSCORE);
+            fallback.fit(new double[]{0,0});
+            return fallback;
+        }
+        int windowSize = config.getWindowSize();
+        int barCount = closes.length;
+        int numSeq = barCount - windowSize - 1;
+        if (numSeq < 1) numSeq = barCount - 1;
+        double[] labelSeq = new double[Math.max(0, numSeq)];
+        for (int i = 0; i < labelSeq.length; i++) {
+            if (config.isUseMultiHorizonAvg()) {
+                int H = config.getHorizonBars();
+                double prev = closes[i + windowSize - 1];
+                double sum=0; int count=0;
+                for (int h=1; h<=H; h++) {
+                    int idx = i + windowSize - 1 + h;
+                    if (idx < closes.length) {
+                        double next = closes[idx];
+                        sum += Math.log(next / prev);
+                        prev = next; count++;
+                    }
+                }
+                labelSeq[i] = count>0? sum/count : 0.0;
+            } else {
+                double prev = closes[i + windowSize - 1];
+                double next = closes[i + windowSize];
+                labelSeq[i] = Math.log(next / prev);
+            }
+        }
+        FeatureScaler z = new FeatureScaler(FeatureScaler.Type.ZSCORE);
+        z.fit(labelSeq);
+        double[] norm = z.transform(labelSeq);
+        double m=0,v=0; int n=norm.length; for(double d: norm)m+=d; m = n>0?m/n:0; for(double d: norm)v += (d-m)*(d-m); v = n>0? v/n:0; double std=Math.sqrt(v);
+        logger.info("[MIGRATION][LABEL_SCALER] Nouveau label scaler ZSCORE construit. meanNorm={} stdNorm={}", String.format("%.4f", m), String.format("%.4f", std));
+        return z;
+    }
+
+    // Restauré: calcul du business score (utilisé dans walkForwardEvaluateOutOfSample)
     public double computeBusinessScore(double profitFactor, double winRate, double maxDrawdownPct, double expectancy, LstmConfig config) {
-        // Log de debug pour comprendre pourquoi le businessScore est à 0
         double pfAdj = Math.min(profitFactor, config.getBusinessProfitFactorCap());
         double expPos = Math.max(expectancy, 0.0);
         double denom = 1.0 + Math.pow(Math.max(maxDrawdownPct, 0.0), config.getBusinessDrawdownGamma());
         double score = (expPos * pfAdj * winRate) / (denom + 1e-9);
-        logger.info("[DEBUG][BUSINESS_SCORE] pf={} (adj={}), winRate={}, maxDD={}, expectancy={}, denom={}, score={}",
+        logger.debug("[BUSINESS_SCORE] pf={} (adj={}), winRate={}, maxDD={}, expectancy={}, denom={}, score={}",
             profitFactor, pfAdj, winRate, maxDrawdownPct, expectancy, denom, score);
         return score;
     }
