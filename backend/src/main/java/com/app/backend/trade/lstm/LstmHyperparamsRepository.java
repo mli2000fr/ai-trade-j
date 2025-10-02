@@ -60,8 +60,8 @@ public class LstmHyperparamsRepository {
                     "normalization_method, swing_trade_type, num_layers, bidirectional, attention, features, horizon_bars, " +
                     "threshold_type, threshold_k, limit_prediction_pct, batch_size, cv_mode, use_scalar_v2, use_log_return_target, use_walk_forward_v2, " +
                     "walk_forward_splits, embargo_bars, seed, business_profit_factor_cap, business_drawdown_gamma, capital, risk_pct, sizing_k, fee_pct, slippage_pct, " +
-                    "kl_drift_threshold, mean_shift_sigma_threshold, updated_date) " +
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)";
+                    "kl_drift_threshold, mean_shift_sigma_threshold, use_multi_horizon_avg, entry_threshold_factor, updated_date) " +
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)";
 
     /**
      * Requête de sélection d'un jeu d'hyperparamètres selon le symbole (clé).
@@ -77,8 +77,8 @@ public class LstmHyperparamsRepository {
             "INSERT INTO lstm_tuning_metrics (" +
                     "symbol, window_size, lstm_neurons, dropout_rate, learning_rate, l1, l2, num_epochs, patience, min_delta, optimizer, " +
                     "normalization_scope, normalization_method, swing_trade_type, features, mse, rmse, horizon_bars, " +
-                    "profit_total, profit_factor, win_rate, max_drawdown, num_trades, business_score, sortino, calmar, turnover, avg_bars_in_position, tested_date" +
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+                    "profit_total, profit_factor, win_rate, max_drawdown, num_trades, business_score, sortino, calmar, turnover, avg_bars_in_position, use_multi_horizon_avg, entry_threshold_factor, tested_date" +
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
 
     // =========================================================
     // Constructeur
@@ -147,7 +147,9 @@ public class LstmHyperparamsRepository {
                 config.getFeePct(),
                 config.getSlippagePct(),
                 config.getKlDriftThreshold(),
-                config.getMeanShiftSigmaThreshold()
+                config.getMeanShiftSigmaThreshold(),
+                config.isUseMultiHorizonAvg(),
+                config.getEntryThresholdFactor()
         );
     }
 
@@ -176,7 +178,6 @@ public class LstmHyperparamsRepository {
      * @param config hyperparamètres utilisés lors du test (on snapshot certains champs)
      * @param mse erreur quadratique moyenne du modèle
      * @param rmse racine de l'erreur quadratique moyenne
-     * @param direction "long", "short" ou autre direction testée
      * @param profitTotal profit agrégé sur la simulation
      * @param profitFactor ratio (gains / pertes)
      * @param winRate pourcentage de trades gagnants
@@ -186,7 +187,7 @@ public class LstmHyperparamsRepository {
      * @param sortino ratio Sortino
      * @param calmar ratio Calmar
      * @param turnover rotation du portefeuille
-     * @param avgBarsInPosition dur��e moyenne en position (en barres)
+     * @param avgBarsInPosition durée moyenne en position (en barres)
      */
     public void saveTuningMetrics(
             String symbol,
@@ -233,7 +234,9 @@ public class LstmHyperparamsRepository {
                 sortino,
                 calmar,
                 turnover,
-                avgBarsInPosition
+                avgBarsInPosition,
+                config.isUseMultiHorizonAvg(),
+                config.getEntryThresholdFactor()
         );
     }
 
@@ -333,6 +336,10 @@ public class LstmHyperparamsRepository {
         // Détection dérive / drift
         config.setKlDriftThreshold(rs.getDouble("kl_drift_threshold"));
         config.setMeanShiftSigmaThreshold(rs.getDouble("mean_shift_sigma_threshold"));
+
+        // Champs ajoutés : useMultiHorizonAvg et entryThresholdFactor
+        try { config.setUseMultiHorizonAvg(rs.getBoolean("use_multi_horizon_avg")); } catch (Exception ignored) {}
+        try { config.setEntryThresholdFactor(rs.getDouble("entry_threshold_factor")); } catch (Exception ignored) {}
 
         // Désérialisation des features si non null
         String featuresJson = rs.getString("features");

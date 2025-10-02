@@ -154,6 +154,11 @@ public class LstmConfig {
     private boolean bidirectional = false;
     /** Active une couche d'attention au-dessus des sorties LSTM (si supportée par le backend). */
     private boolean attention = false;
+    /**
+     * Si true, la cible (label) sera la moyenne des log-returns t+1..t+H (H = horizonBars),
+     * pour lisser le bruit court terme. Sinon, cible classique (log-return t+1).
+     */
+    private boolean useMultiHorizonAvg = false;
 
     // =============================== Labeling & Prédiction ===============================
     /** Horizon temporel (nombre de barres à l'avance) pour lequel on veut prédire la dynamique. */

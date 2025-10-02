@@ -862,23 +862,37 @@ public class LstmTradePredictor {
         for (int i = 0; i < numSeq; i++) {
             // Pour chaque séquence i, copier windowSize barres consécutives
             for (int j = 0; j < windowSize; j++) {
-                // Copie toutes les features de la barre (i+j) vers la position [i][j]
-                // System.arraycopy = copie efficace de tableau Java
                 System.arraycopy(matrix[i + j], 0, inputSeq[i][j], 0, numFeatures);
             }
 
             // ===== CONSTRUCTION DU LABEL (CIBLE DE PRÉDICTION) =====
-            // Le label correspond à la valeur à prédire après la séquence d'entrée
             if (config.isUseLogReturnTarget()) {
-                // Mode log-return : on prédit le rendement logarithmique
-                // Plus stable pour l'entraînement car centré autour de 0
-                double prev = closes[i + windowSize - 1];  // Dernier prix de la séquence
-                double next = closes[i + windowSize];       // Prix à prédire (barre suivante)
-                labelSeq[i] = Math.log(next / prev);       // Log-return = ln(P_t+1 / P_t)
+                if (config.isUseMultiHorizonAvg()) { // Correction ici
+                    // Mode multi-horizon : moyenne des log-returns t+1..t+H
+                    int H = config.getHorizonBars();
+                    double prev = closes[i + windowSize - 1];
+                    double sumLogRet = 0.0;
+                    int count = 0;
+                    for (int h = 1; h <= H; h++) {
+                        int idx = i + windowSize - 1 + h;
+                        if (idx < closes.length) {
+                            double next = closes[idx];
+                            double logRet = Math.log(next / prev);
+                            sumLogRet += logRet;
+                            prev = next;
+                            count++;
+                        }
+                    }
+                    labelSeq[i] = (count > 0) ? (sumLogRet / count) : 0.0;
+                } else {
+                    // Mode log-return simple : t+1
+                    double prev = closes[i + windowSize - 1];
+                    double next = closes[i + windowSize];
+                    labelSeq[i] = Math.log(next / prev);
+                }
             } else {
                 // Mode prix direct : on prédit directement le prix futur
-                // Plus intuitif mais peut être moins stable pour l'entraînement
-                labelSeq[i] = closes[i + windowSize];      // Prix de clôture à prédire
+                labelSeq[i] = closes[i + windowSize];
             }
         }
 
