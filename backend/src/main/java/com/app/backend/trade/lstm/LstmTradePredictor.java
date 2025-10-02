@@ -1903,11 +1903,19 @@ public class LstmTradePredictor {
         double consecutiveLosses = 0;
         double maxConsecutiveLosses = 3;
 
+        // Buffer circulaire pour distribution des |predictedDelta| (Step 14)
+        final int deltaBufCapacity = 200;
+        double[] deltaBuf = new double[deltaBufCapacity];
+        int deltaBufCount = 0;
+        int deltaBufIndex = 0;
+        final double deltaFloor = 0.0007; // floor minimal
+        final int minSamplesForPercentile = 30; // warmup minimal
+
         // Boucle principale
         for (int bar = testStartBar; bar < testEndBar - 1; bar++) {
             if (bar < config.getWindowSize()) continue; // pas assez d'historique
             BarSeries sub = fullSeries.getSubSeries(0, bar + 1); // conservé pour fonctions existantes (threshold, volume)
-            double threshold = computeSwingTradeThreshold(sub, config);
+            double threshold = computeSwingTradeThreshold(sub, config); // Toujours utilisé pour target sizing
             double atr = atrValues[bar];
             if (!inPos) {
                 if (consecutiveLosses >= maxConsecutiveLosses) {
@@ -1922,7 +1930,23 @@ public class LstmTradePredictor {
                     predicted = predictNextCloseScalarV2(sub, config, model, scalers);
                 }
                 double lastClose = closes[bar];
-                double signalStrength = (predicted - lastClose) / lastClose;
+                double rawDelta = (predicted - lastClose) / lastClose; // predictedDelta relatif
+                double signalStrength = rawDelta; // alias logique existante
+
+                // Calcul du threshold adaptatif via percentile 65 des |predictedDelta| (sans inclure le courant)
+                double entryThreshold;
+                if (deltaBufCount >= minSamplesForPercentile) {
+                    // Copier tampon courant dans tableau triable
+                    int n = deltaBufCount;
+                    double[] tmp = new double[n];
+                    for (int i = 0; i < n; i++) tmp[i] = deltaBuf[i];
+                    Arrays.sort(tmp);
+                    int idx = (int)Math.floor(0.65 * (n - 1));
+                    double perc65 = tmp[idx];
+                    entryThreshold = Math.max(perc65, deltaFloor);
+                } else {
+                    entryThreshold = deltaFloor; // warmup
+                }
 
                 boolean contratrianSignal = false;
                 if (signalStrength < -0.02) {
@@ -1941,38 +1965,41 @@ public class LstmTradePredictor {
                                 String.format("%.2f", distanceToSupport * 100), String.format("%.4f", signalStrength));
                     }
                 }
-                double entryThreshold = threshold * config.getEntryThresholdFactor();
+                // Logs debug (pour comparaison historique) : on conserve threshold (baseline) + entryThreshold distributionnel
                 double signalStrengthPct = signalStrength * 100;
                 double entryThresholdPct = entryThreshold * 100;
                 double thresholdPct = threshold * 100;
-                logger.info("[DEBUG][RAW][CACHE] bar={}, predicted={}, lastClose={}, signalStrength={}% ({}), entryThreshold={}% ({}), threshold={}% ({})",
+                logger.info("[DEBUG][RAW][CACHE][DIST] bar={}, predicted={}, lastClose={}, signalStrength={}% ({}), entryThreshold(P65)={}% ({}), baselineThreshold={}% ({}), bufSize={}",
                         bar,
                         String.format("%.3f", predicted),
                         String.format("%.3f", lastClose),
                         String.format("%.4f", signalStrengthPct), String.format("%.6f", signalStrength),
                         String.format("%.4f", entryThresholdPct), String.format("%.6f", entryThreshold),
-                        String.format("%.4f", thresholdPct), String.format("%.6f", threshold));
-                if (entryThreshold > 0.01) {
-                    logger.warn("[DEBUG][EMERGENCY][CACHE] entryThreshold trop élevé ({}%), fallback 0.3%", String.format("%.4f", entryThreshold * 100));
-                    entryThreshold = 0.003;
-                }
+                        String.format("%.4f", thresholdPct), String.format("%.6f", threshold),
+                        deltaBufCount);
+
+                if (entryThreshold > 0.02) // garde-fou extrême improbable
+                    logger.warn("[DEBUG][EMERGENCY][CACHE] entryThreshold distrib trop élevé ({}%), clamp 0.3%", String.format("%.4f", entryThreshold * 100));
+                // Plus de réduction temporelle: adaptiveThreshold == entryThreshold
                 double adaptiveThreshold = entryThreshold;
-                if (bar > testStartBar + 50) {
-                    double reductionFactor = Math.max(0.1, 1.0 - (bar - testStartBar) * 0.001);
-                    adaptiveThreshold = entryThreshold * reductionFactor;
-                    if (Math.abs(adaptiveThreshold - entryThreshold) > 0.0001) {
-                        logger.info("[DEBUG][ADAPTIVE][CACHE] bar={} seuil: {} -> {} (reductFactor={})", bar,
-                                String.format("%.4f", entryThreshold), String.format("%.4f", adaptiveThreshold),
-                                String.format("%.3f", reductionFactor));
-                    }
-                }
                 boolean wouldEnter = signalStrength > adaptiveThreshold;
-                logger.info("[DEBUG][ENTRY][CACHE] bar={} wouldEnter={} signal={} thresh={} adaptive={}", bar, wouldEnter,
-                        String.format("%.6f", signalStrength), String.format("%.6f", entryThreshold), String.format("%.6f", adaptiveThreshold));
+                logger.info("[DEBUG][ENTRY][CACHE][DIST] bar={} wouldEnter={} signal={} thresh={} adaptive={} bufSize={}", bar, wouldEnter,
+                        String.format("%.6f", signalStrength), String.format("%.6f", entryThreshold), String.format("%.6f", adaptiveThreshold), deltaBufCount);
                 if (signalStrength > adaptiveThreshold) {
                     double currentRsi = rsiValues[bar];
-                    logger.info("[DEBUG][ENTRY][CACHE] bar={}, currentRsi={}", bar, currentRsi);
-                    if (currentRsi > 75) continue;
+                    logger.info("[DEBUG][ENTRY][CACHE] bar={}, currentRsi={} rawDeltaAbs={} entryThreshold={}", bar, currentRsi,
+                            String.format("%.6f", Math.abs(rawDelta)), String.format("%.6f", entryThreshold));
+                    if (currentRsi > 75) {
+                        // Update buffer avant continue pour ne pas perdre ce delta historique
+                        double absDelta = Math.abs(rawDelta);
+                        if (deltaBufCount < deltaBufCapacity) {
+                            deltaBuf[deltaBufCount++] = absDelta;
+                        } else {
+                            deltaBuf[deltaBufIndex] = absDelta;
+                            deltaBufIndex = (deltaBufIndex + 1) % deltaBufCapacity;
+                        }
+                        continue;
+                    }
                     // Volume check (non pré-calculé – coût acceptable)
                     VolumeIndicator vol = new VolumeIndicator(sub);
                     double currentVol = vol.getValue(sub.getEndIndex()).doubleValue();
@@ -1982,7 +2009,16 @@ public class LstmTradePredictor {
                         avgVol += vol.getValue(i).doubleValue();
                     }
                     avgVol /= volPeriod;
-                    if (currentVol < avgVol * 0.8) continue;
+                    if (currentVol < avgVol * 0.8) {
+                        double absDelta = Math.abs(rawDelta);
+                        if (deltaBufCount < deltaBufCapacity) {
+                            deltaBuf[deltaBufCount++] = absDelta;
+                        } else {
+                            deltaBuf[deltaBufIndex] = absDelta;
+                            deltaBufIndex = (deltaBufIndex + 1) % deltaBufCapacity;
+                        }
+                        continue;
+                    }
                     inPos = true;
                     entry = lastClose;
                     barsInPos = 0;
@@ -1992,6 +2028,14 @@ public class LstmTradePredictor {
                     positionSize = stopDistance > 0 ? riskAmount / (lastClose * stopDistance) : 0;
                     double maxPositionValue = capital * 0.1;
                     if (positionSize * lastClose > maxPositionValue) positionSize = maxPositionValue / lastClose;
+                }
+                // Mise à jour buffer après décision (n'inclut pas le delta dans son propre calcul de percentile)
+                double absDelta = Math.abs(rawDelta);
+                if (deltaBufCount < deltaBufCapacity) {
+                    deltaBuf[deltaBufCount++] = absDelta;
+                } else {
+                    deltaBuf[deltaBufIndex] = absDelta;
+                    deltaBufIndex = (deltaBufIndex + 1) % deltaBufCapacity;
                 }
             } else {
                 barsInPos++;
