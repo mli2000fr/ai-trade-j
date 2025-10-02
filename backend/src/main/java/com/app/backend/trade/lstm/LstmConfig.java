@@ -220,6 +220,9 @@ public class LstmConfig {
      */
     private double entryThresholdFactor = 1.2;
 
+    /** Patience spécifique pour l'early stopping basé sur la perte de validation interne. */
+    private int patienceVal = 5;
+
     /**
      * Constructeur par défaut : charge les hyperparamètres depuis le fichier
      * resources/lstm-config.properties si présent. Chaque paramètre possède une valeur de secours
@@ -247,6 +250,8 @@ public class LstmConfig {
                 numEpochs = Integer.parseInt(props.getProperty("numEpochs", "100"));
                 patience = Integer.parseInt(props.getProperty("patience", "10"));
                 minDelta = Double.parseDouble(props.getProperty("minDelta", "0.0001"));
+                // Ajout Étape 11: patience validation distincte (fallback 5)
+                patienceVal = Integer.parseInt(props.getProperty("patienceVal", "5"));
                 optimizer = props.getProperty("optimizer", "adam");
                 kFolds = Integer.parseInt(props.getProperty("kFolds", "5"));
                 l1 = Double.parseDouble(props.getProperty("l1", "0.0"));
@@ -305,6 +310,8 @@ public class LstmConfig {
         numEpochs = rs.getInt("num_epochs");
         patience = rs.getInt("patience");
         minDelta = rs.getDouble("min_delta");
+        // Lecture optionnelle patience validation (colonne potentiellement absente)
+        try { this.patienceVal = rs.getInt("patience_val"); } catch (Exception ignored) { this.patienceVal = 5; }
         kFolds = rs.getInt("k_folds");
         optimizer = rs.getString("optimizer");
         l1 = rs.getDouble("l1");

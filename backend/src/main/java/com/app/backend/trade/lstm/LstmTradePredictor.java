@@ -1129,10 +1129,34 @@ public class LstmTradePredictor {
         // Création du DataSet DeepLearning4J (associe inputs X et labels y)
         org.nd4j.linalg.dataset.DataSet ds = new org.nd4j.linalg.dataset.DataSet(X, y);
 
-        // Création de l'itérateur avec batching pour l'entraînement
-        // ListDataSetIterator découpe le dataset en mini-batches de taille config.getBatchSize()
+        // ===== Étape 11: Split interne validation (derniers 15% des séquences) =====
+        int numSeqTotal = (int) X.size(0);
+        int valCount = (int) Math.round(numSeqTotal * 0.15);
+        if (valCount < 1 && numSeqTotal >= 20) valCount = 1; // sécurité minimale
+        int trainCount = numSeqTotal - valCount;
+        boolean useInternalVal = trainCount > 1 && valCount >= 1;
+        org.nd4j.linalg.api.ndarray.INDArray XTrain, yTrain, XVal = null, yVal = null;
+        if (useInternalVal) {
+            XTrain = X.get(org.nd4j.linalg.indexing.NDArrayIndex.interval(0, trainCount),
+                org.nd4j.linalg.indexing.NDArrayIndex.all(), org.nd4j.linalg.indexing.NDArrayIndex.all()).dup('c');
+            yTrain = y.get(org.nd4j.linalg.indexing.NDArrayIndex.interval(0, trainCount), org.nd4j.linalg.indexing.NDArrayIndex.all()).dup('c');
+            XVal = X.get(org.nd4j.linalg.indexing.NDArrayIndex.interval(trainCount, numSeqTotal),
+                org.nd4j.linalg.indexing.NDArrayIndex.all(), org.nd4j.linalg.indexing.NDArrayIndex.all()).dup('c');
+            yVal = y.get(org.nd4j.linalg.indexing.NDArrayIndex.interval(trainCount, numSeqTotal), org.nd4j.linalg.indexing.NDArrayIndex.all()).dup('c');
+        } else {
+            // Fallback: tout en train (ancien comportement)
+            XTrain = X;
+            yTrain = y;
+            logger.warn("[TRAIN][VAL][FALLBACK] Validation interne désactivée (trainCount={} valCount={} total={})", trainCount, valCount, numSeqTotal);
+        }
+        org.nd4j.linalg.dataset.DataSet trainDs = new org.nd4j.linalg.dataset.DataSet(XTrain, yTrain);
         org.nd4j.linalg.dataset.api.iterator.DataSetIterator iterator =
-            new ListDataSetIterator<>(ds.asList(), config.getBatchSize());
+            new ListDataSetIterator<>(trainDs.asList(), config.getBatchSize());
+        org.nd4j.linalg.dataset.DataSet valDs = null;
+        if (useInternalVal) {
+            valDs = new org.nd4j.linalg.dataset.DataSet(XVal, yVal);
+            logger.info("[TRAIN][VAL] Activation split validation interne 85%/15% (train={} val={})", trainCount, valCount);
+        }
 
         // ===== PHASE 9: BOUCLE D'ENTRAÎNEMENT PRINCIPALE =====
 
@@ -1143,126 +1167,116 @@ public class LstmTradePredictor {
         long t0 = System.currentTimeMillis();
 
         // Variables pour Early Stopping et sauvegarde du meilleur modèle
-        double bestScore = Double.POSITIVE_INFINITY;
+        double bestScore = Double.POSITIVE_INFINITY; // score train (fallback)
+        double bestValLoss = Double.POSITIVE_INFINITY; // suivi validation
         MultiLayerNetwork bestModel = null;              // Sauvegarde du meilleur modèle
-        int patience = config.getPatience();             // Nombre d'époques sans amélioration tolérées
-        double minDelta = config.getMinDelta();          // Amélioration minimale considérée comme significative
-        int epochsWithoutImprovement = 0;               // Compteur pour early stopping
+        int patience = config.getPatience();             // Patience train (fallback)
+        double minDelta = config.getMinDelta();          // Amélioration minimale
+        int epochsWithoutImprovement = 0;               // Compteur train
+        int epochsWithoutValImprovement = 0;            // Compteur validation
+        int patienceVal = config.getPatienceVal() > 0 ? config.getPatienceVal() : 5;
 
         // Étape 10: holder baseline variance résiduelle pour suivi amélioration HUBER
         Double[] baselineResidualVarHolder = new Double[]{null};
 
         // Boucle d'entraînement epoch par epoch
         for (int epoch = 1; epoch <= epochs; epoch++) {
-            // Remise à zéro de l'itérateur pour réutiliser les données
             iterator.reset();
-
-            // Exécution d'une époque complète d'entraînement
-            // fit() effectue la forward pass + backward pass (gradient descent)
             model.fit(iterator);
-
-            // ===== ÉVALUATION VARIANCE RÉSIDUELLE (Étape 10 HUBER) =====
-            // Prédictions sur l'ensemble d'entraînement (coût modeste car dataset réduit en mémoire)
-            org.nd4j.linalg.api.ndarray.INDArray preds = model.output(X, false);
-            org.nd4j.linalg.api.ndarray.INDArray residuals = y.sub(preds);
-            double residualVar = residuals.varNumber().doubleValue();
-            if (Double.isNaN(residualVar) || Double.isInfinite(residualVar)) residualVar = Double.POSITIVE_INFINITY;
-            // Initialisation baseline la première époque
-            // Utilisation de champs locaux via tableau pour conserver valeur mutable (si besoin extension future)
-            // (On garde local ici; si besoin cross-training => promouvoir en attribut)
-            if (epoch == 1) {
-                logger.info("[TRAIN][HUBER] Variance résiduelle baseline (epoch 1) = {}", String.format("%.6f", residualVar));
-            } else {
-                // On récupère la variance baseline stockée dans un tag de l'historique des logs :
-                // Pour simplicité, on la recalculera depuis epoch 1 si on veut; ici on mémorise localement.
-            }
-            // Mémo baseline hors boucle via variable statique locale
-            if (baselineResidualVarHolder[0] == null) baselineResidualVarHolder[0] = residualVar;
-            double baselineResidualVar = baselineResidualVarHolder[0];
-            double residualImprovement = (baselineResidualVar - residualVar) / baselineResidualVar;
-            if (residualImprovement >= 0.10) {
-                logger.info("[TRAIN][HUBER] Amélioration variance résiduelle >=10% ({}%) epoch {}", String.format("%.2f", residualImprovement * 100), epoch);
-            } else {
-                logger.debug("[TRAIN][HUBER] Variance résiduelle={} (amélioration {}%)", String.format("%.6f", residualVar), String.format("%.2f", residualImprovement * 100));
-            }
-
-            // ===== SCORE (LOSS) COURANT =====
-            double score = model.score(); // Peut représenter Huber désormais
-            if (Double.isNaN(score) || Double.isInfinite(score)) {
-                logger.error("[TRAIN][NaN] Score NaN/Inf détecté epoch {} -> arrêt anticipé (vérifier données / gradient clipping)", epoch);
-                break; // stop loop si dérive détectée
-            }
-
-            // ===== GESTION DU MEILLEUR MODÈLE ET EARLY STOPPING =====
-            // Vérification si on a une amélioration significative
-            boolean hasImproved = (bestScore - score) > minDelta;
-
-            if (hasImproved) {
-                // Nouvelle meilleure performance trouvée !
-                bestScore = score;
-                epochsWithoutImprovement = 0; // Reset du compteur de patience
-
-                // ===== SAUVEGARDE DU MEILLEUR MODÈLE =====
-                // Clone profond des paramètres du modèle pour préserver l'état optimal
-                if (bestModel == null) {
-                    // Première initialisation : crée une copie de l'architecture
-                    bestModel = model.clone();
+            // Calcul des losses train & validation après fit (cohérentes avec état courant)
+            double trainLoss = model.score(trainDs);
+            Double valLoss = null;
+            boolean valImproved = false;
+            boolean acceptanceValBetterThanTrain = false;
+            if (useInternalVal) {
+                valLoss = model.score(valDs);
+                acceptanceValBetterThanTrain = valLoss < (trainLoss + minDelta);
+                valImproved = (bestValLoss - valLoss) > minDelta;
+                if (valImproved) {
+                    bestValLoss = valLoss;
+                    epochsWithoutValImprovement = 0;
+                    if (bestModel == null) {
+                        bestModel = model.clone();
+                    } else {
+                        bestModel.setParams(model.params().dup());
+                    }
                 } else {
-                    // Copie uniquement les paramètres (plus efficace que clone complet)
-                    bestModel.setParams(model.params().dup());
+                    epochsWithoutValImprovement++;
                 }
-
-                logger.debug("[TRAIN][BEST] Époque {} - Nouveau meilleur score: {} (amélioration: {})",
-                           epoch, String.format("%.6f", bestScore), String.format("%.6f", bestScore - score + minDelta));
             } else {
-                // Pas d'amélioration significative
-                epochsWithoutImprovement++;
-
-                // ===== EARLY STOPPING =====
-                // Arrêt anticipé si pas d'amélioration depuis patience époques
-                if (patience > 0 && epochsWithoutImprovement >= patience) {
-                    logger.info("[TRAIN][EARLY-STOP] Arrêt anticipé à l'époque {}/{} après {} époques sans amélioration (patience={})",
-                              epoch, epochs, epochsWithoutImprovement, patience);
-                    break; // Sort de la boucle d'entraînement
+                // Fallback ancien critère train
+                double score = trainLoss;
+                boolean hasImproved = (bestScore - score) > minDelta;
+                if (hasImproved) {
+                    bestScore = score;
+                    epochsWithoutImprovement = 0;
+                    if (bestModel == null) bestModel = model.clone(); else bestModel.setParams(model.params().dup());
+                } else {
+                    epochsWithoutImprovement++;
                 }
             }
 
-            // ===== LOGGING PÉRIODIQUE ET MONITORING MÉMOIRE =====
-            // Log seulement sur certaines époques pour éviter le spam
-            if (epoch == 1 || epoch == epochs || epoch % Math.max(1, epochs / 10) == 0) {
-                // Récupération des statistiques mémoire
-                Runtime rt = Runtime.getRuntime();
-                long used = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);  // MB utilisées
-                long max = rt.maxMemory() / (1024 * 1024);                         // MB max disponibles
-
-                // Calcul du temps écoulé depuis le début
-                long elapsed = System.currentTimeMillis() - t0;
-
-                // Log informatif avec métriques clés de l'entraînement + early stopping info
-                logger.info("[TRAIN][EPOCH] {}/{} score={} best={} noImprove={}/{} elapsedMs={} memUsedMB={}/{}",
-                    epoch,                                  // Époque actuelle
-                    epochs,                                 // Total d'époques
-                    String.format("%.6f", score),         // Score actuel (6 décimales)
-                    String.format("%.6f", bestScore),     // Meilleur score atteint
-                    epochsWithoutImprovement,              // Époques sans amélioration
-                    patience,                              // Patience maximale
-                    elapsed,                               // Temps écoulé en ms
-                    used,                                  // Mémoire utilisée en MB
-                    max                                    // Mémoire max en MB
-                );
+            // Logging variance résiduelle (conserve bloc existant simplifié)
+            org.nd4j.linalg.api.ndarray.INDArray predsTrainDebug = null;
+            try { predsTrainDebug = model.output(XTrain, false); } catch (Exception ignored) {}
+            if (predsTrainDebug != null) {
+                org.nd4j.linalg.api.ndarray.INDArray residualsDbg = yTrain.sub(predsTrainDebug);
+                double residualVar = residualsDbg.varNumber().doubleValue();
+                if (epoch == 1) {
+                    logger.info("[TRAIN][HUBER] Var résiduelle train epoch1={} ", String.format(Locale.US, "%.6f", residualVar));
+                }
             }
+
+            // Early stopping conditions
+            boolean stop = false;
+            if (useInternalVal) {
+                if (patienceVal > 0 && epochsWithoutValImprovement >= patienceVal) {
+                    logger.info("[TRAIN][EARLY-STOP][VAL] Arrêt anticipé epoch={} (patienceVal={} sans amélioration) bestValLoss={}", epoch, patienceVal, String.format(Locale.US, "%.6f", bestValLoss));
+                    stop = true;
+                }
+            } else {
+                if (patience > 0 && epochsWithoutImprovement >= patience) {
+                    logger.info("[TRAIN][EARLY-STOP][TRAIN] Arrêt anticipé epoch={} (patience={} sans amélioration) bestScore={}", epoch, patience, String.format(Locale.US, "%.6f", bestScore));
+                    stop = true;
+                }
+            }
+
+            // Logging périodique enrichi
+            if (epoch == 1 || epoch == epochs || epoch % Math.max(1, epochs / 10) == 0 || stop) {
+                Runtime rt = Runtime.getRuntime();
+                long used = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
+                long max = rt.maxMemory() / (1024 * 1024);
+                long elapsed = System.currentTimeMillis() - t0;
+                if (useInternalVal) {
+                    logger.info("[TRAIN][EPOCH][VAL] {}/{} trainLoss={} valLoss={} bestVal={} noValImprove={}/{} acceptValBetterTrain={} improved={} elapsedMs={} memMB={}/{}", epoch, epochs,
+                        String.format(Locale.US, "%.6f", trainLoss),
+                        String.format(Locale.US, "%.6f", valLoss),
+                        String.format(Locale.US, "%.6f", bestValLoss),
+                        epochsWithoutValImprovement, patienceVal,
+                        acceptanceValBetterThanTrain,
+                        valImproved,
+                        elapsed, used, max);
+                } else {
+                    logger.info("[TRAIN][EPOCH] {}/{} trainLoss={} bestTrain={} noImprove={}/{} elapsedMs={} memMB={}/{}", epoch, epochs,
+                        String.format(Locale.US, "%.6f", trainLoss),
+                        String.format(Locale.US, "%.6f", bestScore),
+                        epochsWithoutImprovement, patience,
+                        elapsed, used, max);
+                }
+            }
+            if (stop) break;
         }
 
         // ===== PHASE 10: SÉLECTION DU MODÈLE FINAL =====
-        // Utilise le meilleur modèle trouvé pendant l'entraînement (pas le dernier)
         MultiLayerNetwork finalModel = bestModel != null ? bestModel : model;
-
-        // Log de confirmation du modèle retourné
         if (bestModel != null) {
-            logger.info("[TRAIN][FINAL] Retour du meilleur modèle (score={}) au lieu du modèle final",
-                       String.format("%.6f", bestScore));
+            if (useInternalVal) {
+                logger.info("[TRAIN][FINAL][VAL] Retour meilleur modèle validation (bestValLoss={})", String.format(Locale.US, "%.6f", bestValLoss));
+            } else {
+                logger.info("[TRAIN][FINAL] Retour meilleur modèle train (bestScore={})", String.format(Locale.US, "%.6f", bestScore));
+            }
         } else {
-            logger.warn("[TRAIN][FINAL] Aucune amélioration détectée, retour du modèle final (peut-être sous-optimal)");
+            logger.warn("[TRAIN][FINAL] Aucun modèle amélioré sauvegardé (fallback dernier état)");
         }
 
         // ===== PHASE 11: RETOUR DU RÉSULTAT FINAL =====
