@@ -175,7 +175,7 @@ public class LstmConfig {
     /** Active pipeline étiquettes scalaires + walk-forward. */
     private boolean useScalarV2 = false;
     /** Utilise le log-return comme cible (target) plutôt que le prix normalisé. */
-    private boolean useLogReturnTarget = false;
+    private boolean useLogReturnTarget = true;
     /** Active la validation walk-forward (utilisé si useScalarV2 = true). */
     private boolean useWalkForwardV2 = true;
     /** Nombre de segments (splits) dans la validation walk-forward. */

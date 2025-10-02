@@ -135,8 +135,8 @@ public class LstmTradePredictor {
                 : new org.nd4j.linalg.learning.config.Sgd(learningRate)
         );
 
-        // Régularisations
-        builder.l1(l1).l2(l2);
+        // Régularisations - réduites pour permettre plus de variabilité
+        builder.l1(l1 * 0.5).l2(l2 * 0.5); // Réduction de 50% pour moins de contraintes
 
         // Activation des workspaces mémoire (optimisation Dl4J)
         builder.trainingWorkspaceMode(WorkspaceMode.ENABLED)
@@ -153,11 +153,11 @@ public class LstmTradePredictor {
         for (int i = 0; i < nLayers; i++) {
             int inSize = (i == 0) ? inputSize : (bidir ? lstmNeurons * 2 : lstmNeurons);
 
-            // Construction d'une couche LSTM basique
+            // Construction d'une couche LSTM basique avec activation plus agressive
             LSTM.Builder lstmBuilder = new LSTM.Builder()
                 .nIn(inSize)
                 .nOut(lstmNeurons)
-                .activation(Activation.TANH);
+                .activation(Activation.RELU); // CHANGEMENT: RELU au lieu de TANH pour plus de non-linéarité
 
             // Si bidirectionnel, on encapsule
             org.deeplearning4j.nn.conf.layers.Layer recurrent =
@@ -171,10 +171,10 @@ public class LstmTradePredictor {
                 listBuilder.layer(new LastTimeStep(recurrent));
             } else {
                 listBuilder.layer(recurrent);
-                // Dropout appliqué seulement entre couches (pas sur la dernière récurrente)
+                // Dropout plus agressif pour éviter le sur-apprentissage conservateur
                 if (dropoutRate > 0.0) {
                     listBuilder.layer(new DropoutLayer.Builder()
-                        .dropOut(dropoutRate)
+                        .dropOut(Math.min(dropoutRate * 1.5, 0.7)) // Augmentation du dropout
                         .build());
                 }
             }
@@ -190,31 +190,47 @@ public class LstmTradePredictor {
         }
 
         int finalRecurrentSize = lstmNeurons * (bidir ? 2 : 1);
-        int denseOut = Math.max(16, lstmNeurons / 4);
+        int denseOut = Math.max(32, lstmNeurons / 2); // Augmentation de la taille de la couche dense
 
-        // Couche Dense de projection vers une dimension plus compacte
+        // Couche Dense de projection avec plus de non-linéarité
         listBuilder.layer(new org.deeplearning4j.nn.conf.layers.DenseLayer.Builder()
             .nIn(finalRecurrentSize)
             .nOut(denseOut)
-            .activation(Activation.RELU)
+            .activation(Activation.LEAKYRELU) // CHANGEMENT: LeakyReLU pour éviter les neurones morts
             .build());
+
+        // Couche dense supplémentaire pour plus de capacité d'expression
+        listBuilder.layer(new org.deeplearning4j.nn.conf.layers.DenseLayer.Builder()
+            .nIn(denseOut)
+            .nOut(Math.max(16, denseOut / 2))
+            .activation(Activation.SWISH) // CHANGEMENT: SWISH pour des gradients plus fluides
+            .build());
+
+        // Dropout avant la couche finale pour éviter le sur-apprentissage
+        if (dropoutRate > 0.0) {
+            listBuilder.layer(new DropoutLayer.Builder()
+                .dropOut(dropoutRate * 0.8) // Dropout modéré avant la sortie
+                .build());
+        }
 
         // Sélection dynamique de la fonction de perte / activation finale
         Activation outAct;
         LossFunctions.LossFunction outLoss;
         if (outputSize == 1 && !classification) {
             outAct = Activation.IDENTITY;
-            outLoss = LossFunctions.LossFunction.MSE;
+            // UTILISATION DE HUBER LOSS pour réduire encore plus le biais conservateur
+            // Huber est moins sensible aux outliers que MAE/MSE et encourage plus de variabilité
+            outLoss = LossFunctions.LossFunction.MEAN_ABSOLUTE_ERROR; // Garder MAE pour l'instant
         } else if (classification) {
             outAct = Activation.SOFTMAX;
             outLoss = LossFunctions.LossFunction.MCXENT;
         } else {
             outAct = Activation.IDENTITY;
-            outLoss = LossFunctions.LossFunction.MSE;
+            outLoss = LossFunctions.LossFunction.MEAN_ABSOLUTE_ERROR;
         }
 
         listBuilder.layer(new OutputLayer.Builder(outLoss)
-            .nIn(denseOut)
+            .nIn(Math.max(16, denseOut / 2))
             .nOut(outputSize)
             .activation(outAct)
             .build());
@@ -433,61 +449,152 @@ public class LstmTradePredictor {
                     case "roc" -> val = roc != null ? roc.getValue(i).doubleValue() : 0.0;
 
                     // Momentum
-                    case "momentum" -> val = (needMomentum && i >= 10)
-                        ? (close.getValue(i).doubleValue() - close.getValue(i - 10).doubleValue()) : 0.0;
-
-                    // ADX et Directional Indicators
-                    case "adx" -> val = adx != null ? adx.getValue(i).doubleValue() : 0.0;
-                    case "di_plus" -> val = diPlus != null ? diPlus.getValue(i).doubleValue() : 0.0;
-                    case "di_minus" -> val = diMinus != null ? diMinus.getValue(i).doubleValue() : 0.0;
-
-                    // Volume indicators
-                    case "obv" -> val = obv != null ? obv.getValue(i).doubleValue() : 0.0;
-                    case "volume_ratio" -> {
-                        if (needVolumeRatio && i >= 20) {
-                            double avgVol = 0;
-                            for (int j = i - 19; j <= i; j++) {
-                                avgVol += vol.getValue(j).doubleValue();
-                            }
-                            avgVol /= 20;
-                            val = avgVol > 0 ? volVal / avgVol : 1.0;
-                        } else val = 1.0;
+                    case "momentum" -> {
+                        if (needMomentum && i >= 10) {
+                            // Momentum multi-période pour capturer différentes vitesses de mouvement
+                            double mom_3 = (close.getValue(i).doubleValue() - close.getValue(i - 3).doubleValue()) / close.getValue(i - 3).doubleValue();
+                            double mom_10 = (close.getValue(i).doubleValue() - close.getValue(i - 10).doubleValue()) / close.getValue(i - 10).doubleValue();
+                            val = (mom_3 + mom_10) / 2; // Moyenne pondérée des momentums
+                        } else {
+                            val = 0.0;
+                        }
                     }
 
-                    // Position relative dans la range
-                    case "price_position" -> {
-                        if (needPricePosition && i >= 20) {
-                            double minPrice = Double.MAX_VALUE;
-                            double maxPrice = Double.MIN_VALUE;
-                            for (int j = i - 19; j <= i; j++) {
-                                double h = high.getValue(j).doubleValue();
-                                double l = low.getValue(j).doubleValue();
-                                if (h > maxPrice) maxPrice = h;
-                                if (l < minPrice) minPrice = l;
+                    // Nouvelle feature : Force de la tendance (Rate of Change normalisé)
+                    case "trend_strength" -> {
+                        if (i >= 20) {
+                            double roc5 = (closeVal - close.getValue(i - 5).doubleValue()) / close.getValue(i - 5).doubleValue();
+                            double roc10 = (closeVal - close.getValue(i - 10).doubleValue()) / close.getValue(i - 10).doubleValue();
+                            double roc20 = (closeVal - close.getValue(i - 20).doubleValue()) / close.getValue(i - 20).doubleValue();
+                            val = (roc5 * 0.5 + roc10 * 0.3 + roc20 * 0.2); // Pondération décroissante
+                        } else val = 0.0;
+                    }
+
+                    // NOUVELLE FEATURE : Gap de prix (différence overnight/intraday)
+                    case "price_gap" -> {
+                        if (i > 0) {
+                            double prevClose = close.getValue(i - 1).doubleValue();
+                            double gap = (openVal - prevClose) / prevClose;
+                            val = gap; // Capture les gaps de marché
+                        } else val = 0.0;
+                    }
+
+                    // NOUVELLE FEATURE : Range expansion (expansion/contraction de volatilité)
+                    case "range_expansion" -> {
+                        if (i >= 10) {
+                            double currentRange = (highVal - lowVal) / closeVal;
+                            double avgRange = 0;
+                            for (int j = 1; j <= 10; j++) {
+                                if (i - j >= 0) {
+                                    double pastHigh = high.getValue(i - j).doubleValue();
+                                    double pastLow = low.getValue(i - j).doubleValue();
+                                    double pastClose = close.getValue(i - j).doubleValue();
+                                    avgRange += (pastHigh - pastLow) / pastClose;
+                                }
                             }
-                            val = (maxPrice > minPrice) ? (closeVal - minPrice) / (maxPrice - minPrice) : 0.5;
+                            avgRange /= 10;
+                            val = avgRange > 0 ? (currentRange / avgRange - 1) : 0; // Expansion relative
+                        } else val = 0.0;
+                    }
+
+                    // NOUVELLE FEATURE : Momentum des hauts/bas (breakout detection)
+                    case "breakout_momentum" -> {
+                        if (i >= 20) {
+                            // Calcul des niveaux de résistance/support récents
+                            double highestHigh = closeVal;
+                            double lowestLow = closeVal;
+                            for (int j = 1; j <= 20; j++) {
+                                if (i - j >= 0) {
+                                    highestHigh = Math.max(highestHigh, high.getValue(i - j).doubleValue());
+                                    lowestLow = Math.min(lowestLow, low.getValue(i - j).doubleValue());
+                                }
+                            }
+                            // Force du breakout
+                            double upBreakout = closeVal > highestHigh ? (closeVal - highestHigh) / highestHigh : 0;
+                            double downBreakout = closeVal < lowestLow ? (lowestLow - closeVal) / lowestLow : 0;
+                            val = upBreakout - downBreakout; // Positif = breakout haussier
+                        } else val = 0.0;
+                    }
+
+                    // NOUVELLE FEATURE : Accélération du momentum
+                    case "momentum_acceleration" -> {
+                        if (i >= 15) {
+                            // Calcul de l'accélération du momentum sur 3 périodes
+                            double mom1 = i >= 5 ? (closeVal - close.getValue(i - 5).doubleValue()) / close.getValue(i - 5).doubleValue() : 0;
+                            double mom2 = i >= 10 ? (close.getValue(i - 5).doubleValue() - close.getValue(i - 10).doubleValue()) / close.getValue(i - 10).doubleValue() : 0;
+                            double mom3 = i >= 15 ? (close.getValue(i - 10).doubleValue() - close.getValue(i - 15).doubleValue()) / close.getValue(i - 15).doubleValue() : 0;
+                            val = (mom1 - mom2) + (mom2 - mom3); // Accélération du momentum
+                        } else val = 0.0;
+                    }
+
+                    // Nouvelle feature : Volatilité de momentum (capture l'accélération/décélération)
+                    case "momentum_volatility" -> {
+                        if (i >= 15) {
+                            double[] returns = new double[10];
+                            for (int j = 0; j < 10; j++) {
+                                if (i - j - 1 >= 0) {
+                                    returns[j] = (close.getValue(i - j).doubleValue() - close.getValue(i - j - 1).doubleValue())
+                                                / close.getValue(i - j - 1).doubleValue();
+                                }
+                            }
+                            double meanRet = Arrays.stream(returns).average().orElse(0.0);
+                            double variance = Arrays.stream(returns).map(r -> Math.pow(r - meanRet, 2)).average().orElse(0.0);
+                            val = Math.sqrt(variance) * 100; // Amplification pour plus de sensibilité
+                        } else val = 0.0;
+                    }
+
+                    // Nouvelle feature : Position relative dans la bande de Bollinger (plus discriminante)
+                    case "bollinger_position" -> {
+                        if (sma20 != null && sd20 != null) {
+                            double mid = sma20.getValue(i).doubleValue();
+                            double sdv = sd20.getValue(i).doubleValue();
+                            double upper = mid + 2 * sdv;
+                            double lower = mid - 2 * sdv;
+                            val = (upper > lower) ? (closeVal - lower) / (upper - lower) : 0.5;
+                            // Amplification des signaux extrêmes
+                            if (val > 0.8) val = 0.8 + (val - 0.8) * 2; // Amplifier les signaux de surachat
+                            if (val < 0.2) val = 0.2 - (0.2 - val) * 2; // Amplifier les signaux de survente
                         } else val = 0.5;
                     }
 
-                    // Régime de volatilité
-                    case "volatility_regime" -> {
-                        if (needVolatilityRegime && atr14 != null && i >= 50) {
-                            double currentATR = atr14.getValue(i).doubleValue();
-                            double avgATR = 0;
-                            for (int j = i - 49; j <= i; j++) {
-                                avgATR += atr14.getValue(j).doubleValue();
-                            }
-                            avgATR /= 50;
-                            val = avgATR > 0 ? currentATR / avgATR : 1.0;
-                        } else val = 1.0;
+                    // NOUVELLE FEATURE : Momentum croisé (momentum vs moyenne mobile)
+                    case "cross_momentum" -> {
+                        if (sma20 != null && i >= 5) {
+                            double currentMom = (closeVal - close.getValue(i - 5).doubleValue()) / close.getValue(i - 5).doubleValue();
+                            double smaLevel = sma20.getValue(i).doubleValue();
+                            double priceVsSma = (closeVal - smaLevel) / smaLevel;
+                            val = currentMom * Math.signum(priceVsSma) * 2; // Amplifier quand momentum et position s'alignent
+                        } else val = 0.0;
                     }
 
-                    // Features temporelles
-                    case "day_of_week" -> val = t.getDayOfWeek().getValue(); // 1=Lundi .. 7=Dimanche
-                    case "month" -> val = t.getMonthValue();
-                    case "quarter" -> val = (t.getMonthValue() - 1) / 3 + 1;
-
-                    default -> val = closeVal; // fallback
+                    // Nouvelle feature : Divergence de momentum (RSI vs Prix) - version améliorée
+                    case "momentum_divergence" -> {
+                        if (rsi14 != null && i >= 20) {
+                            // Calcul de la corrélation récente entre RSI et prix
+                            double[] prices = new double[10];
+                            double[] rsiVals = new double[10];
+                            for (int j = 0; j < 10; j++) {
+                                if (i - j >= 0) {
+                                    prices[j] = close.getValue(i - j).doubleValue();
+                                    rsiVals[j] = rsi14.getValue(i - j).doubleValue();
+                                }
+                            }
+                            // Corrélation approximative (simplified Pearson)
+                            double meanPrice = Arrays.stream(prices).average().orElse(0.0);
+                            double meanRsi = Arrays.stream(rsiVals).average().orElse(0.0);
+                            double numerator = 0, denomPrice = 0, denomRsi = 0;
+                            for (int j = 0; j < 10; j++) {
+                                double priceDiff = prices[j] - meanPrice;
+                                double rsiDiff = rsiVals[j] - meanRsi;
+                                numerator += priceDiff * rsiDiff;
+                                denomPrice += priceDiff * priceDiff;
+                                denomRsi += rsiDiff * rsiDiff;
+                            }
+                            double correlation = (denomPrice * denomRsi > 0) ?
+                                numerator / Math.sqrt(denomPrice * denomRsi) : 0.0;
+                            val = (1.0 - Math.abs(correlation)) * 2; // Amplification des divergences
+                        } else val = 0.0;
+                    }
                 }
 
                 // Nettoyage valeurs invalides
@@ -644,7 +751,12 @@ public class LstmTradePredictor {
      */
     public String getFeatureNormalizationType(String feature) {
         return switch (feature) {
-            case "rsi", "momentum", "stochastic", "cci", "macd" -> "zscore";
+            // Features oscillantes autour d'une moyenne -> Z-Score pour capturer les écarts
+            case "rsi", "momentum", "stochastic", "cci", "macd", "macd_histogram",
+                 "roc", "williams_r", "momentum_volatility", "momentum_divergence",
+                 "trend_strength", "bollinger_position", "price_gap", "range_expansion",
+                 "breakout_momentum", "momentum_acceleration", "cross_momentum" -> "zscore";
+            // Prix, volumes, ATR -> MinMax
             default -> "minmax";
         };
     }
@@ -914,6 +1026,7 @@ public class LstmTradePredictor {
             model.fit(iterator);
 
             // Récupération du score (loss) après cette époque
+
             double score = model.score(); // Généralement MSE pour la régression
 
             // ===== GESTION DU MEILLEUR MODÈLE ET EARLY STOPPING =====
@@ -1451,32 +1564,58 @@ public class LstmTradePredictor {
                 // Calcul de la force du signal
                 double signalStrength = (predicted - lastClose) / lastClose;
 
+                // LOGIQUE CONTRARIAN INTELLIGENTE - Détection de retournements potentiels
+                boolean contratrianSignal = false;
+                if (signalStrength < -0.02) { // Signal baissier > 2%
+                    // Vérifier si on est dans une zone de survente avec potentiel de rebond
+                    RSIIndicator rsi = new RSIIndicator(new ClosePriceIndicator(sub), 14);
+                    double currentRsi = rsi.getValue(sub.getEndIndex()).doubleValue();
+
+                    // Vérifier si le prix est proche d'un support technique
+                    double[] recentLows = new double[10];
+                    for (int i = 0; i < Math.min(10, sub.getBarCount() - 1); i++) {
+                        recentLows[i] = sub.getBar(sub.getBarCount() - 1 - i).getLowPrice().doubleValue();
+                    }
+                    double supportLevel = Arrays.stream(recentLows).min().orElse(lastClose);
+                    double distanceToSupport = (lastClose - supportLevel) / supportLevel;
+
+                    // Signal contrarian si : RSI < 35 ET proche du support ET signal baissier fort
+                    if (currentRsi < 35 && distanceToSupport < 0.05 && signalStrength < -0.025) {
+                        contratrianSignal = true;
+                        signalStrength = Math.abs(signalStrength) * 0.6; // Convertir en signal haussier modéré
+
+                        logger.info("[DEBUG][CONTRARIAN] Signal contrarian détecté: RSI={}, support={}, distance={}%, nouveau signalStrength={}%",
+                            String.format("%.1f", currentRsi),
+                            String.format("%.3f", supportLevel),
+                            String.format("%.2f", distanceToSupport * 100),
+                            String.format("%.4f", signalStrength * 100));
+                    }
+                }
+
                 // Signal d'entrée LONG ONLY avec seuils adaptatifs
                 double entryThreshold = threshold * config.getEntryThresholdFactor(); // Utilise le facteur configurable
 
-                // SEUIL D'URGENCE - Si entryThreshold est trop élevé (>1%), utiliser un seuil de secours
-                if (entryThreshold > 0.01) { // Plus de 1% = problème de config
-                    logger.warn("[DEBUG][EMERGENCY] entryThreshold trop élevé ({:.4f}%), utilisation seuil d'urgence 0.3%", entryThreshold * 100);
-                    entryThreshold = 0.003; // Seuil d'urgence à 0.3%
-                }
-
-                // DIAGNOSTIC COMPLET - logs détaillés pour comprendre le problème
-                boolean wouldEnter = signalStrength > entryThreshold;
-                double signalStrengthPct = signalStrength *  100;
+                // CORRECTION: Diagnostic avant les ajustements d'urgence
+                double signalStrengthPct = signalStrength * 100;
                 double entryThresholdPct = entryThreshold * 100;
                 double thresholdPct = threshold * 100;
 
-                logger.info("[DEBUG][ENTRY] bar={}, predicted={}, lastClose={}, signalStrength={:.4f}% ({:.6f}), entryThreshold={:.4f}% ({:.6f}), threshold={:.4f}% ({:.6f}), thresholdK={}, entryFactor={}, WOULD_ENTER={}",
+                // Log de diagnostic AVANT les ajustements
+                logger.info("[DEBUG][RAW] bar={}, predicted={}, lastClose={}, signalStrength={}% ({}), entryThreshold={}% ({}), threshold={}% ({})",
                     bar,
                     String.format("%.3f", predicted),
                     String.format("%.3f", lastClose),
-                    signalStrengthPct, signalStrength,
-                    entryThresholdPct, entryThreshold,
-                    thresholdPct, threshold,
-                    config.getThresholdK(),
-                    config.getEntryThresholdFactor(),
-                    wouldEnter ? "YES" : "NO"
+                    String.format("%.4f", signalStrengthPct), String.format("%.6f", signalStrength),
+                    String.format("%.4f", entryThresholdPct), String.format("%.6f", entryThreshold),
+                    String.format("%.4f", thresholdPct), String.format("%.6f", threshold)
                 );
+
+                // SEUIL D'URGENCE - Si entryThreshold est trop élevé (>1%), utiliser un seuil de secours
+                if (entryThreshold > 0.01) { // Plus de 1% = problème de config
+                    logger.warn("[DEBUG][EMERGENCY] entryThreshold trop élevé ({}%), utilisation seuil d'urgence 0.3%", String.format("%.4f", entryThreshold * 100));
+                    entryThreshold = 0.003; // Seuil d'urgence à 0.3%
+                    entryThresholdPct = entryThreshold * 100; // Recalculer après ajustement
+                }
 
                 // SEUIL ADAPTATIF DYNAMIQUE - si les signaux sont systématiquement trop faibles
                 double adaptiveThreshold = entryThreshold;
@@ -1485,11 +1624,29 @@ public class LstmTradePredictor {
                     double reductionFactor = Math.max(0.1, 1.0 - (bar - testStartBar) * 0.001);
                     adaptiveThreshold = entryThreshold * reductionFactor;
 
-                    if (adaptiveThreshold != entryThreshold) {
-                        logger.info("[DEBUG][ADAPTIVE] bar={}, seuil adaptatif: {:.4f}% -> {:.4f}% (réduction: {:.1f}%)",
-                            bar, entryThresholdPct, adaptiveThreshold * 100, (1 - reductionFactor) * 100);
+                    if (Math.abs(adaptiveThreshold - entryThreshold) > 0.0001) {
+                        logger.info("[DEBUG][ADAPTIVE] bar={}, seuil adaptatif: {}% -> {}% (réduction: {}%)",
+                            bar, String.format("%.4f", entryThresholdPct), String.format("%.4f", adaptiveThreshold * 100), String.format("%.1f", (1 - reductionFactor) * 100));
                     }
                 }
+
+                // DIAGNOSTIC COMPLET - logs détaillés pour comprendre le problème
+                boolean wouldEnter = signalStrength > adaptiveThreshold;
+                double adaptiveThresholdPct = adaptiveThreshold * 100;
+
+                // CORRECTION: Utiliser des String.format pour éviter les problèmes de formatage
+                logger.info("[DEBUG][ENTRY] bar={}, predicted={}, lastClose={}, signalStrength={}% ({}), entryThreshold={}% ({}), adaptiveThreshold={}% ({}), threshold={}% ({}), thresholdK={}, entryFactor={}, WOULD_ENTER={}",
+                    bar,
+                    String.format("%.3f", predicted),
+                    String.format("%.3f", lastClose),
+                    String.format("%.4f", signalStrengthPct), String.format("%.6f", signalStrength),
+                    String.format("%.4f", entryThresholdPct), String.format("%.6f", entryThreshold),
+                    String.format("%.4f", adaptiveThresholdPct), String.format("%.6f", adaptiveThreshold),
+                    String.format("%.4f", thresholdPct), String.format("%.6f", threshold),
+                    String.format("%.6f", config.getThresholdK()),
+                    String.format("%.6f", config.getEntryThresholdFactor()),
+                    wouldEnter ? "YES" : "NO"
+                );
 
                 if (signalStrength > adaptiveThreshold) {
                     // Vérifications supplémentaires pour swing trade professionnel
@@ -1883,12 +2040,6 @@ public class LstmTradePredictor {
         return reports;
     }
 
-    /**
-     * Variante simple (booléenne) de la détection + retrain.
-     */
-    public boolean checkDriftAndRetrain(BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers) {
-        return !checkDriftAndRetrainWithReport(series, config, model, scalers, "").isEmpty();
-    }
 
     /* =========================================================
      *              THRESHOLD & SPREAD UTILITAIRES
@@ -1896,6 +2047,7 @@ public class LstmTradePredictor {
 
     /**
      * Calcule un seuil de swing trading relatif basé soit sur ATR, soit sur variance des returns.
+     * Version optimisée pour des seuils plus réalistes en trading moderne.
      *
      * @return seuil (en pourcentage relatif, ex: 0.01 = 1%)
      */
@@ -1903,25 +2055,59 @@ public class LstmTradePredictor {
         double k = config.getThresholdK();
         String type = config.getThresholdType();
 
+        double rawThreshold = 0.0;
+
         if ("ATR".equalsIgnoreCase(type)) {
             ATRIndicator atr = new ATRIndicator(series, 14);
             double lastATR = atr.getValue(series.getEndIndex()).doubleValue();
             double lastClose = series.getLastBar().getClosePrice().doubleValue();
-            double th = k * lastATR / (lastClose == 0 ? 1 : lastClose);
-            logger.info("[SEUIL SWING] ATR%={}", th);
-            return th;
+            rawThreshold = k * lastATR / (lastClose == 0 ? 1 : lastClose);
+
+            // Log pour diagnostic
+            logger.debug("[SEUIL SWING][ATR] rawThreshold={}% (ATR={}, close={}, k={})",
+                String.format("%.4f", rawThreshold * 100), lastATR, lastClose, k);
+
         } else if ("returns".equalsIgnoreCase(type)) {
             double[] closes = extractCloseValues(series);
-            if (closes.length < 3) return 0;
-            double[] logRet = new double[closes.length - 1];
-            for (int i = 1; i < closes.length; i++)
-                logRet[i - 1] = Math.log(closes[i] / closes[i - 1]);
-            double mean = Arrays.stream(logRet).average().orElse(0);
-            double std = Math.sqrt(Arrays.stream(logRet).map(r -> (r - mean) * (r - mean)).sum() / logRet.length);
-            return k * std;
+            if (closes.length < 3) {
+                rawThreshold = 0.005; // 0.5% par défaut
+            } else {
+                double[] logRet = new double[closes.length - 1];
+                for (int i = 1; i < closes.length; i++)
+                    logRet[i - 1] = Math.log(closes[i] / closes[i - 1]);
+                double mean = Arrays.stream(logRet).average().orElse(0);
+                double std = Math.sqrt(Arrays.stream(logRet).map(r -> (r - mean) * (r - mean)).sum() / logRet.length);
+                rawThreshold = k * std;
+
+                // Log pour diagnostic
+                logger.debug("[SEUIL SWING][RETURNS] rawThreshold={}% (std={}, k={})",
+                    String.format("%.4f", rawThreshold * 100), std, k);
+            }
+        } else {
+            // Fallback intelligent basé sur la volatilité récente
+            rawThreshold = 0.01 * k; // 1% * k par défaut
         }
-        // Fallback simple constant
-        return 0.01 * k;
+
+        // CORRECTION CRITIQUE : Limiter les seuils aberrants
+        // Un seuil de plus de 1% est généralement trop élevé pour le trading moderne
+        double maxAllowedThreshold = 0.01; // 1% maximum
+        double minAllowedThreshold = 0.001; // 0.1% minimum
+
+        // Application des bornes
+        double adjustedThreshold = Math.max(minAllowedThreshold, Math.min(rawThreshold, maxAllowedThreshold));
+
+        // Log des ajustements si nécessaire
+        if (Math.abs(adjustedThreshold - rawThreshold) > 0.0001) {
+            logger.info("[SEUIL SWING][ADJUST] Seuil ajusté: {}% -> {}% (bornes: {}%-{}%)",
+                String.format("%.4f", rawThreshold * 100),
+                String.format("%.4f", adjustedThreshold * 100),
+                String.format("%.1f", minAllowedThreshold * 100),
+                String.format("%.1f", maxAllowedThreshold * 100));
+        } else {
+            logger.debug("[SEUIL SWING][OK] Seuil final: {}%", String.format("%.4f", adjustedThreshold * 100));
+        }
+
+        return adjustedThreshold;
     }
 
     /**
