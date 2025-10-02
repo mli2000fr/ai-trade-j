@@ -15,8 +15,8 @@ Ajouter flag config useMultiHorizonAvg (fallback si absent). Acceptation: distri
 Dans train: si useLogReturnTarget alors labelScaler.Type.ZSCORE.
 Migration backward compatible (si scalers JSON ancien = MinMax, détecter et reconstruire). Acceptation: std(label normalisé) ≈ 1, pas de plateau < 1e-3.
 
-PHASE 2 – Normalisation & Features Étape
-4. Ajout feature realized_vol Objectif: meilleur lien signal/volatilité. Actions:
+PHASE 2 – Normalisation & Features
+Étape 4. Ajout feature realized_vol Objectif: meilleur lien signal/volatilité. Actions:
 realized_vol = std(log-return derniers N=14)*sqrt(14).
 Normalisation ZScore. Acceptation: feature non constante (> 20 valeurs distinctes sur dataset).
 

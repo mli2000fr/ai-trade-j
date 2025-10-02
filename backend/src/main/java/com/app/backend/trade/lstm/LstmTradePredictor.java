@@ -295,6 +295,46 @@ public class LstmTradePredictor {
         double[][] M = new double[n][fCount];
         if (n == 0) return M;
 
+        // Pré-calcul spécifique realized_vol si demandé
+        boolean needRealizedVol = features.contains("realized_vol");
+        double[] realizedVol = null;
+        if (needRealizedVol) {
+            final int WIN = 14; // fenêtre log-returns
+            double[] closesRaw = new double[n];
+            for (int i = 0; i < n; i++) closesRaw[i] = series.getBar(i).getClosePrice().doubleValue();
+            double[] logRet = new double[n];
+            logRet[0] = 0.0;
+            for (int i = 1; i < n; i++) {
+                double prev = closesRaw[i - 1];
+                double cur = closesRaw[i];
+                if (prev > 0 && cur > 0) {
+                    double lr = Math.log(cur / prev);
+                    if (Double.isFinite(lr)) logRet[i] = lr; else logRet[i] = 0.0;
+                } else logRet[i] = 0.0;
+            }
+            realizedVol = new double[n];
+            double sum = 0.0, sum2 = 0.0;
+            // Sliding window
+            for (int i = 0; i < n; i++) {
+                double r = logRet[i];
+                sum += r; sum2 += r * r;
+                if (i >= WIN) { // retirer élément sorti de fenêtre
+                    double old = logRet[i - WIN];
+                    sum -= old;
+                    sum2 -= old * old;
+                }
+                if (i >= WIN) { // fenêtre pleine WIN éléments (indices i-WIN+1 .. i)
+                    double mean = sum / WIN;
+                    double var = (sum2 / WIN) - mean * mean;
+                    if (var < 0) var = 0;
+                    realizedVol[i] = Math.sqrt(var) * Math.sqrt(WIN);
+                } else {
+                    realizedVol[i] = 0.0; // insuffisant historique
+                }
+                if (!Double.isFinite(realizedVol[i])) realizedVol[i] = 0.0;
+            }
+        }
+
         // Indicateurs de base
         ClosePriceIndicator close = new ClosePriceIndicator(series);
         HighPriceIndicator high = new HighPriceIndicator(series);
@@ -570,7 +610,6 @@ public class LstmTradePredictor {
                     // Nouvelle feature : Divergence de momentum (RSI vs Prix) - version améliorée
                     case "momentum_divergence" -> {
                         if (rsi14 != null && i >= 20) {
-                            // Calcul de la corrélation récente entre RSI et prix
                             double[] prices = new double[10];
                             double[] rsiVals = new double[10];
                             for (int j = 0; j < 10; j++) {
@@ -579,7 +618,6 @@ public class LstmTradePredictor {
                                     rsiVals[j] = rsi14.getValue(i - j).doubleValue();
                                 }
                             }
-                            // Corrélation approximative (simplified Pearson)
                             double meanPrice = Arrays.stream(prices).average().orElse(0.0);
                             double meanRsi = Arrays.stream(rsiVals).average().orElse(0.0);
                             double numerator = 0, denomPrice = 0, denomRsi = 0;
@@ -590,16 +628,36 @@ public class LstmTradePredictor {
                                 denomPrice += priceDiff * priceDiff;
                                 denomRsi += rsiDiff * rsiDiff;
                             }
-                            double correlation = (denomPrice * denomRsi > 0) ?
-                                numerator / Math.sqrt(denomPrice * denomRsi) : 0.0;
-                            val = (1.0 - Math.abs(correlation)) * 2; // Amplification des divergences
+                            double correlation = (denomPrice * denomRsi > 0) ? numerator / Math.sqrt(denomPrice * denomRsi) : 0.0;
+                            val = (1.0 - Math.abs(correlation)) * 2;
                         } else val = 0.0;
+                    }
+                    case "realized_vol" -> {
+                        // Valeur déjà pré-calculée
+                        val = needRealizedVol ? realizedVol[i] : 0.0;
                     }
                 }
 
                 // Nettoyage valeurs invalides
                 if (Double.isNaN(val) || Double.isInfinite(val)) val = 0.0;
                 M[i][f] = val;
+            }
+        }
+
+        // Vérification diversité realized_vol (si calculée)
+        if (needRealizedVol) {
+            try {
+                int col = features.indexOf("realized_vol");
+                java.util.Set<Double> distinct = new java.util.HashSet<>();
+                for (int i = 0; i < n; i++) distinct.add(M[i][col]);
+                int distinctCount = distinct.size();
+                if (distinctCount <= 20) {
+                    logger.warn("[FEATURE][REALIZED_VOL] Faible diversité ({} valeurs distinctes <=20) - vérifier dataset", distinctCount);
+                } else {
+                    logger.debug("[FEATURE][REALIZED_VOL] Diversité OK ({} valeurs distinctes)", distinctCount);
+                }
+            } catch (Exception e) {
+                logger.warn("[FEATURE][REALIZED_VOL] Échec comptage diversité: {}", e.getMessage());
             }
         }
         return M;
@@ -755,7 +813,8 @@ public class LstmTradePredictor {
             case "rsi", "momentum", "stochastic", "cci", "macd", "macd_histogram",
                  "roc", "williams_r", "momentum_volatility", "momentum_divergence",
                  "trend_strength", "bollinger_position", "price_gap", "range_expansion",
-                 "breakout_momentum", "momentum_acceleration", "cross_momentum" -> "zscore";
+                 "breakout_momentum", "momentum_acceleration", "cross_momentum",
+                 "realized_vol" -> "zscore"; // <-- ajout realized_vol
             // Prix, volumes, ATR -> MinMax
             default -> "minmax";
         };
