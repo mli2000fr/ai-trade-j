@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.app.backend.trade.lstm.LstmDataAuditService;
 
 @Controller
 public class LstmHelper {
@@ -48,6 +49,8 @@ public class LstmHelper {
     private final LstmTradePredictor lstmTradePredictor;
     // Service de génération / tuning d'hyperparamètres
     private final LstmTuningService lstmTuningService;
+    // Service d'audit des données (ajouté)
+    private final LstmDataAuditService lstmDataAuditService;
 
     // Logger standard SLF4J
     private static final Logger logger = LoggerFactory.getLogger(LstmHelper.class);
@@ -68,6 +71,7 @@ public class LstmHelper {
         this.jdbcTemplate = jdbcTemplate;
         this.lstmTradePredictor = lstmTradePredictor;
         this.lstmTuningService = lstmTuningService;
+        this.lstmDataAuditService = new LstmDataAuditService(this);
     }
 
     /**
@@ -445,6 +449,16 @@ public class LstmHelper {
      */
     public java.util.List<LstmTradePredictor.DriftReportEntry> getDriftReports() {
         return new java.util.ArrayList<>(driftReports);
+    }
+
+    /**
+     * Lance un audit complet des données pour tous les symboles filtrés.
+     * @param windowSize taille de la fenêtre d'entrée
+     * @param horizonBars horizon de prédiction
+     * @return liste des symboles valides
+     */
+    public List<String> auditAllSymbols(int windowSize, int horizonBars) {
+        return lstmDataAuditService.auditAllSymbols(windowSize, horizonBars);
     }
 
 }
