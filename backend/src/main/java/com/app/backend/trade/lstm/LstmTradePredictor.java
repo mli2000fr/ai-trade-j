@@ -704,6 +704,29 @@ public class LstmTradePredictor {
         return M;
     }
 
+    // Méthode utilitaire: calcul skewness (3ème moment centré normalisé)
+    private double computeSkewness(double[] data) {
+        if (data == null || data.length == 0) return 0.0;
+        int n = data.length;
+        double mean = 0.0;
+        for (double v : data) mean += v;
+        mean /= n;
+        double m2 = 0.0, m3 = 0.0;
+        for (double v : data) {
+            double d = v - mean;
+            double d2 = d * d;
+            m2 += d2;
+            m3 += d2 * d;
+        }
+        if (m2 == 0) return 0.0;
+        double var = m2 / n;
+        double std = Math.sqrt(var);
+        if (std < 1e-12) return 0.0;
+        double skew = (m3 / n) / (std * std * std);
+        if (!Double.isFinite(skew)) return 0.0;
+        return skew;
+    }
+
     /* =========================================================
      *               OUTILS MANIPULATION SHAPES
      * ========================================================= */
@@ -1179,6 +1202,12 @@ public class LstmTradePredictor {
         // Étape 10: holder baseline variance résiduelle pour suivi amélioration HUBER
         Double[] baselineResidualVarHolder = new Double[]{null};
 
+        // Étape 12: Variables scheduler LR (réduction multiplicative simple toutes les 25 epochs)
+        double currentLearningRate = config.getLearningRate();
+        boolean lrReducedOnce = false;                        // Indique si une première réduction a eu lieu
+        double bestValLossAtFirstLrReduction = Double.NaN;    // Snapshot du bestValLoss au moment de la 1ère réduction
+        boolean lrFirstReductionImproved = false;             // Flag acceptation: amélioration après 1ère réduction
+
         // Boucle d'entraînement epoch par epoch
         for (int epoch = 1; epoch <= epochs; epoch++) {
             iterator.reset();
@@ -1202,6 +1231,15 @@ public class LstmTradePredictor {
                     }
                 } else {
                     epochsWithoutValImprovement++;
+                }
+                // Étape 12: vérification acceptation amélioration après première réduction
+                if (lrReducedOnce && !lrFirstReductionImproved && valLoss != null && Double.isFinite(bestValLossAtFirstLrReduction)) {
+                    if ((bestValLossAtFirstLrReduction - valLoss) > minDelta) {
+                        lrFirstReductionImproved = true;
+                        logger.info("[TRAIN][LR-SCHED][ACCEPT] Amélioration val_loss après 1ère réduction LR: avant={} après={}",
+                            String.format(Locale.US, "%.6f", bestValLossAtFirstLrReduction),
+                            String.format(Locale.US, "%.6f", valLoss));
+                    }
                 }
             } else {
                 // Fallback ancien critère train
@@ -1227,6 +1265,24 @@ public class LstmTradePredictor {
                 }
             }
 
+            // Étape 12: Scheduler LR simple (appliqué APRÈS calcul des losses de l'époque -> agit pour l'époque suivante)
+            if (epoch % 25 == 0) {
+                double newLR = currentLearningRate * 0.9; // réduction multiplicative
+                // Floor de sécurité pour éviter LR trop bas (optionnel)
+                if (newLR < 1e-6) newLR = 1e-6;
+                if (!lrReducedOnce) {
+                    lrReducedOnce = true;
+                    bestValLossAtFirstLrReduction = bestValLoss; // snapshot pour critère Acceptation
+                }
+                if (Math.abs(newLR - currentLearningRate) > 1e-12) {
+                    applyLearningRate(model, newLR);
+                    logger.info("[TRAIN][LR-SCHED] Réduction LR epoch={} ancienLR={} nouveauLR={}", epoch,
+                        String.format(Locale.US, "%.8f", currentLearningRate),
+                        String.format(Locale.US, "%.8f", newLR));
+                    currentLearningRate = newLR;
+                }
+            }
+
             // Early stopping conditions
             boolean stop = false;
             if (useInternalVal) {
@@ -1248,19 +1304,23 @@ public class LstmTradePredictor {
                 long max = rt.maxMemory() / (1024 * 1024);
                 long elapsed = System.currentTimeMillis() - t0;
                 if (useInternalVal) {
-                    logger.info("[TRAIN][EPOCH][VAL] {}/{} trainLoss={} valLoss={} bestVal={} noValImprove={}/{} acceptValBetterTrain={} improved={} elapsedMs={} memMB={}/{}", epoch, epochs,
+                    logger.info("[TRAIN][EPOCH][VAL] {}/{} trainLoss={} valLoss={} bestVal={} noValImprove={}/{} acceptValBetterTrain={} improved={} lr={} reducedOnce={} lrAccept={} elapsedMs={} memMB={}/{}", epoch, epochs,
                         String.format(Locale.US, "%.6f", trainLoss),
                         String.format(Locale.US, "%.6f", valLoss),
                         String.format(Locale.US, "%.6f", bestValLoss),
                         epochsWithoutValImprovement, patienceVal,
                         acceptanceValBetterThanTrain,
                         valImproved,
+                        String.format(Locale.US, "%.8f", currentLearningRate),
+                        lrReducedOnce,
+                        lrFirstReductionImproved,
                         elapsed, used, max);
                 } else {
-                    logger.info("[TRAIN][EPOCH] {}/{} trainLoss={} bestTrain={} noImprove={}/{} elapsedMs={} memMB={}/{}", epoch, epochs,
-                        String.format(Locale.US, "%.6f", trainLoss),
-                        String.format(Locale.US, "%.6f", bestScore),
+                    logger.info("[TRAIN][EPOCH] {}/{} trainLoss={} bestTrain={} noImprove={}/{} lr={} elapsedMs={} memMB={}/{}", epoch, epochs,
+                        String.format("%.6f", trainLoss),
+                        String.format("%.6f", bestScore),
                         epochsWithoutImprovement, patience,
+                        String.format(Locale.US, "%.8f", currentLearningRate),
                         elapsed, used, max);
                 }
             }
@@ -2552,34 +2612,32 @@ public class LstmTradePredictor {
         return z;
     }
 
-    // Restauré: calcul du business score (utilisé dans walkForwardEvaluateOutOfSample)
-    public double computeBusinessScore(double profitFactor, double winRate, double maxDrawdownPct, double expectancy, LstmConfig config) {
-        double pfAdj = Math.min(profitFactor, config.getBusinessProfitFactorCap());
-        double expPos = Math.max(expectancy, 0.0);
-        double denom = 1.0 + Math.pow(Math.max(maxDrawdownPct, 0.0), config.getBusinessDrawdownGamma());
-        double score = (expPos * pfAdj * winRate) / (denom + 1e-9);
-        logger.debug("[BUSINESS_SCORE] pf={} (adj={}), winRate={}, maxDD={}, expectancy={}, denom={}, score={}",
-            profitFactor, pfAdj, winRate, maxDrawdownPct, expectancy, denom, score);
-        return score;
+    // Étape 12: Méthode utilitaire pour appliquer un nouveau learning rate à toutes les couches
+    private void applyLearningRate(MultiLayerNetwork model, double newLR) {
+        if (model == null) return;
+        try {
+            model.setLearningRate(newLR);
+        } catch (Exception e) {
+            logger.warn("[TRAIN][LR-SCHED] Impossible d'appliquer nouveau LR={} : {}", newLR, e.getMessage());
+        }
     }
 
-    private double computeSkewness(double[] data) {
-        if (data == null || data.length == 0) return 0.0;
-        int n = data.length;
-        double mean = 0.0;
-        for (double v : data) mean += v;
-        mean /= n;
-        double m2 = 0.0, m3 = 0.0;
-        for (double v : data) {
-            double d = v - mean;
-            m2 += d * d;
-            m3 += d * d * d;
-        }
-        if (m2 == 0) return 0.0;
-        double var = m2 / n;
-        double std = Math.sqrt(var);
-        if (std == 0) return 0.0;
-        double skew = (m3 / n) / (std * std * std);
-        return Double.isFinite(skew) ? skew : 0.0;
+    // Score métier combinant facteurs de performance (PF, winRate, drawdown, expectancy) -> [0,1]
+    private double computeBusinessScore(double profitFactor, double winRate, double maxDrawdownPct, double expectancy, LstmConfig config) {
+        double cap = config.getBusinessProfitFactorCap() > 0 ? config.getBusinessProfitFactorCap() : 3.0;
+        double pfComp = Double.isFinite(profitFactor) && profitFactor > 0 ? Math.min(profitFactor, cap) / cap : 0.0;
+        double wrComp = (winRate >= 0 && winRate <= 1) ? winRate : 0.0;
+        double expComp;
+        if (Double.isFinite(expectancy)) {
+            // Normalisation douce expectancy ∈ R vers [0,1]
+            double norm = expectancy / (1.0 + Math.abs(expectancy)); // (-1,1)
+            expComp = (norm + 1.0) / 2.0; // (0,1)
+        } else expComp = 0.5;
+        double gamma = config.getBusinessDrawdownGamma() > 0 ? config.getBusinessDrawdownGamma() : 1.0;
+        double ddPenalty = Math.tanh(gamma * Math.max(0, maxDrawdownPct)); // (0,1)
+        double stabilityComp = 1.0 - ddPenalty; // drawdown faible => proche 1
+        double score = 0.35 * pfComp + 0.20 * wrComp + 0.20 * expComp + 0.25 * stabilityComp;
+        if (!Double.isFinite(score)) score = 0.0;
+        return Math.max(0.0, Math.min(1.0, score));
     }
 }
