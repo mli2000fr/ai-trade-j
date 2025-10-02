@@ -2125,6 +2125,16 @@ public class LstmTradePredictor {
         double annualizedReturn = tm.totalProfit / capitalBase;
         tm.calmar = tm.maxDrawdownPct > 0 ? (annualizedReturn / tm.maxDrawdownPct) : 0.0;
 
+        // Step14: vérification plage cible trades/an (approx si >=200 barres test)
+        int testBars = testEndBar - testStartBar;
+        if (testBars >= 200) { // ~1 an trading (hors week-ends) selon granularité actuelle
+            if (tm.numTrades < 8 || tm.numTrades > 30) {
+                logger.warn("[STEP14][CHECK] Nb trades hors plage cible ({} not in [8,30]) testBars={}", tm.numTrades, testBars);
+            } else {
+                logger.info("[STEP14][CHECK] Nb trades dans plage cible ({} in [8,30]) testBars={}", tm.numTrades, testBars);
+            }
+        }
+
         return tm;
     }
 
