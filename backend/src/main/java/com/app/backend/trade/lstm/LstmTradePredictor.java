@@ -160,7 +160,7 @@ public class LstmTradePredictor {
                 .nIn(inSize)
                 .nOut(lstmNeurons)
                 // Étape 7: retour à TANH pour limiter explosions de gradients sur séquences financières
-                .activation(Activation.TANH); // CHANGEMENT: RELU au lieu de TANH pour plus de non-linéarité
+                .activation(Activation.TANH);
 
             // Si bidirectionnel, on encapsule
             org.deeplearning4j.nn.conf.layers.Layer recurrent =
@@ -247,6 +247,10 @@ public class LstmTradePredictor {
         MultiLayerConfiguration conf = listBuilder.build();
         MultiLayerNetwork model = new MultiLayerNetwork(conf);
         model.init();
+        // Étape 9: log des valeurs de dropout réellement appliquées (récurrent plafonné 0.25, dense final = min(0.2, dropoutRate))
+        double appliedRecurrentDropout = (dropoutRate > 0.0) ? Math.min(Math.max(dropoutRate, 0.0), 0.25) : 0.0;
+        double appliedFinalDenseDropout = (dropoutRate > 0.0) ? Math.min(0.2, Math.max(dropoutRate, 0.0)) : 0.0;
+        logger.info("[LSTM][Etape9] Dropout recurrent applique={} | Dropout dense final={}", appliedRecurrentDropout, appliedFinalDenseDropout);
         return model;
     }
 
@@ -1377,13 +1381,12 @@ public class LstmTradePredictor {
         // Extraction des derniers windowSize points normalisés pour la prédiction
         for (int j = 0; j < windowSize; j++) {
             // Copie des features de la barre (length - windowSize + j)
-            // Utilise les dernières barres disponibles comme contexte de prédiction
             System.arraycopy(
-                normMatrix[normMatrix.length - windowSize + j], // Source: barre j dans la fenêtre
-                0,                                              // Index source de départ
-                seq[0][j],                                      // Destination: séquence batch 0, temps j
-                0,                                              // Index destination de départ
-                numFeatures                                     // Nombre d'éléments à copier
+                normMatrix[normMatrix.length - windowSize + j],
+                0,
+                seq[0][j],
+                0,
+                numFeatures
             );
         }
 
