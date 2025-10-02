@@ -1,6 +1,5 @@
 package com.app.backend.trade.strategy;
 
-import com.app.backend.trade.controller.StrategieHelper;
 import com.app.backend.trade.model.ComboMixResult;
 import com.app.backend.trade.model.ComboResult;
 import com.app.backend.trade.model.MarketPhase;
@@ -160,6 +159,8 @@ public class StrategieBackTest {
                 .maxTradeGain(maxTradeGain)
                 .maxTradeLoss(maxTradeLoss)
                 .scoreSwingTrade(0)
+                .baseScoreSwingTrade(0)
+                .tradePenaltyFactor(1.0)
                 .sharpeRatio(sharpeRatio)
                 .stabilityScore(stabilityScore)
                 .build();
@@ -273,6 +274,8 @@ public class StrategieBackTest {
                 .maxTradeGain(maxTradeGain)
                 .maxTradeLoss(maxTradeLoss)
                 .scoreSwingTrade(0)
+                .baseScoreSwingTrade(0)
+                .tradePenaltyFactor(1.0)
                 .sharpeRatio(sharpeRatio)
                 .stabilityScore(stabilityScore)
                 .build();
@@ -334,30 +337,23 @@ public class StrategieBackTest {
         double minStab = Collections.min(stabilityList);
         double maxStab = Collections.max(stabilityList);
         List<ComboResult> results = new ArrayList<>();
-        for (int i = 0; i < combos.size(); i++) {
-            ComboResult combo = combos.get(i);
+        final double tradeFloor = 8.0; // Étape 16
+        for (ComboResult combo : combos) {
             RiskResult r = combo.getFinalResult();
-            // Calcul d'un score global pour chaque résultat
-            double score = this.calculScore(TradingProfile.BALANCED, r);
-            combo.getFinalResult().setScoreSwingTrade(score);
-            if (score >= 60) {
-                combo.getFinalResult().setScoreSwingTrade(score);
+            double baseScore = this.calculScore(TradingProfile.BALANCED, r);
+            r.setBaseScoreSwingTrade(baseScore);
+            double penaltyFactor = Math.min(1.0, r.getTradeCount() / tradeFloor);
+            r.setTradePenaltyFactor(penaltyFactor);
+            double penalizedScore = baseScore * penaltyFactor;
+            // Exclusion stricte si tradeCount <5 (acceptation Étape 16)
+            if (r.getTradeCount() < 5) {
+                r.setScoreSwingTrade(0);
+                continue;
+            }
+            r.setScoreSwingTrade(penalizedScore);
+            if (penalizedScore >= 60) {
                 results.add(combo);
             }
-            /*
-             // Filtres durs
-            boolean filteredOut = r.getMaxDrawdown() > 0.3 || r.getSharpeRatio() < 0.5 || r.getTradeCount() < 10 || (r.getWinRate() < 0.5 && r.getProfitFactor() < 1.2);
-            if (filteredOut) continue;
-            // Normalisation min-max
-            double rendNorm = (maxRend - minRend) == 0 ? 0 : (r.getRendement() - minRend) / (maxRend - minRend);
-            double sharpeNorm = (maxSharpe - minSharpe) == 0 ? 0 : (r.getSharpeRatio() - minSharpe) / (maxSharpe - minSharpe);
-            double drawdownNorm = (maxDrawdown - minDrawdown) == 0 ? 0 : (r.getMaxDrawdown() - minDrawdown) / (maxDrawdown - minDrawdown);
-            double stabilityNorm = (maxStab - minStab) == 0 ? 0 : (r.getStabilityScore() - minStab) / (maxStab - minStab);
-            // Score pondéré
-            double score = weights.rendement * rendNorm + weights.sharpe * sharpeNorm + weights.drawdown * (1 - drawdownNorm) + weights.stability * stabilityNorm;
-            combo.getResult().setScoreSwingTrade(score);
-            results.add(combo);
-             */
         }
         return results;
     }
@@ -384,31 +380,23 @@ public class StrategieBackTest {
         double minStab = Collections.min(stabilityList);
         double maxStab = Collections.max(stabilityList);
         List<ComboMixResult> results = new ArrayList<>();
-        for (int i = 0; i < combos.size(); i++) {
-            ComboMixResult combo = combos.get(i);
+        final double tradeFloor = 8.0; // Étape 16
+        for (ComboMixResult combo : combos) {
             RiskResult r = combo.getFinalResult();
-            // Calcul d'un score global pour chaque résultat
-
-            double score = this.calculScore(TradingProfile.BALANCED, r);
-
-            if (score >= 60) {
-                combo.getFinalResult().setScoreSwingTrade(score);
+            double baseScore = this.calculScore(TradingProfile.BALANCED, r);
+            r.setBaseScoreSwingTrade(baseScore);
+            double penaltyFactor = Math.min(1.0, r.getTradeCount() / tradeFloor);
+            r.setTradePenaltyFactor(penaltyFactor);
+            // Exclusion stricte si tradeCount <5
+            if (r.getTradeCount() < 5) {
+                r.setScoreSwingTrade(0);
+                continue;
+            }
+            double penalizedScore = baseScore * penaltyFactor;
+            r.setScoreSwingTrade(penalizedScore);
+            if (penalizedScore >= 60) {
                 results.add(combo);
             }
-            /*
-             // Filtres durs
-            boolean filteredOut = r.getMaxDrawdown() > 0.3 || r.getSharpeRatio() < 0.5 || r.getTradeCount() < 10 || (r.getWinRate() < 0.5 && r.getProfitFactor() < 1.2);
-            if (filteredOut) continue;
-            // Normalisation min-max
-            double rendNorm = (maxRend - minRend) == 0 ? 0 : (r.getRendement() - minRend) / (maxRend - minRend);
-            double sharpeNorm = (maxSharpe - minSharpe) == 0 ? 0 : (r.getSharpeRatio() - minSharpe) / (maxSharpe - minSharpe);
-            double drawdownNorm = (maxDrawdown - minDrawdown) == 0 ? 0 : (r.getMaxDrawdown() - minDrawdown) / (maxDrawdown - minDrawdown);
-            double stabilityNorm = (maxStab - minStab) == 0 ? 0 : (r.getStabilityScore() - minStab) / (maxStab - minStab);
-            // Score pondéré
-            double score = weights.rendement * rendNorm + weights.sharpe * sharpeNorm + weights.drawdown * (1 - drawdownNorm) + weights.stability * stabilityNorm;
-            combo.getResult().setScoreSwingTrade(score);
-            results.add(combo);S
-             */
         }
         return results;
     }

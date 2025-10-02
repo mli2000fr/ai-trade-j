@@ -1579,7 +1579,7 @@ public class LstmTradePredictor {
                         String.format("%.6f", Math.exp(predTarget)),
                         String.format("%.3f", predicted));
         } else {
-            // Mode prix direct: la prédiction est déjà dans le domaine des prix
+            // Mode prix direct : la prédiction est déjà dans le domaine des prix
             predicted = predTarget;
         }
 
@@ -1669,6 +1669,19 @@ public class LstmTradePredictor {
         return predicted;
     }
 
+    // === Step15: métriques trading & décision contrarian (réintégration) ===
+    public static class TradingMetricsV2 implements Serializable {
+        public double totalProfit, profitFactor, winRate, maxDrawdownPct, expectancy, sharpe, sortino, exposure, turnover, avgBarsInPosition, mse, businessScore, calmar;
+        public int numTrades;
+        // Step15: nouveaux champs contrarian
+        public int contrarianTrades;
+        public int normalTrades;
+        public double contrarianRatio;
+    }
+    private static class ContrarianDecision { boolean active; double adjustedSignalStrength; String reason; }
+    private ContrarianDecision evaluateContrarian(double rawSignalStrength, double lastClose, double[] rsiValues, int bar, BarSeries sub) {
+        ContrarianDecision d = new ContrarianDecision(); d.active=false; d.adjustedSignalStrength=rawSignalStrength; if (rawSignalStrength < -0.02) { double currentRsi = rsiValues[bar]; int recentWindow = Math.min(10, sub.getBarCount()); if (recentWindow > 0) { double supportLevel = Double.POSITIVE_INFINITY; for (int i=0;i<recentWindow;i++){ double low = sub.getBar(sub.getBarCount()-1-i).getLowPrice().doubleValue(); if (low < supportLevel) supportLevel = low; } double distanceToSupport = supportLevel>0? (lastClose - supportLevel)/supportLevel : 1.0; if (currentRsi < 35 && distanceToSupport < 0.05 && rawSignalStrength < -0.025) { d.active = true; d.adjustedSignalStrength = Math.abs(rawSignalStrength) * 0.6; d.reason = String.format("RSI=%.1f support=%.3f dist=%.2f%% raw=%.4f", currentRsi, supportLevel, distanceToSupport*100, rawSignalStrength); logger.info("[DEBUG][CONTRARIAN] bar={} rsi={} support={} dist={} signalAdj={}", bar, String.format("%.1f", currentRsi), String.format("%.3f", supportLevel), String.format("%.2f", distanceToSupport*100), String.format("%.4f", d.adjustedSignalStrength)); } } } return d; }
+
     /* =========================================================
      *                WALK-FORWARD EVALUATION
      * =========================================================
@@ -1678,15 +1691,6 @@ public class LstmTradePredictor {
      *  - Mesure métriques + MSE
      *  - Calcul d'un businessScore pondéré
      */
-
-    /**
-     * Contient les métriques de trading sur un split (simulation).
-     * Les champs sont agrégés plus tard.
-     */
-    public static class TradingMetricsV2 implements Serializable {
-        public double totalProfit, profitFactor, winRate, maxDrawdownPct, expectancy, sharpe, sortino, exposure, turnover, avgBarsInPosition, mse, businessScore, calmar;
-        public int numTrades;
-    }
 
     /**
      * Résultat global d'un walk-forward avec statistiques agrégées.
@@ -1948,23 +1952,14 @@ public class LstmTradePredictor {
                     entryThreshold = deltaFloor; // warmup
                 }
 
-                boolean contratrianSignal = false;
-                if (signalStrength < -0.02) {
-                    double currentRsi = rsiValues[bar];
-                    double[] recentLows = new double[10];
-                    for (int i = 0; i < Math.min(10, sub.getBarCount()); i++) {
-                        recentLows[i] = sub.getBar(sub.getBarCount() - 1 - i).getLowPrice().doubleValue();
-                    }
-                    double supportLevel = Arrays.stream(recentLows).min().orElse(lastClose);
-                    double distanceToSupport = (lastClose - supportLevel) / supportLevel;
-                    if (currentRsi < 35 && distanceToSupport < 0.05 && signalStrength < -0.025) {
-                        contratrianSignal = true;
-                        signalStrength = Math.abs(signalStrength) * 0.6;
-                        logger.info("[DEBUG][CONTRARIAN][CACHE] bar={} rsi={} support={} dist={} signalAdj={}", bar,
-                                String.format("%.1f", currentRsi), String.format("%.3f", supportLevel),
-                                String.format("%.2f", distanceToSupport * 100), String.format("%.4f", signalStrength));
-                    }
+                ContrarianDecision contrarianDecision = evaluateContrarian(signalStrength, lastClose, rsiValues, bar, sub);
+                if (contrarianDecision.active) {
+                    signalStrength = contrarianDecision.adjustedSignalStrength;
+                    logger.info("[DEBUG][CONTRARIAN][CACHE] bar={} rsi={} signalAdj={}", bar,
+                            String.format("%.1f", rsiValues[bar]),
+                            String.format("%.4f", signalStrength));
                 }
+
                 // Logs debug (pour comparaison historique) : on conserve threshold (baseline) + entryThreshold distributionnel
                 double signalStrengthPct = signalStrength * 100;
                 double entryThresholdPct = entryThreshold * 100;
@@ -2028,6 +2023,8 @@ public class LstmTradePredictor {
                     positionSize = stopDistance > 0 ? riskAmount / (lastClose * stopDistance) : 0;
                     double maxPositionValue = capital * 0.1;
                     if (positionSize * lastClose > maxPositionValue) positionSize = maxPositionValue / lastClose;
+                    // Step15: comptage contrarian vs normal
+                    if (contrarianDecision.active) tm.contrarianTrades++; else tm.normalTrades++;
                 }
                 // Mise à jour buffer après décision (n'inclut pas le delta dans son propre calcul de percentile)
                 double absDelta = Math.abs(rawDelta);
@@ -2125,14 +2122,19 @@ public class LstmTradePredictor {
         double annualizedReturn = tm.totalProfit / capitalBase;
         tm.calmar = tm.maxDrawdownPct > 0 ? (annualizedReturn / tm.maxDrawdownPct) : 0.0;
 
-        // Step14: vérification plage cible trades/an (approx si >=200 barres test)
-        int testBars = testEndBar - testStartBar;
-        if (testBars >= 200) { // ~1 an trading (hors week-ends) selon granularité actuelle
-            if (tm.numTrades < 8 || tm.numTrades > 30) {
-                logger.warn("[STEP14][CHECK] Nb trades hors plage cible ({} not in [8,30]) testBars={}", tm.numTrades, testBars);
-            } else {
-                logger.info("[STEP14][CHECK] Nb trades dans plage cible ({} in [8,30]) testBars={}", tm.numTrades, testBars);
-            }
+        // Step15: calcul ratio contrarian
+        int counted = tm.contrarianTrades + tm.normalTrades;
+        if (tm.numTrades < counted) {
+            int diff = counted - tm.numTrades;
+            if (tm.normalTrades >= diff) tm.normalTrades -= diff; else if (tm.contrarianTrades >= diff) tm.contrarianTrades -= diff;
+        } else if (tm.numTrades > counted) {
+            tm.normalTrades += (tm.numTrades - counted);
+        }
+        tm.contrarianRatio = tm.numTrades > 0 ? (double) tm.contrarianTrades / tm.numTrades : 0.0;
+        if (tm.contrarianRatio > 0.35) {
+            logger.warn("[STEP15][CHECK] ratio contrarian élevé {}% (>35%)", String.format("%.2f", tm.contrarianRatio * 100));
+        } else {
+            logger.info("[STEP15][CHECK] ratio contrarian {}% (<=35%)", String.format("%.2f", tm.contrarianRatio * 100));
         }
 
         return tm;

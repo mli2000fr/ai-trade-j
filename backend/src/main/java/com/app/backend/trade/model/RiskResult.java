@@ -26,6 +26,10 @@ public class RiskResult {
     public double maxTradeLoss;
 
     public double scoreSwingTrade = 0;
+    /** Nouveau: score brut avant pénalité */
+    public double baseScoreSwingTrade = 0;
+    /** Nouveau: facteur de pénalité appliqué (min(1, tradeCount/tradeFloor)) */
+    public double tradePenaltyFactor = 1.0;
 
     /** Ratio de Sharpe du backtest */
     public double sharpeRatio;
