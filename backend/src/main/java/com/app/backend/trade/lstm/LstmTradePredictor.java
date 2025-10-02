@@ -153,11 +153,12 @@ public class LstmTradePredictor {
         for (int i = 0; i < nLayers; i++) {
             int inSize = (i == 0) ? inputSize : (bidir ? lstmNeurons * 2 : lstmNeurons);
 
-            // Construction d'une couche LSTM basique avec activation plus agressive
+            // Construction d'une couche LSTM avec activation TANH (stabilité des gradients)
             LSTM.Builder lstmBuilder = new LSTM.Builder()
                 .nIn(inSize)
                 .nOut(lstmNeurons)
-                .activation(Activation.RELU); // CHANGEMENT: RELU au lieu de TANH pour plus de non-linéarité
+                // Étape 7: retour à TANH pour limiter explosions de gradients sur séquences financières
+                .activation(Activation.TANH); // CHANGEMENT: RELU au lieu de TANH pour plus de non-linéarité
 
             // Si bidirectionnel, on encapsule
             org.deeplearning4j.nn.conf.layers.Layer recurrent =
@@ -2483,7 +2484,7 @@ public class LstmTradePredictor {
                         prev = next; count++;
                     }
                 }
-                labelSeq[i] = count>0? sum/count : 0.0;
+                labelSeq[i] = count>0? (sum/count) : 0.0;
             } else {
                 double prev = closes[i + windowSize - 1];
                 double next = closes[i + windowSize];
