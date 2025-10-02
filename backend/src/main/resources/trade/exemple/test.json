@@ -1,28 +1,175 @@
-Grille de tuning enrichie
-Ajouter dans generateSwingTradeGrid et generateRandomSwingTradeGrid :
-Des valeurs pour numLstmLayers, bidirectional, attention, batchSize.
-Des features personnalisables (passer une liste en paramètre).
-Des horizons de prédiction différents (horizonBars).
+Plan concret, modulaire, exécutable étape par étape (chaque étape indépendante)
+Phase 0 – Cadre général Objectif global: augmenter la qualité prédictive (retours swing 3–10 jours), stabiliser la simulation, augmenter le nombre de trades valides, réduire la timidité du modèle, améliorer la sélection via business score robuste.
 
-Personnalisation des features
-Permettre de passer une liste de features par symbole ou par secteur.
-Ajouter une méthode pour charger dynamiquement les features selon le marché.
+PHASE 1 – Données & Cibles Étape
+1. Audit des données Objectif: vérifier suffisance et cohérence (pas de fuite). Actions:
+Vérifier par symbole: nombre de barres >= (windowSize + horizonBars + 400).
+Calculer stats: mean/std des log-returns, proportion de zéros, empreinte NaN.
+Logger histogramme log-return (20 bins). Acceptation: aucun symbole avec log-return variance < 1e-5; sinon exclure ou enrichir.
 
-Validation croisée avancée
-Ajouter un paramètre pour choisir le mode de validation croisée.
-Permettre de tester plusieurs modes et comparer les résultats.
+Étape 2. Option cible multi-horizon (indépendante) Objectif: lisser bruit court terme. Actions:
+Créer mode target = moyenne des log-returns t+1..t+H (H = horizonBars).
+Ajouter flag config useMultiHorizonAvg (fallback si absent). Acceptation: distribution target moins leptokurtique (kurtosis diminue).
 
-Reporting drift/retrain
-Ajouter un log/reporting centralisé des drifts et retrain dans LstmHelper.
-Sauvegarder la date, le symbole, le type de drift, le score avant/après retrain.
+Étape 3. Passage label scaler de MinMax -> ZScore Objectif: éviter compression extrême. Actions:
+Dans train: si useLogReturnTarget alors labelScaler.Type.ZSCORE.
+Migration backward compatible (si scalers JSON ancien = MinMax, détecter et reconstruire). Acceptation: std(label normalisé) ≈ 1, pas de plateau < 1e-3.
 
-Business metrics enrichis
-Calculer et sauvegarder Sortino, Calmar, turnover, avgBarsInPosition dans la base.
+PHASE 2 – Normalisation & Features Étape
+4. Ajout feature realized_vol Objectif: meilleur lien signal/volatilité. Actions:
+realized_vol = std(log-return derniers N=14)*sqrt(14).
+Normalisation ZScore. Acceptation: feature non constante (> 20 valeurs distinctes sur dataset).
 
-Versioning des modèles
-Sauvegarder chaque modèle avec un timestamp/version.
-Permettre de charger une version antérieure en cas de besoin.
+Étape 5. Pré-normalisation volume Objectif: réduire skew. Actions:
+Remplacer volume brut par log(1+volume), puis normalisation existante. Acceptation: skew(volume) réduit d’au moins 30%.
 
-Parallélisation dynamique
-Adapter le nombre de threads selon la machine (CPU/GPU).
-Ajouter un paramètre dans LstmTuningService pour configurer le parallélisme.
+Étape 6. Cache extraction features Objectif: performance & cohérence simulation. Actions:
+Memoriser matrix features dans simulateTradingWalkForward (Map<barIndex,double[]>).
+Réutiliser pour ATR, RSI quand possible. Acceptation: temps simulation réduit (>15%) sur série test.
+
+PHASE 3 – Architecture Réseau
+Étape 7. Revenir activation LSTM TANH Objectif: stabilité gradients. Actions:
+LSTM.Builder.activation(Activation.TANH). Acceptation: disparition warnings gradients explosifs (si existants).
+
+Étape 8. Gradient clipping Objectif: prévenir dérives. Actions:
+builder.gradientNormalization(ClipElementWiseAbsoluteValue).gradientNormalizationThreshold(1.0). Acceptation: aucune valeur de perte NaN sur 3 runs.
+
+Étape 9. Réduction dropout Objectif: éviter sous-apprentissage. Actions:
+Dropout récurrent max 0.25.
+Supprimer multiplication *1.5.
+Dropout dense final = min(0.2, dropoutRate). Acceptation: courbe loss descend encore après 5 epochs (vs plateau immédiat avant).
+
+Étape 10. Huber loss Objectif: robustesse aux outliers sans lisser trop. Actions:
+Remplacer MEAN_ABSOLUTE_ERROR par HUBER (si support). Sinon SMOOTH_L1 custom. Acceptation: variance des erreurs résiduelles réduite (>10%).
+
+PHASE 4 – Boucle d’Entraînement Étape
+11. Validation split interne Objectif: early stopping réaliste. Actions:
+Split interne: dernière 15% du trainSeries.
+Calcul val_loss après chaque epoch.
+Early stop sur val_loss avec patienceVal distincte. Acceptation: val_loss meilleure que last train_loss + minDelta.
+
+Étape 12. LR scheduler Objectif: convergence plus fine. Actions:
+Tous les 25 epochs: lr *= 0.9 (simple). Acceptation: amélioration val_loss après première réduction.
+
+Étape 13. Sauvegarde meilleur modèle sur val_loss Objectif: éviter dernier sur-ajusté. Actions:
+Maintenir bestValLoss, cloner params. Acceptation: best model score différent du dernier dans ≥40% des runs.
+
+PHASE 5 – Seuils & Signaux
+Étape 14. Seuil adaptatif distribution prédictions Objectif: augmenter trades pertinents. Actions:
+Maintenir buffer circulaire des |predictedDelta| derniers 200 points.
+entryThreshold = max(percentile65, floorMin=0.0007) au lieu de cap constant. Acceptation: nombre de trades/test entre 8 et 30 pour 1 an.
+
+Étape 15. Refactor contrarian Objectif: transparence & contrôle. Actions:
+Extraire logique contrarian dans méthode dédiée renvoyant ContrarianDecision {active, adjustedSignalStrength, reason}.
+Ajouter métrique: tradesContrarian vs tradesNormaux. Acceptation: log ratio contrarian <= 35%.
+
+Étape 16. Pénalité trades rares dans businessScore Objectif: éviter faux PF élevés. Actions:
+scoreFinal = score * min(1.0, numTrades / tradeFloor) (tradeFloor=8). Acceptation: configurations avec numTrades<5 ne gagnent plus tuning.
+
+PHASE 6 – Simulation & Risk
+Étape 17. Caching prédictions intra-split Objectif: éviter recalcul multiple. Actions:
+Map<Integer, Double> predictedAtBar pour newPredicted. Acceptation: -30% temps simulateTrading sur bench.
+
+Étape 18. Position sizing plafonné adaptatif Objectif: cohérence risque. Actions:
+positionValueMax = min( capital*0.1, capital * (0.5 * atrPct / medianAtrPct) ). Acceptation: dispersion taille positions (std) réduite.
+
+PHASE 7 – Tuning
+Étape 19. Activer parallélisme réel Objectif: vitesse. Actions:
+Remettre numThreads = Math.min(...effectiveMaxThreads).
+Ajouter file tuning_progress_metrics (JSON). Acceptation: temps total < temps séquentiel * 0.5 sur grille réduite.
+
+Étape 20. Tuning en deux phases Objectif: efficacité. Actions:
+Phase 1: grille coarse.
+Sélection top 5 par businessScore ajusté.
+Phase 2: micro-grille autour (neurons ±32, lr *{0.8,1,1.2}, dropout ±0.05). Acceptation: amélioration bestScore >= 5% vs one-shot.
+
+PHASE 8 – Monitoring & Drift
+Étape 21. Ajout métrique variance prédictions Objectif: détecter modèle trop plat. Actions:
+Après entraînement: var( predTrain - closeTrain ) > seuil. Acceptation: alerte si var < 1e-6.
+
+Étape 22. Drift ciblé labels Objectif: cohérence performance. Actions:
+stocker dernière distribution log-return (mean/std).
+retrain si shift > 2σ sur 250 dernières barres. Acceptation: retrain déclenché seulement si shift réel.
+
+PHASE 9 – Journalisation & Traçabilité
+Étape 23. Export JSON résumé run Objectif: reproductibilité. Actions:
+Sauvegarder config + val_loss curve + trade stats dans table ou fichier. Acceptation: un enregistrement par run.
+
+PHASE 10 – Qualité & Tests Étape
+24. Tests unitaires ciblés Objectif: non-régression. Actions:
+Test: adaptive threshold jamais > 1%.
+Test: businessScore diminue si maxDrawdown augmente.
+Test: contrarian réduit signalStrength initial négatif -> positif. Acceptation: tests verts.
+
+Étape 25. Smoke test pipeline Objectif: validation bout-en-bout. Actions:
+Série synthétique (sinus + bruit).
+Exécuter entraînement court (epochs=5).
+Vérifier qu’au moins 1 trade simulé. Acceptation: tradePnL size >=1.
+
+PHASE 11 – Optimisations futures (optionnel)
+Étape 26. Multi-target (seq2one vs seq2multi) + attention réelle. Étape 27. Exploration transformer hybride (si besoin patterns non locaux). Étape 28. Remplacement simulation interne par moteur backtest unifié (déduplication logique risk).
+
+Format d’exécution de chaque étape (recommandé)
+Input: fichiers impactés + paramètres nouveaux.
+Actions: liste modifs code (classes/méthodes).
+Validation: logs attendus + tests rapides.
+Rollback: pointer bloc modifié (facile à inverser).
+Indépendance des étapes Chaque étape contient suffisamment d’information pour être réalisée même si étapes précédentes non encore faites; si une dépendance forte existe (ex: étape 13 dépend du split validation ajouté en étape 11), spécifier fallback (ex: si pas de val split, utiliser trainLoss et tagger modèle “trainOnly”).
+
+Résumé rapide (si priorité limitée) Critique immédiat: 3, 7, 8, 11, 14, 16. Ensuite: 9, 10, 15, 17, 19, 20.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
