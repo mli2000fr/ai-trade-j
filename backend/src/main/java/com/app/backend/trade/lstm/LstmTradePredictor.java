@@ -1888,6 +1888,12 @@ public class LstmTradePredictor {
         logger.debug("[SIM][CACHE] Pré-calcul features+indicateurs en {} ms (bars={})", (cacheReadyNs - cacheStartNs)/1_000_000, fullSeries.getBarCount());
         // ===============================================================
 
+        // ===== Étape 17: Cache prédictions intra-split =====
+        Map<Integer, Double> predictionCache = new HashMap<>();
+        int predictionComputeCount = 0;
+        int predictionCacheHit = 0;
+        // ===============================================================
+
         double equity = 0, peak = 0, trough = 0;
         boolean inPos = false; // Pas de longPos/shortPos - LONG ONLY
         double entry = 0;
@@ -1927,11 +1933,18 @@ public class LstmTradePredictor {
                     continue;
                 }
                 double predicted;
-                try {
-                    predicted = predictNextCloseScalarCached(bar, normMatrix, closes, config, model, scalers);
-                } catch (Exception e) {
-                    // Fallback rare
-                    predicted = predictNextCloseScalarV2(sub, config, model, scalers);
+                Double cachedPred = predictionCache.get(bar);
+                if (cachedPred != null) {
+                    predicted = cachedPred;
+                    predictionCacheHit++;
+                } else {
+                    try {
+                        predicted = predictNextCloseScalarCached(bar, normMatrix, closes, config, model, scalers);
+                    } catch (Exception e) {
+                        predicted = predictNextCloseScalarV2(sub, config, model, scalers); // fallback
+                    }
+                    predictionCache.put(bar, predicted);
+                    predictionComputeCount++;
                 }
                 double lastClose = closes[bar];
                 double rawDelta = (predicted - lastClose) / lastClose; // predictedDelta relatif
@@ -2048,13 +2061,24 @@ public class LstmTradePredictor {
                     pnl = (current - entry) * positionSize;
                     exit = true;
                 } else if (barsInPos >= 3) {
-                    try {
-                        double newPredicted = predictNextCloseScalarCached(bar, normMatrix, closes, config, model, scalers);
-                        if (newPredicted < current * 0.98) {
-                            pnl = (current - entry) * positionSize;
-                            exit = true;
+                    Double cachedPred2 = predictionCache.get(bar);
+                    double newPredicted;
+                    if (cachedPred2 != null) {
+                        newPredicted = cachedPred2;
+                        predictionCacheHit++;
+                    } else {
+                        try {
+                            newPredicted = predictNextCloseScalarCached(bar, normMatrix, closes, config, model, scalers);
+                        } catch (Exception ignored) {
+                            newPredicted = current; // fallback neutre
                         }
-                    } catch (Exception ignored) {}
+                        predictionCache.put(bar, newPredicted);
+                        predictionComputeCount++;
+                    }
+                    if (newPredicted < current * 0.98) {
+                        pnl = (current - entry) * positionSize;
+                        exit = true;
+                    }
                 }
                 if (exit) {
                     double entrySlippage = slippagePct * entry * positionSize;
@@ -2072,6 +2096,12 @@ public class LstmTradePredictor {
                 }
             }
         }
+
+        logger.debug("[SIM][CACHE][PRED] computes={} hits={} hitRatio={} totalBarsSimul={}",
+                predictionComputeCount,
+                predictionCacheHit,
+                (predictionComputeCount + predictionCacheHit) > 0 ? String.format("%.2f", (predictionCacheHit * 100.0)/(predictionComputeCount + predictionCacheHit)) : "0.00",
+                (testEndBar - testStartBar));
 
         // Agrégation métriques
         double gains = 0, losses = 0;
