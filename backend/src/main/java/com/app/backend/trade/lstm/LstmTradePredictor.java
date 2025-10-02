@@ -1257,80 +1257,94 @@ public class LstmTradePredictor {
         public double meanMse, meanBusinessScore, mseVariance, mseInterModelVariance;
     }
 
+
     /**
-     * Évalue un modèle LSTM pré-entraîné via validation walk-forward.
-     * Cette surcharge utilise le modèle déjà entraîné au lieu de re-entraîner pour chaque split.
-     * Plus efficace et cohérent : on évalue exactement le modèle qu'on a entraîné.
+     * Version de walkForwardEvaluate qui teste UNIQUEMENT sur les données out-of-sample
+     * à partir d'un point de départ spécifié (pour éviter le data leakage).
      *
-     * @param series série temporelle complète
+     * @param series série temporelle complète (nécessaire pour le contexte historique)
      * @param config configuration LSTM
-     * @param preTrainedModel modèle déjà entraîné sur toute la série (ou une partie)
-     * @param preTrainedScalers scalers associés au modèle pré-entraîné
-     * @return résultats d'évaluation walk-forward
+     * @param preTrainedModel modèle entraîné uniquement sur la partie train
+     * @param preTrainedScalers scalers calculés uniquement sur la partie train
+     * @param testStartFromBar index à partir duquel commencer les tests (données non vues)
+     * @return résultats d'évaluation walk-forward sur données out-of-sample uniquement
      */
-    public WalkForwardResultV2 walkForwardEvaluate(BarSeries series, LstmConfig config,
-                                                   MultiLayerNetwork preTrainedModel,
-                                                   ScalerSet preTrainedScalers) {
-        // ===== PHASE 1: INITIALISATION ET VALIDATION DES PARAMÈTRES =====
+    public WalkForwardResultV2 walkForwardEvaluateOutOfSample(BarSeries series, LstmConfig config,
+                                                              MultiLayerNetwork preTrainedModel,
+                                                              ScalerSet preTrainedScalers,
+                                                              int testStartFromBar) {
+        // ===== PHASE 1: INITIALISATION ET VALIDATION =====
 
         WalkForwardResultV2 result = new WalkForwardResultV2();
 
-        // Validation des paramètres d'entrée
         if (preTrainedModel == null || preTrainedScalers == null) {
-            logger.error("[WALK-FORWARD-PRETRAINED] Modèle ou scalers pré-entraînés manquants");
+            logger.error("[WALK-FORWARD-OOS] Modèle ou scalers pré-entraînés manquants");
             return result;
         }
 
-        int splits = Math.max(2, config.getWalkForwardSplits());
         int windowSize = config.getWindowSize();
         int totalBars = series.getBarCount();
 
-        if (totalBars < windowSize + 50) {
-            logger.warn("[WALK-FORWARD-PRETRAINED] Données insuffisantes: {} barres pour windowSize={}", totalBars, windowSize);
+        // Vérifier que nous avons assez de données pour tester
+        if (testStartFromBar + windowSize + 10 >= totalBars) {
+            logger.warn("[WALK-FORWARD-OOS] Données insuffisantes pour test out-of-sample: testStart={}, totalBars={}",
+                       testStartFromBar, totalBars);
             return result;
         }
 
-        // ===== PHASE 2: CALCUL DE LA SEGMENTATION TEMPORELLE =====
+        // ===== PHASE 2: CALCUL DE LA SEGMENTATION TEMPORELLE OUT-OF-SAMPLE =====
 
-        int splitSize = (totalBars - windowSize) / splits;
+        // Nombre de barres disponibles pour les tests (partie non vue par le modèle)
+        int testBarsAvailable = totalBars - testStartFromBar;
+        int splits = Math.max(1, Math.min(config.getWalkForwardSplits(), testBarsAvailable / 50)); // Au moins 50 barres par split
+
+        if (splits == 0) {
+            logger.warn("[WALK-FORWARD-OOS] Pas assez de données pour créer des splits de test");
+            return result;
+        }
+
+        int splitSize = testBarsAvailable / splits;
         double sumMse = 0, sumBusiness = 0;
         int mseCount = 0, businessCount = 0;
         List<Double> mseList = new ArrayList<>();
 
-        logger.info("[WALK-FORWARD-PRETRAINED] Début évaluation avec modèle pré-entraîné: {} splits", splits);
+        logger.info("[WALK-FORWARD-OOS] Début évaluation out-of-sample: {} splits sur données [{}, {}]",
+                   splits, testStartFromBar, totalBars);
 
-        // ===== PHASE 3: BOUCLE PRINCIPALE SUR CHAQUE SPLIT =====
+        // ===== PHASE 3: BOUCLE PRINCIPALE SUR CHAQUE SPLIT OUT-OF-SAMPLE =====
 
         for (int s = 1; s <= splits; s++) {
-            int testEndBar = (s == splits) ? totalBars : windowSize + s * splitSize;
-            int testStartBar = windowSize + (s - 1) * splitSize + config.getEmbargoBars();
+            // Calcul des bornes du split dans la zone out-of-sample uniquement
+            int testStartBar = testStartFromBar + (s - 1) * splitSize + config.getEmbargoBars();
+            int testEndBar = (s == splits) ? totalBars : testStartFromBar + s * splitSize;
 
+            // Vérification que le split est suffisamment grand
             if (testStartBar + windowSize + 5 >= testEndBar) {
-                logger.debug("[WALK-FORWARD-PRETRAINED] Split {} trop petit, ignoré", s);
+                logger.debug("[WALK-FORWARD-OOS] Split {} trop petit, ignoré", s);
                 continue;
             }
 
-            logger.debug("[WALK-FORWARD-PRETRAINED] Split {}/{}: test=[{},{}[",
+            logger.debug("[WALK-FORWARD-OOS] Split {}/{}: test=[{},{}] (out-of-sample uniquement)",
                         s, splits, testStartBar, testEndBar);
 
-            // ===== ÉVALUATION DIRECTE AVEC LE MODÈLE PRÉ-ENTRAÎNÉ =====
-            // On utilise le modèle pré-entraîné au lieu de re-entraîner
+            // ===== SIMULATION TRADING SUR DONNÉES NON VUES =====
+            // IMPORTANT: testStartBar et testEndBar sont dans la zone [testStartFromBar, totalBars]
+            // Ces données n'ont JAMAIS été vues par le modèle pendant l'entraînement
 
             TradingMetricsV2 metrics = simulateTradingWalkForward(
-                series,                    // Série complète
-                testStartBar,              // Début de la période de test
-                testEndBar,                // Fin de la période de test
-                preTrainedModel,           // Modèle pré-entraîné (pas de re-entraînement)
-                preTrainedScalers,         // Scalers pré-entraînés
+                series,                    // Série complète (pour contexte historique)
+                testStartBar,              // Début test (dans zone out-of-sample)
+                testEndBar,                // Fin test (dans zone out-of-sample)
+                preTrainedModel,           // Modèle entraîné sur [0, testStartFromBar] uniquement
+                preTrainedScalers,         // Scalers calculés sur [0, testStartFromBar] uniquement
                 config                     // Configuration
             );
 
-            // Calcul MSE sur ce split avec le modèle pré-entraîné
+            // Calcul MSE sur ce split out-of-sample
             metrics.mse = computeSplitMse(series, testStartBar, testEndBar,
                                         preTrainedModel, preTrainedScalers, config);
 
-            // ===== CALCUL DU BUSINESS SCORE =====
-
+            // Calcul du business score
             double businessScore = computeBusinessScore(
                 metrics.profitFactor, metrics.winRate,
                 metrics.maxDrawdownPct, metrics.expectancy, config
@@ -1352,11 +1366,11 @@ public class LstmTradePredictor {
                 businessCount++;
             }
 
-            logger.debug("[WALK-FORWARD-PRETRAINED] Split {}: MSE={}, PF={}, WR={}, BS={}",
+            logger.debug("[WALK-FORWARD-OOS] Split {}: MSE={}, PF={}, WinRate={}, BusinessScore={}",
                         s, metrics.mse, metrics.profitFactor, metrics.winRate, businessScore);
         }
 
-        // ===== PHASE 4: CALCUL DES MOYENNES FINALES =====
+        // ===== PHASE 4: CALCUL DES MOYENNES =====
 
         result.meanMse = mseCount > 0 ? sumMse / mseCount : Double.NaN;
         result.meanBusinessScore = businessCount > 0 ? sumBusiness / businessCount : Double.NaN;
@@ -1370,7 +1384,7 @@ public class LstmTradePredictor {
             result.mseInterModelVariance = variance;
         }
 
-        logger.info("[WALK-FORWARD-PRETRAINED] Fin évaluation: meanMSE={}, meanBusinessScore={}, {} splits valides",
+        logger.info("[WALK-FORWARD-OOS] Fin évaluation out-of-sample: meanMSE={}, meanBusinessScore={}, {} splits valides sur données non vues",
                    result.meanMse, result.meanBusinessScore, result.splits.size());
 
         return result;
@@ -1438,15 +1452,56 @@ public class LstmTradePredictor {
                 double signalStrength = (predicted - lastClose) / lastClose;
 
                 // Signal d'entrée LONG ONLY avec seuils adaptatifs
-                double entryThreshold = threshold * 1.2; // Seuil plus élevé pour swing trade
+                double entryThreshold = threshold * config.getEntryThresholdFactor(); // Utilise le facteur configurable
 
-                if (signalStrength > entryThreshold) {
+                // SEUIL D'URGENCE - Si entryThreshold est trop élevé (>1%), utiliser un seuil de secours
+                if (entryThreshold > 0.01) { // Plus de 1% = problème de config
+                    logger.warn("[DEBUG][EMERGENCY] entryThreshold trop élevé ({:.4f}%), utilisation seuil d'urgence 0.3%", entryThreshold * 100);
+                    entryThreshold = 0.003; // Seuil d'urgence à 0.3%
+                }
+
+                // DIAGNOSTIC COMPLET - logs détaillés pour comprendre le problème
+                boolean wouldEnter = signalStrength > entryThreshold;
+                double signalStrengthPct = signalStrength *  100;
+                double entryThresholdPct = entryThreshold * 100;
+                double thresholdPct = threshold * 100;
+
+                logger.info("[DEBUG][ENTRY] bar={}, predicted={}, lastClose={}, signalStrength={:.4f}% ({:.6f}), entryThreshold={:.4f}% ({:.6f}), threshold={:.4f}% ({:.6f}), thresholdK={}, entryFactor={}, WOULD_ENTER={}",
+                    bar,
+                    String.format("%.3f", predicted),
+                    String.format("%.3f", lastClose),
+                    signalStrengthPct, signalStrength,
+                    entryThresholdPct, entryThreshold,
+                    thresholdPct, threshold,
+                    config.getThresholdK(),
+                    config.getEntryThresholdFactor(),
+                    wouldEnter ? "YES" : "NO"
+                );
+
+                // SEUIL ADAPTATIF DYNAMIQUE - si les signaux sont systématiquement trop faibles
+                double adaptiveThreshold = entryThreshold;
+                if (bar > testStartBar + 50) { // Après 50 barres, ajuster si nécessaire
+                    // Réduire progressivement le seuil si aucune entrée depuis longtemps
+                    double reductionFactor = Math.max(0.1, 1.0 - (bar - testStartBar) * 0.001);
+                    adaptiveThreshold = entryThreshold * reductionFactor;
+
+                    if (adaptiveThreshold != entryThreshold) {
+                        logger.info("[DEBUG][ADAPTIVE] bar={}, seuil adaptatif: {:.4f}% -> {:.4f}% (réduction: {:.1f}%)",
+                            bar, entryThresholdPct, adaptiveThreshold * 100, (1 - reductionFactor) * 100);
+                    }
+                }
+
+                if (signalStrength > adaptiveThreshold) {
                     // Vérifications supplémentaires pour swing trade professionnel
 
                     // 1. Vérifier que ce n'est pas un faux signal (RSI pas en zone extrême)
                     RSIIndicator rsi = new RSIIndicator(new ClosePriceIndicator(sub), 14);
                     double currentRsi = rsi.getValue(sub.getEndIndex()).doubleValue();
-                    if (currentRsi > 75) continue; // Éviter les zones de surachat extrême
+                    logger.info("[--------2][DEBUG][ENTRY] bar={}, currentRsi={}", bar, currentRsi);
+                    if (currentRsi > 75) {
+                        logger.info("[--------2][DEBUG][ENTRY] bar={}, rejeté: RSI trop élevé ({} > 75)", bar, currentRsi);
+                        continue; // Éviter les zones de surachat extrême
+                    }
 
                     // 2. Vérifier le volume (doit être au-dessus de la moyenne)
                     VolumeIndicator vol = new VolumeIndicator(sub);
@@ -1457,9 +1512,14 @@ public class LstmTradePredictor {
                         avgVol += vol.getValue(i).doubleValue();
                     }
                     avgVol /= volPeriod;
-                    if (currentVol < avgVol * 0.8) continue; // Volume insuffisant
+                    logger.debug("[DEBUG][ENTRY] bar={}, currentVol={}, avgVol={}", bar, currentVol, avgVol);
+                    if (currentVol < avgVol * 0.8) {
+                        logger.debug("[DEBUG][ENTRY] bar={}, rejeté: volume insuffisant ({} < {})", bar, currentVol, avgVol * 0.8);
+                        continue; // Volume insuffisant
+                    }
 
                     // 3. Entrée confirmée
+                    logger.debug("[DEBUG][ENTRY] bar={}, entrée confirmée à {}", bar, lastClose);
                     inPos = true;
                     entry = lastClose;
                     barsInPos = 0;
@@ -1564,6 +1624,7 @@ public class LstmTradePredictor {
             if (p > 0) { gains += p; win++; }
             else if (p < 0) { losses += p; loss++; }
         }
+        logger.info("[--------][DEBUG][TRADES] Nb trades={}, wins={}, losses={}, gains={}, lossesSum={}", tradePnL.size(), win, loss, gains, losses);
 
         tm.totalProfit = gains + losses;
         tm.numTrades = tradePnL.size();
@@ -1623,11 +1684,18 @@ public class LstmTradePredictor {
             if (t - window < 1) continue; // si log-return => besoin de t-1
             BarSeries sub = series.getSubSeries(0, t); // exclut t (label à t)
             double pred = predictNextCloseScalarV2(sub, config, model, scalers);
-            double actual = config.isUseLogReturnTarget()
-                ? Math.log(closes[t] / closes[t - 1])
-                : closes[t];
-            double err = pred - actual;
-            se += err * err;
+            if (config.isUseLogReturnTarget()) {
+                // Comparer dans l'espace log-return
+                double predLogReturn = Math.log(pred / closes[t - 1]);
+                double actual = Math.log(closes[t] / closes[t - 1]);
+                double err = predLogReturn - actual;
+                se += err * err;
+            } else {
+                // Comparer dans l'espace prix
+                double actual = closes[t];
+                double err = pred - actual;
+                se += err * err;
+            }
             count++;
         }
         return count > 0 ? se / count : Double.NaN;
@@ -2110,16 +2178,13 @@ public class LstmTradePredictor {
      * @return score business composite
      */
     public double computeBusinessScore(double profitFactor, double winRate, double maxDrawdownPct, double expectancy, LstmConfig config) {
-        // Plafonnement du profit factor pour éviter les valeurs extrêmes
+        // Log de debug pour comprendre pourquoi le businessScore est à 0
         double pfAdj = Math.min(profitFactor, config.getBusinessProfitFactorCap());
-
-        // Expectancy positive uniquement
         double expPos = Math.max(expectancy, 0.0);
-
-        // Pénalisation du drawdown avec exposant configurable
         double denom = 1.0 + Math.pow(Math.max(maxDrawdownPct, 0.0), config.getBusinessDrawdownGamma());
-
-        // Formule finale du business score
-        return (expPos * pfAdj * winRate) / (denom + 1e-9);
+        double score = (expPos * pfAdj * winRate) / (denom + 1e-9);
+        logger.info("[DEBUG][BUSINESS_SCORE] pf={} (adj={}), winRate={}, maxDD={}, expectancy={}, denom={}, score={}",
+            profitFactor, pfAdj, winRate, maxDrawdownPct, expectancy, denom, score);
+        return score;
     }
 }

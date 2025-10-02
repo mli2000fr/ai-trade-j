@@ -374,18 +374,40 @@ public class LstmTuningService {
                     // Log de début de traitement de cette configuration
                     logger.info("[TUNING][V2] [{}] Début config {}/{}", symbol, configIndex, grid.size());
 
-                    // ===== ENTRAÎNEMENT DU MODÈLE PRINCIPAL =====
-                    // Entraîne un modèle LSTM complet sur toute la série temporelle
-                    // Retourne: modèle neuronal + scalers (normalisateurs) + métriques d'entraînement
-                    LstmTradePredictor.TrainResult trFull = lstmTradePredictor.trainLstmScalarV2(series, config, null);
+                    // ===== SÉPARATION TRAIN/TEST POUR ÉVITER LE DATA LEAKAGE =====
+                    // PROBLÈME CORRIGÉ: éviter d'entraîner et tester sur les mêmes données
+
+                    int totalBars = series.getBarCount();
+                    int testSplitRatio = 20; // 20% pour le test (out-of-sample)
+                    int trainEndBar = totalBars * (100 - testSplitRatio) / 100; // 80% pour l'entraînement
+
+                    // Vérification que nous avons assez de données
+                    if (trainEndBar < config.getWindowSize() + 50) {
+                        throw new IllegalStateException("Données insuffisantes après séparation train/test");
+                    }
+
+                    // ===== ENTRAÎNEMENT SUR LA PARTIE TRAIN UNIQUEMENT =====
+                    // Création d'une sous-série contenant uniquement les données d'entraînement
+                    BarSeries trainSeries = series.getSubSeries(0, trainEndBar);
+                    logger.debug("[TUNING][V2] [{}] Séparation données: train=[0,{}], test=[{},{}]",
+                               symbol, trainEndBar, trainEndBar, totalBars);
+
+                    // Entraîne le modèle UNIQUEMENT sur les données d'entraînement
+                    LstmTradePredictor.TrainResult trFull = lstmTradePredictor.trainLstmScalarV2(trainSeries, config, null);
                     model = trFull.model;                    // Modèle neuronal entraîné
                     LstmTradePredictor.ScalerSet scalers = trFull.scalers; // Normalisateurs (min/max, z-score, etc.)
 
-                    // ===== VALIDATION WALK-FORWARD =====
+                    // ===== VALIDATION WALK-FORWARD SUR DONNÉES NON VUES =====
                     // Évalue la performance du modèle via validation temporelle séquentielle
-                    // Simule le trading réel: entraîne sur passé, teste sur futur, avance dans le temps
-                    // CORRECTION: Utilise le modèle pré-entraîné au lieu de re-entraîner pour chaque split
-                    LstmTradePredictor.WalkForwardResultV2 wf = lstmTradePredictor.walkForwardEvaluate(series, config, model, scalers);
+                    // IMPORTANT: Le modèle n'a été entraîné que sur trainSeries [0, trainEndBar]
+                    // Cette méthode teste UNIQUEMENT sur [trainEndBar, totalBars] (données non vues)
+                    LstmTradePredictor.WalkForwardResultV2 wf = lstmTradePredictor.walkForwardEvaluateOutOfSample(
+                        series,           // Série complète (pour contexte historique)
+                        config,
+                        model,           // Modèle entraîné UNIQUEMENT sur trainSeries
+                        scalers,         // Scalers calculés UNIQUEMENT sur trainSeries
+                        trainEndBar      // Point de séparation: test commence à partir d'ici (20% finaux)
+                    );
                     double meanMse = wf.meanMse;            // Erreur quadratique moyenne sur tous les splits
 
                     // ===== AGRÉGATION DES MÉTRIQUES DE TRADING =====
@@ -434,6 +456,14 @@ public class LstmTuningService {
                     // Score business moyen (critère de sélection)
                     double meanBusinessScore = sumBusiness / splits;
 
+
+                    // DEBUG: Log détaillé des businessScore de chaque split
+                    java.util.List<Double> businessScoresDebug = new java.util.ArrayList<>();
+                    for(LstmTradePredictor.TradingMetricsV2 m : wf.splits) {
+                        businessScoresDebug.add(m.businessScore);
+                    }
+                    logger.info("[--------][DEBUG][TUNING][V2] [{}] businessScores splits: {} | sumBusiness={} | splits={} | meanBusinessScore={}",
+                        symbol, businessScoresDebug, sumBusiness, splits, meanBusinessScore);
 
                     // ===== CALCUL DE LA RMSE =====
                     // Root Mean Square Error: racine carrée de la MSE (plus interprétable)

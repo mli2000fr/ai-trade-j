@@ -175,7 +175,7 @@ public class LstmConfig {
     /** Active pipeline étiquettes scalaires + walk-forward. */
     private boolean useScalarV2 = false;
     /** Utilise le log-return comme cible (target) plutôt que le prix normalisé. */
-    private boolean useLogReturnTarget = true;
+    private boolean useLogReturnTarget = false;
     /** Active la validation walk-forward (utilisé si useScalarV2 = true). */
     private boolean useWalkForwardV2 = true;
     /** Nombre de segments (splits) dans la validation walk-forward. */
@@ -206,6 +206,14 @@ public class LstmConfig {
     private double klDriftThreshold = 0.15;
     /** Seuil de shift de moyenne exprimé en nombre d'écarts-types. */
     private double meanShiftSigmaThreshold = 2.0;
+
+    // =============================== Paramètre du facteur de seuil d'entrée ===============================
+    /**
+     * Facteur multiplicatif appliqué au seuil d'entrée pour le signal de trade.
+     * Permet d'ajuster dynamiquement la sensibilité de la stratégie.
+     * Par défaut : 1.2
+     */
+    private double entryThresholdFactor = 1.2;
 
     /**
      * Constructeur par défaut : charge les hyperparamètres depuis le fichier
@@ -265,6 +273,7 @@ public class LstmConfig {
                 slippagePct = Double.parseDouble(props.getProperty("slippagePct", "0.0002"));
                 klDriftThreshold = Double.parseDouble(props.getProperty("klDriftThreshold", "0.15"));
                 meanShiftSigmaThreshold = Double.parseDouble(props.getProperty("meanShiftSigmaThreshold", "2.0"));
+                entryThresholdFactor = Double.parseDouble(props.getProperty("entryThresholdFactor", "1.2"));
             }
             // FILET DE SECURITE : même si le fichier n'existe pas, on veut un optimizer par défaut.
             optimizer = props.getProperty("optimizer", "adam");
@@ -324,6 +333,7 @@ public class LstmConfig {
         try { this.slippagePct = rs.getDouble("slippage_pct"); } catch (Exception ignored) {}
         try { this.klDriftThreshold = rs.getDouble("kl_drift_threshold"); } catch (Exception ignored) {}
         try { this.meanShiftSigmaThreshold = rs.getDouble("mean_shift_sigma_threshold"); } catch (Exception ignored) {}
+        try { this.entryThresholdFactor = rs.getDouble("entry_threshold_factor"); } catch (Exception ignored) {}
     }
 
     /**
