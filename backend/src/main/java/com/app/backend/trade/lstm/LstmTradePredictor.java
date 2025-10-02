@@ -46,7 +46,8 @@ import org.deeplearning4j.nn.conf.layers.recurrent.LastTimeStep;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.util.ModelSerializer;
 import org.nd4j.linalg.activations.Activation;
-import org.nd4j.linalg.lossfunctions.LossFunctions;
+import org.nd4j.linalg.lossfunctions.ILossFunction;
+import org.nd4j.linalg.lossfunctions.impl.LossMCXENT;
 import org.nd4j.linalg.factory.Nd4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -220,21 +221,20 @@ public class LstmTradePredictor {
 
         // Sélection dynamique de la fonction de perte / activation finale
         Activation outAct;
-        LossFunctions.LossFunction outLoss;
+        ILossFunction lossFn;
         if (outputSize == 1 && !classification) {
             outAct = Activation.IDENTITY;
-            // UTILISATION DE HUBER LOSS pour réduire encore plus le biais conservateur
-            // Huber est moins sensible aux outliers que MAE/MSE et encourage plus de variabilité
-            outLoss = LossFunctions.LossFunction.MEAN_ABSOLUTE_ERROR; // Garder MAE pour l'instant
+            // Étape 10: Huber via implémentation custom (delta=1.0)
+            lossFn = new LossHuberCustom(1.0);
         } else if (classification) {
             outAct = Activation.SOFTMAX;
-            outLoss = LossFunctions.LossFunction.MCXENT;
+            lossFn = new LossMCXENT();
         } else {
             outAct = Activation.IDENTITY;
-            outLoss = LossFunctions.LossFunction.MEAN_ABSOLUTE_ERROR;
+            lossFn = new LossHuberCustom(1.0);
         }
 
-        listBuilder.layer(new OutputLayer.Builder(outLoss)
+        listBuilder.layer(new OutputLayer.Builder(lossFn)
             .nIn(Math.max(16, denseOut / 2))
             .nOut(outputSize)
             .activation(outAct)
@@ -1149,6 +1149,9 @@ public class LstmTradePredictor {
         double minDelta = config.getMinDelta();          // Amélioration minimale considérée comme significative
         int epochsWithoutImprovement = 0;               // Compteur pour early stopping
 
+        // Étape 10: holder baseline variance résiduelle pour suivi amélioration HUBER
+        Double[] baselineResidualVarHolder = new Double[]{null};
+
         // Boucle d'entraînement epoch par epoch
         for (int epoch = 1; epoch <= epochs; epoch++) {
             // Remise à zéro de l'itérateur pour réutiliser les données
@@ -1158,8 +1161,33 @@ public class LstmTradePredictor {
             // fit() effectue la forward pass + backward pass (gradient descent)
             model.fit(iterator);
 
-            // Récupération du score (loss) après cette époque
-            double score = model.score(); // Généralement MSE pour la régression
+            // ===== ÉVALUATION VARIANCE RÉSIDUELLE (Étape 10 HUBER) =====
+            // Prédictions sur l'ensemble d'entraînement (coût modeste car dataset réduit en mémoire)
+            org.nd4j.linalg.api.ndarray.INDArray preds = model.output(X, false);
+            org.nd4j.linalg.api.ndarray.INDArray residuals = y.sub(preds);
+            double residualVar = residuals.varNumber().doubleValue();
+            if (Double.isNaN(residualVar) || Double.isInfinite(residualVar)) residualVar = Double.POSITIVE_INFINITY;
+            // Initialisation baseline la première époque
+            // Utilisation de champs locaux via tableau pour conserver valeur mutable (si besoin extension future)
+            // (On garde local ici; si besoin cross-training => promouvoir en attribut)
+            if (epoch == 1) {
+                logger.info("[TRAIN][HUBER] Variance résiduelle baseline (epoch 1) = {}", String.format("%.6f", residualVar));
+            } else {
+                // On récupère la variance baseline stockée dans un tag de l'historique des logs :
+                // Pour simplicité, on la recalculera depuis epoch 1 si on veut; ici on mémorise localement.
+            }
+            // Mémo baseline hors boucle via variable statique locale
+            if (baselineResidualVarHolder[0] == null) baselineResidualVarHolder[0] = residualVar;
+            double baselineResidualVar = baselineResidualVarHolder[0];
+            double residualImprovement = (baselineResidualVar - residualVar) / baselineResidualVar;
+            if (residualImprovement >= 0.10) {
+                logger.info("[TRAIN][HUBER] Amélioration variance résiduelle >=10% ({}%) epoch {}", String.format("%.2f", residualImprovement * 100), epoch);
+            } else {
+                logger.debug("[TRAIN][HUBER] Variance résiduelle={} (amélioration {}%)", String.format("%.6f", residualVar), String.format("%.2f", residualImprovement * 100));
+            }
+
+            // ===== SCORE (LOSS) COURANT =====
+            double score = model.score(); // Peut représenter Huber désormais
             if (Double.isNaN(score) || Double.isInfinite(score)) {
                 logger.error("[TRAIN][NaN] Score NaN/Inf détecté epoch {} -> arrêt anticipé (vérifier données / gradient clipping)", epoch);
                 break; // stop loop si dérive détectée
@@ -2490,7 +2518,8 @@ public class LstmTradePredictor {
                     int idx = i + windowSize - 1 + h;
                     if (idx < closes.length) {
                         double next = closes[idx];
-                        sum += Math.log(next / prev);
+                        double logRet = Math.log(next / prev);
+                        sum += logRet;
                         prev = next; count++;
                     }
                 }
