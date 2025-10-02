@@ -1478,6 +1478,49 @@ public class LstmTradePredictor {
         return predictNextCloseScalarV2(series, config, model, scalers);
     }
 
+    /**
+     * (Étape 6 - Cache) Variante ultra légère de prédiction réutilisant:
+     *  - Matrice normalisée complète (normMatrix)
+     *  - Tableau des closes (closes)
+     * Évite: extractFeatureMatrix + normalisation à chaque appel.
+     * Hypothèses: normMatrix et closes couvrent au moins endBarInclusive.
+     */
+    public double predictNextCloseScalarCached(int endBarInclusive,
+                                               double[][] normMatrix,
+                                               double[] closes,
+                                               LstmConfig config,
+                                               MultiLayerNetwork model,
+                                               ScalerSet scalers) {
+        int windowSize = config.getWindowSize();
+        int numFeatures = normMatrix[0].length;
+        if (endBarInclusive < windowSize - 1) {
+            throw new IllegalArgumentException("endBarInclusive=" + endBarInclusive + " < windowSize-1");
+        }
+        // Construction séquence [1][window][features]
+        double[][][] seq = new double[1][windowSize][numFeatures];
+        int start = endBarInclusive - windowSize + 1;
+        for (int t = 0; t < windowSize; t++) {
+            System.arraycopy(normMatrix[start + t], 0, seq[0][t], 0, numFeatures);
+        }
+        org.nd4j.linalg.api.ndarray.INDArray input = Nd4j.create(seq).permute(0, 2, 1).dup('c');
+        double predNorm = model.output(input).getDouble(0);
+        double predTarget = scalers.labelScaler.inverse(predNorm);
+        double referencePrice = closes[endBarInclusive];
+        double predicted;
+        if (config.isUseLogReturnTarget()) {
+            predicted = referencePrice * Math.exp(predTarget);
+        } else {
+            predicted = predTarget;
+        }
+        double limitPct = config.getLimitPredictionPct();
+        if (limitPct > 0) {
+            double min = referencePrice * (1 - limitPct);
+            double max = referencePrice * (1 + limitPct);
+            if (predicted < min) predicted = min; else if (predicted > max) predicted = max;
+        }
+        return predicted;
+    }
+
     /* =========================================================
      *                WALK-FORWARD EVALUATION
      * =========================================================
@@ -1654,12 +1697,50 @@ public class LstmTradePredictor {
         LstmConfig config
     ) {
         TradingMetricsV2 tm = new TradingMetricsV2();
+        // ===== Étape 6: Pré-calcul & cache features / indicateurs =====
+        long cacheStartNs = System.nanoTime();
+        List<String> features = config.getFeatures();
+        double[][] rawMatrix = extractFeatureMatrix(fullSeries, features); // [bars][features]
+        int numFeatures = features.size();
+        double[][] normMatrix = new double[rawMatrix.length][numFeatures];
+        if (scalers == null || scalers.featureScalers == null || scalers.featureScalers.size() != numFeatures || scalers.labelScaler == null) {
+            logger.warn("[SIM][CACHE] Scalers incomplets -> rebuild (coût ponctuel)");
+            scalers = rebuildScalers(fullSeries, config);
+        }
+        if (config.isUseLogReturnTarget() && scalers.labelScaler.type == FeatureScaler.Type.MINMAX) {
+            try {
+                scalers.labelScaler = rebuildLabelScalerForLogReturn(fullSeries, config);
+            } catch (Exception e) { logger.error("[SIM][CACHE][LABEL_MIGRATION] {}", e.getMessage()); }
+        }
+        // Normalisation colonne par colonne (évite recalculs multiples)
+        for (int f = 0; f < numFeatures; f++) {
+            double[] col = new double[rawMatrix.length];
+            for (int i = 0; i < rawMatrix.length; i++) col[i] = rawMatrix[i][f];
+            double[] normCol = scalers.featureScalers.get(features.get(f)).transform(col);
+            for (int i = 0; i < rawMatrix.length; i++) normMatrix[i][f] = normCol[i];
+        }
+        double[] closes = extractCloseValues(fullSeries);
+        // Cache sous forme Map (acceptation plan) barIndex -> features normalisées
+        Map<Integer, double[]> featureCache = new HashMap<>(normMatrix.length);
+        for (int i = 0; i < normMatrix.length; i++) featureCache.put(i, normMatrix[i]);
+        // Indicateurs lourds pré-calculés (ATR, RSI)
+        ATRIndicator atrFull = new ATRIndicator(fullSeries, 14);
+        RSIIndicator rsiFull = new RSIIndicator(new ClosePriceIndicator(fullSeries), 14);
+        double[] atrValues = new double[fullSeries.getBarCount()];
+        double[] rsiValues = new double[fullSeries.getBarCount()];
+        for (int i = 0; i < fullSeries.getBarCount(); i++) {
+            atrValues[i] = atrFull.getValue(i).doubleValue();
+            rsiValues[i] = rsiFull.getValue(i).doubleValue();
+        }
+        long cacheReadyNs = System.nanoTime();
+        logger.debug("[SIM][CACHE] Pré-calcul features+indicateurs en {} ms (bars={})", (cacheReadyNs - cacheStartNs)/1_000_000, fullSeries.getBarCount());
+        // ===============================================================
 
         double equity = 0, peak = 0, trough = 0;
         boolean inPos = false; // Pas de longPos/shortPos - LONG ONLY
         double entry = 0;
         int barsInPos = 0;
-        int horizon = Math.max(5, config.getHorizonBars()); // Minimum 5 pour swing trade
+        int horizon = Math.max(5, config.getHorizonBars());
 
         List<Double> tradePnL = new ArrayList<>();
         List<Double> tradeReturns = new ArrayList<>();
@@ -1668,134 +1749,83 @@ public class LstmTradePredictor {
         double capital = config.getCapital();
         double riskPct = config.getRiskPct();
         double sizingK = config.getSizingK();
-        // Alpaca : commission-free mais spread et slippage réalistes
-        double feePct = 0.0; // Alpaca commission-free
-        double slippagePct = config.getSlippagePct(); // 0.05% slippage réaliste
+        double feePct = 0.0; // commission-free
+        double slippagePct = config.getSlippagePct();
         double positionSize = 0;
-
-        // Variables pour swing trade optimization
         double consecutiveLosses = 0;
-        double maxConsecutiveLosses = 3; // Protection contre séries de pertes
+        double maxConsecutiveLosses = 3;
 
-        // Boucle sur les barres de test
+        // Boucle principale
         for (int bar = testStartBar; bar < testEndBar - 1; bar++) {
-            BarSeries sub = fullSeries.getSubSeries(0, bar + 1);
-            if (sub.getBarCount() <= config.getWindowSize()) continue;
-
+            if (bar < config.getWindowSize()) continue; // pas assez d'historique
+            BarSeries sub = fullSeries.getSubSeries(0, bar + 1); // conservé pour fonctions existantes (threshold, volume)
             double threshold = computeSwingTradeThreshold(sub, config);
-            ATRIndicator atrInd = new ATRIndicator(sub, 14);
-            double atr = atrInd.getValue(sub.getEndIndex()).doubleValue();
-
+            double atr = atrValues[bar];
             if (!inPos) {
-                // Protection contre trop de pertes consécutives
                 if (consecutiveLosses >= maxConsecutiveLosses) {
-                    if (bar % 5 == 0) consecutiveLosses = Math.max(0, consecutiveLosses - 1); // Réduction progressive
+                    if (bar % 5 == 0) consecutiveLosses = Math.max(0, consecutiveLosses - 1);
                     continue;
                 }
-
-                double predicted = predictNextCloseScalarV2(sub, config, model, scalers);
-                double lastClose = sub.getLastBar().getClosePrice().doubleValue();
-
-                // Calcul de la force du signal
+                double predicted;
+                try {
+                    predicted = predictNextCloseScalarCached(bar, normMatrix, closes, config, model, scalers);
+                } catch (Exception e) {
+                    // Fallback rare
+                    predicted = predictNextCloseScalarV2(sub, config, model, scalers);
+                }
+                double lastClose = closes[bar];
                 double signalStrength = (predicted - lastClose) / lastClose;
 
-                // LOGIQUE CONTRARIAN INTELLIGENTE - Détection de retournements potentiels
                 boolean contratrianSignal = false;
-                if (signalStrength < -0.02) { // Signal baissier > 2%
-                    // Vérifier si on est dans une zone de survente avec potentiel de rebond
-                    RSIIndicator rsi = new RSIIndicator(new ClosePriceIndicator(sub), 14);
-                    double currentRsi = rsi.getValue(sub.getEndIndex()).doubleValue();
-
-                    // Vérifier si le prix est proche d'un support technique
+                if (signalStrength < -0.02) {
+                    double currentRsi = rsiValues[bar];
                     double[] recentLows = new double[10];
-                    for (int i = 0; i < Math.min(10, sub.getBarCount() - 1); i++) {
+                    for (int i = 0; i < Math.min(10, sub.getBarCount()); i++) {
                         recentLows[i] = sub.getBar(sub.getBarCount() - 1 - i).getLowPrice().doubleValue();
                     }
                     double supportLevel = Arrays.stream(recentLows).min().orElse(lastClose);
                     double distanceToSupport = (lastClose - supportLevel) / supportLevel;
-
-                    // Signal contrarian si : RSI < 35 ET proche du support ET signal baissier fort
                     if (currentRsi < 35 && distanceToSupport < 0.05 && signalStrength < -0.025) {
                         contratrianSignal = true;
-                        signalStrength = Math.abs(signalStrength) * 0.6; // Convertir en signal haussier modéré
-
-                        logger.info("[DEBUG][CONTRARIAN] Signal contrarian détecté: RSI={}, support={}, distance={}%, nouveau signalStrength={}%",
-                            String.format("%.1f", currentRsi),
-                            String.format("%.3f", supportLevel),
-                            String.format("%.2f", distanceToSupport * 100),
-                            String.format("%.4f", signalStrength * 100));
+                        signalStrength = Math.abs(signalStrength) * 0.6;
+                        logger.info("[DEBUG][CONTRARIAN][CACHE] bar={} rsi={} support={} dist={} signalAdj={}", bar,
+                                String.format("%.1f", currentRsi), String.format("%.3f", supportLevel),
+                                String.format("%.2f", distanceToSupport * 100), String.format("%.4f", signalStrength));
                     }
                 }
-
-                // Signal d'entrée LONG ONLY avec seuils adaptatifs
-                double entryThreshold = threshold * config.getEntryThresholdFactor(); // Utilise le facteur configurable
-
-                // CORRECTION: Diagnostic avant les ajustements d'urgence
+                double entryThreshold = threshold * config.getEntryThresholdFactor();
                 double signalStrengthPct = signalStrength * 100;
                 double entryThresholdPct = entryThreshold * 100;
                 double thresholdPct = threshold * 100;
-
-                // Log de diagnostic AVANT les ajustements
-                logger.info("[DEBUG][RAW] bar={}, predicted={}, lastClose={}, signalStrength={}% ({}), entryThreshold={}% ({}), threshold={}% ({})",
-                    bar,
-                    String.format("%.3f", predicted),
-                    String.format("%.3f", lastClose),
-                    String.format("%.4f", signalStrengthPct), String.format("%.6f", signalStrength),
-                    String.format("%.4f", entryThresholdPct), String.format("%.6f", entryThreshold),
-                    String.format("%.4f", thresholdPct), String.format("%.6f", threshold)
-                );
-
-                // SEUIL D'URGENCE - Si entryThreshold est trop élevé (>1%), utiliser un seuil de secours
-                if (entryThreshold > 0.01) { // Plus de 1% = problème de config
-                    logger.warn("[DEBUG][EMERGENCY] entryThreshold trop élevé ({}%), utilisation seuil d'urgence 0.3%", String.format("%.4f", entryThreshold * 100));
-                    entryThreshold = 0.003; // Seuil d'urgence à 0.3%
-                    entryThresholdPct = entryThreshold * 100; // Recalculer après ajustement
+                logger.info("[DEBUG][RAW][CACHE] bar={}, predicted={}, lastClose={}, signalStrength={}% ({}), entryThreshold={}% ({}), threshold={}% ({})",
+                        bar,
+                        String.format("%.3f", predicted),
+                        String.format("%.3f", lastClose),
+                        String.format("%.4f", signalStrengthPct), String.format("%.6f", signalStrength),
+                        String.format("%.4f", entryThresholdPct), String.format("%.6f", entryThreshold),
+                        String.format("%.4f", thresholdPct), String.format("%.6f", threshold));
+                if (entryThreshold > 0.01) {
+                    logger.warn("[DEBUG][EMERGENCY][CACHE] entryThreshold trop élevé ({}%), fallback 0.3%", String.format("%.4f", entryThreshold * 100));
+                    entryThreshold = 0.003;
                 }
-
-                // SEUIL ADAPTATIF DYNAMIQUE - si les signaux sont systématiquement trop faibles
                 double adaptiveThreshold = entryThreshold;
-                if (bar > testStartBar + 50) { // Après 50 barres, ajuster si nécessaire
-                    // Réduire progressivement le seuil si aucune entrée depuis longtemps
+                if (bar > testStartBar + 50) {
                     double reductionFactor = Math.max(0.1, 1.0 - (bar - testStartBar) * 0.001);
                     adaptiveThreshold = entryThreshold * reductionFactor;
-
                     if (Math.abs(adaptiveThreshold - entryThreshold) > 0.0001) {
-                        logger.info("[DEBUG][ADAPTIVE] bar={}, seuil adaptatif: {}% -> {}% (réduction: {}%)",
-                            bar, String.format("%.4f", entryThresholdPct), String.format("%.4f", adaptiveThreshold * 100), String.format("%.1f", (1 - reductionFactor) * 100));
+                        logger.info("[DEBUG][ADAPTIVE][CACHE] bar={} seuil: {} -> {} (reductFactor={})", bar,
+                                String.format("%.4f", entryThreshold), String.format("%.4f", adaptiveThreshold),
+                                String.format("%.3f", reductionFactor));
                     }
                 }
-
-                // DIAGNOSTIC COMPLET - logs détaillés pour comprendre le problème
                 boolean wouldEnter = signalStrength > adaptiveThreshold;
-                double adaptiveThresholdPct = adaptiveThreshold * 100;
-
-                // CORRECTION: Utiliser des String.format pour éviter les problèmes de formatage
-                logger.info("[DEBUG][ENTRY] bar={}, predicted={}, lastClose={}, signalStrength={}% ({}), entryThreshold={}% ({}), adaptiveThreshold={}% ({}), threshold={}% ({}), thresholdK={}, entryFactor={}, WOULD_ENTER={}",
-                    bar,
-                    String.format("%.3f", predicted),
-                    String.format("%.3f", lastClose),
-                    String.format("%.4f", signalStrengthPct), String.format("%.6f", signalStrength),
-                    String.format("%.4f", entryThresholdPct), String.format("%.6f", entryThreshold),
-                    String.format("%.4f", adaptiveThresholdPct), String.format("%.6f", adaptiveThreshold),
-                    String.format("%.4f", thresholdPct), String.format("%.6f", threshold),
-                    String.format("%.6f", config.getThresholdK()),
-                    String.format("%.6f", config.getEntryThresholdFactor()),
-                    wouldEnter ? "YES" : "NO"
-                );
-
+                logger.info("[DEBUG][ENTRY][CACHE] bar={} wouldEnter={} signal={} thresh={} adaptive={}", bar, wouldEnter,
+                        String.format("%.6f", signalStrength), String.format("%.6f", entryThreshold), String.format("%.6f", adaptiveThreshold));
                 if (signalStrength > adaptiveThreshold) {
-                    // Vérifications supplémentaires pour swing trade professionnel
-
-                    // 1. Vérifier que ce n'est pas un faux signal (RSI pas en zone extrême)
-                    RSIIndicator rsi = new RSIIndicator(new ClosePriceIndicator(sub), 14);
-                    double currentRsi = rsi.getValue(sub.getEndIndex()).doubleValue();
-                    logger.info("[--------2][DEBUG][ENTRY] bar={}, currentRsi={}", bar, currentRsi);
-                    if (currentRsi > 75) {
-                        logger.info("[--------2][DEBUG][ENTRY] bar={}, rejeté: RSI trop élevé ({} > 75)", bar, currentRsi);
-                        continue; // Éviter les zones de surachat extrême
-                    }
-
-                    // 2. Vérifier le volume (doit être au-dessus de la moyenne)
+                    double currentRsi = rsiValues[bar];
+                    logger.info("[DEBUG][ENTRY][CACHE] bar={}, currentRsi={}", bar, currentRsi);
+                    if (currentRsi > 75) continue;
+                    // Volume check (non pré-calculé – coût acceptable)
                     VolumeIndicator vol = new VolumeIndicator(sub);
                     double currentVol = vol.getValue(sub.getEndIndex()).doubleValue();
                     double avgVol = 0;
@@ -1804,107 +1834,52 @@ public class LstmTradePredictor {
                         avgVol += vol.getValue(i).doubleValue();
                     }
                     avgVol /= volPeriod;
-                    logger.debug("[DEBUG][ENTRY] bar={}, currentVol={}, avgVol={}", bar, currentVol, avgVol);
-                    if (currentVol < avgVol * 0.8) {
-                        logger.debug("[DEBUG][ENTRY] bar={}, rejeté: volume insuffisant ({} < {})", bar, currentVol, avgVol * 0.8);
-                        continue; // Volume insuffisant
-                    }
-
-                    // 3. Entrée confirmée
-                    logger.debug("[DEBUG][ENTRY] bar={}, entrée confirmée à {}", bar, lastClose);
+                    if (currentVol < avgVol * 0.8) continue;
                     inPos = true;
                     entry = lastClose;
                     barsInPos = 0;
-
-                    // Calcul taille position optimisée pour swing trade
-                    // Utilise ATR pour sizing basé sur volatilité
                     double atrPct = atr / lastClose;
                     double riskAmount = capital * riskPct;
-                    double stopDistance = atrPct * sizingK; // Distance stop basée sur ATR
-                    positionSize = riskAmount / (lastClose * stopDistance);
-
-                    // Limite la taille de position (max 10% du capital)
+                    double stopDistance = atrPct * sizingK;
+                    positionSize = stopDistance > 0 ? riskAmount / (lastClose * stopDistance) : 0;
                     double maxPositionValue = capital * 0.1;
-                    if (positionSize * lastClose > maxPositionValue) {
-                        positionSize = maxPositionValue / lastClose;
-                    }
+                    if (positionSize * lastClose > maxPositionValue) positionSize = maxPositionValue / lastClose;
                 }
             } else {
                 barsInPos++;
-                double current = fullSeries.getBar(bar).getClosePrice().doubleValue();
-
-                // Gestion des sorties pour swing trade professionnel
+                double current = closes[bar];
                 boolean exit = false;
                 double pnl = 0;
-
-                // 1. Stop Loss dynamique basé sur ATR
-                double atrStop = entry - (atr * sizingK * 1.5); // Stop plus large pour swing
-
-                // 2. Take Profit progressif
-                double basicTarget = entry * (1 + threshold * 3); // Target à 3x le threshold
-                double atrTarget = entry + (atr * sizingK * 2.5); // Target basé sur ATR
+                double atrStop = entry - (atr * sizingK * 1.5);
+                double basicTarget = entry * (1 + threshold * 3);
+                double atrTarget = entry + (atr * sizingK * 2.5);
                 double target = Math.max(basicTarget, atrTarget);
-
-                // 3. Trailing stop pour swing trade
-                double trailingStop = Math.max(atrStop, current * 0.95); // Trail à 5%
-
-                // Conditions de sortie
-                if (current <= trailingStop) {
-                    // Stop loss ou trailing stop
-                    pnl = (current - entry) * positionSize;
-                    exit = true;
-                } else if (current >= target) {
-                    // Take profit
-                    pnl = (current - entry) * positionSize;
-                    exit = true;
-                } else if (barsInPos >= horizon) {
-                    // Sortie temporelle
+                double trailingStop = Math.max(atrStop, current * 0.95);
+                if (current <= trailingStop || current >= target || barsInPos >= horizon) {
                     pnl = (current - entry) * positionSize;
                     exit = true;
                 } else if (barsInPos >= 3) {
-                    // Sortie si prédiction devient négative après 3 jours minimum
                     try {
-                        BarSeries currentSub = fullSeries.getSubSeries(0, bar + 1);
-                        double newPredicted = predictNextCloseScalarV2(currentSub, config, model, scalers);
-                        if (newPredicted < current * 0.98) { // Prédiction baissière > 2%
+                        double newPredicted = predictNextCloseScalarCached(bar, normMatrix, closes, config, model, scalers);
+                        if (newPredicted < current * 0.98) {
                             pnl = (current - entry) * positionSize;
                             exit = true;
                         }
-                    } catch (Exception ignored) {} // Continue si erreur de prédiction
+                    } catch (Exception ignored) {}
                 }
-
                 if (exit) {
-                    // Coûts de trading Alpaca (pas de commission mais slippage)
                     double entrySlippage = slippagePct * entry * positionSize;
                     double exitSlippage = slippagePct * current * positionSize;
                     double totalCosts = entrySlippage + exitSlippage;
-
                     pnl -= totalCosts;
-
                     tradePnL.add(pnl);
                     tradeReturns.add(pnl / (entry * positionSize));
                     barsInPosList.add(barsInPos);
-
-                    // Gestion séries de pertes
-                    if (pnl < 0) {
-                        consecutiveLosses++;
-                    } else {
-                        consecutiveLosses = 0;
-                    }
-
+                    if (pnl < 0) consecutiveLosses++; else consecutiveLosses = 0;
                     equity += pnl;
-                    if (equity > peak) {
-                        peak = equity;
-                        trough = equity;
-                    } else if (equity < trough) {
-                        trough = equity;
-                    }
-
-                    // Reset position
-                    inPos = false;
-                    entry = 0;
-                    barsInPos = 0;
-                    positionSize = 0;
+                    if (equity > peak) { peak = equity; trough = equity; }
+                    else if (equity < trough) { trough = equity; }
+                    inPos = false; entry = 0; barsInPos = 0; positionSize = 0;
                 }
             }
         }
