@@ -853,7 +853,20 @@ public class LstmTradePredictor {
     public static class TrainResult {
         public MultiLayerNetwork model;
         public ScalerSet scalers;
+        // Step13: métadonnées validation
+        public Double bestValLoss;
+        public Double finalValLoss;
+        public boolean bestBetterThanLast;
         public TrainResult(MultiLayerNetwork m, ScalerSet s){this.model=m;this.scalers=s;}
+        public TrainResult(MultiLayerNetwork m, ScalerSet s, Double bestVal, Double finalVal, boolean improved){
+            this.model=m; this.scalers=s; this.bestValLoss=bestVal; this.finalValLoss=finalVal; this.bestBetterThanLast=improved;
+        }
+    }
+
+    // Step13: compteurs globaux (ratio améliorations bestValLoss vs dernier valLoss)
+    private static class Step13Stats {
+        private static final java.util.concurrent.atomic.AtomicInteger totalRuns = new java.util.concurrent.atomic.AtomicInteger();
+        private static final java.util.concurrent.atomic.AtomicInteger improvedRuns = new java.util.concurrent.atomic.AtomicInteger();
     }
 
     /**
@@ -1198,6 +1211,7 @@ public class LstmTradePredictor {
         int epochsWithoutImprovement = 0;               // Compteur train
         int epochsWithoutValImprovement = 0;            // Compteur validation
         int patienceVal = config.getPatienceVal() > 0 ? config.getPatienceVal() : 5;
+        Double lastValLoss = null; // Step13: stocke le dernier valLoss
 
         // Étape 10: holder baseline variance résiduelle pour suivi amélioration HUBER
         Double[] baselineResidualVarHolder = new Double[]{null};
@@ -1219,6 +1233,7 @@ public class LstmTradePredictor {
             boolean acceptanceValBetterThanTrain = false;
             if (useInternalVal) {
                 valLoss = model.score(valDs);
+                lastValLoss = valLoss; // Step13: mise à jour dernier valLoss
                 acceptanceValBetterThanTrain = valLoss < (trainLoss + minDelta);
                 valImproved = (bestValLoss - valLoss) > minDelta;
                 if (valImproved) {
@@ -1339,10 +1354,30 @@ public class LstmTradePredictor {
             logger.warn("[TRAIN][FINAL] Aucun modèle amélioré sauvegardé (fallback dernier état)");
         }
 
+        // ===== STEP 13: ACCEPTATION (best model vs dernier) =====
+        boolean bestBetterThanLast = false;
+        if (useInternalVal && Double.isFinite(bestValLoss) && lastValLoss != null && Double.isFinite(lastValLoss)) {
+            // Critère strict: meilleure epoch différente (strictement plus basse)
+            bestBetterThanLast = (bestValLoss + minDelta) < lastValLoss;
+            logger.info("[TRAIN][ACCEPT][STEP13] bestValLoss={} lastValLoss={} improvedVsLast={}",
+                String.format(Locale.US, "%.6f", bestValLoss),
+                String.format(Locale.US, "%.6f", lastValLoss),
+                bestBetterThanLast);
+            // Compteurs globaux (static) pour ratio >=40%
+            try {
+                Step13Stats.totalRuns.incrementAndGet();
+                if (bestBetterThanLast) Step13Stats.improvedRuns.incrementAndGet();
+                int tot = Step13Stats.totalRuns.get();
+                int imp = Step13Stats.improvedRuns.get();
+                double ratio = tot > 0 ? (100.0 * imp / tot) : 0.0;
+                logger.info("[TRAIN][ACCEPT][STEP13][RATIO] improvedRuns={}/{} ({}%)", imp, tot, String.format(Locale.US, "%.2f", ratio));
+            } catch (Exception ignore) {}
+        } else if (useInternalVal) {
+            logger.info("[TRAIN][ACCEPT][STEP13] Données insuffisantes pour calcul acceptation (bestValLoss={} lastValLoss={})", bestValLoss, lastValLoss);
+        }
+
         // ===== PHASE 11: RETOUR DU RÉSULTAT FINAL =====
-        // Encapsulation du MEILLEUR modèle entraîné et des scalers dans un objet résultat
-        // Les scalers sont critiques pour la dénormalisation lors des prédictions
-        return new TrainResult(finalModel, scalers);
+        return new TrainResult(finalModel, scalers, useInternalVal? bestValLoss: null, useInternalVal? lastValLoss: null, bestBetterThanLast);
     }
 
     /* =========================================================
