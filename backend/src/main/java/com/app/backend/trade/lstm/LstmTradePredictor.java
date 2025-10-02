@@ -405,6 +405,9 @@ public class LstmTradePredictor {
         boolean needVolumeRatio = features.contains("volume_ratio");
         boolean needPricePosition = features.contains("price_position");
         boolean needVolatilityRegime = features.contains("volatility_regime");
+        // Étape 5: préparation suivi skew volume
+        boolean needVolume = features.contains("volume");
+        double[] rawVolumeForSkew = needVolume ? new double[n] : null;
 
         // Parcours de chaque barre
         for (int i = 0; i < n; i++) {
@@ -413,6 +416,7 @@ public class LstmTradePredictor {
             double lowVal = low.getValue(i).doubleValue();
             double openVal = open.getValue(i).doubleValue();
             double volVal = vol.getValue(i).doubleValue();
+            if (needVolume) rawVolumeForSkew[i] = volVal; // stock brut pour skew
             ZonedDateTime t = series.getBar(i).getEndTime();
 
             for (int f = 0; f < fCount; f++) {
@@ -425,7 +429,14 @@ public class LstmTradePredictor {
                     case "high" -> val = highVal;
                     case "low" -> val = lowVal;
                     case "open" -> val = openVal;
-                    case "volume" -> val = volVal;
+                    case "volume" -> {
+                        // Étape 5: appliquer log1p(volume) avant normalisation
+                        double safeVol = volVal;
+                        if (safeVol < 0) safeVol = 0; // sécurité
+                        double logV = Math.log1p(safeVol);
+                        if (!Double.isFinite(logV)) logV = 0.0;
+                        val = logV;
+                    }
 
                     // RSI variants
                     case "rsi" -> val = rsi != null ? rsi.getValue(i).doubleValue() : 0.0;
@@ -658,6 +669,27 @@ public class LstmTradePredictor {
                 }
             } catch (Exception e) {
                 logger.warn("[FEATURE][REALIZED_VOL] Échec comptage diversité: {}", e.getMessage());
+            }
+        }
+        // Étape 5: calcul skew avant/après transformation volume
+        if (needVolume) {
+            try {
+                int vCol = features.indexOf("volume");
+                double[] volLog = new double[n];
+                for (int i = 0; i < n; i++) volLog[i] = M[i][vCol];
+                for (int i = 0; i < n; i++) if (rawVolumeForSkew[i] < 0 || !Double.isFinite(rawVolumeForSkew[i])) rawVolumeForSkew[i] = 0.0;
+                double skewRaw = computeSkewness(rawVolumeForSkew);
+                double skewLog = computeSkewness(volLog);
+                double absRaw = Math.abs(skewRaw);
+                double absLog = Math.abs(skewLog);
+                double reduction = absRaw > 1e-9 ? (absRaw - absLog) / absRaw : 0.0;
+                String status = reduction >= 0.30 ? "ACCEPTÉ" : "ATTENTION";
+                logger.info("[FEATURE][VOLUME_LOG1P] skew_raw={} skew_log={} reduction={} ({})", String.format(Locale.US, "%.4f", skewRaw), String.format(Locale.US, "%.4f", skewLog), String.format(Locale.US, "%.1f%%", reduction * 100.0), status);
+                if (reduction < 0.30) {
+                    logger.warn("[FEATURE][VOLUME_LOG1P] Réduction skew < 30% ({}).", String.format(Locale.US, "%.1f%%", reduction * 100.0));
+                }
+            } catch (Exception e) {
+                logger.warn("[FEATURE][VOLUME_LOG1P] Échec calcul skew: {}", e.getMessage());
             }
         }
         return M;
@@ -2500,5 +2532,25 @@ public class LstmTradePredictor {
         logger.debug("[BUSINESS_SCORE] pf={} (adj={}), winRate={}, maxDD={}, expectancy={}, denom={}, score={}",
             profitFactor, pfAdj, winRate, maxDrawdownPct, expectancy, denom, score);
         return score;
+    }
+
+    private double computeSkewness(double[] data) {
+        if (data == null || data.length == 0) return 0.0;
+        int n = data.length;
+        double mean = 0.0;
+        for (double v : data) mean += v;
+        mean /= n;
+        double m2 = 0.0, m3 = 0.0;
+        for (double v : data) {
+            double d = v - mean;
+            m2 += d * d;
+            m3 += d * d * d;
+        }
+        if (m2 == 0) return 0.0;
+        double var = m2 / n;
+        double std = Math.sqrt(var);
+        if (std == 0) return 0.0;
+        double skew = (m3 / n) / (std * std * std);
+        return Double.isFinite(skew) ? skew : 0.0;
     }
 }
