@@ -37,6 +37,8 @@ CREATE TABLE trade_ai.lstm_hyperparams (
     sizing_k DOUBLE DEFAULT 1.0,
     fee_pct DOUBLE DEFAULT 0.0005,
     slippage_pct DOUBLE DEFAULT 0.0002,
+    use_multi_horizon_avg BOOLEAN DEFAULT FALSE,
+    entry_threshold_factor DOUBLE DEFAULT 1.2,
     kl_drift_threshold DOUBLE DEFAULT 0.15,
     mean_shift_sigma_threshold DOUBLE DEFAULT 2.0,
     updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
