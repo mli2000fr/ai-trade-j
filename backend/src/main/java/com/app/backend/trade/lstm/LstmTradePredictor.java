@@ -60,13 +60,12 @@ import org.ta4j.core.indicators.helpers.HighPriceIndicator;
 import org.ta4j.core.indicators.helpers.LowPriceIndicator;
 import org.ta4j.core.indicators.helpers.VolumeIndicator;
 import org.ta4j.core.indicators.statistics.StandardDeviationIndicator;
-
 import java.io.*;
-import java.time.DayOfWeek;
 import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.Arrays;
 import org.deeplearning4j.nn.conf.inputs.InputType;
+import org.deeplearning4j.nn.conf.GradientNormalization;
 
 @Service
 public class LstmTradePredictor {
@@ -140,7 +139,10 @@ public class LstmTradePredictor {
 
         // Activation des workspaces mémoire (optimisation Dl4J)
         builder.trainingWorkspaceMode(WorkspaceMode.ENABLED)
-               .inferenceWorkspaceMode(WorkspaceMode.ENABLED);
+               .inferenceWorkspaceMode(WorkspaceMode.ENABLED)
+               // Étape 8: Gradient clipping pour prévenir dérives / NaN
+               .gradientNormalization(GradientNormalization.ClipElementWiseAbsoluteValue)
+               .gradientNormalizationThreshold(1.0);
 
         NeuralNetConfiguration.ListBuilder listBuilder = builder.list();
 
@@ -1151,8 +1153,11 @@ public class LstmTradePredictor {
             model.fit(iterator);
 
             // Récupération du score (loss) après cette époque
-
             double score = model.score(); // Généralement MSE pour la régression
+            if (Double.isNaN(score) || Double.isInfinite(score)) {
+                logger.error("[TRAIN][NaN] Score NaN/Inf détecté epoch {} -> arrêt anticipé (vérifier données / gradient clipping)", epoch);
+                break; // stop loop si dérive détectée
+            }
 
             // ===== GESTION DU MEILLEUR MODÈLE ET EARLY STOPPING =====
             // Vérification si on a une amélioration significative
