@@ -1673,10 +1673,12 @@ public class LstmTradePredictor {
     public static class TradingMetricsV2 implements Serializable {
         public double totalProfit, profitFactor, winRate, maxDrawdownPct, expectancy, sharpe, sortino, exposure, turnover, avgBarsInPosition, mse, businessScore, calmar;
         public int numTrades;
-        // Step15: nouveaux champs contrarian
         public int contrarianTrades;
         public int normalTrades;
         public double contrarianRatio;
+        // Étape 18: stats position sizing
+        public double positionValueMean;
+        public double positionValueStd;
     }
     private static class ContrarianDecision { boolean active; double adjustedSignalStrength; String reason; }
     private ContrarianDecision evaluateContrarian(double rawSignalStrength, double lastClose, double[] rsiValues, int bar, BarSeries sub) {
@@ -1888,6 +1890,28 @@ public class LstmTradePredictor {
         logger.debug("[SIM][CACHE] Pré-calcul features+indicateurs en {} ms (bars={})", (cacheReadyNs - cacheStartNs)/1_000_000, fullSeries.getBarCount());
         // ===============================================================
 
+        // Étape 18: calcul medianAtrPct (sans fuite: uniquement historique avant testStartBar)
+        double medianAtrPct;
+        {
+            List<Double> atrPctHist = new ArrayList<>();
+            for (int i = 0; i < Math.min(testStartBar, fullSeries.getBarCount()); i++) {
+                double c = closes[i];
+                if (c > 0) {
+                    double pct = atrValues[i] / c;
+                    if (Double.isFinite(pct) && pct > 0) atrPctHist.add(pct);
+                }
+            }
+            if (atrPctHist.isEmpty()) {
+                medianAtrPct = 0.01; // fallback 1%
+            } else {
+                Collections.sort(atrPctHist);
+                int mIdx = atrPctHist.size() / 2;
+                if (atrPctHist.size() % 2 == 1) medianAtrPct = atrPctHist.get(mIdx); else medianAtrPct = (atrPctHist.get(mIdx - 1) + atrPctHist.get(mIdx)) / 2.0;
+                if (!Double.isFinite(medianAtrPct) || medianAtrPct <= 0) medianAtrPct = 0.01;
+            }
+        }
+        logger.info("[POS][ADAPT] medianAtrPct (historique avant test) = {}%", String.format(Locale.US, "%.4f", medianAtrPct * 100));
+
         // ===== Étape 17: Cache prédictions intra-split =====
         Map<Integer, Double> predictionCache = new HashMap<>();
         int predictionComputeCount = 0;
@@ -1903,6 +1927,8 @@ public class LstmTradePredictor {
         List<Double> tradePnL = new ArrayList<>();
         List<Double> tradeReturns = new ArrayList<>();
         List<Integer> barsInPosList = new ArrayList<>();
+        // Étape 18: collecte des valeurs de position (valeur notionnelle) pour stats dispersion
+        List<Double> positionValues = new ArrayList<>();
 
         double capital = config.getCapital();
         double riskPct = config.getRiskPct();
@@ -2034,10 +2060,31 @@ public class LstmTradePredictor {
                     double riskAmount = capital * riskPct;
                     double stopDistance = atrPct * sizingK;
                     positionSize = stopDistance > 0 ? riskAmount / (lastClose * stopDistance) : 0;
-                    double maxPositionValue = capital * 0.1;
-                    if (positionSize * lastClose > maxPositionValue) positionSize = maxPositionValue / lastClose;
-                    // Step15: comptage contrarian vs normal
-                    if (contrarianDecision.active) tm.contrarianTrades++; else tm.normalTrades++;
+                    // Étape 18: plafonnement adaptatif
+                    double hardCap = capital * 0.10; // cap fixe historique 10% du capital
+                    double dynFactor = (medianAtrPct > 0) ? (0.5 * atrPct / medianAtrPct) : 0.5; // 0.5 * ratio ATR relatifs
+                    // Limites de robustesse sur dynFactor
+                    if (!Double.isFinite(dynFactor) || dynFactor <= 0) dynFactor = 0.5;
+                    dynFactor = Math.max(0.05, Math.min(dynFactor, 1.5)); // clamp pour éviter extrêmes
+                    double dynamicCap = capital * dynFactor;
+                    double positionValueMax = Math.min(hardCap, dynamicCap);
+                    if (positionValueMax <= 0) positionValueMax = hardCap; // fallback
+                    double rawPositionValue = positionSize * lastClose;
+                    if (rawPositionValue > positionValueMax && lastClose > 0) {
+                        positionSize = positionValueMax / lastClose;
+                    }
+                    double finalPositionValue = positionSize * lastClose;
+                    positionValues.add(finalPositionValue);
+                    logger.debug("[POS][ADAPT] bar={} atrPct={} medianAtrPct={} dynFactor={} dynCap={} hardCap={} finalCap={} rawPosValue={} finalPosValue={}",
+                            bar,
+                            String.format(Locale.US, "%.5f", atrPct),
+                            String.format(Locale.US, "%.5f", medianAtrPct),
+                            String.format(Locale.US, "%.3f", dynFactor),
+                            String.format(Locale.US, "%.2f", dynamicCap),
+                            String.format(Locale.US, "%.2f", hardCap),
+                            String.format(Locale.US, "%.2f", positionValueMax),
+                            String.format(Locale.US, "%.2f", rawPositionValue),
+                            String.format(Locale.US, "%.2f", finalPositionValue));
                 }
                 // Mise à jour buffer après décision (n'inclut pas le delta dans son propre calcul de percentile)
                 double absDelta = Math.abs(rawDelta);
@@ -2165,6 +2212,19 @@ public class LstmTradePredictor {
             logger.warn("[STEP15][CHECK] ratio contrarian élevé {}% (>35%)", String.format("%.2f", tm.contrarianRatio * 100));
         } else {
             logger.info("[STEP15][CHECK] ratio contrarian {}% (<=35%)", String.format("%.2f", tm.contrarianRatio * 100));
+        }
+        // Étape 18: calcul stats dispersion position sizing
+        if (!positionValues.isEmpty()) {
+            double sumPV = 0; for (double v : positionValues) sumPV += v; double meanPV = sumPV / positionValues.size();
+            double varPV = 0; for (double v : positionValues) { double d = v - meanPV; varPV += d * d; } varPV = varPV / positionValues.size();
+            double stdPV = Math.sqrt(varPV);
+            tm.positionValueMean = meanPV;
+            tm.positionValueStd = stdPV;
+            logger.info("[POS][ADAPT][STATS] positions={} meanValue={} stdValue={} stdPctCapital={}",
+                    positionValues.size(),
+                    String.format(Locale.US, "%.2f", meanPV),
+                    String.format(Locale.US, "%.2f", stdPV),
+                    String.format(Locale.US, "%.2f", (stdPV / capital) * 100));
         }
 
         return tm;
