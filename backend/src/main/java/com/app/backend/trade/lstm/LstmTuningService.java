@@ -693,7 +693,7 @@ public class LstmTuningService {
         // Paramètres optimisés pour swing trade professionnel (3-10 jours)
         int[] windowSizes = {30, 40, 50}; // Fenêtres plus larges pour swing trade
         int[] lstmNeurons = {128, 192, 256}; // Plus de neurones pour capturer patterns complexes
-        double[] dropoutRates = {0.25, 0.3, 0.35}; // Dropout adapté pour éviter overfitting
+        double[] dropoutRates = {0.2, 0.25}; // Étape 9: max 0.25 (réduction sur-apprentissage)
         double[] learningRates = {0.0002, 0.0003, 0.0005}; // LR plus faibles pour stabilité
         double[] l1s = {0.0}; // Pas de L1 pour swing trade
         double[] l2s = {0.003, 0.005, 0.008}; // L2 plus élevé pour généralisation
@@ -778,7 +778,7 @@ public class LstmTuningService {
         List<LstmConfig> grid = new java.util.ArrayList<>();
         int[] windowSizes = {20, 30, 40};
         int[] lstmNeurons = {64, 128, 256};
-        double[] dropoutRates = {0.2, 0.3};
+        double[] dropoutRates = {0.2, 0.25}; // Étape 9: max 0.25
         double[] learningRates = {0.0005, 0.001};
         double[] l1s = {0.0};
         double[] l2s = {0.0001, 0.001};
@@ -850,7 +850,7 @@ public class LstmTuningService {
         java.util.Random rand = new java.util.Random();
         int[] windowSizes = {10, 20, 30};
         int[] lstmNeurons = {64, 128};
-        double[] dropoutRates = {0.2, 0.3};
+        double[] dropoutRates = {0.2, 0.25}; // Étape 9: max 0.25
         double[] learningRates = {0.0005, 0.001};
         double[] l1s = {0.0};
         double[] l2s = {0.0001, 0.001};
@@ -896,7 +896,7 @@ public class LstmTuningService {
         java.util.Random rand = new java.util.Random(seed);
         int[] windowSizes = {10, 20, 30};
         int[] lstmNeurons = {64, 128};
-        double[] dropoutRates = {0.2, 0.3};
+        double[] dropoutRates = {0.2, 0.25}; // Étape 9: max 0.25
         double[] learningRates = {0.0005, 0.001};
         double[] l1s = {0.0};
         double[] l2s = {0.0001, 0.001};
@@ -947,7 +947,7 @@ public class LstmTuningService {
         java.util.Random rand = new java.util.Random();
         int[] windowSizes = {10, 20, 30};
         int[] lstmNeurons = {64, 128};
-        double[] dropoutRates = {0.2, 0.3};
+        double[] dropoutRates = {0.2, 0.25}; // Étape 9: max 0.25
         double[] learningRates = {0.0005, 0.001};
         double[] l1s = {0.0};
         double[] l2s = {0.0001, 0.001};
@@ -996,7 +996,7 @@ public class LstmTuningService {
         List<LstmConfig> grid = new java.util.ArrayList<>();
         int[] windowSizes = {20, 30, 40};
         int[] lstmNeurons = {64, 128, 256};
-        double[] dropoutRates = {0.2, 0.3};
+        double[] dropoutRates = {0.2, 0.25}; // Étape 9: max 0.25
         double[] learningRates = {0.0005, 0.001};
         double[] l1s = {0.0};
         double[] l2s = {0.0001, 0.001};
@@ -1062,7 +1062,7 @@ public class LstmTuningService {
         List<LstmConfig> grid = new java.util.ArrayList<>();
         int[] windowSizes = {20, 30, 40};
         int[] lstmNeurons = {64, 128, 256};
-        double[] dropoutRates = {0.2, 0.3};
+        double[] dropoutRates = {0.2, 0.25}; // Étape 9: max 0.25
         double[] learningRates = {0.0005, 0.001};
         double[] l1s = {0.0};
         double[] l2s = {0.0001, 0.001};

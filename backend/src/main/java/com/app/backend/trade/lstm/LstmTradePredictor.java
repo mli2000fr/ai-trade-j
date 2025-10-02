@@ -176,8 +176,9 @@ public class LstmTradePredictor {
                 listBuilder.layer(recurrent);
                 // Dropout plus agressif pour éviter le sur-apprentissage conservateur
                 if (dropoutRate > 0.0) {
+                    // Étape 9: Dropout récurrent plafonné à 0.25 (suppression *1.5 pour éviter sous-apprentissage)
                     listBuilder.layer(new DropoutLayer.Builder()
-                        .dropOut(Math.min(dropoutRate * 1.5, 0.7)) // Augmentation du dropout
+                        .dropOut(Math.min(Math.max(dropoutRate, 0.0), 0.25))
                         .build());
                 }
             }
@@ -211,8 +212,9 @@ public class LstmTradePredictor {
 
         // Dropout avant la couche finale pour éviter le sur-apprentissage
         if (dropoutRate > 0.0) {
+            // Étape 9: Dropout dense final = min(0.2, dropoutRate)
             listBuilder.layer(new DropoutLayer.Builder()
-                .dropOut(dropoutRate * 0.8) // Dropout modéré avant la sortie
+                .dropOut(Math.min(0.2, Math.max(dropoutRate, 0.0)))
                 .build());
         }
 
