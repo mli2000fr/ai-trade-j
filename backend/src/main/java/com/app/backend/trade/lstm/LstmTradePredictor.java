@@ -2756,7 +2756,7 @@ public class LstmTradePredictor {
         byte[] modelBytes = baos.toByteArray();
 
         // Sauvegarde hyperparamètres via repository + JSON
-        hyperparamsRepository.saveHyperparams(symbol, config);
+        // hyperparamsRepository.saveHyperparams(symbol, config);
 
         com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         String hyperparamsJson = mapper.writeValueAsString(config);

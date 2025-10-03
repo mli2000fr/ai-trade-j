@@ -641,7 +641,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                                 ? (indice.type + ' (' + indice.dateStr + ')')
                                 : '-')
                         }</TableCell>
-                        <TableCell align="center"><b>{(row.single.finalResult.rendement * 100).toFixed(2)} %</b> ({(row.single.testResult.rendement * 100).toFixed(2)} %)</TableCell>
+                        <TableCell align="center"><b>{(row.single.finalResult.rendement * 100).toFixed(2)} %</b></TableCell>
                         <TableCell align="center">{row.single.finalResult.avgPnL.toFixed(2)}</TableCell>
                         <TableCell align="center">{row.single.finalResult.profitFactor.toFixed(2)}</TableCell>
                         <TableCell align="center">{(row.single.finalResult.maxDrawdown * 100).toFixed(2)} %</TableCell>
@@ -656,7 +656,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                               ? (indiceMix.type + ' (' + indiceMix.dateStr + ')')
                               : '-'
                         }</TableCell>
-                        <TableCell align="center"><b>{(row.mix.finalResult.rendement * 100).toFixed(2)} %</b>| {(row.mix.testResult.rendement * 100).toFixed(2)} %</TableCell>
+                        <TableCell align="center"><b>{(row.mix.finalResult.rendement * 100).toFixed(2)} %</b></TableCell>
                         <TableCell align="center">{row.mix.finalResult.avgPnL.toFixed(2)}</TableCell>
                         <TableCell align="center">{row.mix.finalResult.profitFactor.toFixed(2)}</TableCell>
                         <TableCell align="center">{(row.mix.finalResult.maxDrawdown * 100).toFixed(2)} %</TableCell>

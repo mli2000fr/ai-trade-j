@@ -71,7 +71,7 @@ public class LstmTuningService {
     private int configuredMaxThreads; // Si 0 => auto-calcul
     private int effectiveMaxThreads = 12; // Valeur de secours si auto-calcul échoue
     private boolean cudaBackend = false;  // Flag détecté au démarrage (backend ND4J CUDA ou non)
-    @Value("${lstm.tuning.enableTwoPhase:false}")
+    @Value("${lstm.tuning.enableTwoPhase:true}")
     private boolean enableTwoPhase; // Activation tuning deux phases dans tuneAllSymbols
     public boolean isEnableTwoPhase(){ return enableTwoPhase; }
     public void setEnableTwoPhase(boolean enableTwoPhase){ this.enableTwoPhase = enableTwoPhase; }

@@ -377,7 +377,7 @@ public class LstmHelper {
 
     // Méthode conservée (signature legacy)
     public void tuneAllSymbols() {
-        tuneAllSymbols(true, 1);
+        tuneAllSymbols(true, 5);
     }
 
     /**

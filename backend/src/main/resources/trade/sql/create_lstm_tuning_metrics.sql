@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS lstm_tuning_metrics (
   calmar DOUBLE,
   turnover DOUBLE,
   avg_bars_in_position DOUBLE,
+  use_multi_horizon_avg TINYINT(1) NOT NULL DEFAULT 0,
+  entry_threshold_factor DOUBLE,
   tested_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_symbol_date (symbol, tested_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -35,4 +37,3 @@ CREATE TABLE IF NOT EXISTS lstm_tuning_metrics (
 -- Optionnel: contrainte d'unicité sur une configuration donnée
 -- ALTER TABLE lstm_tuning_metrics
 --   ADD UNIQUE uk_cfg (symbol, window_size, lstm_neurons, dropout_rate, learning_rate, optimizer);
-

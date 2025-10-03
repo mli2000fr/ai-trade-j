@@ -1,24 +1,24 @@
-CREATE TABLE trade_ai.lstm_hyperparams (
+CREATE TABLE IF NOT EXISTS lstm_hyperparams (
     symbol VARCHAR(32) PRIMARY KEY,
-    window_size INT,
-    lstm_neurons INT,
-    dropout_rate DOUBLE,
-    learning_rate DOUBLE,
-    num_epochs INT,
-    patience INT,
-    min_delta DOUBLE,
-    k_folds INT,
-    optimizer VARCHAR(32),
-    l1 DOUBLE,
-    l2 DOUBLE,
-    num_layers INT, -- correspond à numLstmLayers dans le code (mapping actuel)
-    horizon_bars INT,
-    bidirectional BOOLEAN DEFAULT FALSE,
-    attention BOOLEAN DEFAULT FALSE,
+    window_size INT NOT NULL,
+    lstm_neurons INT NOT NULL,
+    dropout_rate DOUBLE NOT NULL,
+    learning_rate DOUBLE NOT NULL,
+    num_epochs INT NOT NULL,
+    patience INT NOT NULL,
+    min_delta DOUBLE NOT NULL,
+    k_folds INT NOT NULL,
+    optimizer VARCHAR(32) NOT NULL,
+    l1 DOUBLE NOT NULL,
+    l2 DOUBLE NOT NULL,
     normalization_scope VARCHAR(32) DEFAULT 'window',
     normalization_method VARCHAR(32) DEFAULT 'auto',
     swing_trade_type VARCHAR(32) DEFAULT 'range',
+    num_layers INT NOT NULL,
+    bidirectional BOOLEAN DEFAULT FALSE,
+    attention BOOLEAN DEFAULT FALSE,
     features TEXT,
+    horizon_bars INT NOT NULL,
     threshold_type VARCHAR(32) DEFAULT 'ATR',
     threshold_k DOUBLE DEFAULT 1.0,
     limit_prediction_pct DOUBLE DEFAULT 0.0,
@@ -37,9 +37,15 @@ CREATE TABLE trade_ai.lstm_hyperparams (
     sizing_k DOUBLE DEFAULT 1.0,
     fee_pct DOUBLE DEFAULT 0.0005,
     slippage_pct DOUBLE DEFAULT 0.0002,
-    use_multi_horizon_avg BOOLEAN DEFAULT FALSE,
-    entry_threshold_factor DOUBLE DEFAULT 1.2,
     kl_drift_threshold DOUBLE DEFAULT 0.15,
     mean_shift_sigma_threshold DOUBLE DEFAULT 2.0,
-    updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+    use_multi_horizon_avg BOOLEAN DEFAULT FALSE,
+    entry_threshold_factor DOUBLE DEFAULT 1.2,
+    updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_lstm_hparams_updated_date (updated_date),
+    INDEX idx_lstm_hparams_symbol_updated (symbol, updated_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- IMPORTANT: l'ordre des colonnes ci-dessus correspond exactement à celui utilisé dans REPLACE INTO
+-- de LstmHyperparamsRepository (sauf updated_date géré par CURRENT_TIMESTAMP). Ajouter toute nouvelle
+-- colonne AVANT updated_date et l'insérer aussi dans la requête Java dans le même ordre.
