@@ -134,15 +134,29 @@ public class LstmHelper {
      * @param symbol symbole ciblé
      */
     public void trainLstm(String symbol) {
-        boolean useRandomGrid = true; // Stratégie actuelle : random search
-        List<LstmConfig> grid;
+        boolean useRandomGrid = true; // Stratégie actuelle : random search (phase 1 coarse)
+        List<LstmConfig> coarseGrid;
         if (useRandomGrid) {
-            grid = lstmTuningService.generateRandomSwingTradeGrid(10);
+            coarseGrid = lstmTuningService.generateRandomSwingTradeGrid(10);
         } else {
-            grid = lstmTuningService.generateSwingTradeGrid();
+            coarseGrid = lstmTuningService.generateSwingTradeGrid();
         }
-        // Délègue réellement au service
-        lstmTuningService.tuneAllSymbols(Arrays.asList(symbol), grid, jdbcTemplate, sym -> getBarBySymbol(sym, null));
+        BarSeries series = getBarBySymbol(symbol, null);
+        // Nouveau: tuning en deux phases (Étape 20)
+        lstmTuningService.tuneSymbolTwoPhase(symbol, coarseGrid, series, jdbcTemplate);
+    }
+
+    /**
+     * Variante: tuning en deux phases pour tous les symboles filtrés (optionnel).
+     * Utilise une petite grille random coarse pour chaque symbole, puis phase micro.
+     */
+    public void trainLstmTwoPhaseAllFiltered(int randomGridSize){
+        List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
+        for(String symbol : symbols){
+            List<LstmConfig> coarse = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize);
+            BarSeries series = getBarBySymbol(symbol, null);
+            lstmTuningService.tuneSymbolTwoPhase(symbol, coarse, series, jdbcTemplate);
+        }
     }
 
     /**
