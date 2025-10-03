@@ -676,6 +676,21 @@ public class LstmTuningService {
             logger.warn("Nettoyage ND4J échec : {}", e.getMessage());
         }
 
+        // ===== EXPORT RÉSUMÉ RUN JSON (Étape 23) =====
+            try {
+                writeRunSummaryJson(new LstmRunSummary(
+                    symbol,
+                    endSymbol,
+                    bestConfig,
+                    bestScore, // meanMse
+                    bestBusinessScore,
+                    bestScore,
+                    null // valLossCurve à remplir si disponible
+                ));
+            } catch (Exception ex) {
+                logger.warn("[TUNING][EXPORT] Échec export JSON résumé run: {}", ex.getMessage());
+            }
+
         // ===== RETOUR DU RÉSULTAT FINAL =====
         // Retourne la meilleure configuration trouvée (null si aucune valide)
         return bestConfig;
@@ -1478,4 +1493,37 @@ public class LstmTuningService {
 
     private static LstmConfig cloneConfig(LstmConfig o){ LstmConfig c = new LstmConfig();
         c.setWindowSize(o.getWindowSize()); c.setLstmNeurons(o.getLstmNeurons()); c.setDropoutRate(o.getDropoutRate()); c.setLearningRate(o.getLearningRate()); c.setNumEpochs(o.getNumEpochs()); c.setPatience(o.getPatience()); c.setMinDelta(o.getMinDelta()); c.setKFolds(o.getKFolds()); c.setOptimizer(o.getOptimizer()); c.setL1(o.getL1()); c.setL2(o.getL2()); c.setNormalizationScope(o.getNormalizationScope()); c.setNormalizationMethod(o.getNormalizationMethod()); c.setSwingTradeType(o.getSwingTradeType()); c.setUseScalarV2(o.isUseScalarV2()); c.setUseWalkForwardV2(o.isUseWalkForwardV2()); c.setNumLstmLayers(o.getNumLstmLayers()); c.setBatchSize(o.getBatchSize()); c.setBidirectional(o.isBidirectional()); c.setAttention(o.isAttention()); c.setHorizonBars(o.getHorizonBars()); c.setFeatures(o.getFeatures()); c.setCvMode(o.getCvMode()); c.setSeed(o.getSeed()); c.setBusinessProfitFactorCap(o.getBusinessProfitFactorCap()); c.setBusinessDrawdownGamma(o.getBusinessDrawdownGamma()); c.setCapital(o.getCapital()); c.setRiskPct(o.getRiskPct()); c.setSizingK(o.getSizingK()); c.setFeePct(o.getFeePct()); c.setSlippagePct(o.getSlippagePct()); c.setWalkForwardSplits(o.getWalkForwardSplits()); c.setEmbargoBars(o.getEmbargoBars()); c.setThresholdK(o.getThresholdK()); c.setThresholdType(o.getThresholdType()); c.setLimitPredictionPct(o.getLimitPredictionPct()); c.setUseLogReturnTarget(o.isUseLogReturnTarget()); c.setUseMultiHorizonAvg(o.isUseMultiHorizonAvg()); c.setEntryThresholdFactor(o.getEntryThresholdFactor()); c.setKlDriftThreshold(o.getKlDriftThreshold()); c.setMeanShiftSigmaThreshold(o.getMeanShiftSigmaThreshold()); return c; }
+
+    // Classe de résumé d'un run LSTM pour export JSON
+    public static class LstmRunSummary {
+        public String symbol;
+        public long timestamp;
+        public LstmConfig bestConfig;
+        public Double meanMse;
+        public Double bestBusinessScore;
+        public Double bestScore;
+        public java.util.List<Double> valLossCurve; // Optionnel, à remplir si disponible
+        public LstmRunSummary(String symbol, long timestamp, LstmConfig bestConfig, Double meanMse, Double bestBusinessScore, Double bestScore, java.util.List<Double> valLossCurve) {
+            this.symbol = symbol;
+            this.timestamp = timestamp;
+            this.bestConfig = bestConfig;
+            this.meanMse = meanMse;
+            this.bestBusinessScore = bestBusinessScore;
+            this.bestScore = bestScore;
+            this.valLossCurve = valLossCurve;
+        }
+    }
+
+    // Méthode d'export JSON du résumé de run
+    private void writeRunSummaryJson(LstmRunSummary summary) {
+        try {
+            String dir = "backend/lstm_runs";
+            java.nio.file.Files.createDirectories(java.nio.file.Paths.get(dir));
+            String fileName = String.format("%s/%s_%d.json", dir, summary.symbol, summary.timestamp);
+            String json = new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(summary);
+            java.nio.file.Files.write(java.nio.file.Paths.get(fileName), json.getBytes(), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+        } catch (Exception e) {
+            logger.warn("[TUNING][EXPORT] Echec export JSON résumé run: {}", e.getMessage());
+        }
+    }
 }

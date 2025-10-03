@@ -107,7 +107,9 @@ Exécuter entraînement court (epochs=5).
 Vérifier qu’au moins 1 trade simulé. Acceptation: tradePnL size >=1.
 
 PHASE 11 – Optimisations futures (optionnel)
-Étape 26. Multi-target (seq2one vs seq2multi) + attention réelle. Étape 27. Exploration transformer hybride (si besoin patterns non locaux). Étape 28. Remplacement simulation interne par moteur backtest unifié (déduplication logique risk).
+Étape 26. Multi-target (seq2one vs seq2multi) + attention réelle.
+Étape 27. Exploration transformer hybride (si besoin patterns non locaux).
+Étape 28. Remplacement simulation interne par moteur backtest unifié (déduplication logique risk).
 
 Format d’exécution de chaque étape (recommandé)
 Input: fichiers impactés + paramètres nouveaux.
