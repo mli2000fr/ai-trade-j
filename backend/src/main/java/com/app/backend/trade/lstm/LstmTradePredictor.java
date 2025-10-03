@@ -857,6 +857,9 @@ public class LstmTradePredictor {
         public Double bestValLoss;
         public Double finalValLoss;
         public boolean bestBetterThanLast;
+        // Step21: métrique variance résiduelle prix train & alerte platitude
+        public Double residualVariance; // var(predictedCloseTrain - closeTrain)
+        public boolean flatModelAlert;
         public TrainResult(MultiLayerNetwork m, ScalerSet s){this.model=m;this.scalers=s;}
         public TrainResult(MultiLayerNetwork m, ScalerSet s, Double bestVal, Double finalVal, boolean improved){
             this.model=m; this.scalers=s; this.bestValLoss=bestVal; this.finalValLoss=finalVal; this.bestBetterThanLast=improved;
@@ -1376,8 +1379,58 @@ public class LstmTradePredictor {
             logger.info("[TRAIN][ACCEPT][STEP13] Données insuffisantes pour calcul acceptation (bestValLoss={} lastValLoss={})", bestValLoss, lastValLoss);
         }
 
+        // ===== STEP 21: VARIANCE DES PRÉDICTIONS (détection modèle plat) =====
+        Double residualVarStep21 = null; boolean flatAlert=false;
+        try {
+            // Recalcule prédictions sur l'ensemble train (XTrain ou X si fallback) avec modèle final retenu
+            org.nd4j.linalg.api.ndarray.INDArray XForVar = (useInternalVal ? XTrain : X); // XTrain défini plus haut
+            if (XForVar != null && XForVar.size(0) > 5) {
+                org.nd4j.linalg.api.ndarray.INDArray predNormAll = finalModel.output(XForVar, false);
+                int nPred = (int) predNormAll.size(0);
+                double[] residuals = new double[nPred];
+                for (int i = 0; i < nPred; i++) {
+                    double predNorm = predNormAll.getDouble(i);
+                    double predTarget = scalers.labelScaler.inverse(predNorm);
+                    // Reconstruction prix futur préd it
+                    // Index i correspond à séquence i: fenêtre couvrant closes[i .. i+windowSize-1], target = closes[i+windowSize]
+                    int baseIdx = i + windowSize - 1;
+                    int futureIdx = i + windowSize;
+                    if (futureIdx >= closes.length) break; // sécurité
+                    double baseClose = closes[baseIdx];
+                    double trueClose = closes[futureIdx];
+                    double predictedClose;
+                    if (config.isUseLogReturnTarget()) {
+                        // Si multi-horizon moyenne, on traite la moyenne comme log-return agrégé (approximation acceptable pour alerte platitude)
+                        predictedClose = baseClose * Math.exp(predTarget);
+                    } else {
+                        predictedClose = predTarget; // cible prix direct
+                    }
+                    double resid = predictedClose - trueClose;
+                    if (!Double.isFinite(resid)) resid = 0.0;
+                    residuals[i] = resid;
+                }
+                // Calcul variance
+                int m = 0; double meanR = 0.0; for (double r : residuals){ if (Double.isFinite(r)){ meanR += r; m++; } }
+                if (m > 0) meanR /= m; double var=0.0; for (double r: residuals){ if (Double.isFinite(r)){ double d=r-meanR; var += d*d; }}
+                if (m > 0) var /= m; residualVarStep21 = var;
+                double seuil = config.getPredictionResidualVarianceMin();
+                if (var < seuil) {
+                    flatAlert = true;
+                    logger.warn("[TRAIN][STEP21][ALERT] Variance résiduelle trop faible var={} < seuil={} => modèle potentiellement trop plat", String.format(Locale.US, "%.8g", var), String.format(Locale.US, "%.8g", seuil));
+                } else {
+                    logger.info("[TRAIN][STEP21] Variance résiduelle train var={} (seuil={})", String.format(Locale.US, "%.8g", var), String.format(Locale.US, "%.8g", seuil));
+                }
+            } else {
+                logger.debug("[TRAIN][STEP21] Skip calcul variance (jeu train insuffisant)");
+            }
+        } catch (Exception e) {
+            logger.error("[TRAIN][STEP21][FAIL] {}", e.getMessage());
+        }
+
         // ===== PHASE 11: RETOUR DU RÉSULTAT FINAL =====
-        return new TrainResult(finalModel, scalers, useInternalVal? bestValLoss: null, useInternalVal? lastValLoss: null, bestBetterThanLast);
+        TrainResult tr = new TrainResult(finalModel, scalers, useInternalVal? bestValLoss: null, useInternalVal? lastValLoss: null, bestBetterThanLast);
+        tr.residualVariance = residualVarStep21; tr.flatModelAlert = flatAlert;
+        return tr;
     }
 
     /* =========================================================
