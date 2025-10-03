@@ -841,6 +841,10 @@ public class LstmTradePredictor {
     public static class ScalerSet implements Serializable {
         public Map<String, FeatureScaler> featureScalers = new HashMap<>();
         public FeatureScaler labelScaler;
+        // Étape 22: distribution des labels (log-return) au moment de l'entraînement
+        // Nullable pour compat rétro (anciens JSON sans ces champs)
+        public Double labelDistMean;   // mean(labelSeq)
+        public Double labelDistStd;    // std(labelSeq)
     }
 
     /* =========================================================
@@ -1074,6 +1078,14 @@ public class LstmTradePredictor {
         FeatureScaler labelScaler = new FeatureScaler(labelType);
         labelScaler.fit(labelSeq);
         scalers.labelScaler = labelScaler; // Stockage pour utilisation ultérieure
+        // Étape 22: stocker distribution label brute (log-return ou moyenne multi-horizon) pour dérive future
+        if (config.isUseLogReturnTarget()) {
+            double m = 0; for (double v : labelSeq) m += v; m = labelSeq.length>0? m/labelSeq.length:0;
+            double var=0; for (double v: labelSeq){ double d=v-m; var+=d*d; } var = labelSeq.length>0? var/labelSeq.length:0; double std = Math.sqrt(var);
+            scalers.labelDistMean = m;
+            scalers.labelDistStd = std>1e-12? std : 1e-12; // éviter division par 0
+            logger.info("[STEP22][LABEL_DIST][TRAIN] mean={} std={}", String.format(java.util.Locale.US, "%.6f", scalers.labelDistMean), String.format(java.util.Locale.US, "%.6f", scalers.labelDistStd));
+        }
 
         // Vérification qualité normalisation label (std ≈ 1 si ZSCORE)
         double[] normLabels = scalers.labelScaler.transform(labelSeq);
@@ -1411,7 +1423,7 @@ public class LstmTradePredictor {
                 }
                 // Calcul variance
                 int m = 0; double meanR = 0.0; for (double r : residuals){ if (Double.isFinite(r)){ meanR += r; m++; } }
-                if (m > 0) meanR /= m; double var=0.0; for (double r: residuals){ if (Double.isFinite(r)){ double d=r-meanR; var += d*d; }}
+                if (m > 0) meanR /= m; double var=0; for (double r: residuals){ if (Double.isFinite(r)){ double d=r-meanR; var += d*d; }}
                 if (m > 0) var /= m; residualVarStep21 = var;
                 double seuil = config.getPredictionResidualVarianceMin();
                 if (var < seuil) {
@@ -2315,6 +2327,56 @@ public class LstmTradePredictor {
         return count > 0 ? se / count : Double.NaN;
     }
 
+    // Étape 22: extraction des derniers labels réalisés (log-return simple ou moyenne multi-horizon)
+    // Retourne un tableau de taille <= lookback (peut être plus petit si historique insuffisant)
+    private double[] computeRecentLabelValues(BarSeries series, LstmConfig config, int lookback) {
+        if (!config.isUseLogReturnTarget()) {
+            // Si on ne travaille pas en log-return, dérive label non pertinente -> tableau vide
+            return new double[0];
+        }
+        int n = series.getBarCount();
+        if (n < 3) return new double[0];
+        int horizon = Math.max(1, config.getHorizonBars());
+        double[] closes = extractCloseValues(series);
+        // Dernier index où un horizon complet est disponible (i + horizon <= n-1)
+        int lastStart = n - 1 - horizon;
+        if (lastStart <= 0) return new double[0];
+        int start = Math.max(0, lastStart - lookback + 1); // inclut lastStart
+        java.util.List<Double> out = new java.util.ArrayList<>();
+        if (config.isUseMultiHorizonAvg()) {
+            for (int i = start; i <= lastStart; i++) {
+                double prev = closes[i];
+                double sum = 0.0; int c = 0;
+                for (int h = 1; h <= horizon; h++) {
+                    double next = closes[i + h];
+                    if (prev > 0 && next > 0) {
+                        double lr = Math.log(next / prev);
+                        if (Double.isFinite(lr)) sum += lr;
+                        else sum += 0.0;
+                        prev = next;
+                        c++;
+                    }
+                }
+                if (c > 0) out.add(sum / c);
+            }
+        } else {
+            // Log-return simple t -> t+1
+            for (int i = start; i <= lastStart; i++) {
+                double a = closes[i];
+                double b = closes[i + 1];
+                if (a > 0 && b > 0) {
+                    double lr = Math.log(b / a);
+                    out.add(Double.isFinite(lr) ? lr : 0.0);
+                } else {
+                    out.add(0.0);
+                }
+            }
+        }
+        double[] arr = new double[out.size()];
+        for (int i = 0; i < out.size(); i++) arr[i] = out.get(i);
+        return arr;
+    }
+
     /* =========================================================
      *                DRIFT DETECTION (STATISTIQUE)
      * =========================================================
@@ -2444,6 +2506,24 @@ public class LstmTradePredictor {
         } catch (Exception ignored) {}
 
         boolean retrain = false;
+        // Étape 22: Drift label (log-return) ciblé avant boucle features pour ne pas dépendre d'elles
+        if (config.isUseLogReturnTarget()) {
+            try {
+                int LOOKBACK = 250;
+                double[] recentLabels = computeRecentLabelValues(series, config, LOOKBACK);
+                if (recentLabels.length > 30) { // taille minimale
+                    double m=0; for(double v: recentLabels) m+=v; m=recentLabels.length>0? m/recentLabels.length:0;
+                    double var=0; for(double v: recentLabels){ double d=v-m; var+=d*d; } var = recentLabels.length>0? var/recentLabels.length:0; double std = Math.sqrt(var);
+                    scalers.labelDistMean = m;
+                    scalers.labelDistStd = std>1e-12? std : 1e-12; // éviter division par 0
+                    logger.info("[STEP22][LABEL_DIST][TRAIN] mean={} std={}", String.format(java.util.Locale.US, "%.6f", scalers.labelDistMean), String.format(java.util.Locale.US, "%.6f", scalers.labelDistStd));
+                } else {
+                    logger.debug("[STEP22][LABEL_DIST] Série insuffisante pour LOOKBACK={} (size={})", 250, recentLabels.length);
+                }
+            } catch (Exception ex) {
+                logger.warn("[STEP22][LABEL_DRIFT] Erreur calcul drift label: {}", ex.getMessage());
+            }
+        }
 
         for (String feat : config.getFeatures()) {
             FeatureScaler sc = scalers.featureScalers.get(feat);
@@ -2841,7 +2921,7 @@ public class LstmTradePredictor {
         FeatureScaler z = new FeatureScaler(FeatureScaler.Type.ZSCORE);
         z.fit(labelSeq);
         double[] norm = z.transform(labelSeq);
-        double m=0,v=0; int n=norm.length; for(double d: norm)m+=d; m = n>0?m/n:0; for(double d: norm)v += (d-m)*(d-m); v = n>0? v/n:0; double std=Math.sqrt(v);
+        double m=0,v=0; int n=norm.length; for(double d: norm)m+=d; m = n>0? m/n:0; for(double d: norm)v += (d-m)*(d-m); v = n>0? v/n:0; double std=Math.sqrt(v);
         logger.info("[MIGRATION][LABEL_SCALER] Nouveau label scaler ZSCORE construit. meanNorm={} stdNorm={}", String.format("%.4f", m), String.format("%.4f", std));
         return z;
     }
