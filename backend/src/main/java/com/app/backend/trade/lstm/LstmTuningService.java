@@ -14,6 +14,13 @@ import org.springframework.beans.factory.annotation.Value;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.app.backend.trade.strategy.StrategieBackTest.FEE_PCT;
 import static com.app.backend.trade.strategy.StrategieBackTest.SLIP_PAGE_PCT;
@@ -121,6 +128,9 @@ public class LstmTuningService {
         public long startTime;                // Timestamp début
         public long endTime;                  // Timestamp fin (si terminé/échoué)
         public long lastUpdate;               // Dernière mise à jour (permet de détecter une éventuelle stagnation)
+        // Étape 19: cumul durées individuelles des configs pour stats
+        public AtomicLong cumulativeConfigDurationMs = new AtomicLong(0);
+        public int threadsUsed;               // Threads utilisés pour ce symbole
     }
 
     private final ConcurrentHashMap<String, TuningProgress> tuningProgressMap = new ConcurrentHashMap<>();
@@ -329,7 +339,9 @@ public class LstmTuningService {
         // Calcul du nombre optimal de threads pour ce tuning
         // Équilibrage entre: taille de grille, nombre de coeurs CPU, limite effective
         // Note: actuellement forcé à 4 pour stabilité (ligne commentée montre le calcul automatique)
-        int numThreads = 1; // Math.min(Math.min(grid.size(), Runtime.getRuntime().availableProcessors()), effectiveMaxThreads);
+        int numThreads = Math.min(Math.min(grid.size(), Runtime.getRuntime().availableProcessors()), effectiveMaxThreads);
+        if (numThreads < 1) numThreads = 1;
+        progress.threadsUsed = numThreads;
 
         // Création du pool de threads à taille fixe pour traitement parallèle
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
@@ -485,16 +497,17 @@ public class LstmTuningService {
 
                     // ===== MESURE DE PERFORMANCE ET LOG =====
                     long endConfig = System.currentTimeMillis();
+                    long cfgDuration = (endConfig-startConfig);
                     logger.info("[TUNING][V2] [{}] Fin config {}/{} | meanMSE={}, PF={}, winRate={}, DD%={}, expectancy={}, businessScore={}, trades={} durée={} ms",
                             symbol, configIndex, grid.size(), meanMse, meanPF, meanWinRate, maxDDPct,
-                            meanExpectancy, meanBusinessScore, totalTrades, (endConfig-startConfig));
+                            meanExpectancy, meanBusinessScore, totalTrades, cfgDuration);
 
                     // ===== MISE À JOUR DU PROGRÈS (THREAD-SAFE) =====
-                    // Incrémente le compteur de configurations terminées
                     TuningProgress p = tuningProgressMap.get(symbol);
                     if (p != null) {
-                        p.testedConfigs.incrementAndGet(); // Atomique: thread-safe
-                        p.lastUpdate = System.currentTimeMillis(); // Heartbeat pour monitoring
+                        p.testedConfigs.incrementAndGet();
+                        p.lastUpdate = System.currentTimeMillis();
+                        p.cumulativeConfigDurationMs.addAndGet(cfgDuration);
                     }
 
                     // ===== RETOUR DU RÉSULTAT ENCAPSULÉ =====
@@ -635,11 +648,11 @@ public class LstmTuningService {
                     symbol, bestBusinessScore, bestConfig.getWindowSize(), bestConfig.getLstmNeurons(),
                     bestConfig.getDropoutRate(), bestConfig.getLearningRate(), bestConfig.getL1(), bestConfig.getL2(),
                     bestScore, (endSymbol - startSymbol));
-
+        // Étape 19: écrire métriques JSON
+            try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON: {}", ex.getMessage()); }
         } else {
-            // ===== CAS D'ÉCHEC PARTIEL =====
-            // Certaines configs ont réussi mais aucun résultat valide récupéré
-            logger.warn("[TUNING][V2] Aucun modèle/scaler valide trouvé pour {}", symbol);
+            logger.warn("[TUNING][V2] Aucun modèle/scaler valide trouvé pour {}");
+            try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON: {}", ex.getMessage()); }
         }
 
         // ===== PHASE 11: NETTOYAGE FINAL =====
@@ -1139,8 +1152,7 @@ public class LstmTuningService {
     public void tuneAllSymbols(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         long startAll = System.currentTimeMillis();
         logger.info("[TUNING] Début tuning multi-symboles ({} symboles, parallélisé)", symbols.size());
-        // Pool limité pour tuning de symboles en parallèle (max moitié des threads effectifs, au moins 1)
-        int maxParallelSymbols = 1;//Math.max(1, effectiveMaxThreads / 2);
+        int maxParallelSymbols = Math.max(1, effectiveMaxThreads / 2);
         java.util.concurrent.ExecutorService symbolExecutor = java.util.concurrent.Executors.newFixedThreadPool(maxParallelSymbols);
         java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
         for (int i = 0; i < symbols.size(); i++) {
@@ -1232,5 +1244,57 @@ public class LstmTuningService {
                 break;
             }
         }
+    }
+
+    private static final Object METRICS_FILE_LOCK = new Object();
+    private static final Path METRICS_PATH = Path.of("tuning_progress_metrics.json");
+    private static final DateTimeFormatter ISO_FMT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+
+    private void writeProgressMetrics(TuningProgress progress) throws Exception {
+        if (progress == null) return;
+        double durationMs = (progress.endTime > 0 ? progress.endTime : System.currentTimeMillis()) - progress.startTime;
+        double configsDone = Math.max(1, progress.testedConfigs.get());
+        double cfgPerSec = (durationMs > 0) ? (configsDone / (durationMs/1000.0)) : 0.0;
+        double meanCfgMs = progress.cumulativeConfigDurationMs.get() > 0 ? (progress.cumulativeConfigDurationMs.get() / configsDone) : 0.0;
+        String startIso = ISO_FMT.format(Instant.ofEpochMilli(progress.startTime).atOffset(ZoneOffset.UTC));
+        String endIso = (progress.endTime>0)? ISO_FMT.format(Instant.ofEpochMilli(progress.endTime).atOffset(ZoneOffset.UTC)) : "";
+        String entry = "{"+
+                "\"symbol\":\""+progress.symbol+"\","+
+                "\"status\":\""+progress.status+"\","+
+                "\"totalConfigs\":"+progress.totalConfigs+","+
+                "\"testedConfigs\":"+progress.testedConfigs.get()+","+
+                "\"durationMs\":"+ (long)durationMs +","+
+                "\"configsPerSecond\":"+String.format(java.util.Locale.US,"%.4f",cfgPerSec)+","+
+                "\"meanConfigDurationMs\":"+ (long)meanCfgMs +","+
+                "\"threadsUsed\":"+progress.threadsUsed+","+
+                "\"effectiveMaxThreads\":"+effectiveMaxThreads+","+
+                "\"startTime\":\""+startIso+"\","+
+                "\"endTime\":\""+endIso+"\"}";
+        synchronized (METRICS_FILE_LOCK) {
+            if (!Files.exists(METRICS_PATH)) {
+                Files.writeString(METRICS_PATH, "[\n"+entry+"\n]", StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+            } else {
+                // Append inside JSON array (simple approach: read, strip ending, append)
+                String content = Files.readString(METRICS_PATH);
+                String trimmed = content.trim();
+                if (trimmed.endsWith("]")) {
+                    int idx = trimmed.lastIndexOf(']');
+                    String head = trimmed.substring(0, idx).trim();
+                    if (head.endsWith("[")) {
+                        // empty array
+                        String newJson = "[\n"+entry+"\n]";
+                        Files.writeString(METRICS_PATH, newJson, StandardOpenOption.TRUNCATE_EXISTING);
+                    } else {
+                        if (head.endsWith("}")) head += ","; // ensure comma
+                        String newJson = head + "\n" + entry + "\n]";
+                        Files.writeString(METRICS_PATH, newJson, StandardOpenOption.TRUNCATE_EXISTING);
+                    }
+                } else {
+                    // Corrupted file -> recreate
+                    Files.writeString(METRICS_PATH, "[\n"+entry+"\n]", StandardOpenOption.TRUNCATE_EXISTING);
+                }
+            }
+        }
+        logger.info("[TUNING][METRICS] Mise à jour tuning_progress_metrics.json pour {} (configsPerSec={})", progress.symbol, String.format(java.util.Locale.US, "%.3f", cfgPerSec));
     }
 }
