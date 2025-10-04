@@ -247,7 +247,7 @@ public class LstmHelper {
                                 r.symbol, r.feature, r.driftType, r.kl, r.meanShift, r.mseBefore, r.mseAfter, r.retrained);
                     }
 
-                    // Si au moins un retrain a eu lieu => sauvegarde du modèle
+                    /* Si au moins un retrain a eu lieu => sauvegarde du modèle
                     boolean retrained = reports.stream().anyMatch(rr -> rr.retrained);
                     if (retrained) {
                         try {
@@ -255,7 +255,7 @@ public class LstmHelper {
                         } catch (Exception e) {
                             logger.warn("Erreur lors de la sauvegarde du modèle/scalers après retrain : {}", e.getMessage());
                         }
-                    }
+                    }*/
                 }
             } catch (Exception e) {
                 logger.warn("Erreur pendant le drift reporting: {}", e.getMessage());

@@ -1765,6 +1765,7 @@ public class LstmTradePredictor {
     public static class WalkForwardResultV2 implements Serializable {
         public List<TradingMetricsV2> splits = new ArrayList<>();
         public double meanMse, meanBusinessScore, mseVariance, mseInterModelVariance;
+        public int totalTestedBars;
     }
 
 
@@ -1822,12 +1823,12 @@ public class LstmTradePredictor {
                    splits, testStartFromBar, totalBars);
 
         // ===== PHASE 3: BOUCLE PRINCIPALE SUR CHAQUE SPLIT OUT-OF-SAMPLE =====
-
+        int totalTestedBars = 0;
         for (int s = 1; s <= splits; s++) {
             // Calcul des bornes du split dans la zone out-of-sample uniquement
             int testStartBar = testStartFromBar + (s - 1) * splitSize + config.getEmbargoBars();
             int testEndBar = (s == splits) ? totalBars : testStartFromBar + s * splitSize;
-
+            totalTestedBars = totalTestedBars + testEndBar - testStartBar;
             // Vérification que le split est suffisamment grand
             if (testStartBar + windowSize + 5 >= testEndBar) {
                 logger.debug("[WALK-FORWARD-OOS] Split {} trop petit, ignoré", s);
@@ -1884,6 +1885,7 @@ public class LstmTradePredictor {
 
         result.meanMse = mseCount > 0 ? sumMse / mseCount : Double.NaN;
         result.meanBusinessScore = businessCount > 0 ? sumBusiness / businessCount : Double.NaN;
+        result.totalTestedBars = totalTestedBars;
 
         // Calcul de la variance MSE
         if (mseList.size() > 1) {
@@ -2748,8 +2750,11 @@ public class LstmTradePredictor {
     /**
      * Sauvegarde le modèle + config + scalers en base (table lstm_models).
      * Utilise REPLACE INTO (écrase l'existant).
+     *
      */
-    public void saveModelToDb(String symbol, MultiLayerNetwork model, JdbcTemplate jdbcTemplate, LstmConfig config, ScalerSet scalers) throws IOException {
+    public void saveModelToDb(String symbol, JdbcTemplate jdbcTemplate, MultiLayerNetwork model,  LstmConfig config, ScalerSet scalers,
+                              double mse, double profitFactor, double winRate, double maxDrawdown, double rmse, double sumProfit, int totalTrades, double businessScore,
+                              int totalSeriesTested) throws IOException {
         if (model == null) return;
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         ModelSerializer.writeModel(model, baos, true);
@@ -2762,8 +2767,8 @@ public class LstmTradePredictor {
         String hyperparamsJson = mapper.writeValueAsString(config);
         String scalersJson = mapper.writeValueAsString(scalers);
 
-        String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, scalers_json, updated_date) VALUES (?,?,?,?,?, CURRENT_TIMESTAMP)";
-        jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson, config.getNormalizationScope(), scalersJson);
+        String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, scalers_json, mse, profit_factor, win_rate, max_drawdown, rmse, sum_profit, total_trades, business_score, updated_date, total_series_tested) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP,?)";
+        jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson, config.getNormalizationScope(), scalersJson, mse, profitFactor, winRate, maxDrawdown, rmse, sumProfit, totalTrades, businessScore, totalSeriesTested);
     }
 
     /**

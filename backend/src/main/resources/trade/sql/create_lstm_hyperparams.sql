@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS lstm_hyperparams (
     use_scalar_v2 BOOLEAN DEFAULT FALSE,
     use_log_return_target BOOLEAN DEFAULT FALSE,
     use_walk_forward_v2 BOOLEAN DEFAULT TRUE,
-    walk_forward_splits INT DEFAULT 4,
+    walk_forward_splits INT DEFAULT 3,
     embargo_bars INT DEFAULT 0,
     seed BIGINT DEFAULT 42,
     business_profit_factor_cap DOUBLE DEFAULT 3.0,

@@ -184,7 +184,7 @@ public class LstmConfig {
     /** Active la validation walk-forward (utilisé si useScalarV2 = true). */
     private boolean useWalkForwardV2 = true;
     /** Nombre de segments (splits) dans la validation walk-forward. */
-    private int walkForwardSplits = 4;
+    private int walkForwardSplits = 3;
     /** Barres d'embargo (séparation temporelle) pour éviter la fuite entre train/test. */
     private int embargoBars = 0;
     /** Graine (seed) pour reproductibilité (initialisation aléatoire). */
@@ -275,7 +275,7 @@ public class LstmConfig {
                 useScalarV2 = Boolean.parseBoolean(props.getProperty("useScalarV2", "false"));
                 useLogReturnTarget = Boolean.parseBoolean(props.getProperty("useLogReturnTarget", "true"));
                 useWalkForwardV2 = Boolean.parseBoolean(props.getProperty("useWalkForwardV2", "true"));
-                walkForwardSplits = Integer.parseInt(props.getProperty("walkForwardSplits", "4"));
+                walkForwardSplits = Integer.parseInt(props.getProperty("walkForwardSplits", "3"));
                 embargoBars = Integer.parseInt(props.getProperty("embargoBars", "0"));
                 seed = Long.parseLong(props.getProperty("seed", "42"));
                 businessProfitFactorCap = Double.parseDouble(props.getProperty("businessProfitFactorCap", "3.0"));
