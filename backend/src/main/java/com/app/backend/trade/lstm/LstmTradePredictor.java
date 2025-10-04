@@ -1332,10 +1332,41 @@ public class LstmTradePredictor {
         double bestValLossAtFirstLrReduction = Double.NaN;    // Snapshot du bestValLoss au moment de la 1ère réduction
         boolean lrFirstReductionImproved = false;             // Flag acceptation: amélioration après 1ère réduction
 
+        // === STEP GA (Gradient Accumulation simulée) ===
+        // Objectif: si trainSeqCount est très petit mais batch cible demandé élevé, on simule un batch plus large
+        // en effectuant plusieurs passes (accumulation implicite) avec un learning rate divisé pour approximer
+        // l'effet d'un grand batch (stabilité). On reste minimaliste pour ne pas complexifier la logique.
+        boolean useGradAccum = false;
+        int gradAccumSteps = 1;
+        int targetBatchRequest = requestedBatch; // batch demandé initialement par config
+        // Critères: dataset minuscule (< 64) ET batch demandé au moins 2x plus grand que dataset
+        if (trainSeqCount > 0 && trainSeqCount < 64 && targetBatchRequest > trainSeqCount * 2) {
+            // Nombre de passes pour approximer un batch effectif proche du batch demandé
+            gradAccumSteps = (int) Math.ceil((double) targetBatchRequest / Math.max(1.0, trainSeqCount));
+            if (gradAccumSteps > 1) {
+                useGradAccum = true;
+                double baseLR = currentLearningRate;
+                double scaledLR = baseLR / gradAccumSteps; // réduction proportionnelle
+                if (scaledLR < 1e-7) scaledLR = 1e-7;      // floor sécurité
+                applyLearningRate(model, scaledLR);
+                logger.warn("[TRAIN][GA] Activation gradient accumulation simulée: trainSeq={} requestedBatch={} steps={} LR {} -> {}", trainSeqCount, targetBatchRequest, gradAccumSteps,
+                        String.format(java.util.Locale.US, "%.8f", baseLR), String.format(java.util.Locale.US, "%.8f", scaledLR));
+            }
+        } else {
+            logger.debug("[TRAIN][GA] Accumulation ignorée (trainSeq={} requestedBatch={})", trainSeqCount, targetBatchRequest);
+        }
+
         // Boucle d'entraînement epoch par epoch
         for (int epoch = 1; epoch <= epochs; epoch++) {
-            iterator.reset();
-            model.fit(iterator);
+            if (useGradAccum) {
+                for (int step = 0; step < gradAccumSteps; step++) {
+                    iterator.reset();
+                    model.fit(iterator);
+                }
+            } else {
+                iterator.reset();
+                model.fit(iterator);
+            }
             // Calcul des losses train & validation après fit (cohérentes avec état courant)
             double trainLoss = model.score(trainDs);
             Double valLoss = null;
