@@ -60,8 +60,9 @@ public class LstmHyperparamsRepository {
                     "normalization_method, swing_trade_type, num_layers, bidirectional, attention, features, horizon_bars, " +
                     "threshold_type, threshold_k, limit_prediction_pct, batch_size, cv_mode, use_scalar_v2, use_log_return_target, use_walk_forward_v2, " +
                     "walk_forward_splits, embargo_bars, seed, business_profit_factor_cap, business_drawdown_gamma, capital, risk_pct, sizing_k, fee_pct, slippage_pct, " +
-                    "kl_drift_threshold, mean_shift_sigma_threshold, use_multi_horizon_avg, entry_threshold_factor, updated_date) " +
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)";
+                    "kl_drift_threshold, mean_shift_sigma_threshold, use_multi_horizon_avg, entry_threshold_factor) " +
+                    // 42 colonnes ci-dessus => 42 placeholders ci-dessous
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
     /**
      * Requête de sélection d'un jeu d'hyperparamètres selon le symbole (clé).

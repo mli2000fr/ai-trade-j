@@ -1494,7 +1494,14 @@ public class LstmTuningService {
                     double meanMse = wf.meanMse;
                     double sumPF=0,sumWin=0,sumExp=0,maxDDPct=0,sumBusiness=0,sumProfit=0; int splits=0,totalTrades=0;
                     for (LstmTradePredictor.TradingMetricsV2 m : wf.splits) {
-                        sumPF += Double.isFinite(m.profitFactor)?m.profitFactor:0; sumWin+=m.winRate; sumExp+=m.expectancy; if(m.maxDrawdownPct>maxDDPct) maxDDPct=m.maxDrawdownPct; sumBusiness += Double.isFinite(m.businessScore)?m.businessScore:0; sumProfit+=m.totalProfit; totalTrades+=m.numTrades; splits++; }
+                        sumPF += Double.isFinite(m.profitFactor)?m.profitFactor:0;
+                        sumWin+=m.winRate;
+                        sumExp+=m.expectancy;
+                        if(m.maxDrawdownPct>maxDDPct)
+                            maxDDPct=m.maxDrawdownPct;
+                        sumBusiness += Double.isFinite(m.businessScore)?m.businessScore:0;
+                        sumProfit+=m.totalProfit; totalTrades+=m.numTrades; splits++;
+                    }
                     if (splits==0) throw new IllegalStateException("Aucun split valide");
                     double meanPF = sumPF/splits; double meanWinRate=sumWin/splits; double meanExpectancy=sumExp/splits; double meanBusinessScore=sumBusiness/splits; double rmse = (Double.isFinite(meanMse)&&meanMse>=0)?Math.sqrt(meanMse):Double.NaN;
                     hyperparamsRepository.saveTuningMetrics(symbol, cfg, meanMse, rmse, sumProfit, meanPF, meanWinRate, maxDDPct, totalTrades, meanBusinessScore, wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0), wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0), wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0), wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0));
