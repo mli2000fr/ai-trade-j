@@ -178,10 +178,11 @@ public class LstmTradePredictor {
 
         // Activation des workspaces mémoire (optimisation Dl4J)
         builder.trainingWorkspaceMode(WorkspaceMode.ENABLED)
-               .inferenceWorkspaceMode(WorkspaceMode.ENABLED)
-               // Étape 8: Gradient clipping pour prévenir dérives / NaN
-               .gradientNormalization(GradientNormalization.ClipElementWiseAbsoluteValue)
-               .gradientNormalizationThreshold(1.0);
+               .inferenceWorkspaceMode(WorkspaceMode.ENABLED);
+        // [OPT][GPU] Gradient clipping désactivé (micro-optim). Ancien code:
+        //    .gradientNormalization(GradientNormalization.ClipElementWiseAbsoluteValue)
+        //    .gradientNormalizationThreshold(1.0);
+        logger.info("[LSTM][OPT] Gradient clipping désactivé (micro-optim GPU). Surveiller NaN/pertes instables.");
 
         NeuralNetConfiguration.ListBuilder listBuilder = builder.list();
 
@@ -1367,8 +1368,30 @@ public class LstmTradePredictor {
                 iterator.reset();
                 model.fit(iterator);
             }
+            // Monitoring rapide post-fit (paramètres) pour explosion potentielle sans clipping
+            try {
+                org.nd4j.linalg.api.ndarray.INDArray paramsEpoch = model.params();
+                double maxAbs = paramsEpoch.amaxNumber().doubleValue();
+                if (Double.isNaN(maxAbs) || Double.isInfinite(maxAbs)) {
+                    logger.error("[TRAIN][MONITOR][CRIT] Paramètres contiennent NaN/Inf après epoch {} => arrêt anticipé (réactiver gradient clipping)", epoch);
+                    break;
+                }
+                if (epoch % 5 == 0) {
+                    double l2 = paramsEpoch.norm2Number().doubleValue();
+                    if (l2 > 1e6) {
+                        logger.warn("[TRAIN][MONITOR] Norme L2 paramètres élevée={} (>1e6) epoch={} (risque explosion gradients)", String.format(java.util.Locale.US, "%.3e", l2), epoch);
+                    }
+                }
+            } catch (Exception eMon) {
+                logger.debug("[TRAIN][MONITOR] Skip param check epoch={} cause={}", epoch, eMon.toString());
+            }
             // Calcul des losses train & validation après fit (cohérentes avec état courant)
             double trainLoss = model.score(trainDs);
+            // Sécurité NaN sur loss
+            if (Double.isNaN(trainLoss) || Double.isInfinite(trainLoss)) {
+                logger.error("[TRAIN][MONITOR][CRIT] trainLoss={} (NaN/Inf) epoch {} -> arrêt (réactiver gradient clipping)", trainLoss, epoch);
+                break;
+            }
             Double valLoss = null;
             boolean valImproved = false;
             boolean acceptanceValBetterThanTrain = false;
