@@ -1190,13 +1190,10 @@ public class LstmTradePredictor {
 
         // ===== PHASE 8: PRÉPARATION DES DONNÉES POUR L'ENTRAÎNEMENT =====
 
-        // Création du DataSet DeepLearning4J (associe inputs X et labels y)
-        org.nd4j.linalg.dataset.DataSet ds = new org.nd4j.linalg.dataset.DataSet(X, y);
-
-        // ===== Étape 11: Split interne validation (derniers 15% des séquences) =====
+        // Split interne validation 85/15 (restauré après insertion Step2)
         int numSeqTotal = (int) X.size(0);
         int valCount = (int) Math.round(numSeqTotal * 0.15);
-        if (valCount < 1 && numSeqTotal >= 20) valCount = 1; // sécurité minimale
+        if (valCount < 1 && numSeqTotal >= 20) valCount = 1; // sécurité
         int trainCount = numSeqTotal - valCount;
         boolean useInternalVal = trainCount > 1 && valCount >= 1;
         org.nd4j.linalg.api.ndarray.INDArray XTrain, yTrain, XVal = null, yVal = null;
@@ -1207,21 +1204,47 @@ public class LstmTradePredictor {
             XVal = X.get(org.nd4j.linalg.indexing.NDArrayIndex.interval(trainCount, numSeqTotal),
                 org.nd4j.linalg.indexing.NDArrayIndex.all(), org.nd4j.linalg.indexing.NDArrayIndex.all()).dup('c');
             yVal = y.get(org.nd4j.linalg.indexing.NDArrayIndex.interval(trainCount, numSeqTotal), org.nd4j.linalg.indexing.NDArrayIndex.all()).dup('c');
+            logger.info("[TRAIN][VAL] Activation split validation interne 85%/15% (train={} val={})", trainCount, valCount);
         } else {
-            // Fallback: tout en train (ancien comportement)
-            XTrain = X;
-            yTrain = y;
+            XTrain = X; yTrain = y;
             logger.warn("[TRAIN][VAL][FALLBACK] Validation interne désactivée (trainCount={} valCount={} total={})", trainCount, valCount, numSeqTotal);
         }
         org.nd4j.linalg.dataset.DataSet trainDs = new org.nd4j.linalg.dataset.DataSet(XTrain, yTrain);
-        org.nd4j.linalg.dataset.api.iterator.DataSetIterator iterator =
-            new ListDataSetIterator<>(trainDs.asList(), config.getBatchSize());
         org.nd4j.linalg.dataset.DataSet valDs = null;
         if (useInternalVal) {
             valDs = new org.nd4j.linalg.dataset.DataSet(XVal, yVal);
-            logger.info("[TRAIN][VAL] Activation split validation interne 85%/15% (train={} val={})", trainCount, valCount);
         }
 
+        // ===== STEP2: Ajustement dynamique batch size (exploration GPU) =====
+        int requestedBatch = config.getBatchSize();
+        int effectiveBatchSize = requestedBatch;
+        // Utiliser nombre de séquences d'entraînement réelles pour la règle 4*batch
+        int trainSeqCount = (int) XTrain.size(0);
+        if (trainSeqCount < effectiveBatchSize * 4) {
+            int maxSafe = Math.max(8, Math.max(1, trainSeqCount / 4));
+            int p2 = 1; while (p2 * 2 <= maxSafe) p2 *= 2;
+            if (p2 < effectiveBatchSize) {
+                logger.warn("[TRAIN][BATCH][STEP2] Réduction batch car trainSeq={} < 4*batch={}. requested={} new={}", trainSeqCount, effectiveBatchSize * 4, requestedBatch, p2);
+                effectiveBatchSize = p2;
+            }
+        } else {
+            int candidate = effectiveBatchSize;
+            while (candidate * 2 <= 2048 && (candidate * 2) * 4 <= trainSeqCount) {
+                candidate *= 2;
+            }
+            if (candidate > effectiveBatchSize) {
+                logger.info("[TRAIN][BATCH][STEP2] Auto-augmentation batch (trainSeq={}) {} -> {}", trainSeqCount, effectiveBatchSize, candidate);
+                effectiveBatchSize = candidate;
+            }
+        }
+        int patienceValLocal = config.getPatienceVal() > 0 ? config.getPatienceVal() : 5;
+        if (effectiveBatchSize > requestedBatch) {
+            int old = patienceValLocal;
+            patienceValLocal = Math.max(old + 1, (int) Math.round(old * 1.3));
+            logger.info("[TRAIN][BATCH][STEP2] Augmentation patienceVal (+30%) {} -> {}", old, patienceValLocal);
+        }
+        logger.info("[TRAIN][BATCH][STEP2] BatchSize={} trainSeq={} totalSeq={} features={} window={} patienceVal={} (requested={})", effectiveBatchSize, trainSeqCount, numSeqTotal, numFeatures, windowSize, patienceValLocal, requestedBatch);
+        org.nd4j.linalg.dataset.api.iterator.DataSetIterator iterator = new ListDataSetIterator<>(trainDs.asList(), effectiveBatchSize);
         // ===== PHASE 9: BOUCLE D'ENTRAÎNEMENT PRINCIPALE =====
 
         // Récupération du nombre d'époques depuis la configuration
@@ -1238,7 +1261,7 @@ public class LstmTradePredictor {
         double minDelta = config.getMinDelta();          // Amélioration minimale
         int epochsWithoutImprovement = 0;               // Compteur train
         int epochsWithoutValImprovement = 0;            // Compteur validation
-        int patienceVal = config.getPatienceVal() > 0 ? config.getPatienceVal() : 5;
+        int patienceVal = patienceValLocal; // remplace valeur initiale (après ajustement Step2)
         Double lastValLoss = null; // Step13: stocke le dernier valLoss
 
         // Étape 10: holder baseline variance résiduelle pour suivi amélioration HUBER
@@ -1608,7 +1631,6 @@ public class LstmTradePredictor {
         // ===== PHASE 6: TRANSFORMATION EN TENSEUR ND4J AVEC PERMUTATION =====
 
         // Conversion en tenseur ND4J : [batch, time, features] (format initial)
-        // Puis permutation vers [batch, features, time] pour compatibilité modèle
         org.nd4j.linalg.api.ndarray.INDArray input =
             Nd4j.create(seq)                    // Création tenseur initial [1, windowSize, numFeatures]
                 .permute(0, 2, 1)              // Permutation: [batch, time, features] -> [batch, features, time]
