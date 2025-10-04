@@ -3031,41 +3031,80 @@ public class LstmTradePredictor {
      * Affiche les temps d'exécution et la validité du cache.
      */
     public static void testFeatureMatrixCache(BarSeries fullbars) {
-        // Création d'une série synthétique
+        // Reset instrumentation
+        LstmFeatureMatrixCache.resetStats();
         String symbol = "TESTSYM";
-        String interval = "1h";
-        List<Bar> barList = new ArrayList<>();
-        ZonedDateTime now = ZonedDateTime.now();
-        BarSeries series = new BaseBarSeriesBuilder().withName(symbol).build();
-        BarSeries bars = fullbars.getSubSeries(0,499);
-        for (int i = 0; i < bars.getBarCount(); i++) {
-            double base = 100 + Math.sin(i / 10.0) * 5 + i * 0.01;
-            barList.add(bars.getBar(i));
-        }
-        for (Bar b : barList) series.addBar(b);
         List<String> features = Arrays.asList("close", "high", "low", "volume", "rsi_14", "sma_20", "realized_vol");
         LstmTradePredictor predictor = new LstmTradePredictor(null, null);
-        // Premier appel (cache froid)
+        // Construire une sous-série initiale (au moins 501 barres dans fullbars attendu)
+        int initialBars = Math.min(500, fullbars.getBarCount() - 2); // garde 1+ barres pour ajout
+        BarSeries series = new BaseBarSeriesBuilder().withName(symbol).build();
+        for (int i = 0; i < initialBars; i++) series.addBar(fullbars.getBar(i));
+
+        // Helpers checksum
+        java.util.function.ToDoubleFunction<double[][]> checksum = (m) -> {
+            double s = 0; if (m==null) return s; for (double[] row: m) for (double v: row) s += v; return s; };
+
+        // 1) Premier appel (MISS attendu)
         long t0 = System.nanoTime();
         double[][] m1 = predictor.extractFeatureMatrix(series, features);
         long t1 = System.nanoTime();
-        // Second appel (cache chaud)
+        LstmFeatureMatrixCache.CacheStats s1 = LstmFeatureMatrixCache.getStats();
+        double dt1 = (t1 - t0)/1e6;
+        System.out.println("[CACHE-TEST] 1er appel: ms="+String.format(java.util.Locale.US, "%.3f", dt1)+" stats="+s1);
+        if (s1.misses()!=1 || s1.hits()!=0) System.out.println("[CACHE-TEST][WARN] attendu misses=1 hits=0");
+
+        // 2) Second appel (HIT attendu)
+        long t2a = System.nanoTime();
         double[][] m2 = predictor.extractFeatureMatrix(series, features);
-        long t2 = System.nanoTime();
-        double dt1 = (t1 - t0) / 1e6;
-        double dt2 = (t2 - t1) / 1e6;
-        System.out.println("[TEST] extractFeatureMatrix: 1er appel = " + dt1 + " ms, 2e appel = " + dt2 + " ms");
-        if (dt2 < dt1 * 0.6) {
-            System.out.println("[TEST] OK: 2e appel >40% plus rapide (cache fonctionne)");
+        long t2b = System.nanoTime();
+        LstmFeatureMatrixCache.CacheStats s2 = LstmFeatureMatrixCache.getStats();
+        double dt2 = (t2b - t2a)/1e6;
+        System.out.println("[CACHE-TEST] 2e appel: ms="+String.format(java.util.Locale.US, "%.3f", dt2)+" stats="+s2);
+        if (s2.hits()!=1 || s2.misses()!=1) System.out.println("[CACHE-TEST][WARN] attendu hits=1 misses=1");
+
+        // Validations contenu identique (checksum + dimensions)
+        if (m1.length!=m2.length || m1[0].length!=m2[0].length) System.out.println("[CACHE-TEST][ERR] Dimensions diff m1/m2");
+        double cks1 = checksum.applyAsDouble(m1);
+        double cks2 = checksum.applyAsDouble(m2);
+        if (Math.abs(cks1-cks2) > 1e-9) System.out.println("[CACHE-TEST][ERR] checksum diff entre m1 et m2 => cache incohérent");
+
+        // 3) Ajout d'une nouvelle barre (doit invalider: clé barCount & lastBarEndTime changent)
+        if (initialBars+1 < fullbars.getBarCount()) {
+            series.addBar(fullbars.getBar(initialBars+1));
         } else {
-            System.out.println("[TEST] ATTENTION: gain cache insuffisant");
+            System.out.println("[CACHE-TEST][WARN] Impossible d'ajouter une barre (fullbars insuffisant)");
         }
-        // Test invalidation: on ajoute une barre (barCount change)
-        series.addBar(fullbars.getBar(500));
-        long t3 = System.nanoTime();
+        long t3a = System.nanoTime();
         double[][] m3 = predictor.extractFeatureMatrix(series, features);
-        long t4 = System.nanoTime();
-        double dt3 = (t4 - t3) / 1e6;
-        System.out.println("[TEST] Après ajout d'une barre: appel = " + dt3 + " ms");
+        long t3b = System.nanoTime();
+        LstmFeatureMatrixCache.CacheStats s3 = LstmFeatureMatrixCache.getStats();
+        double dt3 = (t3b - t3a)/1e6;
+        System.out.println("[CACHE-TEST] 3e appel après ajout barre: ms="+String.format(java.util.Locale.US, "%.3f", dt3)+" stats="+s3);
+        boolean invalidationOk = (s3.misses()==2 && s3.hits()==1);
+        if (!invalidationOk) System.out.println("[CACHE-TEST][ERR] Invalidation non détectée (attendu misses=2 hits=1)");
+        if (m3.length != m2.length + 1) System.out.println("[CACHE-TEST][ERR] m3.length="+m3.length+" attendu="+(m2.length+1));
+        double cks3 = checksum.applyAsDouble(m3);
+        if (Math.abs(cks3-cks2) < 1e-9) System.out.println("[CACHE-TEST][WARN] checksum m3 ~= m2 (valeurs peu changées ou cache mal invalidé)");
+
+        // 4) Quatrième appel (HIT attendu sur nouvelle clé)
+        long t4a = System.nanoTime();
+        double[][] m4 = predictor.extractFeatureMatrix(series, features);
+        long t4b = System.nanoTime();
+        LstmFeatureMatrixCache.CacheStats s4 = LstmFeatureMatrixCache.getStats();
+        double dt4 = (t4b - t4a)/1e6;
+        System.out.println("[CACHE-TEST] 4e appel: ms="+String.format(java.util.Locale.US, "%.3f", dt4)+" stats="+s4);
+        if (s4.hits()!=2 || s4.misses()!=2) System.out.println("[CACHE-TEST][ERR] attendu hits=2 misses=2");
+        double cks4 = checksum.applyAsDouble(m4);
+        if (Math.abs(cks4-cks3) > 1e-9) System.out.println("[CACHE-TEST][ERR] m4 diff de m3 (cache hit attendu)");
+
+        // Ratios de temps (indicatif)
+        System.out.println("[CACHE-TEST][SUMMARY] t1(ms)="+String.format(java.util.Locale.US, "%.2f", dt1)+
+                " t2="+String.format(java.util.Locale.US, "%.2f", dt2)+
+                " t3="+String.format(java.util.Locale.US, "%.2f", dt3)+
+                " t4="+String.format(java.util.Locale.US, "%.2f", dt4)+
+                " | invalidationOK="+invalidationOk+
+                " | checksums c1="+String.format(java.util.Locale.US, "%.4f", cks1)+
+                " c3="+String.format(java.util.Locale.US, "%.4f", cks3));
     }
 }
