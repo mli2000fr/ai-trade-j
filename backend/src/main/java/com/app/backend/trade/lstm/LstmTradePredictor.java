@@ -36,6 +36,7 @@ package com.app.backend.trade.lstm;
 import com.app.backend.trade.model.PreditLsdm;
 import com.app.backend.trade.model.SignalType;
 import org.deeplearning4j.datasets.iterator.utilty.ListDataSetIterator;
+import org.deeplearning4j.datasets.iterator.AsyncDataSetIterator;
 import org.deeplearning4j.nn.conf.MultiLayerConfiguration;
 import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
 import org.deeplearning4j.nn.conf.WorkspaceMode;
@@ -1268,6 +1269,14 @@ public class LstmTradePredictor {
         }
         logger.info("[TRAIN][BATCH][STEP2] BatchSize={} trainSeq={} totalSeq={} features={} window={} patienceVal={} (requested={})", effectiveBatchSize, trainSeqCount, numSeqTotal, numFeatures, windowSize, patienceValLocal, requestedBatch);
         org.nd4j.linalg.dataset.api.iterator.DataSetIterator iterator = new ListDataSetIterator<>(trainDs.asList(), effectiveBatchSize);
+        if (config.isUseAsyncIterator()) {
+            int qSize = config.getAsyncQueueSize();
+            if (qSize < 2) qSize = 2; else if (qSize > 8) qSize = 8; // bornes de sécurité mémoire
+            logger.info("[TRAIN][ASYNC][STEP4] Activation AsyncDataSetIterator queueSize={} (batch={} seqTrain={})", qSize, effectiveBatchSize, trainSeqCount);
+            iterator = new AsyncDataSetIterator(iterator, qSize);
+        } else {
+            logger.info("[TRAIN][ASYNC][STEP4] Async iterator désactivé (useAsyncIterator=false)");
+        }
         // ===== PHASE 9: BOUCLE D'ENTRAÎNEMENT PRINCIPALE =====
 
         // Récupération du nombre d'époques depuis la configuration
@@ -1417,6 +1426,9 @@ public class LstmTradePredictor {
         }
 
         // ===== PHASE 10: SÉLECTION DU MODÈLE FINAL =====
+        if (iterator instanceof AsyncDataSetIterator) {
+            try { ((AsyncDataSetIterator) iterator).shutdown(); } catch (Exception e) { logger.warn("[TRAIN][ASYNC][STEP4] Échec shutdown async iterator: {}", e.toString()); }
+        }
         MultiLayerNetwork finalModel = bestModel != null ? bestModel : model;
         if (bestModel != null) {
             if (useInternalVal) {

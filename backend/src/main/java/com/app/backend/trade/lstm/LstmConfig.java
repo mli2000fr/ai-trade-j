@@ -227,6 +227,12 @@ public class LstmConfig {
     /** Seuil minimal de variance des résidus (predTrain - closeTrain). Alerte si variance < seuil (Step21). */
     private double predictionResidualVarianceMin = 1e-6;
 
+    // =============================== Async Iterator (Pipeline) ===============================
+    /** Active l'AsyncDataSetIterator pour précharger les batchs (Étape 4). */
+    private boolean useAsyncIterator = true;
+    /** Taille de la file interne de préchargement async (2-8 recommandé). */
+    private int asyncQueueSize = 3;
+
     /**
      * Constructeur par défaut : charge les hyperparamètres depuis le fichier
      * resources/lstm-config.properties si présent. Chaque paramètre possède une valeur de secours
@@ -289,6 +295,9 @@ public class LstmConfig {
                 meanShiftSigmaThreshold = Double.parseDouble(props.getProperty("meanShiftSigmaThreshold", "2.0"));
                 entryThresholdFactor = Double.parseDouble(props.getProperty("entryThresholdFactor", "1.2"));
                 predictionResidualVarianceMin = Double.parseDouble(props.getProperty("predictionResidualVarianceMin", "0.000001"));
+                // Nouveaux paramètres async iterator (Étape 4)
+                useAsyncIterator = Boolean.parseBoolean(props.getProperty("useAsyncIterator", "true"));
+                asyncQueueSize = Integer.parseInt(props.getProperty("asyncQueueSize", "3"));
             }
             // FILET DE SECURITE : même si le fichier n'existe pas, on veut un optimizer par défaut.
             optimizer = props.getProperty("optimizer", "adam");
@@ -352,6 +361,9 @@ public class LstmConfig {
         try { this.meanShiftSigmaThreshold = rs.getDouble("mean_shift_sigma_threshold"); } catch (Exception ignored) {}
         try { this.entryThresholdFactor = rs.getDouble("entry_threshold_factor"); } catch (Exception ignored) {}
         try { this.predictionResidualVarianceMin = rs.getDouble("prediction_residual_variance_min"); } catch (Exception ignored) {}
+        // Paramètres async iterator (colonne optionnelle)
+        try { this.useAsyncIterator = rs.getBoolean("use_async_iterator"); } catch (Exception ignored) {}
+        try { this.asyncQueueSize = rs.getInt("async_queue_size"); } catch (Exception ignored) {}
     }
 
     /**
