@@ -16,6 +16,8 @@
     </parent>
     <properties>
         <java.version>17</java.version>
+        <!-- Version centralisée Deeplearning4j -->
+        <dl4j.version>1.0.0-M2.1</dl4j.version>
     </properties>
     <repositories>
         <repository>
@@ -75,18 +77,18 @@
         <dependency>
             <groupId>org.deeplearning4j</groupId>
             <artifactId>deeplearning4j-core</artifactId>
-            <version>1.0.0-M2.1</version>
+            <version>${dl4j.version}</version>
         </dependency>
         <dependency>
             <groupId>org.deeplearning4j</groupId>
             <artifactId>deeplearning4j-datasets</artifactId>
-            <version>1.0.0-M2.1</version>
+            <version>${dl4j.version}</version>
         </dependency>
-        <!--<dependency>
+        <dependency>
             <groupId>org.nd4j</groupId>
-            <artifactId>nd4j-native-platform</artifactId>
-            <version>1.0.0-M2.1</version>
-        </dependency>-->
+            <artifactId>nd4j-cuda-11.6-platform</artifactId>
+            <version>${dl4j.version}</version>
+        </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
@@ -102,11 +104,10 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
-        <!-- MySQL Connector/J correct -->
+        <!-- MySQL Connector/J modern coordinates -->
         <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
-            <version>8.0.32</version>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
         <!-- Ajouté pour compatibilité Java 8+ -->
@@ -124,17 +125,6 @@
             <groupId>jakarta.annotation</groupId>
             <artifactId>jakarta.annotation-api</artifactId>
             <version>2.1.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.nd4j</groupId>
-            <artifactId>nd4j-cuda-11.6</artifactId>
-            <version>1.0.0-M2.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.nd4j</groupId>
-            <artifactId>nd4j-cuda-11.6</artifactId>
-            <version>1.0.0-M2.1</version>
-            <classifier>windows-x86_64-cudnn</classifier>
         </dependency>
     </dependencies>
     <build>
@@ -159,15 +149,6 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                            <version>1.18.32</version>
-                        </exclude>
-                    </excludes>
-                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

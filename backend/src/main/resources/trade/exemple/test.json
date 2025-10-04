@@ -1,177 +1,43 @@
-Plan concret, modulaire, exécutable étape par étape (chaque étape indépendante)
-Phase 0 – Cadre général Objectif global: augmenter la qualité prédictive (retours swing 3–10 jours), stabiliser la simulation, augmenter le nombre de trades valides, réduire la timidité du modèle, améliorer la sélection via business score robuste.
 
-PHASE 1 – Données & Cibles Étape
-1. Audit des données Objectif: vérifier suffisance et cohérence (pas de fuite). Actions:
-Vérifier par symbole: nombre de barres >= (windowSize + horizonBars + 400).
-Calculer stats: mean/std des log-returns, proportion de zéros, empreinte NaN.
-Logger histogramme log-return (20 bins). Acceptation: aucun symbole avec log-return variance < 1e-5; sinon exclure ou enrichir.
-
-Étape 2. Option cible multi-horizon (indépendante) Objectif: lisser bruit court terme. Actions:
-Créer mode target = moyenne des log-returns t+1..t+H (H = horizonBars).
-Ajouter flag config useMultiHorizonAvg (fallback si absent). Acceptation: distribution target moins leptokurtique (kurtosis diminue).
-
-Étape 3. Passage label scaler de MinMax -> ZScore Objectif: éviter compression extrême. Actions:
-Dans train: si useLogReturnTarget alors labelScaler.Type.ZSCORE.
-Migration backward compatible (si scalers JSON ancien = MinMax, détecter et reconstruire). Acceptation: std(label normalisé) ≈ 1, pas de plateau < 1e-3.
-
-PHASE 2 – Normalisation & Features
-Étape 4. Ajout feature realized_vol Objectif: meilleur lien signal/volatilité. Actions:
-realized_vol = std(log-return derniers N=14)*sqrt(14).
-Normalisation ZScore. Acceptation: feature non constante (> 20 valeurs distinctes sur dataset).
-
-Étape 5. Pré-normalisation volume Objectif: réduire skew. Actions:
-Remplacer volume brut par log(1+volume), puis normalisation existante. Acceptation: skew(volume) réduit d’au moins 30%.
-
-Étape 6. Cache extraction features Objectif: performance & cohérence simulation. Actions:
-Memoriser matrix features dans simulateTradingWalkForward (Map<barIndex,double[]>).
-Réutiliser pour ATR, RSI quand possible. Acceptation: temps simulation réduit (>15%) sur série test.
-
-PHASE 3 – Architecture Réseau
-Étape 7. Revenir activation LSTM TANH Objectif: stabilité gradients. Actions:
-LSTM.Builder.activation(Activation.TANH). Acceptation: disparition warnings gradients explosifs (si existants).
-
-Étape 8. Gradient clipping Objectif: prévenir dérives. Actions:
-builder.gradientNormalization(ClipElementWiseAbsoluteValue).gradientNormalizationThreshold(1.0). Acceptation: aucune valeur de perte NaN sur 3 runs.
-
-Étape 9. Réduction dropout Objectif: éviter sous-apprentissage. Actions:
-Dropout récurrent max 0.25.
-Supprimer multiplication *1.5.
-Dropout dense final = min(0.2, dropoutRate). Acceptation: courbe loss descend encore après 5 epochs (vs plateau immédiat avant).
-
-Étape 10. Huber loss Objectif: robustesse aux outliers sans lisser trop. Actions:
-Remplacer MEAN_ABSOLUTE_ERROR par HUBER (si support). Sinon SMOOTH_L1 custom. Acceptation: variance des erreurs résiduelles réduite (>10%).
-
-PHASE 4 – Boucle d’Entraînement Étape
-11. Validation split interne Objectif: early stopping réaliste. Actions:
-Split interne: dernière 15% du trainSeries.
-Calcul val_loss après chaque epoch.
-Early stop sur val_loss avec patienceVal distincte. Acceptation: val_loss meilleure que last train_loss + minDelta.
-
-Étape 12. LR scheduler Objectif: convergence plus fine. Actions:
-Tous les 25 epochs: lr *= 0.9 (simple). Acceptation: amélioration val_loss après première réduction.
-
-Étape 13. Sauvegarde meilleur modèle sur val_loss Objectif: éviter dernier sur-ajusté. Actions:
-Maintenir bestValLoss, cloner params. Acceptation: best model score différent du dernier dans ≥40% des runs.
-
-PHASE 5 – Seuils & Signaux
-Étape 14. Seuil adaptatif distribution prédictions Objectif: augmenter trades pertinents. Actions:
-Maintenir buffer circulaire des |predictedDelta| derniers 200 points.
-entryThreshold = max(percentile65, floorMin=0.0007) au lieu de cap constant. Acceptation: nombre de trades/test entre 8 et 30 pour 1 an.
-
-Étape 15. Refactor contrarian Objectif: transparence & contrôle. Actions:
-Extraire logique contrarian dans méthode dédiée renvoyant ContrarianDecision {active, adjustedSignalStrength, reason}.
-Ajouter métrique: tradesContrarian vs tradesNormaux. Acceptation: log ratio contrarian <= 35%.
-
-Étape 16. Pénalité trades rares dans businessScore Objectif: éviter faux PF élevés. Actions:
-scoreFinal = score * min(1.0, numTrades / tradeFloor) (tradeFloor=8). Acceptation: configurations avec numTrades<5 ne gagnent plus tuning.
-
-PHASE 6 – Simulation & Risk
-Étape 17. Caching prédictions intra-split Objectif: éviter recalcul multiple. Actions:
-Map<Integer, Double> predictedAtBar pour newPredicted. Acceptation: -30% temps simulateTrading sur bench.
-
-Étape 18. Position sizing plafonné adaptatif Objectif: cohérence risque. Actions:
-positionValueMax = min( capital*0.1, capital * (0.5 * atrPct / medianAtrPct) ). Acceptation: dispersion taille positions (std) réduite.
-
-PHASE 7 – Tuning
-Étape 19. Activer parallélisme réel Objectif: vitesse. Actions:
-Remettre numThreads = Math.min(...effectiveMaxThreads).
-Ajouter file tuning_progress_metrics (JSON). Acceptation: temps total < temps séquentiel * 0.5 sur grille réduite.
-
-Étape 20. Tuning en deux phases Objectif: efficacité. Actions:
-Phase 1: grille coarse.
-Sélection top 5 par businessScore ajusté.
-Phase 2: micro-grille autour (neurons ±32, lr *{0.8,1,1.2}, dropout ±0.05). Acceptation: amélioration bestScore >= 5% vs one-shot.
-
-PHASE 8 – Monitoring & Drift
-Étape 21. Ajout métrique variance prédictions Objectif: détecter modèle trop plat. Actions:
-Après entraînement: var( predTrain - closeTrain ) > seuil. Acceptation: alerte si var < 1e-6.
-
-Étape 22. Drift ciblé labels Objectif: cohérence performance. Actions:
-stocker dernière distribution log-return (mean/std).
-retrain si shift > 2σ sur 250 dernières barres. Acceptation: retrain déclenché seulement si shift réel.
-
-PHASE 9 – Journalisation & Traçabilité
-Étape 23. Export JSON résumé run Objectif: reproductibilité. Actions:
-Sauvegarder config + val_loss curve + trade stats dans table ou fichier. Acceptation: un enregistrement par run.
-
-PHASE 10 – Qualité & Tests Étape
-24. Tests unitaires ciblés Objectif: non-régression. Actions:
-Test: adaptive threshold jamais > 1%.
-Test: businessScore diminue si maxDrawdown augmente.
-Test: contrarian réduit signalStrength initial négatif -> positif. Acceptation: tests verts.
-
-Étape 25. Smoke test pipeline Objectif: validation bout-en-bout. Actions:
-Série synthétique (sinus + bruit).
-Exécuter entraînement court (epochs=5).
-Vérifier qu’au moins 1 trade simulé. Acceptation: tradePnL size >=1.
-
-PHASE 11 – Optimisations futures (optionnel)
-Étape 26. Multi-target (seq2one vs seq2multi) + attention réelle.
-Étape 27. Exploration transformer hybride (si besoin patterns non locaux).
-Étape 28. Remplacement simulation interne par moteur backtest unifié (déduplication logique risk).
-
-Format d’exécution de chaque étape (recommandé)
-Input: fichiers impactés + paramètres nouveaux.
-Actions: liste modifs code (classes/méthodes).
-Validation: logs attendus + tests rapides.
-Rollback: pointer bloc modifié (facile à inverser).
-Indépendance des étapes Chaque étape contient suffisamment d’information pour être réalisée même si étapes précédentes non encore faites; si une dépendance forte existe (ex: étape 13 dépend du split validation ajouté en étape 11), spécifier fallback (ex: si pas de val split, utiliser trainLoss et tagger modèle “trainOnly”).
-
-Résumé rapide (si priorité limitée) Critique immédiat: 3, 7, 8, 11, 14, 16. Ensuite: 9, 10, 15, 17, 19, 20.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+Analyse initiale: ton code DL4J tourne avec nd4j-cuda-11.6 mais en double précision, petit batch, beaucoup de calculs d’indicateurs TA4J CPU-bound, aucun pipeline async, et probablement pas de couche CUDA/cuDNN optimisée (pas de dépendance deeplearning4j-cuda-*). Résultat: GPU partiellement occupé (~30%), CPU élevé, 3 Go/8 Go VRAM utilisés. Objectif: augmenter la charge utile GPU (batchs plus gros, float32, cuDNN, overlap data) et réduire le temps CPU (caching features, parallélisation contrôlée, suppression de recalculs, async iterator).
+Je te propose un plan multi-étapes (tu peux cocher et reprendre n’importe quand). Chaque étape a: but, actions concrètes, validations, risques.
+ETAPE 0 - Point de départ (à faire une seule fois) [ ] Action: Ajouter un log backend pour confirmer exécution GPU. Dans trainLstmScalarV2 au début: logger.info("Backend={} dtype={}", Nd4j.getExecutioner().getClass().getName(), Nd4j.defaultFloatingPointType()); [ ] Lancer un run actuel (une seule config) et noter: - Temps moyen par epoch - Batch size actuel - GPU util (% nvidia-smi ou outil équivalent) - VRAM utilisée - CPU util % - Dimensions: numSeq, windowSize, numFeatures [ ] Sauver ces métriques (fichier bench_baseline.md). Validation: fichier baseline existant + logs confirmant Executioner = CudaExecutioner.
+ETAPE 1 - Activer pleinement CUDA + cuDNN + float32 But: Réduire le coût mémoire et booster throughput. [ ] Dans pom.xml remplacer dépendance deeplearning4j-core par deeplearning4j-cuda-11.6 (même version) + garder nd4j-cuda-11.6 classifier cuDNN. [ ] Ajouter au tout début (ex: @PostConstruct dans un bean ou static block): Nd4j.setDefaultDataTypes(org.nd4j.linalg.api.buffer.DataType.FLOAT, org.nd4j.linalg.api.buffer.DataType.FLOAT); [ ] Dans initModel(): builder.dataType(DataType.FLOAT); [ ] Vérifier que tu n’utilises pas d’opérations exigeant double (ton code de features reste en double: c’est acceptable; ND4J cast à la création). [ ] Relancer un entraînement et mesurer: - VRAM (devrait baisser ou permettre batch plus grand) - Temps/epoch (doit descendre de 10–40%) Validation: logs montrent dtype=FLOAT.
+Risques: Si mélange double/float → coûts de cast; acceptable si DataSet final est float.
+ETAPE 2 - Augmenter batch size / exploitation VRAM But: Saturer mieux GPU (LSTM profite de batch plus large). [ ] Stratégie exploratoire: doubler batchSize jusqu’à (a) VRAM ~75–80% ou (b) temps/epoch ne diminue plus. [ ] Ajouter log dynamique: logger.info("BatchSize={} seq={} features={} window={}", batchSize, numSeq, numFeatures, windowSize); [ ] Si numSeq < batchSize * 4 → limiter augmentation (sinon surapprentissage & overhead). [ ] Ajuster patience (moins d’updates/epoch => potentiellement augmenter patienceVal de +30%). Validation: GPU util >55–65% sur plusieurs epochs.
+Risques: Trop gros batch → gradient plate (valLoss n’améliore plus). Si ça arrive, réduire de 25%.
+ETAPE 3 - Caching et réduction CPU feature engineering But: Diminuer recalcul indicateurs TA4J coûteux. [ ] Introduire un cache (clé: symbol + hash(interval + barCount + lastBarEndTime + featureSetVersion)). [ ] Stocker matrix = extractFeatureMatrix(...) sérialisé (Kryo ou simple DataOutputStream) dans un dossier cache/ (par défaut RAM/disk). [ ] Invalider si barCount a changé ou dernière barre (timestamp) diffère. [ ] Pour features composites (ex: plusieurs utilisent sma20, sd20), déjà optimisé partiellement, mais: - Pré-calculer séries primitives (close[], high[], low[], volume[]) en double[] avant d’instancier indicateurs. [ ] Option avancée (plus tard): réécrire certains indicateurs (momentum, gap, range, breakout) en boucles vectorisées ND4J (juste si CPU toujours saturé). Validation: Temps d’appel extractFeatureMatrix réduit de >40% sur 2e run même dataset.
+Risques: Cache incohérent si horizon rolling intraday — inclure timestamp dernière barre.
+ETAPE 4 - Pipeline async & overlap CPU/GPU But: Pendant qu’une batch est sur GPU, préparer la suivante. [ ] Remplacer ListDataSetIterator par AsyncDataSetIterator(new ListDataSetIterator<>(...), queueSize=2 ou 3). [ ] Option si dataset complet tient en mémoire: pas critique mais bénéfice quand batch large. [ ] (Plus tard) Si hyperparam tuning multi-symbol: préparer DataSet de la prochaine config en tâche parallèle (ExecutorService) avant fin de l’epoch en cours. Validation: GPU idle gaps (observables via timeline) réduits.
+Risques: queue trop grande → mémoire JVM en hausse.
+ETAPE 5 - Concurrence contrôlée du tuning pour saturer GPU But: Si un seul modèle trop petit, lancer plusieurs trainings en parallèle (mais bornés). [ ] Implémenter un ExecutorService fixe (pool size 2 ou 3). [ ] Chaque tâche = un appel trainLstmScalarV2 avec config différente. [ ] Synchroniser accès disque (sauvegardes modèles) pour éviter contention. [ ] Surveiller VRAM cumulée (nvidia-smi); si >90%, réduire pool. [ ] Empiler jobs en file; dès qu’un termine, lancer suivant (GPU presque toujours occupé). Validation: GPU util moyenne >70% sur la durée de tuning multi-symbol.
+Risques: Conflits allocation si deux gros batchs démarrent simultanément; atténuer en décalant (sleep 3–5s) démarrage du second.
+ETAPE 6 - Optimisations modèle/cuDNN spécifiques But: Maximiser kernels rapides. [ ] Vérifier logs: si cuDNN LSTM fallback CPU → activer: dans LSTM.Builder() .helperAllowFallback(true) (par défaut) et s’assurer dataType=FLOAT. [ ] Tester réduire dropout layers (chaque dropout entraîne passes sup.) et augmenter légèrement lstmNeurons pour utiliser GPU (ex: +25%) si VRAM encore libre. [ ] Activer gradient accumulation si dataset minuscule mais batch cible trop grand (rare ici) — sinon ignorer. [ ] Vérifier gradient clipping actuel (1.0). Si non nécessaire (pas d’explosions), enlever pour gagner un peu (micro-optim). Validation: Temps/epoch baisse supplémentaire (5–10%).
+Risques: Sans clipping, potentiels NaN sur séries extrêmement volatiles — monitorer.
+ETAPE 7 - Profiling & raffinement But: Confirmer plus de CPU → GPU transfert minimisé. [ ] Activer profil ND4J: System.setProperty("nd4j.exec.debug","true") (temporaire). [ ] Observer ratio temps kernels vs préparation. [ ] Si encore CPU-bound: vectoriser 2–3 features complexes (loop O(20*window) => ND4J ops). [ ] Créer script bench récapitulant: - Baseline vs final (epoch ms, GPU %, VRAM, CPU %). Validation: Document comparatif bench_final.md.
+ETAPE 8 - Nettoyage & automatisation reprise But: Pouvoir reprendre demain facilement. [ ] Créer un fichier PLAN_GPU_PROGRESS.md avec sections: - Checklist (copie de cette liste + cases) - Dernière étape accomplie - Paramètres batchSize / pool concurrency adoptés [ ] Ajouter un petit endpoint /status (optionnel) retournant: - Trainings en cours - GPU target batchSize - Utilisation cache features hits/miss [ ] Script shell (ou .bat) run_training_with_metrics qui lance un tuning et capture logs vers logs/run_TIMESTAMP.log.
+ETAPE 9 - Alertes et garde-fous But: Éviter régressions silencieuses. [ ] Ajouter log si dtype != FLOAT (alerte). [ ] Ajouter log si batchSize < 8 (waste GPU) ou si utilisation VRAM <20% après 5 epochs (suggestion d’augmentation). [ ] Ajouter seuil de temps/epoch minimal attendu; si > +30% baseline → log WARN.
+Résumé leviers majeurs (ordre d’impact attendu):
+Passer en float32 + cuDNN (gros gain)
+Augmenter batch size (utilisation GPU)
+Concurrence contrôlée des trainings (saturation globale)
+Caching features (réduction CPU)
+Async iterator (réduit bulles d’inactivité)
+Ajustements modèle (lstmNeurons, dropout, clipping)
+Vectorisation sélective des features custom
+Chemin de décision rapide si temps limité:
+Jour 1: Étapes 0–1
+Jour 2: Étape 2 + mesure
+Jour 3: Étape 3 + 4
+Jour 4: Étape 5
+Jour 5: Étape 6 + 7
+Jour 6: Étapes 8–9 + finalisation
+Validation finale (critères succès):
+GPU util moyenne >65%
+Temps/epoch réduit ≥30% vs baseline
+CPU util moyenne réduite (ou même CPU mais + modèles/h)
+Aucun out-of-memory GPU
+Pas de dégradation valLoss significative à hyperparams constants
+Prochain concret si tu veux continuer maintenant: je peux modifier pom + initModel pour float + logs backend (Étape 1). Dis-moi et je l’enchaîne.
+Tu peux me dire l’étape déjà accomplie, et je reprendrai à la suivante.
+Fin du plan.

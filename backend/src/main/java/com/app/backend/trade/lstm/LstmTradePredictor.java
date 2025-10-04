@@ -46,6 +46,7 @@ import org.deeplearning4j.nn.conf.layers.recurrent.LastTimeStep;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.util.ModelSerializer;
 import org.nd4j.linalg.activations.Activation;
+import org.nd4j.linalg.api.buffer.DataType;
 import org.nd4j.linalg.lossfunctions.ILossFunction;
 import org.nd4j.linalg.lossfunctions.impl.LossMCXENT;
 import org.nd4j.linalg.factory.Nd4j;
@@ -70,6 +71,15 @@ import org.deeplearning4j.nn.conf.GradientNormalization;
 
 @Service
 public class LstmTradePredictor {
+
+    static {
+        try {
+            // Étape 1: forcer float32 global
+            Nd4j.setDefaultDataTypes(DataType.FLOAT, DataType.FLOAT);
+        } catch (Throwable t) {
+            System.err.println("[LSTM][INIT][WARN] Échec setDefaultDataTypes FLOAT: " + t.getMessage());
+        }
+    }
 
     /* ---------------------------------------------------------
      * LOG & DEPENDANCES
@@ -127,6 +137,7 @@ public class LstmTradePredictor {
     ) {
         // Builder de base
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
+        builder.dataType(DataType.FLOAT); // Étape 1: dtype FLOAT
 
         // Sélection dynamique de l'updater (optimiseur) selon chaîne.
         builder.updater(
@@ -945,6 +956,7 @@ public class LstmTradePredictor {
      * @return Résultat contenant modèle entraîné + scalers pour inversion/prédiction
      */
     public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config, Object unused) {
+        logger.info("[TRAIN][ENV] Backend={} dtype={}", Nd4j.getExecutioner().getClass().getName(), Nd4j.defaultFloatingPointType()); // Étape 1 log
         // ===== PHASE 1: VALIDATION ET PRÉPARATION DES FEATURES =====
 
         // Récupération de la liste des features à utiliser pour l'entraînement
@@ -2061,7 +2073,7 @@ public class LstmTradePredictor {
                 ContrarianDecision contrarianDecision = evaluateContrarian(signalStrength, lastClose, rsiValues, bar, sub);
                 if (contrarianDecision.active) {
                     signalStrength = contrarianDecision.adjustedSignalStrength;
-                    logger.info("[DEBUG][CONTRARIAN][CACHE] bar={} rsi={} signalAdj={}", bar,
+                    logger.info("[DEBUG][CONTRARIAN] bar={} rsi={} signalAdj={}", bar,
                             String.format("%.1f", rsiValues[bar]),
                             String.format("%.4f", signalStrength));
                 }
@@ -2333,50 +2345,56 @@ public class LstmTradePredictor {
     // Retourne un tableau de taille <= lookback (peut être plus petit si historique insuffisant)
     private double[] computeRecentLabelValues(BarSeries series, LstmConfig config, int lookback) {
         if (!config.isUseLogReturnTarget()) {
-            // Si on ne travaille pas en log-return, dérive label non pertinente -> tableau vide
             return new double[0];
         }
         int n = series.getBarCount();
         if (n < 3) return new double[0];
-        int horizon = Math.max(1, config.getHorizonBars());
         double[] closes = extractCloseValues(series);
-        // Dernier index où un horizon complet est disponible (i + horizon <= n-1)
-        int lastStart = n - 1 - horizon;
-        if (lastStart <= 0) return new double[0];
-        int start = Math.max(0, lastStart - lookback + 1); // inclut lastStart
-        java.util.List<Double> out = new java.util.ArrayList<>();
+        int windowSize = config.getWindowSize();
+        int horizon = Math.max(1, config.getHorizonBars());
+
+        // Dernier index de départ i pour lequel la cible (fenêtre + horizon) existe
+        // En training labelSeq[i] utilise closes[i + windowSize -1] comme prev puis jusqu'à horizon après
+        int lastStart;
         if (config.isUseMultiHorizonAvg()) {
-            for (int i = start; i <= lastStart; i++) {
-                double prev = closes[i];
-                double sum = 0.0; int c = 0;
-                for (int h = 1; h <= horizon; h++) {
-                    double next = closes[i + h];
-                    if (prev > 0 && next > 0) {
-                        double lr = Math.log(next / prev);
-                        if (Double.isFinite(lr)) sum += lr;
-                        else sum += 0.0;
-                        prev = next;
-                        c++;
-                    }
-                }
-                if (c > 0) out.add(sum / c);
-            }
+            lastStart = closes.length - windowSize - horizon; // besoin fenêtre + H pas futurs
         } else {
-            // Log-return simple t -> t+1
-            for (int i = start; i <= lastStart; i++) {
-                double a = closes[i];
-                double b = closes[i + 1];
-                if (a > 0 && b > 0) {
-                    double lr = Math.log(b / a);
-                    out.add(Double.isFinite(lr) ? lr : 0.0);
-                } else {
-                    out.add(0.0);
+            lastStart = closes.length - windowSize - 1; // besoin fenêtre + 1 pas futur
+        }
+        if (lastStart < 0) return new double[0];
+
+        int firstStart = Math.max(0, lastStart - lookback + 1);
+        java.util.List<Double> labels = new java.util.ArrayList<>();
+
+        for (int i = firstStart; i <= lastStart; i++) {
+            if (config.isUseMultiHorizonAvg()) {
+                double prev = closes[i + windowSize - 1];
+                double sum = 0.0; int c = 0; double curPrev = prev;
+                for (int h = 1; h <= horizon; h++) {
+                    int idx = i + windowSize - 1 + h;
+                    if (idx >= closes.length) break;
+                    double next = closes[idx];
+                    if (curPrev > 0 && next > 0) {
+                        double lr = Math.log(next / curPrev);
+                        if (Double.isFinite(lr)) { sum += lr; c++; }
+                    }
+                    curPrev = next;
+                }
+                labels.add(c > 0 ? (sum / c) : 0.0);
+            } else {
+                int prevIdx = i + windowSize - 1;
+                int nextIdx = i + windowSize;
+                if (nextIdx < closes.length) {
+                    double a = closes[prevIdx];
+                    double b = closes[nextIdx];
+                    double lr = (a > 0 && b > 0) ? Math.log(b / a) : 0.0;
+                    labels.add(Double.isFinite(lr) ? lr : 0.0);
                 }
             }
         }
-        double[] arr = new double[out.size()];
-        for (int i = 0; i < out.size(); i++) arr[i] = out.get(i);
-        return arr;
+        double[] out = new double[labels.size()];
+        for (int k = 0; k < labels.size(); k++) out[k] = labels.get(k);
+        return out;
     }
 
     /* =========================================================
@@ -2913,7 +2931,8 @@ public class LstmTradePredictor {
                         double next = closes[idx];
                         double logRet = Math.log(next / prev);
                         sum += logRet;
-                        prev = next; count++;
+                        prev = next;
+                        count++;
                     }
                 }
                 labelSeq[i] = count>0? (sum/count) : 0.0;
