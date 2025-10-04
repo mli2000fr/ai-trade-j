@@ -141,6 +141,31 @@ public class LstmTradePredictor {
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
         builder.dataType(DataType.FLOAT); // Étape 1: dtype FLOAT
 
+        // Détection backend GPU pour adaptation dynamique (réduction dropout / +neurones)
+        boolean gpuBackend = false;
+        try {
+            String execCls = Nd4j.getExecutioner().getClass().getName().toLowerCase(Locale.ROOT);
+            gpuBackend = execCls.contains("cuda") || execCls.contains("cudnn");
+        } catch (Exception ignored) {}
+        int effectiveLstmNeurons = lstmNeurons;
+        double effectiveDropout = dropoutRate;
+        if (gpuBackend) {
+            // Réduction coût régularisation (dropout) et augmentation capacité
+            if (effectiveDropout > 0) {
+                effectiveDropout = Math.max(0.0, Math.min(0.25, effectiveDropout * 0.5)); // /2, borne haute 0.25
+            }
+            effectiveLstmNeurons = Math.max(8, (int)Math.round(lstmNeurons * 1.25));
+            if (effectiveLstmNeurons != lstmNeurons || effectiveDropout != dropoutRate) {
+                logger.info("[LSTM][ADAPT][GPU] backend=GPU lstmNeurons {}->{} dropout {}->{}", lstmNeurons, effectiveLstmNeurons, dropoutRate, effectiveDropout);
+            }
+        } else {
+            logger.debug("[LSTM][ADAPT] backend=CPU (pas d'augmentation neurones)");
+        }
+
+        // Remplace références locales par versions effectives
+        lstmNeurons = effectiveLstmNeurons;
+        dropoutRate = effectiveDropout;
+
         // Sélection dynamique de l'updater (optimiseur) selon chaîne.
         builder.updater(
             "adam".equalsIgnoreCase(optimizer) ? new org.nd4j.linalg.learning.config.Adam(learningRate)
@@ -266,7 +291,7 @@ public class LstmTradePredictor {
         // Étape 9: log des valeurs de dropout réellement appliquées (récurrent plafonné 0.25, dense final = min(0.2, dropoutRate))
         double appliedRecurrentDropout = (dropoutRate > 0.0) ? Math.min(Math.max(dropoutRate, 0.0), 0.25) : 0.0;
         double appliedFinalDenseDropout = (dropoutRate > 0.0) ? Math.min(0.2, Math.max(dropoutRate, 0.0)) : 0.0;
-        logger.info("[LSTM][Etape9] Dropout recurrent applique={} | Dropout dense final={}", appliedRecurrentDropout, appliedFinalDenseDropout);
+        logger.info("[LSTM][Etape9] Dropout recurrent applique={} | Dropout dense final={} | neurons={}", appliedRecurrentDropout, appliedFinalDenseDropout, lstmNeurons);
         return model;
     }
 
