@@ -258,6 +258,7 @@ public class LstmTradePredictor {
         MultiLayerConfiguration conf = listBuilder.build();
         MultiLayerNetwork model = new MultiLayerNetwork(conf);
         model.init();
+        logger.info("[LSTM][INIT] defaultFPType={} modelParamsType={}", Nd4j.defaultFloatingPointType(), model.params().dataType());
         // Étape 9: log des valeurs de dropout réellement appliquées (récurrent plafonné 0.25, dense final = min(0.2, dropoutRate))
         double appliedRecurrentDropout = (dropoutRate > 0.0) ? Math.min(Math.max(dropoutRate, 0.0), 0.25) : 0.0;
         double appliedFinalDenseDropout = (dropoutRate > 0.0) ? Math.min(0.2, Math.max(dropoutRate, 0.0)) : 0.0;
@@ -2374,11 +2375,10 @@ public class LstmTradePredictor {
                     int idx = i + windowSize - 1 + h;
                     if (idx >= closes.length) break;
                     double next = closes[idx];
-                    if (curPrev > 0 && next > 0) {
-                        double lr = Math.log(next / curPrev);
-                        if (Double.isFinite(lr)) { sum += lr; c++; }
-                    }
-                    curPrev = next;
+                    double logRet = Math.log(next / prev);
+                    sum += logRet;
+                    prev = next;
+                    c++;
                 }
                 labels.add(c > 0 ? (sum / c) : 0.0);
             } else {
@@ -2945,7 +2945,7 @@ public class LstmTradePredictor {
         FeatureScaler z = new FeatureScaler(FeatureScaler.Type.ZSCORE);
         z.fit(labelSeq);
         double[] norm = z.transform(labelSeq);
-        double m=0,v=0; int n=norm.length; for(double d: norm)m+=d; m = n>0? m/n:0; for(double d: norm)v += (d-m)*(d-m); v = n>0? v/n:0; double std=Math.sqrt(v);
+        double m=0,v=0; int n=norm.length; for(double d: norm)m+=d; m = n>0? m/n:0; for(double d: norm)v += (d-m)*(d-m); v = n>0? v/n:0; double std = Math.sqrt(v);
         logger.info("[MIGRATION][LABEL_SCALER] Nouveau label scaler ZSCORE construit. meanNorm={} stdNorm={}", String.format("%.4f", m), String.format("%.4f", std));
         return z;
     }
