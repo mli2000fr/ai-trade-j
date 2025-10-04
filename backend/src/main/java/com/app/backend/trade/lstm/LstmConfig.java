@@ -59,6 +59,10 @@ public class LstmConfig {
     private double dropoutRate;
 
     // =============================== Optimisation & Entraînement ===============================
+    /** Active ou non le gradient clipping (micro-optim GPU si false). */
+    private boolean enableGradientClipping = false; // défaut: off après optimisation
+    /** Seuil de clipping (|g|>threshold => clamp). */
+    private double gradientClippingThreshold = 1.0;
     /**
      * Taux d'apprentissage (learning rate). Contrôle la vitesse d'ajustement des poids.
      * Trop haut => divergence / instabilité. Trop bas => entraînement très lent.
@@ -257,6 +261,9 @@ public class LstmConfig {
                 lstmNeurons = Integer.parseInt(props.getProperty("lstmNeurons", "50"));
                 dropoutRate = Double.parseDouble(props.getProperty("dropoutRate", "0.2"));
                 learningRate = Double.parseDouble(props.getProperty("learningRate", "0.001"));
+                // Gradient clipping (optionnel)
+                enableGradientClipping = Boolean.parseBoolean(props.getProperty("enableGradientClipping", "false"));
+                gradientClippingThreshold = Double.parseDouble(props.getProperty("gradientClippingThreshold", "1.0"));
                 numEpochs = Integer.parseInt(props.getProperty("numEpochs", "100"));
                 patience = Integer.parseInt(props.getProperty("patience", "10"));
                 minDelta = Double.parseDouble(props.getProperty("minDelta", "0.0001"));
@@ -321,6 +328,9 @@ public class LstmConfig {
         lstmNeurons = rs.getInt("lstm_neurons");
         dropoutRate = rs.getDouble("dropout_rate");
         learningRate = rs.getDouble("learning_rate");
+        // Champs optionnels gradient clipping (peuvent ne pas exister)
+        try { this.enableGradientClipping = rs.getBoolean("enable_gradient_clipping"); } catch (Exception ignored) {}
+        try { this.gradientClippingThreshold = rs.getDouble("gradient_clipping_threshold"); } catch (Exception ignored) {}
         numEpochs = rs.getInt("num_epochs");
         patience = rs.getInt("patience");
         minDelta = rs.getDouble("min_delta");

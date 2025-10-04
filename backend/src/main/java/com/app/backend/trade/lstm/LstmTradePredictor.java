@@ -179,10 +179,13 @@ public class LstmTradePredictor {
         // Activation des workspaces mémoire (optimisation Dl4J)
         builder.trainingWorkspaceMode(WorkspaceMode.ENABLED)
                .inferenceWorkspaceMode(WorkspaceMode.ENABLED);
-        // [OPT][GPU] Gradient clipping désactivé (micro-optim). Ancien code:
-        //    .gradientNormalization(GradientNormalization.ClipElementWiseAbsoluteValue)
-        //    .gradientNormalizationThreshold(1.0);
-        logger.info("[LSTM][OPT] Gradient clipping désactivé (micro-optim GPU). Surveiller NaN/pertes instables.");
+        if (config != null && config.isEnableGradientClipping()) {
+            builder.gradientNormalization(GradientNormalization.ClipElementWiseAbsoluteValue)
+                   .gradientNormalizationThreshold(config.getGradientClippingThreshold());
+            logger.info("[LSTM][OPT] Gradient clipping activé threshold={}", config.getGradientClippingThreshold());
+        } else {
+            logger.info("[LSTM][OPT] Gradient clipping désactivé (micro-optim GPU)");
+        }
 
         NeuralNetConfiguration.ListBuilder listBuilder = builder.list();
 
