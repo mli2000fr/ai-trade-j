@@ -173,6 +173,8 @@ public class LstmTradePredictor {
             LSTM.Builder lstmBuilder = new LSTM.Builder()
                 .nIn(inSize)
                 .nOut(lstmNeurons)
+                .helperAllowFallback(true) // Étape 6: autoriser fallback CPU si cuDNN indisponible (et kernels rapides sinon)
+                // dataType=FLOAT déjà défini globalement via builder.dataType(DataType.FLOAT)
                 // Étape 7: retour à TANH pour limiter explosions de gradients sur séquences financières
                 .activation(Activation.TANH);
 
