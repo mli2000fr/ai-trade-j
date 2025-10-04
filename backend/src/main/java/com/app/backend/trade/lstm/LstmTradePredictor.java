@@ -316,13 +316,33 @@ public class LstmTradePredictor {
         double[][] M = new double[n][fCount];
         if (n == 0) return M;
 
+        // --- CACHE GPU/CPU ---
+        String symbol = series.getName() != null ? series.getName() : "UNKNOWN";
+        String interval = "default"; // À adapter si interval stocké ailleurs
+        long lastBarEndTime = n > 0 ? series.getBar(n-1).getEndTime().toEpochSecond() : 0L;
+        String featureSetVersion = "v1"; // À incrémenter si features changent
+        String cacheKey = LstmFeatureMatrixCache.computeKey(symbol, interval, n, lastBarEndTime, featureSetVersion, features);
+        double[][] cached = LstmFeatureMatrixCache.load(cacheKey);
+        if (cached != null) return cached;
+        // --- FIN CACHE ---
+
+        // Pré-calcul séries primitives pour indicateurs composites
+        double[] closesRaw = new double[n];
+        double[] highsRaw = new double[n];
+        double[] lowsRaw = new double[n];
+        double[] volumesRaw = new double[n];
+        for (int i = 0; i < n; i++) {
+            closesRaw[i] = series.getBar(i).getClosePrice().doubleValue();
+            highsRaw[i] = series.getBar(i).getHighPrice().doubleValue();
+            lowsRaw[i] = series.getBar(i).getLowPrice().doubleValue();
+            volumesRaw[i] = series.getBar(i).getVolume().doubleValue();
+        }
+
         // Pré-calcul spécifique realized_vol si demandé
         boolean needRealizedVol = features.contains("realized_vol");
         double[] realizedVol = null;
         if (needRealizedVol) {
             final int WIN = 14; // fenêtre log-returns
-            double[] closesRaw = new double[n];
-            for (int i = 0; i < n; i++) closesRaw[i] = series.getBar(i).getClosePrice().doubleValue();
             double[] logRet = new double[n];
             logRet[0] = 0.0;
             for (int i = 1; i < n; i++) {
@@ -356,7 +376,7 @@ public class LstmTradePredictor {
             }
         }
 
-        // Indicateurs de base
+        // Indicateurs de base (utilisent BarSeries, mais pourraient être réécrits pour utiliser les tableaux si besoin)
         ClosePriceIndicator close = new ClosePriceIndicator(series);
         HighPriceIndicator high = new HighPriceIndicator(series);
         LowPriceIndicator low = new LowPriceIndicator(series);
@@ -713,6 +733,8 @@ public class LstmTradePredictor {
                 logger.warn("[FEATURE][VOLUME_LOG1P] Échec calcul skew: {}", e.getMessage());
             }
         }
+        // À la toute fin, AVANT le return :
+        LstmFeatureMatrixCache.save(cacheKey, M);
         return M;
     }
 
