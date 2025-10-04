@@ -74,16 +74,12 @@ public class LstmHyperparamsRepository {
      * tested_date est auto-renseignée (CURRENT_TIMESTAMP).
      */
     private static final String SQL_SAVE_TUNING_METRICS =
-            "REPLACE INTO lstm_hyperparams (" +
-                    "symbol, window_size, lstm_neurons, dropout_rate, learning_rate, num_epochs, patience," +
-                    " min_delta, k_folds, optimizer, l1, l2, normalization_scope, normalization_method," +
-                    " swing_trade_type, num_layers, bidirectional, attention, features, horizon_bars," +
-                    " threshold_type, threshold_k, limit_prediction_pct, batch_size, cv_mode, use_scalar_v2," +
-                    " use_log_return_target, use_walk_forward_v2, walk_forward_splits, embargo_bars, seed," +
-                    " business_profit_factor_cap, business_drawdown_gamma, capital, risk_pct, sizing_k," +
-                    " fee_pct, slippage_pct, kl_drift_threshold, mean_shift_sigma_threshold," +
-                    " use_multi_horizon_avg, entry_threshold_factor" +
-                    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            "INSERT INTO lstm_tuning_metrics (" +
+                    "symbol, window_size, lstm_neurons, dropout_rate, learning_rate, l1, l2, num_epochs, patience, min_delta, optimizer, " +
+                    "normalization_scope, normalization_method, swing_trade_type, features, mse, rmse, horizon_bars, " +
+                    "profit_total, profit_factor, win_rate, max_drawdown, num_trades, business_score, sortino, calmar, turnover, avg_bars_in_position, use_multi_horizon_avg, entry_threshold_factor, tested_date" +
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+
 
     // =========================================================
     // Constructeur

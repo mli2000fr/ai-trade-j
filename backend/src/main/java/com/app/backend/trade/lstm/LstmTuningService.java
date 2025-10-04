@@ -655,7 +655,7 @@ public class LstmTuningService {
         // Étape 19: écrire métriques JSON
             try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON: {}", ex.getMessage()); }
         } else {
-            logger.warn("[TUNING][V2] Aucun modèle/scaler valide trouvé pour {}");
+            logger.warn("[TUNING][V2] Aucun modèle/scaler valide trouvé pour {}", symbol);
             try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON: {}", ex.getMessage()); }
         }
 
@@ -1347,90 +1347,131 @@ public class LstmTuningService {
             logger.warn("[TUNING-2PH] Grille initiale vide pour {}", symbol);
             return null;
         }
-        // Phase 1
-        logger.info("[TUNING-2PH][PHASE1] Début phase 1 coarse ({} configs)", coarseGrid.size());
-        PhaseAggregate phase1 = runPhaseNoPersist(symbol, coarseGrid, series, jdbcTemplate, "PHASE1");
-        if (phase1 == null || phase1.bestConfig == null) {
-            logger.warn("[TUNING-2PH][PHASE1] Aucun résultat valide pour {}", symbol);
-            return null;
-        }
-        double baselineScore = phase1.bestBusinessScore;
-        logger.info("[TUNING-2PH][PHASE1] Best businessScore={} (config neurons={} lr={} dropout={})", String.format("%.6f", baselineScore), phase1.bestConfig.getLstmNeurons(), phase1.bestConfig.getLearningRate(), phase1.bestConfig.getDropoutRate());
+        // Initialisation progress (phase 1 + phase 2 inconnue encore)
+        long startSymbol = System.currentTimeMillis();
+        TuningProgress progress = new TuningProgress();
+        progress.symbol = symbol;
+        progress.totalConfigs = coarseGrid.size(); // sera augmenté après génération micro-grille
+        progress.startTime = startSymbol;
+        progress.lastUpdate = startSymbol;
+        progress.status = "phase1";
+        progress.testedConfigs.set(0);
+        tuningProgressMap.put(symbol, progress);
+        try {
+            // Phase 1
+            logger.info("[TUNING-2PH][PHASE1] Début phase 1 coarse ({} configs)", coarseGrid.size());
+            PhaseAggregate phase1 = runPhaseNoPersist(symbol, coarseGrid, series, jdbcTemplate, "PHASE1", progress);
+            if (phase1 == null || phase1.bestConfig == null) {
+                logger.warn("[TUNING-2PH][PHASE1] Aucun résultat valide pour {}", symbol);
+                progress.status = "failed"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime;
+                try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON phase1 fail: {}", ex.getMessage()); }
+                return null;
+            }
+            double baselineScore = phase1.bestBusinessScore;
+            logger.info("[TUNING-2PH][PHASE1] Best businessScore={} (config neurons={} lr={} dropout={})", String.format("%.6f", baselineScore), phase1.bestConfig.getLstmNeurons(), phase1.bestConfig.getLearningRate(), phase1.bestConfig.getDropoutRate());
 
-        // Sélection top5 par businessScore ajusté
-        java.util.List<TuningResult> sorted = new java.util.ArrayList<>(phase1.allResults);
-        sorted.sort((a,b)-> Double.compare(adjScore(b), adjScore(a))); // desc
-        int topN = Math.min(5, sorted.size());
-        java.util.List<TuningResult> top = sorted.subList(0, topN);
-        logger.info("[TUNING-2PH][PHASE1] Top{} adjScores: {}", topN, top.stream().map(r->String.format("%.4f", adjScore(r))).toList());
+            // Sélection top5 par businessScore ajusté
+            java.util.List<TuningResult> sorted = new java.util.ArrayList<>(phase1.allResults);
+            sorted.sort((a,b)-> Double.compare(adjScore(b), adjScore(a))); // desc
+            int topN = Math.min(5, sorted.size());
+            java.util.List<TuningResult> top = sorted.subList(0, topN);
+            logger.info("[TUNING-2PH][PHASE1] Top{} adjScores: {}", topN, top.stream().map(r->String.format("%.4f", adjScore(r))).toList());
 
-        // Construction micro-grille Phase 2
-        java.util.Set<String> dedupKeys = new java.util.HashSet<>();
-        java.util.List<LstmConfig> microGrid = new java.util.ArrayList<>();
-        for (TuningResult tr : top) {
-            LstmConfig base = tr.config;
-            int baseNeurons = base.getLstmNeurons();
-            int[] neuronVariants = new int[]{baseNeurons-32, baseNeurons, baseNeurons+32};
-            double[] lrVariants = new double[]{base.getLearningRate()*0.8, base.getLearningRate(), base.getLearningRate()*1.2};
-            double[] dropoutVariants = new double[]{base.getDropoutRate()-0.05, base.getDropoutRate(), base.getDropoutRate()+0.05};
-            for (int nv : neuronVariants) {
-                if (nv < 16) continue; // évite trop petit
-                if (nv > 512) continue; // borne haute de sécurité
-                for (double lr : lrVariants) {
-                    lr = Math.max(1e-5, Math.min(0.01, lr));
-                    for (double dr : dropoutVariants) {
-                        dr = Math.max(0.05, Math.min(0.40, dr));
-                        LstmConfig clone = cloneConfig(base);
-                        clone.setLstmNeurons(nv);
-                        clone.setLearningRate(lr);
-                        clone.setDropoutRate(dr);
-                        // On conserve seed pour comparabilité
-                        String key = keyOf(clone);
-                        if (dedupKeys.add(key)) {
-                            microGrid.add(clone);
+            // Construction micro-grille Phase 2
+            java.util.Set<String> dedupKeys = new java.util.HashSet<>();
+            java.util.List<LstmConfig> microGrid = new java.util.ArrayList<>();
+            for (TuningResult tr : top) {
+                LstmConfig base = tr.config;
+                int baseNeurons = base.getLstmNeurons();
+                int[] neuronVariants = new int[]{baseNeurons-32, baseNeurons, baseNeurons+32};
+                double[] lrVariants = new double[]{base.getLearningRate()*0.8, base.getLearningRate(), base.getLearningRate()*1.2};
+                double[] dropoutVariants = new double[]{base.getDropoutRate()-0.05, base.getDropoutRate(), base.getDropoutRate()+0.05};
+                for (int nv : neuronVariants) {
+                    if (nv < 16) continue; if (nv > 512) continue;
+                    for (double lr : lrVariants) {
+                        lr = Math.max(1e-5, Math.min(0.01, lr));
+                        for (double dr : dropoutVariants) {
+                            dr = Math.max(0.05, Math.min(0.40, dr));
+                            LstmConfig clone = cloneConfig(base);
+                            clone.setLstmNeurons(nv); clone.setLearningRate(lr); clone.setDropoutRate(dr);
+                            String key = keyOf(clone);
+                            if (dedupKeys.add(key)) microGrid.add(clone);
                         }
                     }
                 }
             }
-        }
-        logger.info("[TUNING-2PH][PHASE2] Micro-grille générée: {} configs (avant top5={} * variations)", microGrid.size(), topN);
-        if (microGrid.isEmpty()) {
-            logger.warn("[TUNING-2PH][PHASE2] Micro-grille vide – persistance phase1");
-            persistBest(symbol, phase1.bestConfig, phase1.bestModel, phase1.bestScalers, baselineScore, phase1.bestMse, jdbcTemplate);
-            return phase1.bestConfig;
-        }
+            // Mise à jour total configs avec phase 2 potentielle
+            progress.totalConfigs += microGrid.size();
+            progress.lastUpdate = System.currentTimeMillis();
+            try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON maj micro-grid: {}", ex.getMessage()); }
+            logger.info("[TUNING-2PH][PHASE2] Micro-grille générée: {} configs (avant top5={} * variations)", microGrid.size(), topN);
+            if (microGrid.isEmpty()) {
+                logger.warn("[TUNING-2PH][PHASE2] Micro-grille vide – persistance phase1");
+                persistBest(symbol, phase1.bestConfig, phase1.bestModel, phase1.bestScalers, baselineScore, phase1.bestMse, jdbcTemplate);
+                progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime;
+                try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON fin phase1-only: {}", ex.getMessage()); }
+                return phase1.bestConfig;
+            }
+            progress.status = "phase2"; progress.lastUpdate = System.currentTimeMillis();
+            try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON début phase2: {}", ex.getMessage()); }
 
-        // Phase 2 (évaluation micro-grid sans persistance immédiate)
-        PhaseAggregate phase2 = runPhaseNoPersist(symbol, microGrid, series, jdbcTemplate, "PHASE2");
-        if (phase2 == null || phase2.bestConfig == null) {
-            logger.warn("[TUNING-2PH][PHASE2] Aucun résultat valide – on garde phase1");
-            persistBest(symbol, phase1.bestConfig, phase1.bestModel, phase1.bestScalers, baselineScore, phase1.bestMse, jdbcTemplate);
-            return phase1.bestConfig;
-        }
-        double improvedScore = phase2.bestBusinessScore;
-        double ratio = improvedScore / (baselineScore == 0.0 ? 1e-9 : baselineScore);
-        logger.info("[TUNING-2PH][COMPARAISON] baseline={} phase2={} ratio={} (threshold=1.05)", String.format("%.6f", baselineScore), String.format("%.6f", improvedScore), String.format("%.4f", ratio));
+            // Phase 2 (évaluation micro-grid sans persistance immédiate)
+            PhaseAggregate phase2 = runPhaseNoPersist(symbol, microGrid, series, jdbcTemplate, "PHASE2", progress);
+            if (phase2 == null || phase2.bestConfig == null) {
+                logger.warn("[TUNING-2PH][PHASE2] Aucun résultat valide – on garde phase1");
+                persistBest(symbol, phase1.bestConfig, phase1.bestModel, phase1.bestScalers, baselineScore, phase1.bestMse, jdbcTemplate);
+                progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime;
+                try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON fin phase2 fallback: {}", ex.getMessage()); }
+                return phase1.bestConfig;
+            }
+            double improvedScore = phase2.bestBusinessScore;
+            double ratio = improvedScore / (baselineScore == 0.0 ? 1e-9 : baselineScore);
+            logger.info("[TUNING-2PH][COMPARAISON] baseline={} phase2={} ratio={} (threshold=1.05)", String.format("%.6f", baselineScore), String.format("%.6f", improvedScore), String.format("%.4f", ratio));
 
-        if (ratio >= 1.05) {
-            logger.info("[TUNING-2PH][CHOIX] Phase2 retenue (amélioration >=5%) neurons={} lr={} dropout={}", phase2.bestConfig.getLstmNeurons(), phase2.bestConfig.getLearningRate(), phase2.bestConfig.getDropoutRate());
-            persistBest(symbol, phase2.bestConfig, phase2.bestModel, phase2.bestScalers, improvedScore, phase2.bestMse, jdbcTemplate);
-            return phase2.bestConfig;
-        } else {
-            logger.info("[TUNING-2PH][CHOIX] Amélioration insuffisante (<5%) – on garde phase1");
-            persistBest(symbol, phase1.bestConfig, phase1.bestModel, phase1.bestScalers, baselineScore, phase1.bestMse, jdbcTemplate);
-            return phase1.bestConfig;
+            LstmConfig finalConfig; MultiLayerNetwork finalModel; LstmTradePredictor.ScalerSet finalScalers; double finalScore; double finalMse;
+            if (ratio >= 1.05) {
+                logger.info("[TUNING-2PH][CHOIX] Phase2 retenue (amélioration >=5%) neurons={} lr={} dropout={}", phase2.bestConfig.getLstmNeurons(), phase2.bestConfig.getLearningRate(), phase2.bestConfig.getDropoutRate());
+                persistBest(symbol, phase2.bestConfig, phase2.bestModel, phase2.bestScalers, improvedScore, phase2.bestMse, jdbcTemplate);
+                finalConfig = phase2.bestConfig; finalModel = phase2.bestModel; finalScalers = phase2.bestScalers; finalScore = improvedScore; finalMse = phase2.bestMse;
+            } else {
+                logger.info("[TUNING-2PH][CHOIX] Amélioration insuffisante (<5%) – on garde phase1");
+                persistBest(symbol, phase1.bestConfig, phase1.bestModel, phase1.bestScalers, baselineScore, phase1.bestMse, jdbcTemplate);
+                finalConfig = phase1.bestConfig; finalModel = phase1.bestModel; finalScalers = phase1.bestScalers; finalScore = baselineScore; finalMse = phase1.bestMse;
+            }
+            progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime;
+            try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON fin complète: {}", ex.getMessage()); }
+            // Export run summary similaire à tuneSymbolMultiThread
+            try {
+                writeRunSummaryJson(new LstmRunSummary(
+                        symbol,
+                        progress.endTime,
+                        finalConfig,
+                        finalMse,
+                        finalScore,
+                        finalMse,
+                        null
+                ));
+            } catch (Exception ex) {
+                logger.warn("[TUNING][EXPORT] Échec export JSON résumé run 2PH: {}", ex.getMessage());
+            }
+            return finalConfig;
+        } catch (Exception e) {
+            progress.status = "erreur"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime;
+            try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON erreur globale: {}", ex.getMessage()); }
+            logger.error("[TUNING-2PH] Erreur globale tuning {} : {}", symbol, e.getMessage());
+            return null;
         }
     }
 
     // ---- Structures internes pour la phase deux ----
     private static class PhaseAggregate { LstmConfig bestConfig; MultiLayerNetwork bestModel; LstmTradePredictor.ScalerSet bestScalers; double bestBusinessScore; double bestMse; java.util.List<TuningResult> allResults; }
 
-    private PhaseAggregate runPhaseNoPersist(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate, String phaseTag) {
+    private PhaseAggregate runPhaseNoPersist(String symbol, List<LstmConfig> grid, BarSeries series, JdbcTemplate jdbcTemplate, String phaseTag, TuningProgress progress) {
         waitForMemory();
-        // Adaptation simplifiée basée sur tuneSymbolMultiThread (sans early-exit si déjà tuné, sans persistance finale)
         long start = System.currentTimeMillis();
         int numThreads = Math.min(Math.min(grid.size(), Runtime.getRuntime().availableProcessors()), effectiveMaxThreads);
         if (numThreads < 1) numThreads = 1;
+        if (progress != null && progress.threadsUsed == 0) progress.threadsUsed = numThreads;
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(numThreads);
         java.util.List<java.util.concurrent.Future<TuningResult>> futures = new java.util.ArrayList<>();
         java.util.List<TuningResult> results = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
@@ -1440,12 +1481,11 @@ public class LstmTuningService {
             LstmConfig cfg = grid.get(i);
             cfg.setUseScalarV2(true); cfg.setUseWalkForwardV2(true);
             futures.add(executor.submit(() -> {
-                MultiLayerNetwork model=null; try {
-                    long startCfg = System.currentTimeMillis();
+                MultiLayerNetwork model=null; long startCfg = System.currentTimeMillis();
+                try {
                     lstmTradePredictor.setGlobalSeeds(cfg.getSeed());
                     int totalBars = series.getBarCount();
-                    int testSplitRatio = 20;
-                    int trainEndBar = totalBars * (100 - testSplitRatio) / 100;
+                    int testSplitRatio = 20; int trainEndBar = totalBars * (100 - testSplitRatio) / 100;
                     if (trainEndBar < cfg.getWindowSize() + 50) throw new IllegalStateException("Données insuffisantes après split");
                     BarSeries trainSeries = series.getSubSeries(0, trainEndBar);
                     LstmTradePredictor.TrainResult trFull = lstmTradePredictor.trainLstmScalarV2(trainSeries, cfg, null);
@@ -1461,9 +1501,15 @@ public class LstmTuningService {
                     TuningResult tr = new TuningResult(cfg, model, scalers, meanMse, meanPF, meanWinRate, maxDDPct, meanBusinessScore);
                     results.add(tr);
                     long dur = System.currentTimeMillis()-startCfg;
+                    if (progress != null) {
+                        progress.testedConfigs.incrementAndGet();
+                        progress.lastUpdate = System.currentTimeMillis();
+                        progress.cumulativeConfigDurationMs.addAndGet(dur);
+                    }
                     logger.info("[TUNING-2PH][{}] {} config {}/{} bs={} adj={} dd={} dur={}ms", phaseTag, symbol, idx+1, grid.size(), String.format("%.5f", meanBusinessScore), String.format("%.5f", adjScore(tr)), String.format("%.4f", maxDDPct), dur);
                     return tr;
                 } catch(Exception e){
+                    if (progress != null) { progress.testedConfigs.incrementAndGet(); progress.lastUpdate = System.currentTimeMillis(); }
                     logger.error("[TUNING-2PH][{}] Erreur config {}/{} : {}", phaseTag, symbol, idx+1, grid.size(), e.getMessage());
                     return null;
                 } finally {
@@ -1472,12 +1518,10 @@ public class LstmTuningService {
             }));
         }
         executor.shutdown();
-        // Collecte (attente)
         for (int i=0;i<futures.size();i++) { try { futures.get(i).get(); } catch(Exception ignored) {} }
         if (results.isEmpty()) return null;
-        // Sélection meilleur businessScore
         TuningResult best = null; double bestBS = Double.NEGATIVE_INFINITY; for (TuningResult r : results) { if (r==null) continue; if (r.businessScore > bestBS) { bestBS = r.businessScore; best = r; } }
-        PhaseAggregate ag = new PhaseAggregate(); ag.bestConfig = best!=null?best.config:null; ag.bestModel = best!=null?best.model:null; ag.bestScalers = best!=null?best.scalers:null; ag.bestBusinessScore=bestBS; ag.bestMse = best!=null?best.score:Double.NaN; ag.allResults = results; long end=System.currentTimeMillis(); logger.info("[TUNING-2PH][{}] Fin phase {} | bestBS={} durée={}ms", symbol, phaseTag, String.format("%.6f", bestBS), (end-start)); return ag;
+        PhaseAggregate ag = new PhaseAggregate(); ag.bestConfig = best!=null?best.config:null; ag.bestModel = best!=null?best.model:null; ag.bestScalers = best!=null?best.scalers:null; ag.bestBusinessScore=bestBS; ag.bestMse = best!=null?best.score:Double.NaN; ag.allResults = results; long end=System.currentTimeMillis(); logger.info("[TUNING-2PH][{}] Fin phase {} | bestBS={} durée={}ms (progress {}/{})", symbol, phaseTag, String.format("%.6f", bestBS), (end-start), (progress!=null?progress.testedConfigs.get():0), (progress!=null?progress.totalConfigs:0)); return ag;
     }
 
     private void persistBest(String symbol, LstmConfig config, MultiLayerNetwork model, LstmTradePredictor.ScalerSet scalers, double businessScore, double mse, JdbcTemplate jdbcTemplate) {
