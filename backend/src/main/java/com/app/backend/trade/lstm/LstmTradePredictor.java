@@ -1012,6 +1012,16 @@ public class LstmTradePredictor {
      * @return Résultat contenant modèle entraîné + scalers pour inversion/prédiction
      */
     public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config, Object unused) {
+        // === PROFILING GPU (Étape 7) : activation temporaire du debug ND4J pour tracer transferts CPU->GPU ===
+        // NOTE: désactiver (supprimer ou mettre false) une fois l'analyse terminée pour éviter surcharge de logs.
+        try {
+            if (!"true".equalsIgnoreCase(System.getProperty("nd4j.exec.debug"))) {
+                System.setProperty("nd4j.exec.debug", "true");
+                logger.warn("[TRAIN][PROFILING] nd4j.exec.debug activé (temporaire) - analyser les logs pour transferts host/device");
+            }
+        } catch (Exception e) {
+            logger.warn("[TRAIN][PROFILING] Impossible d'activer nd4j.exec.debug: {}", e.toString());
+        }
         logger.info("[TRAIN][ENV] Backend={} dtype={}", Nd4j.getExecutioner().getClass().getName(), Nd4j.defaultFloatingPointType()); // Étape 1 log
         // ===== PHASE 1: VALIDATION ET PRÉPARATION DES FEATURES =====
 
