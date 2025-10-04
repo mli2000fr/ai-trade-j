@@ -2806,9 +2806,10 @@ public class LstmTradePredictor {
         com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         String hyperparamsJson = mapper.writeValueAsString(config);
         String scalersJson = mapper.writeValueAsString(scalers);
+        double rendement = config.getCapital() > 0 ? (sumProfit / config.getCapital()) : 0.0;
 
-        String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, scalers_json, mse, profit_factor, win_rate, max_drawdown, rmse, sum_profit, total_trades, business_score, updated_date, total_series_tested) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP,?)";
-        jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson, config.getNormalizationScope(), scalersJson, mse, profitFactor, winRate, maxDrawdown, rmse, sumProfit, totalTrades, businessScore, totalSeriesTested);
+        String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, scalers_json, mse, profit_factor, win_rate, max_drawdown, rmse, sum_profit, total_trades, business_score, updated_date, total_series_tested, rendement) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP,?)";
+        jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson, config.getNormalizationScope(), scalersJson, mse, profitFactor, winRate, maxDrawdown, rmse, sumProfit, totalTrades, businessScore, totalSeriesTested, rendement);
     }
 
     /**

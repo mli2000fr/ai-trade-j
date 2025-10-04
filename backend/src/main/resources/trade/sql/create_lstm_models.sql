@@ -6,5 +6,6 @@ CREATE TABLE trade_ai.lstm_models (
     model_blob LONGBLOB,
     mse DOUBLE, profit_factor DOUBLE, win_rate DOUBLE, max_drawdown DOUBLE, rmse DOUBLE, sum_profit DOUBLE, total_trades INT, business_score DOUBLE,
     total_series_tested INT,
+    rendement DOUBLE,
     normalization_scope VARCHAR(16) DEFAULT 'window'
 );
