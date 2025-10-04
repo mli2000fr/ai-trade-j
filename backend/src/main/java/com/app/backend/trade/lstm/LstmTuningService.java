@@ -22,6 +22,8 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.ScheduledFuture;
 
 /**
  * LstmTuningService
@@ -63,6 +65,11 @@ public class LstmTuningService {
     // Dépendances injectées (services métiers)
     public final LstmTradePredictor lstmTradePredictor;      // Service d'entraînement / prédiction LSTM
     public final LstmHyperparamsRepository hyperparamsRepository; // Accès persistence hyperparamètres + métriques
+
+    // Verrou global sauvegarde modèle (I/O disque sérialisées)
+    private final Object modelSaveLock = new Object();
+    // Contrôleur de concurrence GPU (sémaphore adaptative)
+    private final GpuConcurrencyController gpuController = new GpuConcurrencyController();
 
     // --- Paramétrage dynamique du parallélisme ---
     @Value("${lstm.tuning.maxThreads:0}")
@@ -186,6 +193,11 @@ public class LstmTuningService {
                 logger.debug("Heartbeat tuning erreur: {}", ex.getMessage());
             }
         }, 10, 30, TimeUnit.SECONDS);
+
+        // Démarrage du monitoring GPU après détection backend
+        if (cudaBackend) {
+            gpuController.start(cudaBackend);
+        }
     }
 
     /**
@@ -372,10 +384,22 @@ public class LstmTuningService {
 
             // Soumission de la tâche asynchrone au pool de threads
             futures.add(executor.submit(() -> {
-                // Variable locale pour référence au modèle (nettoyage dans finally)
                 MultiLayerNetwork model = null;
-
+                boolean permitAcquired = false;
+                long staggerSleepMs = 0L;
                 try {
+                    // ===== CONTRÔLE GPU (acquisition de permis) =====
+                    if (cudaBackend) {
+                        gpuController.acquirePermit();
+                        permitAcquired = true;
+                        // Décalage léger de démarrage si une autre tâche vient juste de démarrer (atténue pics VRAM)
+                        int active = gpuController.getActiveTrainings();
+                        if (active > 1) { // une autre est déjà en cours
+                            staggerSleepMs = 3000L + (long)(Math.random()*2000L); // 3-5s
+                            Thread.sleep(staggerSleepMs);
+                        }
+                        gpuController.markTrainingStarted();
+                    }
                     // ===== DÉBUT DE TRAITEMENT D'UNE CONFIGURATION =====
 
                     // Timestamp de début pour mesure de performance par config
@@ -558,6 +582,10 @@ public class LstmTuningService {
 
                     // GC système pour libération immédiate (optionnel mais utile ici)
                     System.gc();
+                    if (cudaBackend) {
+                        gpuController.markTrainingFinished();
+                        if (permitAcquired) gpuController.releasePermit();
+                    }
                 }
             }));
         }
@@ -653,10 +681,11 @@ public class LstmTuningService {
                 // ===== SAUVEGARDE DU MODÈLE COMPLET =====
                 // Sérialisation du modèle + scalers en base pour prédictions futures
                 // Comprend: architecture neuronale, poids entraînés, normalisateurs
-                lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate, bestModel, bestConfig, bestScalers,
+                synchronized (modelSaveLock) { // Sérialisation disque synchronisée
+                    lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate, bestModel, bestConfig, bestScalers,
                         bestScore,  bestResul.profitFactor,  bestResul.winRate,  bestResul.maxDrawdown,  bestResul.rmse,  bestResul.sumProfit,  bestResul.totalTrades,  bestResul.businessScore,
                         bestResul.totalSeriesTested);
-
+                }
             } catch (Exception e) {
                 // Log d'erreur non-bloquante (les hyperparamètres sont sauvés)
                 logger.error("Erreur lors de la sauvegarde du meilleur modèle : {}", e.getMessage());
@@ -1536,7 +1565,19 @@ public class LstmTuningService {
             futures.add(executor.submit(() -> {
                 MultiLayerNetwork model = null;
                 long startCfg = System.currentTimeMillis();
+                boolean permitAcquired = false;
+                long staggerSleepMs = 0L;
                 try {
+                    if (cudaBackend) {
+                        gpuController.acquirePermit();
+                        permitAcquired = true;
+                        int active = gpuController.getActiveTrainings();
+                        if (active > 1) {
+                            staggerSleepMs = 3000L + (long)(Math.random()*2000L); // 3-5s
+                            Thread.sleep(staggerSleepMs);
+                        }
+                        gpuController.markTrainingStarted();
+                    }
                     // Seeds
                     lstmTradePredictor.setGlobalSeeds(cfg.getSeed());
 
@@ -1647,7 +1688,7 @@ public class LstmTuningService {
                         progress.lastUpdate = System.currentTimeMillis();
                     }
                     logger.error(
-                            "[TUNING-2PH][{}] Erreur config {}/{} : {}",
+                            "[TUNING-2PH][{}][{}] Erreur config {}/{} : {}",
                             phaseTag,
                             symbol,
                             idx + 1,
@@ -1662,6 +1703,10 @@ public class LstmTuningService {
                         org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread();
                     } catch (Exception ignored) {}
                     System.gc();
+                    if (cudaBackend) {
+                        gpuController.markTrainingFinished();
+                        if (permitAcquired) gpuController.releasePermit();
+                    }
                 }
             }));
         }
@@ -1723,16 +1768,18 @@ public class LstmTuningService {
             logger.error("[TUNING-2PH][PERSIST] saveHyperparams échec: {}", e.getMessage());
         }
         try {
-            lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate,
-                    pa.bestModel, pa.bestConfig, pa.bestScalers, pa.bestMse,
-                    pa.profitFactor,
-                    pa.winRate,
-                    pa.maxDrawdown,
-                    pa.rmse,
-                    pa.sumProfit,
-                    pa.totalTrades,
-                    pa.bestBusinessScore,
-                    pa.totalSeriesTested);
+            synchronized (modelSaveLock) { // Sérialisation disque synchronisée
+                lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate,
+                        pa.bestModel, pa.bestConfig, pa.bestScalers, pa.bestMse,
+                        pa.profitFactor,
+                        pa.winRate,
+                        pa.maxDrawdown,
+                        pa.rmse,
+                        pa.sumProfit,
+                        pa.totalTrades,
+                        pa.bestBusinessScore,
+                        pa.totalSeriesTested);
+            }
         } catch (Exception e) {
             logger.error("[TUNING-2PH][PERSIST] saveModelToDb échec: {}", e.getMessage());
         }
