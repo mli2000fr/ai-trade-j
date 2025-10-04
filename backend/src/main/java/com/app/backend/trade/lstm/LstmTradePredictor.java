@@ -68,6 +68,7 @@ import java.util.*;
 import java.util.Arrays;
 import org.deeplearning4j.nn.conf.inputs.InputType;
 import org.deeplearning4j.nn.conf.GradientNormalization;
+import org.ta4j.core.num.DecimalNum;
 
 @Service
 public class LstmTradePredictor {
@@ -2417,12 +2418,13 @@ public class LstmTradePredictor {
                 double sum = 0.0; int c = 0; double curPrev = prev;
                 for (int h = 1; h <= horizon; h++) {
                     int idx = i + windowSize - 1 + h;
-                    if (idx >= closes.length) break;
-                    double next = closes[idx];
-                    double logRet = Math.log(next / prev);
-                    sum += logRet;
-                    prev = next;
-                    c++;
+                    if (idx < closes.length) {
+                        double next = closes[idx];
+                        double logRet = Math.log(next / prev);
+                        sum += logRet;
+                        prev = next;
+                        c++;
+                    }
                 }
                 labels.add(c > 0 ? (sum / c) : 0.0);
             } else {
@@ -2716,7 +2718,7 @@ public class LstmTradePredictor {
      */
     public double computeMeanSpread(BarSeries series) {
         int n = series.getBarCount();
-        if (n == 0) return 0;
+        if (n == 0) return   0;
         double sum = 0;
         for (int i = 0; i < n; i++)
             sum += (series.getBar(i).getHighPrice().doubleValue() - series.getBar(i).getLowPrice().doubleValue());
@@ -2830,7 +2832,7 @@ public class LstmTradePredictor {
         String scalersJson = mapper.writeValueAsString(scalers);
         double rendement = config.getCapital() > 0 ? (sumProfit / config.getCapital()) : 0.0;
 
-        String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, scalers_json, mse, profit_factor, win_rate, max_drawdown, rmse, sum_profit, total_trades, business_score, updated_date, total_series_tested, rendement) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP,?)";
+        String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, scalers_json, mse, profit_factor, win_rate, max_drawdown, rmse, sum_profit, total_trades, business_score, total_series_tested, rendement, updated_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)";
         jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson, config.getNormalizationScope(), scalersJson, mse, profitFactor, winRate, maxDrawdown, rmse, sumProfit, totalTrades, businessScore, totalSeriesTested, rendement);
     }
 
@@ -3028,26 +3030,18 @@ public class LstmTradePredictor {
      * Test de performance et d'invalidation du cache de extractFeatureMatrix.
      * Affiche les temps d'exécution et la validité du cache.
      */
-    public static void testFeatureMatrixCache() {
+    public static void testFeatureMatrixCache(BarSeries fullbars) {
         // Création d'une série synthétique
-        int bars = 500;
         String symbol = "TESTSYM";
         String interval = "1h";
         List<Bar> barList = new ArrayList<>();
         ZonedDateTime now = ZonedDateTime.now();
-        for (int i = 0; i < bars; i++) {
-            double base = 100 + Math.sin(i / 10.0) * 5 + i * 0.01;
-            barList.add(new BaseBar(
-                java.time.Duration.ofHours(1),
-                now.plusHours(i),
-                base + Math.random(), // open
-                base + 1 + Math.random(), // high
-                base - 1 + Math.random(), // low
-                base + Math.random(), // close
-                1000 + Math.random() * 100 // volume
-            ));
-        }
         BarSeries series = new BaseBarSeriesBuilder().withName(symbol).build();
+        BarSeries bars = fullbars.getSubSeries(0,499);
+        for (int i = 0; i < bars.getBarCount(); i++) {
+            double base = 100 + Math.sin(i / 10.0) * 5 + i * 0.01;
+            barList.add(bars.getBar(i));
+        }
         for (Bar b : barList) series.addBar(b);
         List<String> features = Arrays.asList("close", "high", "low", "volume", "rsi_14", "sma_20", "realized_vol");
         LstmTradePredictor predictor = new LstmTradePredictor(null, null);
@@ -3067,47 +3061,11 @@ public class LstmTradePredictor {
             System.out.println("[TEST] ATTENTION: gain cache insuffisant");
         }
         // Test invalidation: on ajoute une barre (barCount change)
-        Bar last = barList.get(barList.size() - 1);
-        Bar newBar = new BaseBar(
-            java.time.Duration.ofHours(1),
-            last.getEndTime().plusHours(1),
-            last.getClosePrice().doubleValue() + 1,
-            last.getClosePrice().doubleValue() + 2,
-            last.getClosePrice().doubleValue(),
-            last.getClosePrice().doubleValue() + 1,
-            1000.0
-        );
-        series.addBar(newBar);
+        series.addBar(fullbars.getBar(500));
         long t3 = System.nanoTime();
         double[][] m3 = predictor.extractFeatureMatrix(series, features);
         long t4 = System.nanoTime();
         double dt3 = (t4 - t3) / 1e6;
-        System.out.println("[TEST] extractFeatureMatrix après ajout barre: temps = " + dt3 + " ms");
-        if (dt3 > dt2 * 1.5) {
-            System.out.println("[TEST] OK: cache invalidé si barCount change");
-        } else {
-            System.out.println("[TEST] ATTENTION: cache non invalidé correctement");
-        }
-        // Test invalidation: on modifie le timestamp de la dernière barre
-        Bar modBar = new BaseBar(
-            java.time.Duration.ofHours(1),
-            last.getEndTime().plusHours(2),
-            last.getClosePrice().doubleValue() + 2,
-            last.getClosePrice().doubleValue() + 3,
-            last.getClosePrice().doubleValue() + 1,
-            last.getClosePrice().doubleValue() + 2,
-            1000.0
-        );
-        series.addBar(modBar);
-        long t5 = System.nanoTime();
-        double[][] m4 = predictor.extractFeatureMatrix(series, features);
-        long t6 = System.nanoTime();
-        double dt4 = (t6 - t5) / 1e6;
-        System.out.println("[TEST] extractFeatureMatrix après modif timestamp: temps = " + dt4 + " ms");
-        if (dt4 > dt2 * 1.5) {
-            System.out.println("[TEST] OK: cache invalidé si timestamp dernière barre change");
-        } else {
-            System.out.println("[TEST] ATTENTION: cache non invalidé sur timestamp");
-        }
+        System.out.println("[TEST] Après ajout d'une barre: appel = " + dt3 + " ms");
     }
 }

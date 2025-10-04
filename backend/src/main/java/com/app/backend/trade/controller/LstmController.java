@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.ta4j.core.BarSeries;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -181,7 +182,8 @@ public class LstmController {
         PrintStream oldOut = System.out;
         try {
             System.setOut(new PrintStream(baos));
-            LstmTradePredictor.testFeatureMatrixCache();
+            BarSeries bars = lsdmHelper.getBarBySymbol("MATH", 800);
+            LstmTradePredictor.testFeatureMatrixCache(bars);
         } finally {
             System.setOut(oldOut);
         }
