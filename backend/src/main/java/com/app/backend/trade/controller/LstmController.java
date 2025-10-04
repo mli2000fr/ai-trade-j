@@ -1,5 +1,6 @@
 package com.app.backend.trade.controller;
 
+import com.app.backend.trade.lstm.LstmTradePredictor;
 import com.app.backend.trade.lstm.LstmTuningService;
 import com.app.backend.trade.model.PreditLsdm;
 import org.nd4j.linalg.factory.Nd4j;
@@ -8,7 +9,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.List;
 
 /**
@@ -171,4 +174,17 @@ public class LstmController {
         return lsdmHelper.getTuningExceptionReport();
     }
 
+    @GetMapping("/test-feature-matrix-cache")
+    public String testFeatureMatrixCacheApi() {
+        // Capture la sortie standard
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        PrintStream oldOut = System.out;
+        try {
+            System.setOut(new PrintStream(baos));
+            LstmTradePredictor.testFeatureMatrixCache();
+        } finally {
+            System.setOut(oldOut);
+        }
+        return baos.toString();
+    }
 }

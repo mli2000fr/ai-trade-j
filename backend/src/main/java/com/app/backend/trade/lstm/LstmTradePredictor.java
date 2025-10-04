@@ -3023,4 +3023,91 @@ public class LstmTradePredictor {
         if (!Double.isFinite(score)) score = 0.0;
         return Math.max(0.0, Math.min(1.0, score));
     }
+
+    /**
+     * Test de performance et d'invalidation du cache de extractFeatureMatrix.
+     * Affiche les temps d'exécution et la validité du cache.
+     */
+    public static void testFeatureMatrixCache() {
+        // Création d'une série synthétique
+        int bars = 500;
+        String symbol = "TESTSYM";
+        String interval = "1h";
+        List<Bar> barList = new ArrayList<>();
+        ZonedDateTime now = ZonedDateTime.now();
+        for (int i = 0; i < bars; i++) {
+            double base = 100 + Math.sin(i / 10.0) * 5 + i * 0.01;
+            barList.add(new BaseBar(
+                java.time.Duration.ofHours(1),
+                now.plusHours(i),
+                base + Math.random(), // open
+                base + 1 + Math.random(), // high
+                base - 1 + Math.random(), // low
+                base + Math.random(), // close
+                1000 + Math.random() * 100 // volume
+            ));
+        }
+        BarSeries series = new BaseBarSeriesBuilder().withName(symbol).build();
+        for (Bar b : barList) series.addBar(b);
+        List<String> features = Arrays.asList("close", "high", "low", "volume", "rsi_14", "sma_20", "realized_vol");
+        LstmTradePredictor predictor = new LstmTradePredictor(null, null);
+        // Premier appel (cache froid)
+        long t0 = System.nanoTime();
+        double[][] m1 = predictor.extractFeatureMatrix(series, features);
+        long t1 = System.nanoTime();
+        // Second appel (cache chaud)
+        double[][] m2 = predictor.extractFeatureMatrix(series, features);
+        long t2 = System.nanoTime();
+        double dt1 = (t1 - t0) / 1e6;
+        double dt2 = (t2 - t1) / 1e6;
+        System.out.println("[TEST] extractFeatureMatrix: 1er appel = " + dt1 + " ms, 2e appel = " + dt2 + " ms");
+        if (dt2 < dt1 * 0.6) {
+            System.out.println("[TEST] OK: 2e appel >40% plus rapide (cache fonctionne)");
+        } else {
+            System.out.println("[TEST] ATTENTION: gain cache insuffisant");
+        }
+        // Test invalidation: on ajoute une barre (barCount change)
+        Bar last = barList.get(barList.size() - 1);
+        Bar newBar = new BaseBar(
+            java.time.Duration.ofHours(1),
+            last.getEndTime().plusHours(1),
+            last.getClosePrice().doubleValue() + 1,
+            last.getClosePrice().doubleValue() + 2,
+            last.getClosePrice().doubleValue(),
+            last.getClosePrice().doubleValue() + 1,
+            1000.0
+        );
+        series.addBar(newBar);
+        long t3 = System.nanoTime();
+        double[][] m3 = predictor.extractFeatureMatrix(series, features);
+        long t4 = System.nanoTime();
+        double dt3 = (t4 - t3) / 1e6;
+        System.out.println("[TEST] extractFeatureMatrix après ajout barre: temps = " + dt3 + " ms");
+        if (dt3 > dt2 * 1.5) {
+            System.out.println("[TEST] OK: cache invalidé si barCount change");
+        } else {
+            System.out.println("[TEST] ATTENTION: cache non invalidé correctement");
+        }
+        // Test invalidation: on modifie le timestamp de la dernière barre
+        Bar modBar = new BaseBar(
+            java.time.Duration.ofHours(1),
+            last.getEndTime().plusHours(2),
+            last.getClosePrice().doubleValue() + 2,
+            last.getClosePrice().doubleValue() + 3,
+            last.getClosePrice().doubleValue() + 1,
+            last.getClosePrice().doubleValue() + 2,
+            1000.0
+        );
+        series.addBar(modBar);
+        long t5 = System.nanoTime();
+        double[][] m4 = predictor.extractFeatureMatrix(series, features);
+        long t6 = System.nanoTime();
+        double dt4 = (t6 - t5) / 1e6;
+        System.out.println("[TEST] extractFeatureMatrix après modif timestamp: temps = " + dt4 + " ms");
+        if (dt4 > dt2 * 1.5) {
+            System.out.println("[TEST] OK: cache invalidé si timestamp dernière barre change");
+        } else {
+            System.out.println("[TEST] ATTENTION: cache non invalidé sur timestamp");
+        }
+    }
 }
