@@ -5,19 +5,32 @@ import org.nd4j.linalg.lossfunctions.ILossFunction;
 import org.nd4j.linalg.activations.IActivation;
 import org.nd4j.linalg.ops.transforms.Transforms;
 import org.nd4j.common.primitives.Pair; // import correct pour Pair
+import org.nd4j.shade.jackson.annotation.JsonCreator;
+import org.nd4j.shade.jackson.annotation.JsonProperty;
 
 /**
  * Perte Huber (Smooth L1) custom pour DL4J 1.0.0-M2.1.
- * e = y_pred - y_true
- * L(e) = 0.5*e^2                 si |e| <= delta
- *      = delta*(|e| - 0.5*delta)  sinon
- * dL/de = e si |e|<=delta sinon delta*sign(e)
  */
 public class LossHuberCustom implements ILossFunction {
     private final double delta;
-    public LossHuberCustom(double delta){
-        if (delta <= 0) throw new IllegalArgumentException("delta doit être > 0");
-        this.delta = delta;
+
+    // Constructeur JSON rétrocompatible: si delta manquant ou <=0, fallback 1.0
+    @JsonCreator
+    public LossHuberCustom(@JsonProperty("delta") Double delta){
+        if (delta == null || delta <= 0) {
+            this.delta = 1.0; // valeur par défaut
+        } else {
+            this.delta = delta;
+        }
+    }
+
+    // Constructeur no-arg (utilisation directe éventuelle)
+    public LossHuberCustom(){
+        this.delta = 1.0;
+    }
+
+    public double getDelta(){
+        return delta;
     }
 
     private INDArray activated(INDArray preOutput, IActivation activationFn){
