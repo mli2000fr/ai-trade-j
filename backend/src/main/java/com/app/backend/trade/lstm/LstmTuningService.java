@@ -59,10 +59,12 @@ import java.util.concurrent.atomic.AtomicLong;
 public class LstmTuningService {
     private static final Logger logger = LoggerFactory.getLogger(LstmTuningService.class);
 
-    // --- Critères d'acceptation Phase 2 (voir test.json: remplacement ratio) ---
-    private static final double REL_GAIN_EPS = 1e-6;              // epsilon pour éviter division par zéro
-    private static final double MIN_RELATIVE_GAIN = 0.05;         // +5% relatif requis
-    private static final double MIN_ABSOLUTE_GAIN = 0.02;         // +0.02 absolu requis
+    // --- Critères d'acceptation Phase 2 (configurables) ---
+    private static final double REL_GAIN_EPS = 1e-6; // epsilon pour éviter division par zéro
+    @Value("${lstm.tuning.twoPhase.minRelativeGain:0.05}")
+    private double minRelativeGain; // ex 0.05 = +5% relatif requis
+    @Value("${lstm.tuning.twoPhase.minAbsoluteGain:0.02}")
+    private double minAbsoluteGain; // ex 0.02 = +0.02 absolu requis
 
     // Dépendances injectées (services métiers)
     public final LstmTradePredictor lstmTradePredictor;      // Service d'entraînement / prédiction LSTM
@@ -1342,12 +1344,12 @@ public class LstmTuningService {
             double absoluteGain = improvedScore - baselineScore;
             double denom = Math.max(REL_GAIN_EPS, Math.abs(baselineScore));
             double relativeGain = absoluteGain / denom;
-            boolean acceptPhase2 = relativeGain >= MIN_RELATIVE_GAIN && absoluteGain >= MIN_ABSOLUTE_GAIN;
+            boolean acceptPhase2 = relativeGain >= minRelativeGain && absoluteGain >= minAbsoluteGain;
             if (logger.isInfoEnabled()) {
                 logger.info("[TUNING-2PH][COMPARE] baseline={} improved={} absGain={} relGain={} acceptPhase2={} (seuils: rel>={} abs>= {})",
                         String.format("%.6f", baselineScore), String.format("%.6f", improvedScore),
                         String.format("%.6f", absoluteGain), String.format("%.6f", relativeGain), acceptPhase2,
-                        String.format("%.3f", MIN_RELATIVE_GAIN), String.format("%.3f", MIN_ABSOLUTE_GAIN));
+                        String.format("%.3f", minRelativeGain), String.format("%.3f", minAbsoluteGain));
             }
             PhaseAggregate provisional = acceptPhase2 ? phase2 : phase1;
             boolean fromPhase2 = provisional == phase2;
