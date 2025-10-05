@@ -684,7 +684,7 @@ public class LstmTuningService {
                 synchronized (modelSaveLock) { // Sérialisation disque synchronisée
                     lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate, bestModel, bestConfig, bestScalers,
                         bestScore,  bestResul.profitFactor,  bestResul.winRate,  bestResul.maxDrawdown,  bestResul.rmse,  bestResul.sumProfit,  bestResul.totalTrades,  bestResul.businessScore,
-                        bestResul.totalSeriesTested, 0);
+                        bestResul.totalSeriesTested, 0, 0);
                 }
             } catch (Exception e) {
                 // Log d'erreur non-bloquante (les hyperparamètres sont sauvés)
