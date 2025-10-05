@@ -59,6 +59,11 @@ import java.util.concurrent.atomic.AtomicLong;
 public class LstmTuningService {
     private static final Logger logger = LoggerFactory.getLogger(LstmTuningService.class);
 
+    // --- Critères d'acceptation Phase 2 (voir test.json: remplacement ratio) ---
+    private static final double REL_GAIN_EPS = 1e-6;              // epsilon pour éviter division par zéro
+    private static final double MIN_RELATIVE_GAIN = 0.05;         // +5% relatif requis
+    private static final double MIN_ABSOLUTE_GAIN = 0.02;         // +0.02 absolu requis
+
     // Dépendances injectées (services métiers)
     public final LstmTradePredictor lstmTradePredictor;      // Service d'entraînement / prédiction LSTM
     public final LstmHyperparamsRepository hyperparamsRepository; // Accès persistence hyperparamètres + métriques
@@ -471,7 +476,7 @@ public class LstmTuningService {
                         sumWin += m.winRate;
                         sumExp += m.expectancy;
                         if(m.maxDrawdownPct > maxDrawdownPct) maxDrawdownPct = m.maxDrawdownPct;
-                        sumBusiness += (Double.isFinite(m.businessScore)? m.businessScore:0);
+                        sumBusiness += (Double.isFinite(m.businessScore) ? m.businessScore : 0);
                         sumProfit += m.totalProfit;
                         totalTrades += m.numTrades;
                         splits++;
@@ -1262,7 +1267,6 @@ public class LstmTuningService {
                 try { writeProgressMetrics(progress); } catch (Exception ignored) {}
                 return null;
             }
-            double baselineScore = phase1.bestBusinessScore;
 
             // Top N pour micro-grille
             java.util.List<TuningResult> sorted = new java.util.ArrayList<>(phase1.allResults);
@@ -1332,10 +1336,22 @@ public class LstmTuningService {
                 progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime; try { writeProgressMetrics(progress);} catch(Exception ignored) {}
                 return phase1.bestConfig;
             }
-            double ratio = phase2.bestBusinessScore / (baselineScore==0?1e-9:baselineScore);
-            PhaseAggregate provisional = (ratio >= 1.05) ? phase2 : phase1;
+            // Nouvelle métrique d'amélioration: (improved - baseline) / max(eps, |baseline|)
+            double baselineScore = phase1.bestBusinessScore; // redéfini localement ici pour clarté
+            double improvedScore = phase2.bestBusinessScore;
+            double absoluteGain = improvedScore - baselineScore;
+            double denom = Math.max(REL_GAIN_EPS, Math.abs(baselineScore));
+            double relativeGain = absoluteGain / denom;
+            boolean acceptPhase2 = relativeGain >= MIN_RELATIVE_GAIN && absoluteGain >= MIN_ABSOLUTE_GAIN;
+            if (logger.isInfoEnabled()) {
+                logger.info("[TUNING-2PH][COMPARE] baseline={} improved={} absGain={} relGain={} acceptPhase2={} (seuils: rel>={} abs>= {})",
+                        String.format("%.6f", baselineScore), String.format("%.6f", improvedScore),
+                        String.format("%.6f", absoluteGain), String.format("%.6f", relativeGain), acceptPhase2,
+                        String.format("%.3f", MIN_RELATIVE_GAIN), String.format("%.3f", MIN_ABSOLUTE_GAIN));
+            }
+            PhaseAggregate provisional = acceptPhase2 ? phase2 : phase1;
             boolean fromPhase2 = provisional == phase2;
-            double ratioPersist = fromPhase2 ? ratio : 0;
+            double ratioPersist = fromPhase2 ? relativeGain : 0; // on conserve le gain relatif accepté
 
             PhaseAggregate finalAggregate;
             if (enableHoldOut) {
@@ -1343,7 +1359,7 @@ public class LstmTuningService {
                 HoldOutEval ho1 = evaluateHoldOut(symbol, phase1.bestConfig, series, holdOutStart);
                 HoldOutEval hoProv = fromPhase2 ? evaluateHoldOut(symbol, provisional.bestConfig, series, holdOutStart) : ho1;
                 if (ho1 != null && hoProv != null) {
-                    boolean acceptProv = fromPhase2 && hoProv.businessScore >= ho1.businessScore * 1.00; // doit au moins égaler
+                    boolean acceptProv = fromPhase2 && hoProv.businessScore >= ho1.businessScore * 1.00; // au moins égal en hold-out
                     HoldOutEval chosen = acceptProv ? hoProv : ho1;
                     if (!acceptProv && fromPhase2) ratioPersist = 0; // gain non confirmé
                     finalAggregate = new PhaseAggregate();
@@ -1379,9 +1395,10 @@ public class LstmTuningService {
         }
     }
 
-    // ---- Structures internes pour la phase deux ----
+    // ---- Structures internes pour la phase deux (restaurées) ----
     private static class PhaseAggregate {
-        LstmConfig bestConfig; MultiLayerNetwork bestModel; LstmTradePredictor.ScalerSet bestScalers; double bestBusinessScore; double bestMse; double profitFactor; double winRate; double maxDrawdown; double rmse; double sumProfit; int totalTrades; int totalSeriesTested; int phase; java.util.List<TuningResult> allResults; }
+        LstmConfig bestConfig; MultiLayerNetwork bestModel; LstmTradePredictor.ScalerSet bestScalers;
+        double bestBusinessScore; double bestMse; double profitFactor; double winRate; double maxDrawdown; double rmse; double sumProfit; int totalTrades; int totalSeriesTested; int phase; java.util.List<TuningResult> allResults; }
 
     // --- Structure évaluation hold-out ---
     private static class HoldOutEval { LstmConfig config; MultiLayerNetwork model; LstmTradePredictor.ScalerSet scalers; double businessScore; double meanMse; double rmse; double profitFactor; double winRate; double maxDrawdown; double sumProfit; int totalTrades; int totalSeriesTested; }
@@ -1402,7 +1419,6 @@ public class LstmTuningService {
         finally { try { org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc(); } catch (Exception ignored) {} try { org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread(); } catch (Exception ignored) {} System.gc(); }
     }
 
-    // === Méthodes utilitaires nécessaires ===
     private PhaseAggregate runPhaseNoPersist(String symbol,
                                              java.util.List<LstmConfig> grid,
                                              BarSeries series,
@@ -1484,17 +1500,46 @@ public class LstmTuningService {
     private void persistBest(String symbol, PhaseAggregate pa, JdbcTemplate jdbcTemplate, double ratio){
         if(pa.bestConfig==null||pa.bestModel==null||pa.bestScalers==null){ logger.warn("[TUNING-2PH][PERSIST] Objets null – skip"); return; }
         try { hyperparamsRepository.saveHyperparams(symbol, pa.bestConfig, pa.phase); } catch(Exception e){ logger.error("[TUNING-2PH][PERSIST] saveHyperparams échec: {}", e.getMessage()); }
-        try { synchronized(modelSaveLock){ lstmTradePredictor.saveModelToDb(symbol,jdbcTemplate, pa.bestModel, pa.bestConfig, pa.bestScalers, pa.bestMse, pa.profitFactor, pa.winRate, pa.maxDrawdown, pa.rmse, pa.sumProfit, pa.totalTrades, pa.bestBusinessScore, pa.totalSeriesTested, pa.phase, ratio); } } catch(Exception e){ logger.error("[TUNING-2PH][PERSIST] saveModelToDb échec: {}", e.getMessage()); }
-        logger.info("[TUNING-2PH][PERSIST] Persisté phase={} bs={} neurons={} lr={} dr={}", pa.phase, String.format("%.6f", pa.bestBusinessScore), pa.bestConfig.getLstmNeurons(), pa.bestConfig.getLearningRate(), pa.bestConfig.getDropoutRate());
+        try { synchronized (modelSaveLock){ lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate, pa.bestModel, pa.bestConfig, pa.bestScalers, pa.bestMse, pa.profitFactor, pa.winRate, pa.maxDrawdown, pa.rmse, pa.sumProfit, pa.totalTrades, pa.bestBusinessScore, pa.totalSeriesTested, pa.phase, ratio); } }
+        catch(Exception e){ logger.error("[TUNING-2PH][PERSIST] saveModelToDb échec: {}", e.getMessage()); }
     }
 
+    // --- Utilitaires micro-grille ---
+    private static LstmConfig cloneConfig(LstmConfig src){
+        LstmConfig c = new LstmConfig();
+        c.setWindowSize(src.getWindowSize()); c.setLstmNeurons(src.getLstmNeurons()); c.setDropoutRate(src.getDropoutRate()); c.setLearningRate(src.getLearningRate());
+        c.setNumEpochs(src.getNumEpochs()); c.setPatience(src.getPatience()); c.setMinDelta(src.getMinDelta()); c.setKFolds(src.getKFolds());
+        c.setOptimizer(src.getOptimizer()); c.setL1(src.getL1()); c.setL2(src.getL2()); c.setNormalizationScope(src.getNormalizationScope());
+        c.setNormalizationMethod(src.getNormalizationMethod()); c.setSwingTradeType(src.getSwingTradeType()); c.setUseScalarV2(src.isUseScalarV2()); c.setUseWalkForwardV2(src.isUseWalkForwardV2());
+        c.setNumLstmLayers(src.getNumLstmLayers()); c.setBidirectional(src.isBidirectional()); c.setAttention(src.isAttention()); c.setHorizonBars(src.getHorizonBars());
+        c.setBatchSize(src.getBatchSize()); c.setWalkForwardSplits(src.getWalkForwardSplits()); c.setEmbargoBars(src.getEmbargoBars()); c.setCapital(src.getCapital());
+        c.setRiskPct(src.getRiskPct()); c.setSizingK(src.getSizingK()); c.setFeePct(src.getFeePct()); c.setSlippagePct(src.getSlippagePct());
+        c.setBusinessProfitFactorCap(src.getBusinessProfitFactorCap()); c.setBusinessDrawdownGamma(src.getBusinessDrawdownGamma()); c.setSeed(src.getSeed());
+        c.setCvMode(src.getCvMode());
+        return c;
+    }
+    private static String keyOf(LstmConfig c){ return c.getLstmNeurons()+"|"+String.format(java.util.Locale.US,"%.6f",c.getLearningRate())+"|"+String.format(java.util.Locale.US,"%.4f",c.getDropoutRate()); }
     private static double adjScore(TuningResult r){ return r==null?Double.NEGATIVE_INFINITY:r.businessScore; }
 
-    private static String keyOf(LstmConfig c){ return c.getWindowSize()+"_"+c.getLstmNeurons()+"_"+String.format(java.util.Locale.US,"%.6f",c.getLearningRate())+"_"+String.format(java.util.Locale.US,"%.4f",c.getDropoutRate())+"_"+c.getNumLstmLayers()+"_"+c.isBidirectional()+"_"+c.isAttention(); }
+    // --- Résumé run JSON (simplifié) ---
+    private void writeRunSummaryJson(LstmRunSummary summary) throws Exception {
+        // Fallback simple: sérialisation JSON manuelle minimale (évite dépendance supplémentaire)
+        if (summary == null) return;
+        String json = "{"+
+                "\"symbol\":\""+summary.symbol+"\","+
+                "\"timestamp\":"+summary.timestamp+","+
+                "\"bestWindowSize\":"+(summary.bestConfig!=null?summary.bestConfig.getWindowSize():-1)+","+
+                "\"bestNeurons\":"+(summary.bestConfig!=null?summary.bestConfig.getLstmNeurons():-1)+","+
+                "\"businessScore\":"+String.format(java.util.Locale.US,"%.6f",summary.businessScore)+","+
+                "\"meanMse\":"+String.format(java.util.Locale.US,"%.6f",summary.meanMse)+"}";
+        Path p = Path.of("lstm_run_summary_"+summary.symbol+".json");
+        Files.writeString(p, json, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+    }
 
-    private static LstmConfig cloneConfig(LstmConfig o){ LstmConfig c=new LstmConfig(); c.setWindowSize(o.getWindowSize()); c.setLstmNeurons(o.getLstmNeurons()); c.setDropoutRate(o.getDropoutRate()); c.setLearningRate(o.getLearningRate()); c.setNumEpochs(o.getNumEpochs()); c.setPatience(o.getPatience()); c.setMinDelta(o.getMinDelta()); c.setKFolds(o.getKFolds()); c.setOptimizer(o.getOptimizer()); c.setL1(o.getL1()); c.setL2(o.getL2()); c.setNormalizationScope(o.getNormalizationScope()); c.setNormalizationMethod(o.getNormalizationMethod()); c.setSwingTradeType(o.getSwingTradeType()); c.setUseScalarV2(o.isUseScalarV2()); c.setUseWalkForwardV2(o.isUseWalkForwardV2()); c.setNumLstmLayers(o.getNumLstmLayers()); c.setBatchSize(o.getBatchSize()); c.setBidirectional(o.isBidirectional()); c.setAttention(o.isAttention()); c.setHorizonBars(o.getHorizonBars()); c.setFeatures(o.getFeatures()); c.setCvMode(o.getCvMode()); c.setSeed(o.getSeed()); c.setBusinessProfitFactorCap(o.getBusinessProfitFactorCap()); c.setBusinessDrawdownGamma(o.getBusinessDrawdownGamma()); c.setCapital(o.getCapital()); c.setRiskPct(o.getRiskPct()); c.setSizingK(o.getSizingK()); c.setFeePct(o.getFeePct()); c.setSlippagePct(o.getSlippagePct()); c.setWalkForwardSplits(o.getWalkForwardSplits()); c.setEmbargoBars(o.getEmbargoBars()); c.setThresholdK(o.getThresholdK()); c.setThresholdType(o.getThresholdType()); c.setLimitPredictionPct(o.getLimitPredictionPct()); c.setUseLogReturnTarget(o.isUseLogReturnTarget()); c.setUseMultiHorizonAvg(o.isUseMultiHorizonAvg()); c.setEntryThresholdFactor(o.getEntryThresholdFactor()); c.setKlDriftThreshold(o.getKlDriftThreshold()); c.setMeanShiftSigmaThreshold(o.getMeanShiftSigmaThreshold()); return c; }
+    // POJO résumé (minimal)
+    private static class LstmRunSummary {
+        final String symbol; final long timestamp; final LstmConfig bestConfig; final double meanMse; final double businessScore; final double valMse; final Object curve;
+        LstmRunSummary(String symbol, long timestamp, LstmConfig bestConfig, double meanMse, double businessScore, double valMse, Object curve){ this.symbol=symbol; this.timestamp=timestamp; this.bestConfig=bestConfig; this.meanMse=meanMse; this.businessScore=businessScore; this.valMse=valMse; this.curve=curve; }
+    }
 
-    public static class LstmRunSummary { public String symbol; public long timestamp; public LstmConfig bestConfig; public Double meanMse; public Double bestBusinessScore; public Double bestScore; public java.util.List<Double> valLossCurve; public LstmRunSummary(String symbol,long timestamp,LstmConfig bestConfig,Double meanMse,Double bestBusinessScore,Double bestScore,java.util.List<Double> valLossCurve){this.symbol=symbol;this.timestamp=timestamp;this.bestConfig=bestConfig;this.meanMse=meanMse;this.bestBusinessScore=bestBusinessScore;this.bestScore=bestScore;this.valLossCurve=valLossCurve;} }
-
-    private void writeRunSummaryJson(LstmRunSummary summary){ try{ String dir="backend/lstm_runs"; java.nio.file.Files.createDirectories(java.nio.file.Paths.get(dir)); String file=String.format("%s/%s_%d.json",dir,summary.symbol,summary.timestamp); String json=new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(summary); java.nio.file.Files.write(java.nio.file.Paths.get(file), json.getBytes(), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING); }catch(Exception e){ logger.warn("[TUNING][EXPORT] Echec export JSON: {}", e.getMessage()); } }
 }
