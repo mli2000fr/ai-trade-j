@@ -237,6 +237,14 @@ public class LstmConfig {
     /** Taille de la file interne de préchargement async (2-8 recommandé). */
     private int asyncQueueSize = 3;
 
+    // =============================== Marqueur baseline ré-entraînement ===============================
+    /**
+     * Marque cette configuration comme une réplique baseline (hyperparamètres strictement identiques
+     * à la meilleure config phase 1) incluse dans la micro-grille phase 2 pour mesurer la dérive
+     * due au simple ré-entraînement (drift stochastique). Si true: on ne modifie pas seed ni splits.
+     */
+    private boolean baselineReplica = false;
+
     /**
      * Constructeur par défaut : charge les hyperparamètres depuis le fichier
      * resources/lstm-config.properties si présent. Chaque paramètre possède une valeur de secours
@@ -374,6 +382,7 @@ public class LstmConfig {
         // Paramètres async iterator (colonne optionnelle)
         try { this.useAsyncIterator = rs.getBoolean("use_async_iterator"); } catch (Exception ignored) {}
         try { this.asyncQueueSize = rs.getInt("async_queue_size"); } catch (Exception ignored) {}
+        try { this.baselineReplica = rs.getBoolean("baseline_replica"); } catch (Exception ignored) {}
     }
 
     /**

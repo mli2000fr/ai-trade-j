@@ -1290,6 +1290,22 @@ public class LstmTuningService {
                 double[] drVar = {base.getDropoutRate()-0.05, base.getDropoutRate(), base.getDropoutRate()+0.05};
                 for (int nv : neuVar) { if (nv<16||nv>512) continue; for (double lr: lrVar){ lr=Math.max(1e-5, Math.min(0.01, lr)); for(double dr:drVar){ dr=Math.max(0.05, Math.min(0.40, dr)); LstmConfig c=cloneConfig(base); c.setLstmNeurons(nv); c.setLearningRate(lr); c.setDropoutRate(dr); if(dedup.add(keyOf(c))) microGrid.add(c); } } }
             }
+            // --- Ajout explicite baseline ré-entraînement (inchangée) pour mesure dérive ---
+            if (phase1.bestConfig != null) {
+                String baselineKey = keyOf(phase1.bestConfig);
+                boolean present = false;
+                for (LstmConfig c : microGrid) {
+                    if (keyOf(c).equals(baselineKey)) { c.setBaselineReplica(true); present = true; break; }
+                }
+                if (!present) {
+                    LstmConfig baselineReplica = cloneConfig(phase1.bestConfig);
+                    baselineReplica.setBaselineReplica(true); // flag pour éviter jitter seed/splits
+                    microGrid.add(baselineReplica);
+                    logger.info("[TUNING-2PH][PHASE2][BASELINE] Ajout réplique baseline sans variation (neurons={} lr={} dropout={})", baselineReplica.getLstmNeurons(), baselineReplica.getLearningRate(), baselineReplica.getDropoutRate());
+                } else {
+                    logger.info("[TUNING-2PH][PHASE2][BASELINE] Baseline déjà présente dans micro-grille (marquée baselineReplica)");
+                }
+            }
             progress.totalConfigs += microGrid.size();
             try { writeProgressMetrics(progress); } catch (Exception ignored) {}
             if (microGrid.isEmpty()) {
@@ -1446,9 +1462,9 @@ public class LstmTuningService {
         for (int i=0;i<grid.size();i++) {
             final int idx=i; LstmConfig cfg=grid.get(i); cfg.setUseScalarV2(true); cfg.setUseWalkForwardV2(true);
             // --- Phase 2: diversification supplémentaire pour réduire corrélation ---
-            if (phase == 2) {
-                cfg.setSeed(cfg.getSeed() + 777 + idx); // seed décalé
-                cfg.setWalkForwardSplits(Math.min(6, cfg.getWalkForwardSplits() + 1)); // plus de splits
+            if (phase == 2 && !cfg.isBaselineReplica()) {
+                cfg.setSeed(cfg.getSeed() + 777 + idx); // seed décalé (sauf baseline)
+                cfg.setWalkForwardSplits(Math.min(6, cfg.getWalkForwardSplits() + 1)); // plus de splits (sauf baseline)
             }
             futures.add(executor.submit(()->{
                 MultiLayerNetwork model=null; boolean permit=false; long stagger=0;
