@@ -85,6 +85,24 @@ public class LstmTuningService {
     public boolean isEnableTwoPhase(){ return enableTwoPhase; }
     public void setEnableTwoPhase(boolean enableTwoPhase){ this.enableTwoPhase = enableTwoPhase; }
 
+    // === Nouveaux paramètres d'utilisation GPU ===
+    @Value("${gpu.concurrency.min:1}")
+    private int gpuMinConcurrency;
+    @Value("${gpu.concurrency.max:2}")
+    private int gpuMaxConcurrency; // augmenter (ex: 6) pour pousser plus de jobs simultanés
+    @Value("${gpu.concurrency.scaleUpThresholdPct:70.0}")
+    private double gpuScaleUpThreshold;
+    @Value("${gpu.concurrency.scaleDownThresholdPct:92.0}")
+    private double gpuScaleDownThreshold;
+    @Value("${lstm.tuning.gpu.enableStagger:true}")
+    private boolean gpuEnableStagger; // possibilité de désactiver le sleep d'échelonnage
+    @Value("${lstm.tuning.gpu.autoBatchScale:true}")
+    private boolean gpuAutoBatchScale; // active l'augmentation de batch automatique
+    @Value("${lstm.tuning.gpu.targetBatchSize:128}")
+    private int gpuTargetBatchSize; // batch visé si inférieur
+    @Value("${lstm.tuning.gpu.scaleLearningRateOnBatch:false}")
+    private boolean gpuScaleLearningRateOnBatch; // ajuste LR proportionnellement à l'augmentation batch
+
     /**
      * Permet (ex: via un endpoint admin) de forcer dynamiquement le nombre max de threads de tuning.
      * Thread-safe: synchronized pour éviter des recalculs simultanés incohérents.
@@ -175,11 +193,17 @@ public class LstmTuningService {
         } catch (Exception e) {
             logger.error("Erreur lors de la détection du backend ND4J : {}", e.getMessage());
         } finally {
-            // Toujours recalculer (même si échec)
             computeEffectiveMaxThreads();
         }
 
-        // Heartbeat: toutes les 30 secondes, tant qu'il y a des tunings actifs
+        // Configuration du contrôleur GPU avant démarrage
+        try {
+            gpuController.configure(gpuMinConcurrency, gpuMaxConcurrency, gpuScaleUpThreshold, gpuScaleDownThreshold);
+        } catch (Exception ex) {
+            logger.warn("[GPU][CONF] Échec configuration dynamique: {}", ex.getMessage());
+        }
+
+        // Heartbeat: toutes les 30 secondes
         progressLoggerExecutor = Executors.newSingleThreadScheduledExecutor();
         progressLoggerExecutor.scheduleAtFixedRate(() -> {
             try {
@@ -201,6 +225,11 @@ public class LstmTuningService {
         // Démarrage du monitoring GPU après détection backend
         if (cudaBackend) {
             gpuController.start(cudaBackend);
+            logger.info("[GPU] Concurrence initiale min={} max={} scaleUp<{}% scaleDown>{}% targetBatch={} autoBatchScale={} stagger={} scaleLRBatch={}",
+                    gpuMinConcurrency, gpuMaxConcurrency,
+                    String.format(java.util.Locale.US, "%.1f", gpuScaleUpThreshold),
+                    String.format(java.util.Locale.US, "%.1f", gpuScaleDownThreshold),
+                    gpuTargetBatchSize, gpuAutoBatchScale, gpuEnableStagger, gpuScaleLearningRateOnBatch);
         }
     }
 
@@ -381,25 +410,40 @@ public class LstmTuningService {
             // Configuration courante à tester
             LstmConfig config = grid.get(i);
 
-            // ===== ACTIVATION DES MODES AVANCÉS =====
-            // Force l'utilisation des versions optimisées des algorithmes
-            config.setUseScalarV2(true);        // Version améliorée du traitement scalaire
-            config.setUseWalkForwardV2(true);   // Version optimisée de la validation walk-forward
+            // Auto-scale batch pour GPU
+            if (cudaBackend && gpuAutoBatchScale) {
+                int originalBatch = config.getBatchSize() > 0 ? config.getBatchSize() : 32;
+                if (originalBatch < gpuTargetBatchSize) {
+                    int newBatch = originalBatch;
+                    while (newBatch < gpuTargetBatchSize) {
+                        newBatch *= 2;
+                        if (newBatch >= gpuTargetBatchSize) break;
+                    }
+                    if (newBatch > gpuTargetBatchSize) newBatch = gpuTargetBatchSize;
+                    if (newBatch != originalBatch) {
+                        if (gpuScaleLearningRateOnBatch && config.getLearningRate() > 0) {
+                            double scaledLr = config.getLearningRate() * ((double) originalBatch / (double) newBatch);
+                            config.setLearningRate(scaledLr);
+                        }
+                        config.setBatchSize(newBatch);
+                        logger.debug("[GPU][BATCHSCALE] {} configIdx={} batch {} -> {} lr={}", symbol, configIndex, originalBatch, newBatch, config.getLearningRate());
+                    }
+                }
+            }
 
-            // Soumission de la tâche asynchrone au pool de threads
+            config.setUseScalarV2(true);
+            config.setUseWalkForwardV2(true);
             futures.add(executor.submit(() -> {
                 MultiLayerNetwork model = null;
                 boolean permitAcquired = false;
                 long staggerSleepMs = 0L;
                 try {
-                    // ===== CONTRÔLE GPU (acquisition de permis) =====
                     if (cudaBackend) {
                         gpuController.acquirePermit();
                         permitAcquired = true;
-                        // Décalage léger de démarrage si une autre tâche vient juste de démarrer (atténue pics VRAM)
                         int active = gpuController.getActiveTrainings();
-                        if (active > 1) { // une autre est déjà en cours
-                            staggerSleepMs = 3000L + (long)(Math.random()*2000L); // 3-5s
+                        if (gpuEnableStagger && active > 1) { // stagger optionnel
+                            staggerSleepMs = 1000L + (long)(Math.random()*1500L); // raccourci 1-2.5s pour réduire latence idle
                             Thread.sleep(staggerSleepMs);
                         }
                         gpuController.markTrainingStarted();
@@ -1162,7 +1206,7 @@ public class LstmTuningService {
     public void tuneAllSymbols(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         long startAll = System.currentTimeMillis();
         logger.info("[TUNING] Début tuning multi-symboles ({} symboles, parallélisé) | twoPhase={} ", symbols.size(), enableTwoPhase);
-        int maxParallelSymbols = Math.max(1, effectiveMaxThreads);
+        int maxParallelSymbols = 2;//Math.max(1, effectiveMaxThreads);
         java.util.concurrent.ExecutorService symbolExecutor = java.util.concurrent.Executors.newFixedThreadPool(maxParallelSymbols);
         java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
         for (int i = 0; i < symbols.size(); i++) {
@@ -1605,6 +1649,23 @@ public class LstmTuningService {
         var results = java.util.Collections.synchronizedList(new java.util.ArrayList<TuningResult>());
         for (int i=0;i<grid.size();i++) {
             final int idx=i; LstmConfig cfg=grid.get(i); cfg.setUseScalarV2(true); cfg.setUseWalkForwardV2(true);
+            // Auto-scale batch GPU phase1/2
+            if (cudaBackend && gpuAutoBatchScale) {
+                int originalBatch = cfg.getBatchSize()>0?cfg.getBatchSize():32;
+                if (originalBatch < gpuTargetBatchSize) {
+                    int newBatch = originalBatch;
+                    while (newBatch < gpuTargetBatchSize) { newBatch *= 2; if (newBatch >= gpuTargetBatchSize) break; }
+                    if (newBatch > gpuTargetBatchSize) newBatch = gpuTargetBatchSize;
+                    if (newBatch != originalBatch) {
+                        if (gpuScaleLearningRateOnBatch && cfg.getLearningRate() > 0) {
+                            double scaledLr = cfg.getLearningRate() * ((double) originalBatch / (double) newBatch);
+                            cfg.setLearningRate(scaledLr);
+                        }
+                        cfg.setBatchSize(newBatch);
+                        logger.debug("[GPU][BATCHSCALE][{}] phase={} idx={} batch {} -> {} lr={}", symbol, phase, idx+1, originalBatch, newBatch, cfg.getLearningRate());
+                    }
+                }
+            }
             // --- Phase 2: diversification supplémentaire pour réduire corrélation ---
             if (phase == 2 && !cfg.isBaselineReplica()) {
                 cfg.setSeed(cfg.getSeed() + 777 + idx); // seed décalé (sauf baseline)
@@ -1613,7 +1674,7 @@ public class LstmTuningService {
             futures.add(executor.submit(()->{
                 MultiLayerNetwork model=null; boolean permit=false; long stagger=0;
                 try {
-                    if (cudaBackend){ gpuController.acquirePermit(); permit=true; int active=gpuController.getActiveTrainings(); if(active>1){ stagger=3000+(long)(Math.random()*2000); Thread.sleep(stagger);} gpuController.markTrainingStarted(); }
+                    if (cudaBackend){ gpuController.acquirePermit(); permit=true; int active=gpuController.getActiveTrainings(); if(gpuEnableStagger && active>1){ stagger=1000+(long)(Math.random()*1500); Thread.sleep(stagger);} gpuController.markTrainingStarted(); }
                     lstmTradePredictor.setGlobalSeeds(cfg.getSeed());
                     int totalBars=series.getBarCount();
                     int testSplitRatio = (phase == 2 ? 25 : 20);
