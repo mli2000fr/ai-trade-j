@@ -1,43 +1,9 @@
-
-Analyse initiale: ton code DL4J tourne avec nd4j-cuda-11.6 mais en double précision, petit batch, beaucoup de calculs d’indicateurs TA4J CPU-bound, aucun pipeline async, et probablement pas de couche CUDA/cuDNN optimisée (pas de dépendance deeplearning4j-cuda-*). Résultat: GPU partiellement occupé (~30%), CPU élevé, 3 Go/8 Go VRAM utilisés. Objectif: augmenter la charge utile GPU (batchs plus gros, float32, cuDNN, overlap data) et réduire le temps CPU (caching features, parallélisation contrôlée, suppression de recalculs, async iterator).
-Je te propose un plan multi-étapes (tu peux cocher et reprendre n’importe quand). Chaque étape a: but, actions concrètes, validations, risques.
-ETAPE 0 - Point de départ (à faire une seule fois) [ ] Action: Ajouter un log backend pour confirmer exécution GPU. Dans trainLstmScalarV2 au début: logger.info("Backend={} dtype={}", Nd4j.getExecutioner().getClass().getName(), Nd4j.defaultFloatingPointType()); [ ] Lancer un run actuel (une seule config) et noter: - Temps moyen par epoch - Batch size actuel - GPU util (% nvidia-smi ou outil équivalent) - VRAM utilisée - CPU util % - Dimensions: numSeq, windowSize, numFeatures [ ] Sauver ces métriques (fichier bench_baseline.md). Validation: fichier baseline existant + logs confirmant Executioner = CudaExecutioner.
-ETAPE 1 - Activer pleinement CUDA + cuDNN + float32 But: Réduire le coût mémoire et booster throughput. [ ] Dans pom.xml remplacer dépendance deeplearning4j-core par deeplearning4j-cuda-11.6 (même version) + garder nd4j-cuda-11.6 classifier cuDNN. [ ] Ajouter au tout début (ex: @PostConstruct dans un bean ou static block): Nd4j.setDefaultDataTypes(org.nd4j.linalg.api.buffer.DataType.FLOAT, org.nd4j.linalg.api.buffer.DataType.FLOAT); [ ] Dans initModel(): builder.dataType(DataType.FLOAT); [ ] Vérifier que tu n’utilises pas d’opérations exigeant double (ton code de features reste en double: c’est acceptable; ND4J cast à la création). [ ] Relancer un entraînement et mesurer: - VRAM (devrait baisser ou permettre batch plus grand) - Temps/epoch (doit descendre de 10–40%) Validation: logs montrent dtype=FLOAT.
-Risques: Si mélange double/float → coûts de cast; acceptable si DataSet final est float.
-ETAPE 2 - Augmenter batch size / exploitation VRAM But: Saturer mieux GPU (LSTM profite de batch plus large). [ ] Stratégie exploratoire: doubler batchSize jusqu’à (a) VRAM ~75–80% ou (b) temps/epoch ne diminue plus. [ ] Ajouter log dynamique: logger.info("BatchSize={} seq={} features={} window={}", batchSize, numSeq, numFeatures, windowSize); [ ] Si numSeq < batchSize * 4 → limiter augmentation (sinon surapprentissage & overhead). [ ] Ajuster patience (moins d’updates/epoch => potentiellement augmenter patienceVal de +30%). Validation: GPU util >55–65% sur plusieurs epochs.
-Risques: Trop gros batch → gradient plate (valLoss n’améliore plus). Si ça arrive, réduire de 25%.
-ETAPE 3 - Caching et réduction CPU feature engineering But: Diminuer recalcul indicateurs TA4J coûteux. [ ] Introduire un cache (clé: symbol + hash(interval + barCount + lastBarEndTime + featureSetVersion)). [ ] Stocker matrix = extractFeatureMatrix(...) sérialisé (Kryo ou simple DataOutputStream) dans un dossier cache/ (par défaut RAM/disk). [ ] Invalider si barCount a changé ou dernière barre (timestamp) diffère. [ ] Pour features composites (ex: plusieurs utilisent sma20, sd20), déjà optimisé partiellement, mais: - Pré-calculer séries primitives (close[], high[], low[], volume[]) en double[] avant d’instancier indicateurs. [ ] Option avancée (plus tard): réécrire certains indicateurs (momentum, gap, range, breakout) en boucles vectorisées ND4J (juste si CPU toujours saturé). Validation: Temps d’appel extractFeatureMatrix réduit de >40% sur 2e run même dataset.
-Risques: Cache incohérent si horizon rolling intraday — inclure timestamp dernière barre.
-ETAPE 4 - Pipeline async & overlap CPU/GPU But: Pendant qu’une batch est sur GPU, préparer la suivante. [ ] Remplacer ListDataSetIterator par AsyncDataSetIterator(new ListDataSetIterator<>(...), queueSize=2 ou 3). [ ] Option si dataset complet tient en mémoire: pas critique mais bénéfice quand batch large. [ ] (Plus tard) Si hyperparam tuning multi-symbol: préparer DataSet de la prochaine config en tâche parallèle (ExecutorService) avant fin de l’epoch en cours. Validation: GPU idle gaps (observables via timeline) réduits.
-Risques: queue trop grande → mémoire JVM en hausse.
-ETAPE 5 - Concurrence contrôlée du tuning pour saturer GPU But: Si un seul modèle trop petit, lancer plusieurs trainings en parallèle (mais bornés). [ ] Implémenter un ExecutorService fixe (pool size 2 ou 3). [ ] Chaque tâche = un appel trainLstmScalarV2 avec config différente. [ ] Synchroniser accès disque (sauvegardes modèles) pour éviter contention. [ ] Surveiller VRAM cumulée (nvidia-smi); si >90%, réduire pool. [ ] Empiler jobs en file; dès qu’un termine, lancer suivant (GPU presque toujours occupé). Validation: GPU util moyenne >70% sur la durée de tuning multi-symbol.
-Risques: Conflits allocation si deux gros batchs démarrent simultanément; atténuer en décalant (sleep 3–5s) démarrage du second.
-ETAPE 6 - Optimisations modèle/cuDNN spécifiques But: Maximiser kernels rapides. [ ] Vérifier logs: si cuDNN LSTM fallback CPU → activer: dans LSTM.Builder() .helperAllowFallback(true) (par défaut) et s’assurer dataType=FLOAT. [ ] Tester réduire dropout layers (chaque dropout entraîne passes sup.) et augmenter légèrement lstmNeurons pour utiliser GPU (ex: +25%) si VRAM encore libre. [ ] Activer gradient accumulation si dataset minuscule mais batch cible trop grand (rare ici) — sinon ignorer. [ ] Vérifier gradient clipping actuel (1.0). Si non nécessaire (pas d’explosions), enlever pour gagner un peu (micro-optim). Validation: Temps/epoch baisse supplémentaire (5–10%).
-Risques: Sans clipping, potentiels NaN sur séries extrêmement volatiles — monitorer.
-ETAPE 7 - Profiling & raffinement But: Confirmer plus de CPU → GPU transfert minimisé. [ ] Activer profil ND4J: System.setProperty("nd4j.exec.debug","true") (temporaire). [ ] Observer ratio temps kernels vs préparation. [ ] Si encore CPU-bound: vectoriser 2–3 features complexes (loop O(20*window) => ND4J ops). [ ] Créer script bench récapitulant: - Baseline vs final (epoch ms, GPU %, VRAM, CPU %). Validation: Document comparatif bench_final.md.
-ETAPE 8 - Nettoyage & automatisation reprise But: Pouvoir reprendre demain facilement. [ ] Créer un fichier PLAN_GPU_PROGRESS.md avec sections: - Checklist (copie de cette liste + cases) - Dernière étape accomplie - Paramètres batchSize / pool concurrency adoptés [ ] Ajouter un petit endpoint /status (optionnel) retournant: - Trainings en cours - GPU target batchSize - Utilisation cache features hits/miss [ ] Script shell (ou .bat) run_training_with_metrics qui lance un tuning et capture logs vers logs/run_TIMESTAMP.log.
-ETAPE 9 - Alertes et garde-fous But: Éviter régressions silencieuses. [ ] Ajouter log si dtype != FLOAT (alerte). [ ] Ajouter log si batchSize < 8 (waste GPU) ou si utilisation VRAM <20% après 5 epochs (suggestion d’augmentation). [ ] Ajouter seuil de temps/epoch minimal attendu; si > +30% baseline → log WARN.
-Résumé leviers majeurs (ordre d’impact attendu):
-Passer en float32 + cuDNN (gros gain)
-Augmenter batch size (utilisation GPU)
-Concurrence contrôlée des trainings (saturation globale)
-Caching features (réduction CPU)
-Async iterator (réduit bulles d’inactivité)
-Ajustements modèle (lstmNeurons, dropout, clipping)
-Vectorisation sélective des features custom
-Chemin de décision rapide si temps limité:
-Jour 1: Étapes 0–1
-Jour 2: Étape 2 + mesure
-Jour 3: Étape 3 + 4
-Jour 4: Étape 5
-Jour 5: Étape 6 + 7
-Jour 6: Étapes 8–9 + finalisation
-Validation finale (critères succès):
-GPU util moyenne >65%
-Temps/epoch réduit ≥30% vs baseline
-CPU util moyenne réduite (ou même CPU mais + modèles/h)
-Aucun out-of-memory GPU
-Pas de dégradation valLoss significative à hyperparams constants
-Prochain concret si tu veux continuer maintenant: je peux modifier pom + initModel pour float + logs backend (Étape 1). Dis-moi et je l’enchaîne.
-Tu peux me dire l’étape déjà accomplie, et je reprendrai à la suivante.
-Fin du plan.
+Améliorations recommandées:
+Ajouter un vrai hold-out final (jamais vu en phase 1 ni 2) pour confirmer le gagnant.
+Phase 2: recréer de nouveaux splits (ex: autre point de coupe, autre découpage walk-forward, autre seed) pour réduire la corrélation.
+Remplacer ratio par (improved - baseline) / max(ε, |baseline|) et imposer aussi un gain absolu minimal (ex: +0.02 de businessScore).
+Calculer l’écart-type du businessScore sur les splits; exiger improved > baseline + 1.0 * std (ou bootstrap).
+Inclure la config baseline inchangée dans la micro‑grille pour mesurer la dérive due au simple ré-entraînement.
+Réduire l’amplitude des perturbations (neurons ±16, dropout ±0.03, lr * {0.9,1.0,1.1}) si tu veux un vrai “affinage”.
+Logguer en phase 2 la distribution complète (moyenne, std, top5) pour détecter une dispersion anormale.
+Option: utiliser un critère régularisé: adjustedScore = businessScore - λ * (complexité) ou pénaliser trop de variations.
