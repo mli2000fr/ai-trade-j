@@ -675,7 +675,7 @@ public class LstmTuningService {
 
             // ===== SAUVEGARDE DES HYPERPARAMÈTRES GAGNANTS =====
             // Persistance de la configuration optimale pour réutilisation
-            hyperparamsRepository.saveHyperparams(symbol, bestConfig);
+            hyperparamsRepository.saveHyperparams(symbol, bestConfig, 0);
 
             try {
                 // ===== SAUVEGARDE DU MODÈLE COMPLET =====
@@ -684,7 +684,7 @@ public class LstmTuningService {
                 synchronized (modelSaveLock) { // Sérialisation disque synchronisée
                     lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate, bestModel, bestConfig, bestScalers,
                         bestScore,  bestResul.profitFactor,  bestResul.winRate,  bestResul.maxDrawdown,  bestResul.rmse,  bestResul.sumProfit,  bestResul.totalTrades,  bestResul.businessScore,
-                        bestResul.totalSeriesTested);
+                        bestResul.totalSeriesTested, 0);
                 }
             } catch (Exception e) {
                 // Log d'erreur non-bloquante (les hyperparamètres sont sauvés)
@@ -1216,7 +1216,7 @@ public class LstmTuningService {
     public void tuneAllSymbols(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         long startAll = System.currentTimeMillis();
         logger.info("[TUNING] Début tuning multi-symboles ({} symboles, parallélisé) | twoPhase={} ", symbols.size(), enableTwoPhase);
-        int maxParallelSymbols = Math.max(1, effectiveMaxThreads / 2);
+        int maxParallelSymbols = Math.max(1, effectiveMaxThreads);
         java.util.concurrent.ExecutorService symbolExecutor = java.util.concurrent.Executors.newFixedThreadPool(maxParallelSymbols);
         java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
         for (int i = 0; i < symbols.size(); i++) {
@@ -1417,7 +1417,7 @@ public class LstmTuningService {
         try {
             // Phase 1
             logger.info("[TUNING-2PH][PHASE1] Début phase 1 coarse ({} configs)", coarseGrid.size());
-            PhaseAggregate phase1 = runPhaseNoPersist(symbol, coarseGrid, series, jdbcTemplate, "PHASE1", progress);
+            PhaseAggregate phase1 = runPhaseNoPersist(symbol, coarseGrid, series, 1, "PHASE1", progress);
             if (phase1 == null || phase1.bestConfig == null) {
                 logger.warn("[TUNING-2PH][PHASE1] Aucun résultat valide pour {}", symbol);
                 progress.status = "failed"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime;
@@ -1473,7 +1473,7 @@ public class LstmTuningService {
             try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON début phase2: {}", ex.getMessage()); }
 
             // Phase 2 (évaluation micro-grid sans persistance immédiate)
-            PhaseAggregate phase2 = runPhaseNoPersist(symbol, microGrid, series, jdbcTemplate, "PHASE2", progress);
+            PhaseAggregate phase2 = runPhaseNoPersist(symbol, microGrid, series, 2, "PHASE2", progress);
             if (phase2 == null || phase2.bestConfig == null) {
                 logger.warn("[TUNING-2PH][PHASE2] Aucun résultat valide – on garde phase1");
                 persistBest(symbol, phase1, jdbcTemplate);
@@ -1534,6 +1534,7 @@ public class LstmTuningService {
         double sumProfit;
         int totalTrades;
         int totalSeriesTested;
+        int phase;
 
         java.util.List<TuningResult> allResults;
     }
@@ -1541,7 +1542,7 @@ public class LstmTuningService {
     private PhaseAggregate runPhaseNoPersist(String symbol,
                                              List<LstmConfig> grid,
                                              BarSeries series,
-                                             JdbcTemplate jdbcTemplate,
+                                             int phase,
                                              String phaseTag,
                                              TuningProgress progress) {
         waitForMemory();
@@ -1742,6 +1743,7 @@ public class LstmTuningService {
         ag.sumProfit = (best != null) ? best.sumProfit : 0;
         ag.totalTrades = (best != null) ? best.totalTrades : 0;
         ag.totalSeriesTested = (best != null) ? best.totalSeriesTested : 0;
+        ag.phase = phase;
 
         long end = System.currentTimeMillis();
         logger.info(
@@ -1763,7 +1765,7 @@ public class LstmTuningService {
             return;
         }
         try {
-            hyperparamsRepository.saveHyperparams(symbol, pa.bestConfig);
+            hyperparamsRepository.saveHyperparams(symbol, pa.bestConfig, pa.phase);
         } catch (Exception e) {
             logger.error("[TUNING-2PH][PERSIST] saveHyperparams échec: {}", e.getMessage());
         }
@@ -1778,7 +1780,8 @@ public class LstmTuningService {
                         pa.sumProfit,
                         pa.totalTrades,
                         pa.bestBusinessScore,
-                        pa.totalSeriesTested);
+                        pa.totalSeriesTested,
+                        pa.phase);
             }
         } catch (Exception e) {
             logger.error("[TUNING-2PH][PERSIST] saveModelToDb échec: {}", e.getMessage());

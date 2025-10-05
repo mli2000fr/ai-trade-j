@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS lstm_tuning_metrics (
   sortino DOUBLE,
   calmar DOUBLE,
   turnover DOUBLE,
+  phase INT,
   avg_bars_in_position DOUBLE,
   use_multi_horizon_avg TINYINT(1) NOT NULL DEFAULT 0,
   entry_threshold_factor DOUBLE,

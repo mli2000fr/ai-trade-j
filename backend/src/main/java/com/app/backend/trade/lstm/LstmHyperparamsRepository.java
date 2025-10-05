@@ -78,8 +78,8 @@ public class LstmHyperparamsRepository {
             "INSERT INTO lstm_tuning_metrics (" +
                     "symbol, window_size, lstm_neurons, dropout_rate, learning_rate, l1, l2, num_epochs, patience, min_delta, optimizer, " +
                     "normalization_scope, normalization_method, swing_trade_type, features, mse, rmse, horizon_bars, " +
-                    "profit_total, profit_factor, win_rate, max_drawdown, num_trades, business_score, sortino, calmar, turnover, avg_bars_in_position, use_multi_horizon_avg, entry_threshold_factor, tested_date" +
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+                    "profit_total, profit_factor, win_rate, max_drawdown, num_trades, business_score, sortino, calmar, turnover, avg_bars_in_position, use_multi_horizon_avg, entry_threshold_factor, phase, tested_date" +
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
 
 
     // =========================================================
@@ -105,7 +105,7 @@ public class LstmHyperparamsRepository {
      * @param symbol symbole boursier (clé primaire attendue dans la table).
      * @param config objet contenant tous les hyperparamètres.
      */
-    public void saveHyperparams(String symbol, LstmConfig config) {
+    public void saveHyperparams(String symbol, LstmConfig config, int phase) {
         // Important : l'ordre des paramètres DOIT correspondre strictement
         // à l'ordre des colonnes dans SQL_SAVE_HYPERPARAMS ci-dessus.
         jdbcTemplate.update(
@@ -151,7 +151,8 @@ public class LstmHyperparamsRepository {
                 config.getKlDriftThreshold(),
                 config.getMeanShiftSigmaThreshold(),
                 config.isUseMultiHorizonAvg(),
-                config.getEntryThresholdFactor()
+                config.getEntryThresholdFactor(),
+                phase
         );
     }
 

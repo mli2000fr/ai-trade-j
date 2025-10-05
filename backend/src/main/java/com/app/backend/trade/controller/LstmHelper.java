@@ -407,7 +407,7 @@ public class LstmHelper {
         boolean[] bidirectionals = {true, false};
         boolean[] attentions = {true, false};
 
-        for (String symbol : symbols) {
+        //for (String symbol : symbols) {
             // Features dynamiques selon type de symbole
             //List<String> features = getFeaturesForSymbol(symbol);
             List<LstmConfig> grid;
@@ -420,8 +420,8 @@ public class LstmHelper {
                 );
             }
             // Appel pour ce symbole uniquement (singleton list)
-            lstmTuningService.tuneAllSymbols(Collections.singletonList(symbol), grid, jdbcTemplate, s -> getBarBySymbol(s, null));
-        }
+            lstmTuningService.tuneAllSymbols(symbols, grid, jdbcTemplate, s -> getBarBySymbol(s, null));
+        //}
     }
 
     /**
