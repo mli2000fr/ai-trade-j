@@ -1223,10 +1223,10 @@ public class LstmTuningService {
      * Tuning en deux phases (Étape 20):
      * Phase 1 : grille coarse fournie (random ou déterministe). On évalue toutes les configs sans persister immédiatement le meilleur modèle.
      * Phase 2 : micro-grille générée autour des 5 meilleures configs (businessScore ajusté = businessScore * (1 - maxDrawdown)).
-     * Variations :
-     *   - lstmNeurons ±32
-     *   - learningRate * {0.8, 1.0, 1.2} (borné [1e-5, 0.01])
-     *   - dropout ±0.05 (borné [0.05, 0.40])
+     * Variations (affinage réduit):
+     *   - lstmNeurons ±16
+     *   - learningRate * {0.9, 1.0, 1.1} (borné [1e-5, 0.01])
+     *   - dropout ±0.03 (borné [0.05, 0.40])
      * Acceptation : phase 2 retenue si relativeGain >= minRelativeGain ET absoluteGain >= minAbsoluteGain
      * (paramétrables via properties: lstm.tuning.twoPhase.minRelativeGain / minAbsoluteGain)
      * Sinon persistance du meilleur de la phase 1.
@@ -1285,9 +1285,9 @@ public class LstmTuningService {
             java.util.List<LstmConfig> microGrid = new java.util.ArrayList<>();
             for (TuningResult tr : top) {
                 LstmConfig base = tr.config; int baseNeu = base.getLstmNeurons();
-                int[] neuVar = {baseNeu-32, baseNeu, baseNeu+32};
-                double[] lrVar = {base.getLearningRate()*0.8, base.getLearningRate(), base.getLearningRate()*1.2};
-                double[] drVar = {base.getDropoutRate()-0.05, base.getDropoutRate(), base.getDropoutRate()+0.05};
+                int[] neuVar = {baseNeu-16, baseNeu, baseNeu+16};
+                double[] lrVar = {base.getLearningRate()*0.9, base.getLearningRate(), base.getLearningRate()*1.1};
+                double[] drVar = {base.getDropoutRate()-0.03, base.getDropoutRate(), base.getDropoutRate()+0.03};
                 for (int nv : neuVar) { if (nv<16||nv>512) continue; for (double lr: lrVar){ lr=Math.max(1e-5, Math.min(0.01, lr)); for(double dr:drVar){ dr=Math.max(0.05, Math.min(0.40, dr)); LstmConfig c=cloneConfig(base); c.setLstmNeurons(nv); c.setLearningRate(lr); c.setDropoutRate(dr); if(dedup.add(keyOf(c))) microGrid.add(c); } } }
             }
             // --- Ajout explicite baseline ré-entraînement (inchangée) pour mesure dérive ---
