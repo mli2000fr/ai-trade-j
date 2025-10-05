@@ -448,13 +448,12 @@ public class LstmTuningService {
 
                     // ===== AGRÉGATION DES MÉTRIQUES DE TRADING =====
                     // Collecte et moyenne des métriques business sur tous les splits walk-forward
-                    double sumPF=0, sumWin=0, sumExp=0, maxDDPct=0, sumBusiness=0, sumProfit=0; // Accumulateurs
+                    double sumPF=0, sumWin=0, sumExp=0, maxDrawdownPct=0, sumBusiness=0, sumProfit=0; // Accumulateurs
                     int splits=0;           // Compteur de splits valides
                     int totalTrades=0;      // Nombre total de trades sur tous les splits
 
                     // Parcours de tous les résultats de split pour agrégation
                     for(LstmTradePredictor.TradingMetricsV2 m : wf.splits){
-                        // Log debug si aucun trade exécuté sur le split
                         if (m.numTrades == 0 && logger.isDebugEnabled()) {
                             logger.info("[TUNING][NO_TRADES][V2] symbol={} cfgNeurons={} lr={} dropout={} splitIdx={} pf={} wr={} dd={} exp={} bs={}",
                                     symbol,
@@ -468,45 +467,22 @@ public class LstmTuningService {
                                     m.expectancy,
                                     m.businessScore);
                         }
-                        // Profit Factor: rapport gains/pertes (garde 0 si infini/NaN)
                         if(Double.isFinite(m.profitFactor)) sumPF += m.profitFactor; else sumPF += 0;
-
-                        // Win Rate: pourcentage de trades gagnants
                         sumWin += m.winRate;
-
-                        // Expectancy: gain moyen par trade
                         sumExp += m.expectancy;
-
-                        // Max Drawdown: pire perte cumulée (garde le maximum)
-                        if(m.maxDrawdownPct > maxDDPct) maxDDPct = m.maxDrawdownPct;
-
-                        // Business Score: métrique composite (garde 0 si infini/NaN)
+                        if(m.maxDrawdownPct > maxDrawdownPct) maxDrawdownPct = m.maxDrawdownPct;
                         sumBusiness += (Double.isFinite(m.businessScore)? m.businessScore:0);
-
-                        // Profit total: somme des gains/pertes
                         sumProfit += m.totalProfit;
-
-                        // Nombre de trades: pour calcul de statistiques
                         totalTrades += m.numTrades;
-
-                        // Compteur de splits traités
                         splits++;
                     }
-
-                    // Sécurité: vérifier qu'au moins un split est valide
                     if(splits==0){
                         throw new IllegalStateException("Aucun split valide walk-forward");
                     }
-
-                    // ===== CALCUL DES MOYENNES =====
-                    // Moyennes des métriques sur tous les splits (normalisation)
-                    double meanPF = sumPF / splits;              // Profit Factor moyen
-                    double meanWinRate = sumWin / splits;        // Taux de réussite moyen
-                    double meanExpectancy = sumExp / splits;     // Expectancy moyenne
-                    // Score business moyen (critère de sélection)
+                    double meanPF = sumPF / splits;
+                    double meanWinRate = sumWin / splits;
+                    double meanExpectancy = sumExp / splits;
                     double meanBusinessScore = sumBusiness / splits;
-
-
                     // DEBUG: Log détaillé des businessScore de chaque split
                     java.util.List<Double> businessScoresDebug = new java.util.ArrayList<>();
                     for(LstmTradePredictor.TradingMetricsV2 m : wf.splits) {
@@ -514,44 +490,29 @@ public class LstmTuningService {
                     }
                     logger.info("[--------][DEBUG][TUNING][V2] [{}] businessScores splits: {} | sumBusiness={} | splits={} | meanBusinessScore={}",
                         symbol, businessScoresDebug, sumBusiness, splits, meanBusinessScore);
-
-                    // ===== CALCUL DE LA RMSE =====
-                    // Root Mean Square Error: racine carrée de la MSE (plus interprétable)
                     double rmse = Double.isFinite(meanMse) && meanMse>=0? Math.sqrt(meanMse): Double.NaN;
-
-                    // ===== PERSISTANCE DES MÉTRIQUES COMPLÈTES =====
-                    // Sauvegarde en base de toutes les métriques pour analyse post-tuning
-                    // Permet comparaisons, debug, et optimisations futures
                     hyperparamsRepository.saveTuningMetrics(
-                            symbol, config,                    // Identifiant + configuration
-                            meanMse, rmse,          // Métriques de prédiction
-                            sumProfit, meanPF, meanWinRate, maxDDPct, totalTrades, meanBusinessScore, // Trading metrics
-                            // Métriques avancées (moyennes des splits)
-                            wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0),      // Ratio de Sortino
-                            wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0),       // Ratio de Calmar
-                            wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0),     // Rotation du portefeuille
-                            wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0), // Durée moyenne des positions
+                            symbol, config,
+                            meanMse, rmse,
+                            sumProfit, meanPF, meanWinRate, maxDrawdownPct, totalTrades, meanBusinessScore,
+                            wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0),
+                            wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0),
+                            wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0),
+                            wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0),
                             0
                     );
-
-                    // ===== MESURE DE PERFORMANCE ET LOG =====
                     long endConfig = System.currentTimeMillis();
                     long cfgDuration = (endConfig-startConfig);
                     logger.info("[TUNING][V2] [{}] Fin config {}/{} | meanMSE={}, PF={}, winRate={}, DD%={}, expectancy={}, businessScore={}, trades={} durée={} ms",
-                            symbol, configIndex, grid.size(), meanMse, meanPF, meanWinRate, maxDDPct,
+                            symbol, configIndex, grid.size(), meanMse, meanPF, meanWinRate, maxDrawdownPct,
                             meanExpectancy, meanBusinessScore, totalTrades, cfgDuration);
-
-                    // ===== MISE À JOUR DU PROGRÈS (THREAD-SAFE) =====
                     TuningProgress p = tuningProgressMap.get(symbol);
                     if (p != null) {
                         p.testedConfigs.incrementAndGet();
                         p.lastUpdate = System.currentTimeMillis();
                         p.cumulativeConfigDurationMs.addAndGet(cfgDuration);
                     }
-
-                    // ===== RETOUR DU RÉSULTAT ENCAPSULÉ =====
-                    // Création d'un objet résultat contenant toutes les informations nécessaires
-                    return new TuningResult(config, model, scalers, meanMse, meanPF, meanWinRate, maxDDPct, meanBusinessScore, rmse, sumProfit, totalTrades, series.getBarCount() - trainEndBar);
+                    return new TuningResult(config, model, scalers, meanMse, meanPF, meanWinRate, maxDrawdownPct, meanBusinessScore, rmse, sumProfit, totalTrades, series.getBarCount() - trainEndBar);
 
                 } catch (Exception e){
                     // ===== GESTION CENTRALISÉE DES ERREURS =====
@@ -1041,6 +1002,7 @@ public class LstmTuningService {
             int batchSize = batchSizes[rand.nextInt(batchSizes.length)];
             boolean bidir = bidirectionals[rand.nextInt(bidirectionals.length)];
             boolean att = attentions[rand.nextInt(attentions.length)];
+            String chosenSwingType = swingTypes[rand.nextInt(swingTypes.length)];
             LstmConfig config = new LstmConfig();
             config.setWindowSize(windowSizes[rand.nextInt(windowSizes.length)]);
             config.setLstmNeurons(lstmNeurons[rand.nextInt(lstmNeurons.length)]);
@@ -1055,7 +1017,7 @@ public class LstmTuningService {
             config.setL2(l2s[rand.nextInt(l2s.length)]);
             config.setNormalizationScope(scopes[rand.nextInt(scopes.length)]);
             config.setNormalizationMethod("auto");
-            config.setSwingTradeType(swingTypes[rand.nextInt(swingTypes.length)]);
+            config.setSwingTradeType(chosenSwingType);
             config.setUseScalarV2(true);
             config.setUseWalkForwardV2(true);
             config.setNumLstmLayers(numLayers);
@@ -1320,7 +1282,7 @@ public class LstmTuningService {
             progress.totalConfigs += microGrid.size();
             try { writeProgressMetrics(progress); } catch (Exception ignored) {}
             if (microGrid.isEmpty()) {
-                logger.warn("[TUNING-2PH][PHASE2] Micro-grille vide – validation directe phase1{}");
+                logger.warn("[TUNING-2PH][PHASE2] Micro-grille vide – validation directe phase1");
                 if (enableHoldOut) {
                     HoldOutEval ho1 = evaluateHoldOut(symbol, phase1.bestConfig, series, holdOutStart);
                     if (ho1 != null) {
@@ -1433,9 +1395,9 @@ public class LstmTuningService {
             LstmTradePredictor.TrainResult tr = lstmTradePredictor.trainLstmScalarV2(trainSeries, config, null);
             MultiLayerNetwork model = tr.model; LstmTradePredictor.ScalerSet scalers = tr.scalers;
             LstmTradePredictor.WalkForwardResultV2 wf = lstmTradePredictor.walkForwardEvaluateOutOfSample(fullSeries, config, model, scalers, holdOutStart);
-            double sumB=0,sumPF=0,sumWin=0,maxDD=0,sumProfit=0; int splits=0,trades=0; for(var m: wf.splits){ sumB += Double.isFinite(m.businessScore)?m.businessScore:0; sumPF += Double.isFinite(m.profitFactor)?m.profitFactor:0; sumWin+=m.winRate; if(m.maxDrawdownPct>maxDD) maxDD=m.maxDrawdownPct; sumProfit+=m.totalProfit; trades+=m.numTrades; splits++; }
+            double sumB=0,sumPF=0,sumWin=0,maxDrawdownPct=0,sumProfit=0; int splits=0,trades=0; for(var m: wf.splits){ sumB += Double.isFinite(m.businessScore)?m.businessScore:0; sumPF += Double.isFinite(m.profitFactor)?m.profitFactor:0; sumWin+=m.winRate; if(m.maxDrawdownPct>maxDrawdownPct) maxDrawdownPct=m.maxDrawdownPct; sumProfit+=m.totalProfit; trades+=m.numTrades; splits++; }
             if (splits==0) return null;
-            HoldOutEval ho=new HoldOutEval(); ho.config=config; ho.model=model; ho.scalers=scalers; ho.businessScore=sumB/splits; ho.meanMse=wf.meanMse; ho.rmse=Double.isFinite(wf.meanMse)&&wf.meanMse>=0?Math.sqrt(wf.meanMse):Double.NaN; ho.profitFactor=sumPF/splits; ho.winRate=sumWin/splits; ho.maxDrawdown=maxDD; ho.sumProfit=sumProfit; ho.totalTrades=trades; ho.totalSeriesTested=wf.totalTestedBars; logger.info("[TUNING-2PH][HOLDOUT] {} neurons={} lr={} dropout={} bs={} pf={} wr={} dd={}", symbol, config.getLstmNeurons(), config.getLearningRate(), config.getDropoutRate(), String.format("%.5f", ho.businessScore), String.format("%.4f", ho.profitFactor), String.format("%.4f", ho.winRate), String.format("%.4f", ho.maxDrawdown)); return ho;
+            HoldOutEval ho=new HoldOutEval(); ho.config=config; ho.model=model; ho.scalers=scalers; ho.businessScore=sumB/splits; ho.meanMse=wf.meanMse; ho.rmse=Double.isFinite(wf.meanMse)&&wf.meanMse>=0?Math.sqrt(wf.meanMse):Double.NaN; ho.profitFactor=sumPF/splits; ho.winRate=sumWin/splits; ho.maxDrawdown=maxDrawdownPct; ho.sumProfit=sumProfit; ho.totalTrades=trades; ho.totalSeriesTested=wf.totalTestedBars; logger.info("[TUNING-2PH][HOLDOUT] {} neurons={} lr={} dropout={} bs={} pf={} wr={} dd={}", symbol, config.getLstmNeurons(), config.getLearningRate(), config.getDropoutRate(), String.format("%.5f", ho.businessScore), String.format("%.4f", ho.profitFactor), String.format("%.4f", ho.winRate), String.format("%.4f", ho.maxDrawdown)); return ho;
         } catch (Exception e) { logger.warn("[TUNING-2PH][HOLDOUT] Échec {} : {}", symbol, e.getMessage()); return null; }
         finally { try { org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc(); } catch (Exception ignored) {} try { org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread(); } catch (Exception ignored) {} System.gc(); }
     }
@@ -1457,24 +1419,57 @@ public class LstmTuningService {
         var results = java.util.Collections.synchronizedList(new java.util.ArrayList<TuningResult>());
         for (int i=0;i<grid.size();i++) {
             final int idx=i; LstmConfig cfg=grid.get(i); cfg.setUseScalarV2(true); cfg.setUseWalkForwardV2(true);
+            // --- Phase 2: diversification supplémentaire pour réduire corrélation ---
+            if (phase == 2) {
+                cfg.setSeed(cfg.getSeed() + 777 + idx); // seed décalé
+                cfg.setWalkForwardSplits(Math.min(6, cfg.getWalkForwardSplits() + 1)); // plus de splits
+            }
             futures.add(executor.submit(()->{
                 MultiLayerNetwork model=null; boolean permit=false; long stagger=0;
                 try {
                     if (cudaBackend){ gpuController.acquirePermit(); permit=true; int active=gpuController.getActiveTrainings(); if(active>1){ stagger=3000+(long)(Math.random()*2000); Thread.sleep(stagger);} gpuController.markTrainingStarted(); }
                     lstmTradePredictor.setGlobalSeeds(cfg.getSeed());
-                    int totalBars=series.getBarCount(); int testSplitRatio=20; int trainEnd= totalBars*(100-testSplitRatio)/100; if(trainEnd < cfg.getWindowSize()+50) throw new IllegalStateException("Données insuffisantes");
+                    int totalBars=series.getBarCount();
+                    int testSplitRatio = (phase == 2 ? 25 : 20);
+                    int trainEnd= totalBars*(100-testSplitRatio)/100;
+                    if (phase == 2) {
+                        int jitterRange = Math.max(5, (int)(totalBars * 0.01));
+                        int jitterSeed = (int)((cfg.getSeed() ^ (idx * 0x9E3779B97F4A7C15L)) & 0x7fffffff);
+                        java.util.Random jitterRand = new java.util.Random(jitterSeed);
+                        int jitter = jitterRand.nextInt(jitterRange * 2 + 1) - jitterRange;
+                        trainEnd = trainEnd + jitter;
+                        int minTrain = cfg.getWindowSize() + 60;
+                        int maxTrain = totalBars - (cfg.getWindowSize() + 60);
+                        if (trainEnd < minTrain) trainEnd = minTrain;
+                        if (trainEnd > maxTrain) trainEnd = maxTrain;
+                        if (logger.isDebugEnabled()) {
+                            logger.debug("[TUNING-2PH][{}] phase=2 configIdx={} ratioTest={} jitter={} trainEnd={}/{}", symbol, idx+1, testSplitRatio, jitter, trainEnd, totalBars);
+                        }
+                    }
+                    if(trainEnd < cfg.getWindowSize()+50) throw new IllegalStateException("Données insuffisantes");
                     BarSeries trainSeries=series.getSubSeries(0, trainEnd);
                     var tr = lstmTradePredictor.trainLstmScalarV2(trainSeries, cfg, null);
                     model=tr.model; var scalers=tr.scalers;
                     var wf = lstmTradePredictor.walkForwardEvaluateOutOfSample(series, cfg, model, scalers, trainEnd);
-                    double sumPF=0,sumWin=0,sumExp=0,maxDD=0,sumBusiness=0,sumProfit=0; int splits=0,trades=0; for(var m: wf.splits){ sumPF+=Double.isFinite(m.profitFactor)?m.profitFactor:0; sumWin+=m.winRate; sumExp+=m.expectancy; if(m.maxDrawdownPct>maxDD) maxDD=m.maxDrawdownPct; sumBusiness+=Double.isFinite(m.businessScore)?m.businessScore:0; sumProfit+=m.totalProfit; trades+=m.numTrades; splits++; }
+                    double sumPF=0,sumWin=0,maxDrawdownPct=0,sumBusiness=0,sumProfit=0; int splits=0,trades=0;
+                    for(var m: wf.splits){
+                        sumPF+=Double.isFinite(m.profitFactor)?m.profitFactor:0;
+                        sumWin+=m.winRate;
+                        if(m.maxDrawdownPct>maxDrawdownPct) maxDrawdownPct=m.maxDrawdownPct;
+                        sumBusiness+=Double.isFinite(m.businessScore)?m.businessScore:0;
+                        sumProfit+=m.totalProfit;
+                        trades+=m.numTrades; splits++; }
                     if (splits==0) throw new IllegalStateException("Aucun split valide");
                     double meanMse=wf.meanMse; double meanBusiness=sumBusiness/splits; double rmse=(Double.isFinite(meanMse)&&meanMse>=0)?Math.sqrt(meanMse):Double.NaN;
-                    hyperparamsRepository.saveTuningMetrics(symbol,cfg,meanMse,rmse,sumProfit,sumPF/splits,sumWin/splits,maxDD,trades,meanBusiness, wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0), wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0), wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0), wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0), phase);
-                    TuningResult trRes=new TuningResult(cfg, model, scalers, meanMse, sumPF/splits, sumWin/splits, maxDD, meanBusiness, rmse, sumProfit, trades, wf.totalTestedBars);
+                    hyperparamsRepository.saveTuningMetrics(symbol,cfg,meanMse,rmse,sumProfit,sumPF/splits,sumWin/splits,maxDrawdownPct,trades,meanBusiness,
+                            wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0),
+                            wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0),
+                            wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0),
+                            wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0), phase);
+                    TuningResult trRes=new TuningResult(cfg, model, scalers, meanMse, sumPF/splits, sumWin/splits, maxDrawdownPct, meanBusiness, rmse, sumProfit, trades, wf.totalTestedBars);
                     results.add(trRes);
                     if(progress!=null){ progress.testedConfigs.incrementAndGet(); progress.lastUpdate=System.currentTimeMillis(); }
-                    logger.info("[TUNING-2PH][{}] {} config {}/{} bs={} adj={} dd={} trades={}", phaseTag, symbol, idx+1, grid.size(), String.format("%.5f", meanBusiness), String.format("%.5f", adjScore(trRes)), String.format("%.4f", maxDD), trades);
+                    logger.info("[TUNING-2PH][{}] {} config {}/{} bs={} adj={} dd={} trades={} phase={}", phaseTag, symbol, idx+1, grid.size(), String.format("%.5f", meanBusiness), String.format("%.5f", adjScore(trRes)), String.format("%.4f", maxDrawdownPct), trades, phase);
                     return trRes;
                 } catch(Exception ex){ if(progress!=null){ progress.testedConfigs.incrementAndGet(); progress.lastUpdate=System.currentTimeMillis(); } logger.error("[TUNING-2PH][{}][{}] Erreur config {}/{} : {}", phaseTag, symbol, idx+1, grid.size(), ex.getMessage()); return null; }
                 finally { model=null; try{ org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc(); org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread(); }catch(Exception ignore){} System.gc(); if(cudaBackend){ gpuController.markTrainingFinished(); if(permit) gpuController.releasePermit(); } }
