@@ -57,31 +57,6 @@ public class LstmController {
     @Autowired
     private LstmHelper lsdmHelper;
 
-    /**
-     * Endpoint : Entraîne un modèle LSTM pour un symbole donné.
-     *
-     * Usage :
-     *   GET /api/lstm/train?symbol=BTCUSDT
-     *
-     * Pré-conditions :
-     * - Le symbole doit exister dans vos données source.
-     * - Le service LstmHelper doit gérer l'absence éventuelle de données (validation côté service).
-     *
-     * Post-condition :
-     * - Lance un entraînement asynchrone ou synchrone selon l'implémentation interne de lsdmHelper.trainLstm().
-     *
-     * @param symbol Code du marché (ex : BTCUSDT, ETHUSDT, etc.)
-     * @return Message simple de confirmation (texte brut).
-     *
-     * NOTE : Pas de gestion d'erreur spécifique ici pour ne pas altérer le flux existant.
-     * Toute exception non contrôlée remontera (Spring la gère via son mécanisme d’exception).
-     */
-    @GetMapping("/train")
-    public String trainLstm(@RequestParam String symbol) {
-        // Délégation directe sans transformation (pas de logique ici volontairement).
-        lsdmHelper.trainLstm(symbol);
-        return "Entraînement LSTM terminé pour " + symbol;
-    }
 
     /**
      * Endpoint : Prédit la prochaine valeur de clôture pour un symbole donné.
@@ -98,7 +73,7 @@ public class LstmController {
      * - Si vous devez enrichir la réponse (ex : ajouter un horodatage), faites-le dans le service ou créez un DTO dédié.
      */
     @GetMapping("/predict")
-    public PreditLsdm predictNextClose(@RequestParam String symbol) throws IOException {
+    public PreditLsdm predictNextClose(@RequestParam String symbol) throws Exception {
         return lsdmHelper.getPredit(symbol);
     }
 

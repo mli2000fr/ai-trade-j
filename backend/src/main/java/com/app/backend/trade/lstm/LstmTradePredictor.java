@@ -69,7 +69,7 @@ import java.util.*;
 import java.util.Arrays;
 import org.deeplearning4j.nn.conf.inputs.InputType;
 import org.deeplearning4j.nn.conf.GradientNormalization;
-import org.ta4j.core.num.DecimalNum;
+import org.nd4j.shade.jackson.annotation.JsonIgnoreProperties;
 
 @Service
 public class LstmTradePredictor {
@@ -840,14 +840,21 @@ public class LstmTradePredictor {
      * Stocké pour permettre transformation + inversion (inverse).
      */
     public static class FeatureScaler implements Serializable {
+        @JsonIgnoreProperties(ignoreUnknown = true)
         public enum Type { MINMAX, ZSCORE }
 
-        // Paramètres communs (selon le type)
         public double min = Double.POSITIVE_INFINITY;
         public double max = Double.NEGATIVE_INFINITY;
         public double mean = 0.0;
         public double std = 0.0;
         public Type type;
+
+        // Constructeur no-arg requis pour Jackson
+        public FeatureScaler(){
+            this.type = Type.MINMAX; // défaut sûr
+            this.min = 0; this.max = 1; // évite divisions 0
+            this.mean = 0; this.std = 1.0;
+        }
 
         public FeatureScaler(Type type){ this.type = type; }
 
@@ -908,10 +915,10 @@ public class LstmTradePredictor {
     public static class ScalerSet implements Serializable {
         public Map<String, FeatureScaler> featureScalers = new HashMap<>();
         public FeatureScaler labelScaler;
-        // Étape 22: distribution des labels (log-return) au moment de l'entraînement
-        // Nullable pour compat rétro (anciens JSON sans ces champs)
-        public Double labelDistMean;   // mean(labelSeq)
-        public Double labelDistStd;    // std(labelSeq)
+        public Double labelDistMean;
+        public Double labelDistStd;
+        // Constructeur no-arg pour robustesse
+        public ScalerSet() {}
     }
 
     /* =========================================================
@@ -1908,6 +1915,12 @@ public class LstmTradePredictor {
         // Étape 18: stats position sizing
         public double positionValueMean;
         public double positionValueStd;
+        // Améliorations swing: métriques R (risk multiples)
+        public double avgR;           // moyenne des R multiples par trade
+        public double medianR;        // médiane des R
+        public double rWinRate;       // proportion trades R>0
+        public double positiveRSkew;  // (mean R positif - |mean R négatif|) / (|mean R négatif|+1e-9)
+        public int partialExitTrades; // nb trades avec partial take profit
     }
     private static class ContrarianDecision { boolean active; double adjustedSignalStrength; String reason; }
     private ContrarianDecision evaluateContrarian(double rawSignalStrength, double lastClose, double[] rsiValues, int bar, BarSeries sub) {
@@ -2082,22 +2095,24 @@ public class LstmTradePredictor {
         LstmConfig config
     ) {
         TradingMetricsV2 tm = new TradingMetricsV2();
-        // ===== Étape 6: Pré-calcul & cache features / indicateurs =====
+        // ===== Pré-calcul features / normalisation (inchangé sauf optimisation rebuild) =====
         long cacheStartNs = System.nanoTime();
         List<String> features = config.getFeatures();
         double[][] rawMatrix = extractFeatureMatrix(fullSeries, features); // [bars][features]
         int numFeatures = features.size();
         double[][] normMatrix = new double[rawMatrix.length][numFeatures];
+        // Rebuild des scalers uniquement si vraiment manquants (éviter fuite de données futur test si possible)
         if (scalers == null || scalers.featureScalers == null || scalers.featureScalers.size() != numFeatures || scalers.labelScaler == null) {
-            logger.warn("[SIM][CACHE] Scalers incomplets -> rebuild (coût ponctuel)");
-            scalers = rebuildScalers(fullSeries, config);
+            // Limiter la reconstruction aux barres historiques avant testStartBar pour éviter leakage
+            BarSeries preTestSeries = fullSeries.getSubSeries(0, Math.max(testStartBar, 1));
+            logger.warn("[SIM][SCALERS][REBUILD] Rebuild des scalers sur historique pré-test (0..{}).", testStartBar);
+            scalers = rebuildScalers(preTestSeries, config);
         }
         if (config.isUseLogReturnTarget() && scalers.labelScaler.type == FeatureScaler.Type.MINMAX) {
             try {
-                scalers.labelScaler = rebuildLabelScalerForLogReturn(fullSeries, config);
+                scalers.labelScaler = rebuildLabelScalerForLogReturn(fullSeries.getSubSeries(0, Math.max(testStartBar, 1)), config);
             } catch (Exception e) { logger.error("[SIM][CACHE][LABEL_MIGRATION] {}", e.getMessage()); }
         }
-        // Normalisation colonne par colonne (évite recalculs multiples)
         for (int f = 0; f < numFeatures; f++) {
             double[] col = new double[rawMatrix.length];
             for (int i = 0; i < rawMatrix.length; i++) col[i] = rawMatrix[i][f];
@@ -2105,360 +2120,294 @@ public class LstmTradePredictor {
             for (int i = 0; i < rawMatrix.length; i++) normMatrix[i][f] = normCol[i];
         }
         double[] closes = extractCloseValues(fullSeries);
-        // Cache sous forme Map (acceptation plan) barIndex -> features normalisées
-        Map<Integer, double[]> featureCache = new HashMap<>(normMatrix.length);
-        for (int i = 0; i < normMatrix.length; i++) featureCache.put(i, normMatrix[i]);
-        // Indicateurs lourds pré-calculés (ATR, RSI)
+        int totalBars = fullSeries.getBarCount();
+        // Pré-calcul volumes & moyennes mobiles volume sur 20 périodes
+        double[] volumes = new double[totalBars];
+        for (int i = 0; i < totalBars; i++) volumes[i] = fullSeries.getBar(i).getVolume().doubleValue();
+        double[] volMa20 = new double[totalBars];
+        double rollingSum = 0;
+        for (int i = 0; i < totalBars; i++) {
+            rollingSum += volumes[i];
+            if (i >= 20) rollingSum -= volumes[i - 20];
+            volMa20[i] = (i >= 19) ? rollingSum / 20.0 : volumes[i];
+        }
+        // Indicateurs lourds (ATR/RSI)
         ATRIndicator atrFull = new ATRIndicator(fullSeries, 14);
         RSIIndicator rsiFull = new RSIIndicator(new ClosePriceIndicator(fullSeries), 14);
-        double[] atrValues = new double[fullSeries.getBarCount()];
-        double[] rsiValues = new double[fullSeries.getBarCount()];
-        for (int i = 0; i < fullSeries.getBarCount(); i++) {
+        double[] atrValues = new double[totalBars];
+        double[] rsiValues = new double[totalBars];
+        for (int i = 0; i < totalBars; i++) {
             atrValues[i] = atrFull.getValue(i).doubleValue();
             rsiValues[i] = rsiFull.getValue(i).doubleValue();
         }
         long cacheReadyNs = System.nanoTime();
-        logger.debug("[SIM][CACHE] Pré-calcul features+indicateurs en {} ms (bars={})", (cacheReadyNs - cacheStartNs)/1_000_000, fullSeries.getBarCount());
-        // ===============================================================
+        logger.debug("[SIM][PRE] Pré-calcul en {} ms (bars={})", (cacheReadyNs - cacheStartNs)/1_000_000, totalBars);
 
-        // Étape 18: calcul medianAtrPct (sans fuite: uniquement historique avant testStartBar)
-        double medianAtrPct;
-        {
-            List<Double> atrPctHist = new ArrayList<>();
-            for (int i = 0; i < Math.min(testStartBar, fullSeries.getBarCount()); i++) {
-                double c = closes[i];
-                if (c > 0) {
-                    double pct = atrValues[i] / c;
-                    if (Double.isFinite(pct) && pct > 0) atrPctHist.add(pct);
-                }
-            }
-            if (atrPctHist.isEmpty()) {
-                medianAtrPct = 0.01; // fallback 1%
-            } else {
-                Collections.sort(atrPctHist);
-                int mIdx = atrPctHist.size() / 2;
-                if (atrPctHist.size() % 2 == 1) medianAtrPct = atrPctHist.get(mIdx); else medianAtrPct = (atrPctHist.get(mIdx - 1) + atrPctHist.get(mIdx)) / 2.0;
-                if (!Double.isFinite(medianAtrPct) || medianAtrPct <= 0) medianAtrPct = 0.01;
-            }
-        }
-        logger.info("[POS][ADAPT] medianAtrPct (historique avant test) = {}%", String.format(Locale.US, "%.4f", medianAtrPct * 100));
+        // ===== Paramètres Swing améliorés =====
+        final double kThreshold = config.getThresholdK() > 0 ? config.getThresholdK() : 1.0; // multiplicateur ATR -> delta minimal
+        final double minThreshold = 0.001; // 0.1%
+        final double maxThreshold = 0.01;  // 1%
+        final double rrPartialTarget = 1.5; // première prise de profit à 1.5R
+        final double rrFinalTarget = 3.0;   // objectif final indicatif
+        final double partialPct = 0.5;      // pourcentage de sortie partielle
+        final double trailAtrMult = 2.0;    // trailing stop après partial
+        final int cooldownBars = 3;         // délai ré-entrée après sortie
+        final int maxBarsInTrade = Math.max(5, config.getHorizonBars());
+        final double rsiOverbought = 75.0;  // filtre sur-achat entrée
+        final double volumeMinRatio = 0.8;  // volume actuel >= 80% moyenne
 
-        // ===== Étape 17: Cache prédictions intra-split =====
+        // Prediction cache
         Map<Integer, Double> predictionCache = new HashMap<>();
-        int predictionComputeCount = 0;
-        int predictionCacheHit = 0;
-        // ===============================================================
+        int predictionCompute = 0, predictionHits = 0;
 
-        double equity = 0, peak = 0, trough = 0;
-        boolean inPos = false; // Pas de longPos/shortPos - LONG ONLY
-        double entry = 0;
+        // Buffers historiques pour threshold distributionnel (percentile 65 des |delta|)
+        final int deltaBufCapacity = 200;
+        double[] deltaBuf = new double[deltaBufCapacity];
+        int deltaBufCount = 0, deltaBufIndex = 0;
+        final int minSamplesForPercentile = 30;
+        final double deltaFloor = 0.0007;
+
+        // État de position
+        boolean inPos = false;
+        double entryPrice = 0;
+        double stopLoss = 0;          // stop loss courant
+        double initialStopLoss = 0;    // stop loss initial (pour calcul R)
+        double positionSize = 0;       // nombre d'unités
+        double highSinceEntry = 0;     // plus haut atteint depuis l'entrée
+        boolean partialTaken = false;
         int barsInPos = 0;
-        int horizon = Math.max(5, config.getHorizonBars());
-
-        List<Double> tradePnL = new ArrayList<>();
-        List<Double> tradeReturns = new ArrayList<>();
-        List<Integer> barsInPosList = new ArrayList<>();
-        // Étape 18: collecte des valeurs de position (valeur notionnelle) pour stats dispersion
-        List<Double> positionValues = new ArrayList<>();
-
+        int barsSinceExit = cooldownBars; // permet entrée immédiate au début
+        double initialRiskPerShare = 0;   // entry - initialStopLoss
         double capital = config.getCapital();
         double riskPct = config.getRiskPct();
         double sizingK = config.getSizingK();
-        double feePct = 0.0; // commission-free
         double slippagePct = config.getSlippagePct();
-        double positionSize = 0;
-        double consecutiveLosses = 0;
-        double maxConsecutiveLosses = 3;
+        double feePct = 0.0; // neutre
+        double equity = 0, peak = 0, trough = 0;
 
-        // Buffer circulaire pour distribution des |predictedDelta| (Step 14)
-        final int deltaBufCapacity = 200;
-        double[] deltaBuf = new double[deltaBufCapacity];
-        int deltaBufCount = 0;
-        int deltaBufIndex = 0;
-        final double deltaFloor = 0.0007; // floor minimal
-        final int minSamplesForPercentile = 30; // warmup minimal
+        // Stats trade
+        List<Double> tradePnL = new ArrayList<>();
+        List<Double> tradeReturns = new ArrayList<>();
+        List<Integer> barsHeldList = new ArrayList<>();
+        List<Double> tradeRMultiples = new ArrayList<>();
+        int consecutiveLosses = 0;
+        int maxConsecutiveLosses = 3;
+        List<Double> positionValues = new ArrayList<>();
 
-        // Boucle principale
+        // Parcours principal
         for (int bar = testStartBar; bar < testEndBar - 1; bar++) {
-            if (bar < config.getWindowSize()) continue; // pas assez d'historique
-            BarSeries sub = fullSeries.getSubSeries(0, bar + 1); // conservé pour fonctions existantes (threshold, volume)
-            double threshold = computeSwingTradeThreshold(sub, config); // Toujours utilisé pour target sizing
+            barsSinceExit++;
+            if (bar < config.getWindowSize()) continue; // pas assez d'historique pour prédire
+
             double atr = atrValues[bar];
+            double lastClose = closes[bar];
+            if (!Double.isFinite(atr) || !Double.isFinite(lastClose) || lastClose <= 0) continue;
+            double atrPct = atr / lastClose;
+            // Seuil swing basé ATR (borne min/max) pour cette barre
+            double threshold = kThreshold * atrPct;
+            if (threshold < minThreshold) threshold = minThreshold; else if (threshold > maxThreshold) threshold = maxThreshold;
+
+            // ===== LOGIQUE ENTRÉE =====
             if (!inPos) {
+                if (barsSinceExit < cooldownBars) continue; // période de repos après sortie
                 if (consecutiveLosses >= maxConsecutiveLosses) {
-                    if (bar % 5 == 0) consecutiveLosses = Math.max(0, consecutiveLosses - 1);
+                    if (bar % 5 == 0) consecutiveLosses = Math.max(0, consecutiveLosses - 1); // récupération progressive
                     continue;
                 }
+                // Prédiction (cache)
                 double predicted;
-                Double cachedPred = predictionCache.get(bar);
-                if (cachedPred != null) {
-                    predicted = cachedPred;
-                    predictionCacheHit++;
-                } else {
-                    try {
-                        predicted = predictNextCloseScalarCached(bar, normMatrix, closes, config, model, scalers);
-                    } catch (Exception e) {
-                        predicted = predictNextCloseScalarV2(sub, config, model, scalers); // fallback
-                    }
-                    predictionCache.put(bar, predicted);
-                    predictionComputeCount++;
+                Double cp = predictionCache.get(bar);
+                if (cp != null) { predicted = cp; predictionHits++; }
+                else {
+                    try { predicted = predictNextCloseScalarCached(bar, normMatrix, closes, config, model, scalers); }
+                    catch (Exception e) { predicted = lastClose; }
+                    predictionCache.put(bar, predicted); predictionCompute++;
                 }
-                double lastClose = closes[bar];
-                double rawDelta = (predicted - lastClose) / lastClose; // predictedDelta relatif
-                double signalStrength = rawDelta; // alias logique existante
+                double rawDelta = (predicted - lastClose) / lastClose; // delta relatif
+                double signalStrength = rawDelta;
+                // Contrarian déjà existant – conservé si actif
+                ContrarianDecision contrarian = evaluateContrarian(signalStrength, lastClose, rsiValues, bar, fullSeries.getSubSeries(Math.max(0, bar-50), bar+1));
+                if (contrarian.active) signalStrength = contrarian.adjustedSignalStrength;
 
-                // Calcul du threshold adaptatif via percentile 65 des |predictedDelta| (sans inclure le courant)
+                // Percentile adaptatif (P65 des |delta|)
                 double entryThreshold;
                 if (deltaBufCount >= minSamplesForPercentile) {
-                    // Copier tampon courant dans tableau triable
                     int n = deltaBufCount;
                     double[] tmp = new double[n];
-                    for (int i = 0; i < n; i++) tmp[i] = deltaBuf[i];
+                    System.arraycopy(deltaBuf, 0, tmp, 0, n);
                     Arrays.sort(tmp);
                     int idx = (int)Math.floor(0.65 * (n - 1));
-                    double perc65 = tmp[idx];
-                    entryThreshold = Math.max(perc65, deltaFloor);
-                } else {
-                    entryThreshold = deltaFloor; // warmup
+                    entryThreshold = Math.max(tmp[idx], deltaFloor);
+                } else entryThreshold = deltaFloor;
+
+                // Filtre RSI sur-achat
+                double rsi = rsiValues[bar];
+                if (rsi > rsiOverbought) {
+                    // buffer update puis skip
+                    double absDelta = Math.abs(rawDelta);
+                    if (deltaBufCount < deltaBufCapacity) deltaBuf[deltaBufCount++] = absDelta; else { deltaBuf[deltaBufIndex] = absDelta; deltaBufIndex = (deltaBufIndex+1)%deltaBufCapacity; }
+                    continue;
                 }
-
-                ContrarianDecision contrarianDecision = evaluateContrarian(signalStrength, lastClose, rsiValues, bar, sub);
-                if (contrarianDecision.active) {
-                    signalStrength = contrarianDecision.adjustedSignalStrength;
-                    logger.info("[DEBUG][CONTRARIAN] bar={} rsi={} signalAdj={}", bar,
-                            String.format("%.1f", rsiValues[bar]),
-                            String.format("%.4f", signalStrength));
+                // Filtre volume
+                double vol = volumes[bar];
+                double maVol = volMa20[bar];
+                if (!(vol >= maVol * volumeMinRatio)) {
+                    double absDelta = Math.abs(rawDelta);
+                    if (deltaBufCount < deltaBufCapacity) deltaBuf[deltaBufCount++] = absDelta; else { deltaBuf[deltaBufIndex] = absDelta; deltaBufIndex = (deltaBufIndex+1)%deltaBufCapacity; }
+                    continue;
                 }
-
-                // Logs debug (pour comparaison historique) : on conserve threshold (baseline) + entryThreshold distributionnel
-                double signalStrengthPct = signalStrength * 100;
-                double entryThresholdPct = entryThreshold * 100;
-                double thresholdPct = threshold * 100;
-                logger.info("[DEBUG][RAW][CACHE][DIST] bar={}, predicted={}, lastClose={}, signalStrength={}% ({}), entryThreshold(P65)={}% ({}), baselineThreshold={}% ({}), bufSize={}",
-                        bar,
-                        String.format("%.3f", predicted),
-                        String.format("%.3f", lastClose),
-                        String.format("%.4f", signalStrengthPct), String.format("%.6f", signalStrength),
-                        String.format("%.4f", entryThresholdPct), String.format("%.6f", entryThreshold),
-                        String.format("%.4f", thresholdPct), String.format("%.6f", threshold),
-                        deltaBufCount);
-
-                if (entryThreshold > 0.02) // garde-fou extrême improbable
-                    logger.warn("[DEBUG][EMERGENCY][CACHE] entryThreshold distrib trop élevé ({}%), clamp 0.3%", String.format("%.4f", entryThreshold * 100));
-                // Plus de réduction temporelle: adaptiveThreshold == entryThreshold
-                double adaptiveThreshold = entryThreshold;
-                boolean wouldEnter = signalStrength > adaptiveThreshold;
-                logger.info("[DEBUG][ENTRY][CACHE][DIST] bar={} wouldEnter={} signal={} thresh={} adaptive={} bufSize={}", bar, wouldEnter,
-                        String.format("%.6f", signalStrength), String.format("%.6f", entryThreshold), String.format("%.6f", adaptiveThreshold), deltaBufCount);
-                if (signalStrength > adaptiveThreshold) {
-                    double currentRsi = rsiValues[bar];
-                    logger.info("[DEBUG][ENTRY][CACHE] bar={}, currentRsi={} rawDeltaAbs={} entryThreshold={}", bar, currentRsi,
-                            String.format("%.6f", Math.abs(rawDelta)), String.format("%.6f", entryThreshold));
-                    if (currentRsi > 75) {
-                        // Update buffer avant continue pour ne pas perdre ce delta historique
-                        double absDelta = Math.abs(rawDelta);
-                        if (deltaBufCount < deltaBufCapacity) {
-                            deltaBuf[deltaBufCount++] = absDelta;
-                        } else {
-                            deltaBuf[deltaBufIndex] = absDelta;
-                            deltaBufIndex = (deltaBufIndex + 1) % deltaBufCapacity;
-                        }
-                        continue;
-                    }
-                    // Volume check (non pré-calculé – coût acceptable)
-                    VolumeIndicator vol = new VolumeIndicator(sub);
-                    double currentVol = vol.getValue(sub.getEndIndex()).doubleValue();
-                    double avgVol = 0;
-                    int volPeriod = Math.min(20, sub.getBarCount() - 1);
-                    for (int i = sub.getEndIndex() - volPeriod + 1; i <= sub.getEndIndex(); i++) {
-                        avgVol += vol.getValue(i).doubleValue();
-                    }
-                    avgVol /= volPeriod;
-                    if (currentVol < avgVol * 0.8) {
-                        double absDelta = Math.abs(rawDelta);
-                        if (deltaBufCount < deltaBufCapacity) {
-                            deltaBuf[deltaBufCount++] = absDelta;
-                        } else {
-                            deltaBuf[deltaBufIndex] = absDelta;
-                            deltaBufIndex = (deltaBufIndex + 1) % deltaBufCapacity;
-                        }
-                        continue;
-                    }
-                    inPos = true;
-                    entry = lastClose;
-                    barsInPos = 0;
-                    double atrPct = atr / lastClose;
+                // Décision entrée
+                boolean enter = signalStrength > entryThreshold && signalStrength > threshold; // besoin de dépasser volatilité structurelle
+                if (enter) {
                     double riskAmount = capital * riskPct;
-                    double stopDistance = atrPct * sizingK;
-                    positionSize = stopDistance > 0 ? riskAmount / (lastClose * stopDistance) : 0;
-                    // Étape 18: plafonnement adaptatif
-                    double hardCap = capital * 0.10; // cap fixe historique 10% du capital
-                    double dynFactor = (medianAtrPct > 0) ? (0.5 * atrPct / medianAtrPct) : 0.5; // 0.5 * ratio ATR relatifs
-                    // Limites de robustesse sur dynFactor
-                    if (!Double.isFinite(dynFactor) || dynFactor <= 0) dynFactor = 0.5;
-                    dynFactor = Math.max(0.05, Math.min(dynFactor, 1.5)); // clamp pour éviter extrêmes
-                    double dynamicCap = capital * dynFactor;
-                    double positionValueMax = Math.min(hardCap, dynamicCap);
-                    if (positionValueMax <= 0) positionValueMax = hardCap; // fallback
-                    double rawPositionValue = positionSize * lastClose;
-                    if (rawPositionValue > positionValueMax && lastClose > 0) {
-                        positionSize = positionValueMax / lastClose;
+                    double stopDistancePct = atrPct * sizingK; // distance % (approx) basée ATR
+                    if (stopDistancePct <= 0) {
+                        // buffer update et skip
+                        double absDelta = Math.abs(rawDelta);
+                        if (deltaBufCount < deltaBufCapacity) deltaBuf[deltaBufCount++] = absDelta; else { deltaBuf[deltaBufIndex] = absDelta; deltaBufIndex = (deltaBufIndex+1)%deltaBufCapacity; }
+                        continue;
                     }
-                    double finalPositionValue = positionSize * lastClose;
-                    positionValues.add(finalPositionValue);
-                    logger.debug("[POS][ADAPT] bar={} atrPct={} medianAtrPct={} dynFactor={} dynCap={} hardCap={} finalCap={} rawPosValue={} finalPosValue={}",
-                            bar,
-                            String.format(Locale.US, "%.5f", atrPct),
-                            String.format(Locale.US, "%.5f", medianAtrPct),
-                            String.format(Locale.US, "%.3f", dynFactor),
-                            String.format(Locale.US, "%.2f", dynamicCap),
-                            String.format(Locale.US, "%.2f", hardCap),
-                            String.format(Locale.US, "%.2f", positionValueMax),
-                            String.format(Locale.US, "%.2f", rawPositionValue),
-                            String.format(Locale.US, "%.2f", finalPositionValue));
+                    double stopDistanceAbs = stopDistancePct * lastClose; // en prix
+                    initialStopLoss = lastClose - stopDistanceAbs;
+                    if (initialStopLoss <= 0) initialStopLoss = lastClose * 0.9; // fallback
+                    initialRiskPerShare = lastClose - initialStopLoss;
+                    if (initialRiskPerShare <= 0) {
+                        double absDelta = Math.abs(rawDelta);
+                        if (deltaBufCount < deltaBufCapacity) deltaBuf[deltaBufCount++] = absDelta; else { deltaBuf[deltaBufIndex] = absDelta; deltaBufIndex = (deltaBufIndex+1)%deltaBufCapacity; }
+                        continue;
+                    }
+                    positionSize = riskAmount / initialRiskPerShare;
+                    if (positionSize <= 0) {
+                        double absDelta = Math.abs(rawDelta);
+                        if (deltaBufCount < deltaBufCapacity) deltaBuf[deltaBufCount++] = absDelta; else { deltaBuf[deltaBufIndex] = absDelta; deltaBufIndex = (deltaBufIndex+1)%deltaBufCapacity; }
+                        continue;
+                    }
+                    // Hard & dynamic cap (déjà existant conceptuellement) simplifié
+                    double hardCapValue = capital * 0.10; // 10% capital notionnel
+                    double positionValue = positionSize * lastClose;
+                    if (positionValue > hardCapValue && lastClose > 0) positionSize = hardCapValue / lastClose;
+                    positionValues.add(positionSize * lastClose);
+                    entryPrice = lastClose;
+                    stopLoss = initialStopLoss;
+                    highSinceEntry = entryPrice;
+                    inPos = true;
+                    partialTaken = false;
+                    barsInPos = 0;
+                    barsSinceExit = 0;
                 }
-                // Mise à jour buffer après décision (n'inclut pas le delta dans son propre calcul de percentile)
+                // Mise à jour buffer delta
                 double absDelta = Math.abs(rawDelta);
-                if (deltaBufCount < deltaBufCapacity) {
-                    deltaBuf[deltaBufCount++] = absDelta;
-                } else {
-                    deltaBuf[deltaBufIndex] = absDelta;
-                    deltaBufIndex = (deltaBufIndex + 1) % deltaBufCapacity;
-                }
+                if (deltaBufCount < deltaBufCapacity) deltaBuf[deltaBufCount++] = absDelta; else { deltaBuf[deltaBufIndex] = absDelta; deltaBufIndex = (deltaBufIndex+1)%deltaBufCapacity; }
             } else {
+                // ===== GESTION POSITION OUVERTE =====
                 barsInPos++;
-                double current = closes[bar];
+                double currentPrice = lastClose; // déjà closé bar
+                if (currentPrice > highSinceEntry) highSinceEntry = currentPrice;
+                double unrealizedR = initialRiskPerShare > 0 ? (currentPrice - entryPrice)/initialRiskPerShare : 0;
                 boolean exit = false;
-                double pnl = 0;
-                double atrStop = entry - (atr * sizingK * 1.5);
-                double basicTarget = entry * (1 + threshold * 3);
-                double atrTarget = entry + (atr * sizingK * 2.5);
-                double target = Math.max(basicTarget, atrTarget);
-                double trailingStop = Math.max(atrStop, current * 0.95);
-                if (current <= trailingStop || current >= target || barsInPos >= horizon) {
-                    pnl = (current - entry) * positionSize;
-                    exit = true;
-                } else if (barsInPos >= 3) {
-                    Double cachedPred2 = predictionCache.get(bar);
-                    double newPredicted;
-                    if (cachedPred2 != null) {
-                        newPredicted = cachedPred2;
-                        predictionCacheHit++;
-                    } else {
-                        try {
-                            newPredicted = predictNextCloseScalarCached(bar, normMatrix, closes, config, model, scalers);
-                        } catch (Exception ignored) {
-                            newPredicted = current; // fallback neutre
-                        }
-                        predictionCache.put(bar, newPredicted);
-                        predictionComputeCount++;
-                    }
-                    if (newPredicted < current * 0.98) {
-                        pnl = (current - entry) * positionSize;
-                        exit = true;
-                    }
+                double realizedPnLThisExit = 0;
+                double sizeExited = 0;
+
+                // Partial take profit
+                if (!partialTaken && unrealizedR >= rrPartialTarget) {
+                    double exitPrice = currentPrice; // prix actuel
+                    double partSize = positionSize * partialPct;
+                    double pnlPart = (exitPrice - entryPrice) * partSize;
+                    // frais + slippage
+                    double slip = slippagePct * (entryPrice + exitPrice) * 0.5 * partSize;
+                    pnlPart -= slip + feePct * exitPrice * partSize;
+                    equity += pnlPart; realizedPnLThisExit += pnlPart; sizeExited += partSize; positionSize -= partSize;
+                    partialTaken = true; tm.partialExitTrades++;
+                    // Move stop to breakeven pour le reste
+                    stopLoss = entryPrice;
                 }
+
+                // Trailing stop après partial
+                if (partialTaken) {
+                    double trailStopCandidate = highSinceEntry - atrValues[bar] * trailAtrMult;
+                    if (trailStopCandidate > stopLoss) stopLoss = Math.max(stopLoss, trailStopCandidate);
+                }
+
+                // Final target (indicatif) -> sortie si atteint
+                if (unrealizedR >= rrFinalTarget) {
+                    exit = true;
+                }
+
+                // Stop loss / trailing
+                if (!exit && currentPrice <= stopLoss) exit = true;
+
+                // Durée max
+                if (!exit && barsInPos >= maxBarsInTrade) exit = true;
+
                 if (exit) {
-                    double entrySlippage = slippagePct * entry * positionSize;
-                    double exitSlippage = slippagePct * current * positionSize;
-                    double totalCosts = entrySlippage + exitSlippage;
-                    pnl -= totalCosts;
-                    tradePnL.add(pnl);
-                    tradeReturns.add(pnl / (entry * positionSize));
-                    barsInPosList.add(barsInPos);
-                    if (pnl < 0) consecutiveLosses++; else consecutiveLosses = 0;
-                    equity += pnl;
+                    double exitPrice = currentPrice;
+                    double pnl = (exitPrice - entryPrice) * positionSize;
+                    double slip = slippagePct * (entryPrice + exitPrice) * 0.5 * positionSize;
+                    pnl -= slip + feePct * exitPrice * positionSize;
+                    realizedPnLThisExit += pnl; sizeExited += positionSize; positionSize = 0;
+                    double totalTradePnL = realizedPnLThisExit; // inclut partial si existait
+                    tradePnL.add(totalTradePnL);
+                    double riskCapitalAtTrade = initialRiskPerShare * (sizeExited); // capital risqué approximatif
+                    double tradeR = (initialRiskPerShare > 0) ? (totalTradePnL / (initialRiskPerShare * sizeExited)) : 0;
+                    tradeRMultiples.add(tradeR);
+                    tradeReturns.add(riskCapitalAtTrade > 0 ? totalTradePnL / riskCapitalAtTrade : 0);
+                    barsHeldList.add(barsInPos);
+                    if (totalTradePnL < 0) consecutiveLosses++; else consecutiveLosses = 0;
+                    equity += 0; // déjà ajouté increments
                     if (equity > peak) { peak = equity; trough = equity; }
                     else if (equity < trough) { trough = equity; }
-                    inPos = false; entry = 0; barsInPos = 0; positionSize = 0;
+                    inPos = false;
+                    entryPrice = 0; stopLoss = 0; initialStopLoss = 0; initialRiskPerShare = 0; barsInPos = 0; partialTaken = false; highSinceEntry = 0;
                 }
             }
         }
 
-        logger.debug("[SIM][CACHE][PRED] computes={} hits={} hitRatio={} totalBarsSimul={}",
-                predictionComputeCount,
-                predictionCacheHit,
-                (predictionComputeCount + predictionCacheHit) > 0 ? String.format("%.2f", (predictionCacheHit * 100.0)/(predictionComputeCount + predictionCacheHit)) : "0.00",
-                (testEndBar - testStartBar));
-
-        // Agrégation métriques
-        double gains = 0, losses = 0;
-        int win = 0, loss = 0;
+        // ===== Agrégation métriques =====
+        double gains = 0, losses = 0; int win = 0, loss = 0;
         for (double p : tradePnL) {
-            if (p > 0) { gains += p; win++; }
-            else if (p < 0) { losses += p; loss++; }
+            if (p > 0) { gains += p; win++; } else if (p < 0) { losses += p; loss++; }
         }
-        logger.info("[--------][DEBUG][TRADES] Nb trades={}, wins={}, losses={}, gains={}, lossesSum={}", tradePnL.size(), win, loss, gains, losses);
-
         tm.totalProfit = gains + losses;
         tm.numTrades = tradePnL.size();
         tm.profitFactor = losses != 0 ? gains / Math.abs(losses) : (gains > 0 ? Double.POSITIVE_INFINITY : 0);
-        tm.winRate = tm.numTrades > 0 ? (double) win / tm.numTrades : 0.0;
-
-        double ddAbs = peak - trough;
-        tm.maxDrawdownPct = peak != 0 ? ddAbs / Math.abs(peak) : 0.0;
-
-        double avgGain = win > 0 ? gains / win : 0;
-        double avgLoss = loss > 0 ? Math.abs(losses) / loss : 0;
+        tm.winRate = tm.numTrades > 0 ? (double)win / tm.numTrades : 0;
+        double ddAbs = peak - trough; tm.maxDrawdownPct = peak != 0 ? ddAbs / Math.abs(peak) : 0.0;
+        double avgGain = win > 0 ? gains / win : 0; double avgLoss = loss > 0 ? Math.abs(losses) / loss : 0;
         tm.expectancy = (win + loss) > 0 ? (tm.winRate * avgGain - (1 - tm.winRate) * avgLoss) : 0;
-
-        // Calcul Sharpe et Sortino optimisés
         double meanRet = tradeReturns.stream().mapToDouble(d -> d).average().orElse(0);
-        double stdRet = Math.sqrt(tradeReturns.stream().mapToDouble(d -> {
-            double m = d - meanRet;
-            return m * m;
-        }).average().orElse(0));
-
+        double stdRet = Math.sqrt(tradeReturns.stream().mapToDouble(d -> { double m = d - meanRet; return m*m; }).average().orElse(0));
         tm.sharpe = stdRet > 0 ? meanRet / stdRet * Math.sqrt(Math.max(1, tradeReturns.size())) : 0;
-
-        // Sortino : uniquement downside deviation
-        double downsideStd = Math.sqrt(tradeReturns.stream()
-            .filter(r -> r < meanRet)
-            .mapToDouble(r -> {
-                double dr = r - meanRet;
-                return dr * dr;
-            }).average().orElse(0));
+        double downsideStd = Math.sqrt(tradeReturns.stream().filter(r -> r < meanRet).mapToDouble(r -> { double dr = r - meanRet; return dr*dr; }).average().orElse(0));
         tm.sortino = downsideStd > 0 ? meanRet / downsideStd : 0;
-
-        // Exposure et turnover pour swing trade
-        tm.exposure = barsInPosList.isEmpty() ? 0.0 :
-            barsInPosList.stream().mapToInt(i -> i).sum() / (double)(testEndBar - testStartBar);
-        tm.turnover = tm.numTrades > 0 ? (double)tm.numTrades / ((testEndBar - testStartBar) / 252.0) : 0; // Annualisé
-        tm.avgBarsInPosition = barsInPosList.stream().mapToInt(i -> i).average().orElse(0);
-
+        tm.exposure = barsHeldList.isEmpty()? 0.0 : barsHeldList.stream().mapToInt(i->i).sum() / (double)(testEndBar - testStartBar);
+        tm.turnover = tm.numTrades > 0 ? (double)tm.numTrades / ((testEndBar - testStartBar)/252.0) : 0;
+        tm.avgBarsInPosition = barsHeldList.stream().mapToInt(i->i).average().orElse(0);
         double capitalBase = config.getCapital() > 0 ? config.getCapital() : 1.0;
-        double annualizedReturn = tm.totalProfit / capitalBase;
-        tm.calmar = tm.maxDrawdownPct > 0 ? (annualizedReturn / tm.maxDrawdownPct) : 0.0;
+        double annualizedReturn = tm.totalProfit / capitalBase; tm.calmar = tm.maxDrawdownPct > 0 ? annualizedReturn / tm.maxDrawdownPct : 0;
 
-        // Step15: calcul ratio contrarian
-        int counted = tm.contrarianTrades + tm.normalTrades;
-        if (tm.numTrades < counted) {
-            int diff = counted - tm.numTrades;
-            if (tm.normalTrades >= diff) tm.normalTrades -= diff; else if (tm.contrarianTrades >= diff) tm.contrarianTrades -= diff;
-        } else if (tm.numTrades > counted) {
-            tm.normalTrades += (tm.numTrades - counted);
+        // Métriques R
+        if (!tradeRMultiples.isEmpty()) {
+            tm.avgR = tradeRMultiples.stream().mapToDouble(d->d).average().orElse(0);
+            double[] sortedR = tradeRMultiples.stream().mapToDouble(d->d).sorted().toArray();
+            tm.medianR = sortedR.length%2==1? sortedR[sortedR.length/2] : (sortedR[sortedR.length/2-1]+sortedR[sortedR.length/2])/2.0;
+            long winsR = tradeRMultiples.stream().filter(r->r>0).count();
+            tm.rWinRate = tm.numTrades>0? (double)winsR / tm.numTrades : 0;
+            double meanPos = tradeRMultiples.stream().filter(r->r>0).mapToDouble(r->r).average().orElse(0);
+            double meanNeg = tradeRMultiples.stream().filter(r->r<0).mapToDouble(r->r).average().orElse(0);
+            tm.positiveRSkew = (meanPos - Math.abs(meanNeg)) / (Math.abs(meanNeg)+1e-9);
         }
-        tm.contrarianRatio = tm.numTrades > 0 ? (double) tm.contrarianTrades / tm.numTrades : 0.0;
-        if (tm.contrarianRatio > 0.35) {
-            logger.warn("[STEP15][CHECK] ratio contrarian élevé {}% (>35%)", String.format("%.2f", tm.contrarianRatio * 100));
-        } else {
-            logger.info("[STEP15][CHECK] ratio contrarian {}% (<=35%)", String.format("%.2f", tm.contrarianRatio * 100));
-        }
-        // Étape 18: calcul stats dispersion position sizing
+
+        // Position sizing dispersion
         if (!positionValues.isEmpty()) {
-            double sumPV = 0; for (double v : positionValues) sumPV += v; double meanPV = sumPV / positionValues.size();
-            double varPV = 0; for (double v : positionValues) { double d = v - meanPV; varPV += d * d; } varPV = varPV / positionValues.size();
-            double stdPV = Math.sqrt(varPV);
-            tm.positionValueMean = meanPV;
-            tm.positionValueStd = stdPV;
-            logger.info("[POS][ADAPT][STATS] positions={} meanValue={} stdValue={} stdPctCapital={}",
-                    positionValues.size(),
-                    String.format(Locale.US, "%.2f", meanPV),
-                    String.format(Locale.US, "%.2f", stdPV),
-                    String.format(Locale.US, "%.2f", (stdPV / capital) * 100));
+            double sumPV=0; for (double v: positionValues) sumPV+=v; double meanPV = sumPV/positionValues.size();
+            double varPV=0; for (double v: positionValues){ double d=v-meanPV; varPV += d*d; } varPV /= positionValues.size();
+            tm.positionValueMean = meanPV; tm.positionValueStd = Math.sqrt(varPV);
         }
 
-        return tm;
+        logger.debug("[SIM][PRED-CACHE] compute={} hits={} hitRatio={}%", predictionCompute, predictionHits,
+                (predictionCompute+predictionHits)>0? String.format(Locale.US, "%.2f", 100.0*predictionHits/(predictionCompute+predictionHits)) : "0.00");
+
+        return tm; // businessScore & mse complétés en dehors (walk-forward)
     }
 
     /**

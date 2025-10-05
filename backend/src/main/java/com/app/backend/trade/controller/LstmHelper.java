@@ -142,7 +142,7 @@ public class LstmHelper {
      * @return PreditLsdm objet contenant signal + prix prédits + métadonnées
      * @throws IOException si erreur IO interne (propagée depuis prédicteur)
      */
-    public PreditLsdm getPredit(String symbol) throws IOException {
+    public PreditLsdm getPredit(String symbol) throws Exception {
         // 1. Vérifier si une prédiction du jour existe déjà (évite recalcul)
         PreditLsdm preditLsdmDb = this.getPreditFromDB(symbol);
         if (preditLsdmDb != null) {
@@ -178,6 +178,7 @@ public class LstmHelper {
 
         // 5. Vérification drift + éventuel retrain + reporting
         if (model != null && scalers != null) {
+            /*
             try {
                 java.util.List<LstmTradePredictor.DriftReportEntry> reports =
                         lstmTradePredictor.checkDriftAndRetrainWithReport(series, config, model, scalers, symbol);
@@ -218,11 +219,13 @@ public class LstmHelper {
                         } catch (Exception e) {
                             logger.warn("Erreur lors de la sauvegarde du modèle/scalers après retrain : {}", e.getMessage());
                         }
-                    }*/
+                    }*
                 }
             } catch (Exception e) {
                 logger.warn("Erreur pendant le drift reporting: {}", e.getMessage());
-            }
+            }*/
+        }else{
+            throw new Exception("Modèle/scalers absents pour " + symbol + ", impossible de vérifier le drift.");
         }
 
         // 6. Exécution de la prédiction (utilise model/scalers si présents)
