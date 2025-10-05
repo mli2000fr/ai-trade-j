@@ -1790,7 +1790,25 @@ public class LstmTradePredictor {
         // Inversion de la normalisation pour repasser dans le domaine original
         // Utilise le label scaler qui a été appris sur les targets d'entraînement
         double predTarget = scalers.labelScaler.inverse(predNorm);
-
+        // ===== ADAPTATION SWING PRO (PHASE 8 BIS) : CLAMP DISTRIBUTION LOG-RETURN =====
+        // Objectif: éviter des extrapolations extrêmes hors distribution entraînement (mean ± 4σ)
+        double predTargetEffective = predTarget;
+        if (config.isUseLogReturnTarget() && scalers.labelDistMean != null && scalers.labelDistStd != null && scalers.labelDistStd > 0) {
+            double maxStd = 4.0; // bande extrême tolérée
+            double low = scalers.labelDistMean - maxStd * scalers.labelDistStd;
+            double high = scalers.labelDistMean + maxStd * scalers.labelDistStd;
+            if (predTargetEffective < low || predTargetEffective > high) {
+                double before = predTargetEffective;
+                predTargetEffective = Math.max(low, Math.min(high, predTargetEffective));
+                logger.debug("[PREDICT][CLAMP] logReturn clamp {} -> {} (mean={} std={} range=[{},{}])",
+                        String.format("%.6f", before),
+                        String.format("%.6f", predTargetEffective),
+                        String.format("%.6f", scalers.labelDistMean),
+                        String.format("%.6f", scalers.labelDistStd),
+                        String.format("%.6f", low),
+                        String.format("%.6f", high));
+            }
+        }
         // ===== PHASE 9: RÉCUPÉRATION DU PRIX DE RÉFÉRENCE COHÉRENT =====
 
         // CORRECTION: Pour cohérence avec l'entraînement, utilise le dernier prix de la séquence d'entrée
@@ -1804,21 +1822,66 @@ public class LstmTradePredictor {
         // Gestion des deux modes de prédiction selon le type d'entraînement
         double predicted;
         if (config.isUseLogReturnTarget()) {
-            // Mode log-return: reconversion exponentielle vers prix absolu
-            // predTarget = log(prix_futur / prix_référence) donc prix_futur = prix_référence * exp(predTarget)
-            // CORRECTION: Utilise referencePrice au lieu de lastClose pour cohérence temporelle
-            predicted = referencePrice * Math.exp(predTarget);
-
-            logger.debug("[PREDICT][LOG-RETURN] referencePrice={}, predTarget={}, exp(predTarget)={}, predicted={}",
-                        String.format("%.3f", referencePrice),
-                        String.format("%.6f", predTarget),
-                        String.format("%.6f", Math.exp(predTarget)),
-                        String.format("%.3f", predicted));
+            predicted = referencePrice * Math.exp(predTargetEffective);
+            logger.debug("[PREDICT][LOG-RETURN] referencePrice={} predTargetEff={} predicted={}",
+                    String.format("%.3f", referencePrice),
+                    String.format("%.6f", predTargetEffective),
+                    String.format("%.3f", predicted));
         } else {
-            // Mode prix direct : la prédiction est déjà dans le domaine des prix
-            predicted = predTarget;
+            predicted = predTargetEffective;
         }
-
+        // ===== ADAPTATION SWING PRO (PHASE 10 BIS) : AJUSTEMENTS VOLATILITÉ & DEADZONE =====
+        try {
+            // ATR% courant pour calibrer l'amplitude utile d'un swing professionnel
+            ATRIndicator atrInd = new ATRIndicator(series, 14);
+            double atrVal = atrInd.getValue(series.getEndIndex()).doubleValue();
+            double atrPct = atrVal > 0 && referencePrice > 0 ? atrVal / referencePrice : 0.0;
+            if (Double.isFinite(atrPct) && referencePrice > 0) {
+                double deltaPct = (predicted - referencePrice) / referencePrice;
+                // En environnement très calme (<0.30% ATR) on compresse le signal (évite faux positifs)
+                if (atrPct < 0.003) {
+                    double scale = Math.max(0.25, atrPct / 0.003); // à 0.15% ATR => scale ~0.5
+                    double before = predicted;
+                    predicted = referencePrice + deltaPct * scale * referencePrice;
+                    logger.debug("[PREDICT][ADAPT][LOWVOL] atrPct={} scale={} before={} after={}",
+                            String.format("%.5f", atrPct),
+                            String.format("%.3f", scale),
+                            String.format("%.3f", before),
+                            String.format("%.3f", predicted));
+                }
+                // En volatilité extrême (>2%) on réduit aussi (éviter overshoot)
+                else if (atrPct > 0.02) {
+                    double scale = Math.min(1.0, 0.02 / atrPct * 1.2); // si 4% => scale ~0.6
+                    if (scale < 1.0) {
+                        double before = predicted;
+                        predicted = referencePrice + deltaPct * scale * referencePrice;
+                        logger.debug("[PREDICT][ADAPT][HIGHVOL] atrPct={} scale={} before={} after={}",
+                                String.format("%.5f", atrPct),
+                                String.format("%.3f", scale),
+                                String.format("%.3f", before),
+                                String.format("%.3f", predicted));
+                    }
+                }
+                // Deadzone: si variation < 50% du seuil swing => neutraliser (stabilise signaux)
+                double swingTh = computeSwingTradeThreshold(series, config);
+                if (Math.abs((predicted - referencePrice) / referencePrice) < swingTh * 0.5) {
+                    double before = predicted;
+                    predicted = referencePrice; // neutralise
+                    logger.debug("[PREDICT][DEADZONE] deltaPct={} < {} (0.5*swingTh) -> neutralisation ({} -> {})",
+                            String.format("%.5f", deltaPct),
+                            String.format("%.5f", swingTh * 0.5),
+                            String.format("%.3f", before),
+                            String.format("%.3f", predicted));
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("[PREDICT][ADAPT] Skip ajustements swing: {}", e.toString());
+        }
+        // Sécurité prix non positif (marché fermé ou anomalie) => fallback last
+        if (!(predicted > 0)) {
+            logger.warn("[PREDICT][SAFETY] predicted<=0 -> fallback referencePrice ({})", String.format("%.3f", referencePrice));
+            predicted = referencePrice;
+        }
         // ===== PHASE 11: APPLICATION DES LIMITATIONS DE SÉCURITÉ =====
 
         // Récupération du pourcentage de limitation depuis la configuration
@@ -1844,12 +1907,12 @@ public class LstmTradePredictor {
         // ===== PHASE 12: LOG DE DEBUG ET RETOUR =====
 
         // Log détaillé pour debug et monitoring des prédictions
-        logger.debug("[PREDICT] Prédiction: referencePrice={}, predicted={}, predNorm={}, predTarget={}, limitPct={}",
-                    String.format("%.3f", referencePrice),
-                    String.format("%.3f", predicted),
-                    String.format("%.6f", predNorm),
-                    String.format("%.6f", predTarget),
-                    limitPct);
+        logger.debug("[PREDICT] Prédiction: referencePrice={}, predicted={}, predNorm={}, predTargetEff={}, limitPct={}",
+                String.format("%.3f", referencePrice),
+                String.format("%.3f", predicted),
+                String.format("%.6f", predNorm),
+                String.format("%.6f", predTargetEffective),
+                limitPct);
 
         // Retour de la prédiction finale ajustée et limitée
         return predicted;
@@ -2293,7 +2356,7 @@ public class LstmTradePredictor {
                     inPos = true;
                     partialTaken = false;
                     barsInPos = 0;
-                    barsSinceExit = 0;
+                    barsSinceExit = cooldownBars; // permet entrée immédiate au début
                 }
                 // Mise à jour buffer delta
                 double absDelta = Math.abs(rawDelta);
