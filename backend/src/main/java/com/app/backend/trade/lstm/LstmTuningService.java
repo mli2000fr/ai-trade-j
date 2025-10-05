@@ -1223,8 +1223,9 @@ public class LstmTuningService {
      *   - lstmNeurons ±32
      *   - learningRate * {0.8, 1.0, 1.2} (borné [1e-5, 0.01])
      *   - dropout ±0.05 (borné [0.05, 0.40])
-     * Acceptation : on ne persiste la phase 2 que si amélioration >= 5% du businessScore vs phase 1.
-     * Sinon on persiste le meilleur de la phase 1.
+     * Acceptation : phase 2 retenue si relativeGain >= minRelativeGain ET absoluteGain >= minAbsoluteGain
+     * (paramétrables via properties: lstm.tuning.twoPhase.minRelativeGain / minAbsoluteGain)
+     * Sinon persistance du meilleur de la phase 1.
      *
      * Remarque :
      *  - On réutilise largement la logique de tuneSymbolMultiThread (duplication contrôlée pour limiter refactor risqué)
