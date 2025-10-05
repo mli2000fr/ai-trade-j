@@ -1168,7 +1168,7 @@ public class LstmTuningService {
     // --- Ajout Hold-Out Final (jamais vu pendant phase1/phase2) ---
     private static final double HOLD_OUT_FRACTION = 0.10; // 10% des données réservées
     private static final int MIN_HOLD_OUT_BARS = 200;     // minimum absolu
-    private static final int FINAL_HOLD_OUT_PHASE = 99;   // identifiant de phase pour persistance finale
+    private static final int FINAL_HOLD_OUT_PHASE = 100;   // identifiant de phase pour persistance finale
 
     private void writeProgressMetrics(TuningProgress progress) throws Exception {
         if (progress == null) return;
@@ -1325,7 +1325,7 @@ public class LstmTuningService {
                         finalAg.sumProfit = ho1.sumProfit;
                         finalAg.totalTrades = ho1.totalTrades;
                         finalAg.totalSeriesTested = ho1.totalSeriesTested;
-                        finalAg.phase = FINAL_HOLD_OUT_PHASE;
+                        finalAg.phase = FINAL_HOLD_OUT_PHASE + phase1.phase;
                         persistBest(symbol, finalAg, jdbcTemplate, 0);
                         progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime; try { writeProgressMetrics(progress);} catch(Exception ignored) {}
                         return phase1.bestConfig;
@@ -1380,7 +1380,7 @@ public class LstmTuningService {
                         finalAg.bestConfig = phase1.bestConfig; finalAg.bestModel = ho1.model; finalAg.bestScalers = ho1.scalers;
                         finalAg.bestBusinessScore = ho1.businessScore; finalAg.bestMse = ho1.meanMse; finalAg.profitFactor = ho1.profitFactor;
                         finalAg.winRate = ho1.winRate; finalAg.maxDrawdown = ho1.maxDrawdown; finalAg.rmse = ho1.rmse; finalAg.sumProfit = ho1.sumProfit;
-                        finalAg.totalTrades = ho1.totalTrades; finalAg.totalSeriesTested = ho1.totalSeriesTested; finalAg.phase = FINAL_HOLD_OUT_PHASE;
+                        finalAg.totalTrades = ho1.totalTrades; finalAg.totalSeriesTested = ho1.totalSeriesTested; finalAg.phase = FINAL_HOLD_OUT_PHASE + phase1.phase;
                         persistBest(symbol, finalAg, jdbcTemplate, 0);
                         progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime; try { writeProgressMetrics(progress);} catch(Exception ignored) {}
                         return phase1.bestConfig;
@@ -1432,7 +1432,7 @@ public class LstmTuningService {
                     finalAggregate.sumProfit = chosen.sumProfit;
                     finalAggregate.totalTrades = chosen.totalTrades;
                     finalAggregate.totalSeriesTested = chosen.totalSeriesTested;
-                    finalAggregate.phase = FINAL_HOLD_OUT_PHASE;
+                    finalAggregate.phase = FINAL_HOLD_OUT_PHASE + (fromPhase2 ? provisional.phase : phase1.phase);
                 } else {
                     logger.warn("[TUNING-2PH][HOLDOUT] Échec évaluation hold-out – on persiste sélection provisoire");
                     finalAggregate = provisional;
