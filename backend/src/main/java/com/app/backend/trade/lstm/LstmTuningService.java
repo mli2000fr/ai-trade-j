@@ -727,88 +727,6 @@ public class LstmTuningService {
         }
     }
 
-    /**
-     * Génère automatiquement une grille de configurations optimisée pour le swing trade professionnel.
-     * Adaptée pour 1200 bougies par symbole avec paramètres réalistes.
-     * @return liste de LstmConfig à tester
-     */
-    public List<LstmConfig> generateSwingTradeGrid() {
-        List<LstmConfig> grid = new java.util.ArrayList<>();
-
-        // Paramètres optimisés pour swing trade professionnel (3-10 jours)
-        int[] windowSizes = {30, 40, 50}; // Fenêtres plus larges pour swing trade
-        int[] lstmNeurons = {128, 192, 256}; // Plus de neurones pour capturer patterns complexes
-        double[] dropoutRates = {0.2, 0.25}; // Étape 9: max 0.25 (réduction sur-apprentissage)
-        double[] learningRates = {0.0002, 0.0003, 0.0005}; // LR plus faibles pour stabilité
-        double[] l1s = {0.0}; // Pas de L1 pour swing trade
-        double[] l2s = {0.003, 0.005, 0.008}; // L2 plus élevé pour généralisation
-
-        int numEpochs = 200; // Plus d'époques pour swing trade
-        int patience = 25; // Patience plus élevée
-        double minDelta = 0.00012; // MinDelta plus fin
-        int kFolds = 5;
-        String optimizer = "adam";
-        String[] scopes = {"window"};
-        String[] swingTypes = {"range", "breakout", "mean_reversion"}; // Tous les types swing
-
-        for (String swingType : swingTypes) {
-            for (String scope : scopes) {
-                for (int windowSize : windowSizes) {
-                    for (int neurons : lstmNeurons) {
-                        for (double dropout : dropoutRates) {
-                            for (double lr : learningRates) {
-                                for (double l1 : l1s) {
-                                    for (double l2 : l2s) {
-                                        LstmConfig config = new LstmConfig();
-                                        config.setWindowSize(windowSize);
-                                        config.setLstmNeurons(neurons);
-                                        config.setDropoutRate(dropout);
-                                        config.setLearningRate(lr);
-                                        config.setNumEpochs(numEpochs);
-                                        config.setPatience(patience);
-                                        config.setMinDelta(minDelta);
-                                        config.setKFolds(kFolds);
-                                        config.setOptimizer(optimizer);
-                                        config.setL1(l1);
-                                        config.setL2(l2);
-                                        config.setNormalizationScope(scope);
-                                        config.setNormalizationMethod("auto");
-                                        config.setSwingTradeType(swingType);
-                                        config.setUseScalarV2(true);
-                                        config.setUseWalkForwardV2(true);
-
-                                        // Paramètres swing trade spécifiques
-                                        config.setNumLstmLayers(3); // 3 couches pour plus de profondeur
-                                        config.setBidirectional(false); // Pas bidirectionnel pour swing
-                                        config.setAttention(true); // Attention activée
-                                        config.setHorizonBars(7); // Horizon 7 jours pour swing
-                                        config.setThresholdK(1.5); // Seuil plus élevé
-                                        config.setBatchSize(64); // Batch size optimisé
-                                        config.setWalkForwardSplits(3); // Plus de splits
-                                        config.setEmbargoBars(3); // Embargo pour éviter leakage
-
-                                        // Paramètres trading Alpaca
-                                        config.setCapital(10000.0);
-                                        config.setRiskPct(0.02); // 2% de risque par trade
-                                        config.setSizingK(1.2);
-                                        config.setFeePct(0.0); // Commission-free Alpaca
-                                        config.setSlippagePct(0.0005); // Slippage réaliste
-
-                                        // Business score optimisé
-                                        config.setBusinessProfitFactorCap(4.0);
-                                        config.setBusinessDrawdownGamma(1.5);
-
-                                        grid.add(config);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return grid;
-    }
 
     /**
      * Génère automatiquement une grille de configurations adaptée au swing trade enrichie.
@@ -834,6 +752,83 @@ public class LstmTuningService {
         String optimizer = "adam";
         String[] scopes = {"window"};
         String[] swingTypes = {"range", "mean_reversion"};
+        for (String swingType : swingTypes) {
+            for (String scope : scopes) {
+                for (int windowSize : windowSizes) {
+                    for (int neurons : lstmNeurons) {
+                        for (double dropout : dropoutRates) {
+                            for (double lr : learningRates) {
+                                for (double l1 : l1s) {
+                                    for (double l2 : l2s) {
+                                        for (int numLayers : numLstmLayers) {
+                                            for (int batchSize : batchSizes) {
+                                                for (boolean bidir : bidirectionals) {
+                                                    for (boolean att : attentions) {
+                                                        for (int horizon : horizonBars) {
+                                                            LstmConfig config = new LstmConfig();
+                                                            config.setWindowSize(windowSize);
+                                                            config.setLstmNeurons(neurons);
+                                                            config.setDropoutRate(dropout);
+                                                            config.setLearningRate(lr);
+                                                            config.setNumEpochs(numEpochs);
+                                                            config.setPatience(patience);
+                                                            config.setMinDelta(minDelta);
+                                                            config.setKFolds(kFolds);
+                                                            config.setOptimizer(optimizer);
+                                                            config.setL1(l1);
+                                                            config.setL2(l2);
+                                                            config.setNormalizationScope(scope);
+                                                            config.setNormalizationMethod("auto");
+                                                            config.setSwingTradeType(swingType);
+                                                            config.setUseScalarV2(true);
+                                                            config.setUseWalkForwardV2(true);
+                                                            config.setNumLstmLayers(numLayers);
+                                                            config.setBatchSize(batchSize);
+                                                            config.setBidirectional(bidir);
+                                                            config.setAttention(att);
+                                                            config.setHorizonBars(horizon);
+                                                            grid.add(config);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return grid;
+    }
+
+    /**
+     * Génère une grille aléatoire de configurations adaptée au swing trade enrichie.
+     * @param n nombre de configurations à générer
+     * @param horizonBars tableau des horizons de prédiction à tester
+     * @param numLstmLayers tableau du nombre de couches LSTM
+     * @param batchSizes tableau des batch sizes
+     * @param bidirectionals tableau des valeurs bidirectional
+     * @param attentions tableau des valeurs attention
+     * @return liste de LstmConfig à tester
+     */
+    public List<LstmConfig> generateRandomSwingTradeGrid(int n, int[] horizonBars, int[] numLstmLayers, int[] batchSizes, boolean[] bidirectionals, boolean[] attentions) {
+        List<LstmConfig> grid = new java.util.ArrayList<>();
+        int[] windowSizes = {10, 20, 30};
+        int[] lstmNeurons = {64, 128};
+        double[] dropoutRates = {0.2, 0.25};
+        double[] learningRates = {0.0005, 0.001};
+        double[] l1s = {0.0};
+        double[] l2s = {0.0001, 0.001};
+        int numEpochs = 50;
+        int patience = 5;
+        double minDelta = 0.0005;
+        int kFolds = 3;
+        String optimizer = "adam";
+        String[] scopes = {"window"};
+        String[] swingTypes = {"range", "breakout", "mean_reversion"};
         for (String swingType : swingTypes) {
             for (String scope : scopes) {
                 for (int windowSize : windowSizes) {
@@ -978,72 +973,190 @@ public class LstmTuningService {
         return grid;
     }
 
+
     /**
-     * Génère une grille aléatoire de configurations adaptée au swing trade enrichie.
-     * @param n nombre de configurations à générer
-     * @param horizonBars tableau des horizons de prédiction à tester
-     * @param numLstmLayers tableau du nombre de couches LSTM
-     * @param batchSizes tableau des batch sizes
-     * @param bidirectionals tableau des valeurs bidirectional
-     * @param attentions tableau des valeurs attention
-     * @return liste de LstmConfig aléatoires
+     * Nouvelle génération optimisée pour budget réduit (n ~ 50).
+     * Objectif: maximiser la diversité utile (exploration) tout en concentrant une partie des
+     * configurations sur une zone déjà jugée performante (exploitation) et quelques idées plus
+     * audacieuses (innovation) sans explosion du coût mémoire.
+     *
+     * Stratégie:
+     *  - exploitation: fenêtres moyennes (30-55), neurones 128-256, faible LR log-uniform (2e-4..6e-4)
+     *  - exploration: couvre fenêtres plus larges + petites, variantes horizon (3,5,7,10), couches 1-3
+     *  - innovation: ajoute attention ou bidirectionnel ponctuellement + dropout plus bas (0.15) ou haut (0.28)
+     *  - learningRate & l2: tirage log-uniform pour meilleur spread
+     *  - numEpochs adaptatif (exploitation>exploration>innovation) pour limiter temps global
+     *
+     * Répartition par défaut (si n >= 15):
+     *  - exploitation: 40%
+     *  - exploration: 40%
+     *  - innovation: 20%
+     * Si n plus petit, on réduit proportionnellement mais on conserve au moins 1 par catégorie quand possible.
+     *
+     * NOTE: ne remplace PAS les anciennes méthodes (backward compatible). Utilisée explicitement par LstmHelper.
      */
-    public List<LstmConfig> generateRandomSwingTradeGrid(int n, int[] horizonBars, int[] numLstmLayers, int[] batchSizes, boolean[] bidirectionals, boolean[] attentions) {
-        // VERSION AVANCEE CORRECTE (conserve et utilise les tableaux passés)
-        java.util.Random rand = new java.util.Random();
-        int[] windowSizes = {10, 20, 30};
-        int[] lstmNeurons = {64, 128};
-        double[] dropoutRates = {0.2, 0.25};
-        double[] learningRates = {0.0005, 0.001};
-        double[] l1s = {0.0};
-        double[] l2s = {0.0001, 0.001};
-        int numEpochs = 50;
-        int patience = 5;
-        double minDelta = 0.0005;
-        int kFolds = 3;
-        String optimizer = "adam";
-        String[] scopes = {"window"};
-        String[] swingTypes = {"range", "breakout", "mean_reversion"};
-        List<LstmConfig> grid = new java.util.ArrayList<>();
-        for (int i = 0; i < n; i++) {
-            int horizon = horizonBars[rand.nextInt(horizonBars.length)];
-            int numLayers = numLstmLayers[rand.nextInt(numLstmLayers.length)];
-            int batchSize = batchSizes[rand.nextInt(batchSizes.length)];
-            boolean bidir = bidirectionals[rand.nextInt(bidirectionals.length)];
-            boolean att = attentions[rand.nextInt(attentions.length)];
-            String chosenSwingType = swingTypes[rand.nextInt(swingTypes.length)];
-            LstmConfig config = new LstmConfig();
-            config.setWindowSize(windowSizes[rand.nextInt(windowSizes.length)]);
-            config.setLstmNeurons(lstmNeurons[rand.nextInt(lstmNeurons.length)]);
-            config.setDropoutRate(dropoutRates[rand.nextInt(dropoutRates.length)]);
-            config.setLearningRate(learningRates[rand.nextInt(learningRates.length)]);
-            config.setNumEpochs(numEpochs);
-            config.setPatience(patience);
-            config.setMinDelta(minDelta);
-            config.setKFolds(kFolds);
-            config.setOptimizer(optimizer);
-            config.setL1(l1s[rand.nextInt(l1s.length)]);
-            config.setL2(l2s[rand.nextInt(l2s.length)]);
-            config.setNormalizationScope(scopes[rand.nextInt(scopes.length)]);
-            config.setNormalizationMethod("auto");
-            config.setSwingTradeType(chosenSwingType);
-            config.setUseScalarV2(true);
-            config.setUseWalkForwardV2(true);
-            config.setNumLstmLayers(numLayers);
-            config.setBatchSize(batchSize);
-            config.setBidirectional(bidir);
-            config.setAttention(att);
-            config.setHorizonBars(horizon);
-            grid.add(config);
+    public List<LstmConfig> generateRandomSwingTradeGridOptimized(int n) {
+        java.util.Random rand = new java.util.Random( System.currentTimeMillis() );
+        if (n < 3) n = 3; // sécurité
+        int exploit = Math.max(1, (int)Math.round(n * 0.4));
+        int explore = Math.max(1, (int)Math.round(n * 0.4));
+        int innovate = n - exploit - explore;
+        if (innovate < 1) { innovate = 1; if (explore > exploit) explore--; else exploit--; }
+        List<LstmConfig> grid = new java.util.ArrayList<>(n);
+
+        // ---- Helpers ----
+        java.util.function.DoubleSupplier lrExploitSampler = () -> round(sampleLogUniform(rand, 2e-4, 6e-4));
+        java.util.function.DoubleSupplier lrExploreSampler = () -> round(sampleLogUniform(rand, 2e-4, 1.0e-3));
+        java.util.function.DoubleSupplier l2SamplerTight = () -> round(sampleLogUniform(rand, 5e-5, 2e-3));
+        java.util.function.DoubleSupplier l2SamplerWide = () -> round(sampleLogUniform(rand, 1e-5, 8e-3));
+        java.util.function.IntSupplier horizonExploreSampler = () -> new int[]{3,5,7,10}[rand.nextInt(4)];
+        java.util.function.IntSupplier horizonExploitSampler = () -> new int[]{5,7}[rand.nextInt(2)];
+        java.util.function.IntSupplier horizonInnovSampler = () -> new int[]{7,10}[rand.nextInt(2)];
+
+        // ---- Exploitation ----
+        int[] winExp = {30, 40, 50, 55};
+        int[] neuExp = {128, 192, 256};
+        for (int i = 0; i < exploit; i++) {
+            LstmConfig c = baseConfigSkeleton();
+            c.setWindowSize(winExp[rand.nextInt(winExp.length)]);
+            c.setLstmNeurons(neuExp[rand.nextInt(neuExp.length)]);
+            c.setNumLstmLayers(rand.nextDouble() < 0.65 ? 2 : 3);
+            c.setDropoutRate(rand.nextDouble() < 0.6 ? 0.20 : 0.22);
+            c.setLearningRate(lrExploitSampler.getAsDouble());
+            c.setL2(l2SamplerTight.getAsDouble());
+            c.setHorizonBars(horizonExploitSampler.getAsInt());
+            c.setAttention(true);
+            c.setBidirectional(false);
+            c.setNumEpochs(140 + rand.nextInt(30)); // 140-169
+            c.setPatience(18 + rand.nextInt(6));
+            c.setMinDelta(0.00015);
+            c.setBatchSize(64);
+            c.setSwingTradeType(pick(rand, new String[]{"range","mean_reversion"}, 0.7));
+            grid.add(c);
+        }
+
+        // ---- Exploration ----
+        int[] winExplore = {20, 25, 35, 45, 60};
+        int[] neuExplore = {96, 128, 160, 192, 224};
+        int[] layersExplore = {1,2,3};
+        int[] batchExplore = {32, 64, 96};
+        for (int i = 0; i < explore; i++) {
+            LstmConfig c = baseConfigSkeleton();
+            c.setWindowSize(winExplore[rand.nextInt(winExplore.length)]);
+            c.setLstmNeurons(neuExplore[rand.nextInt(neuExplore.length)]);
+            c.setNumLstmLayers(layersExplore[rand.nextInt(layersExplore.length)]);
+            // dropout 0.15-0.28
+            c.setDropoutRate(round(0.15 + rand.nextDouble() * 0.13));
+            c.setLearningRate(lrExploreSampler.getAsDouble());
+            c.setL2(l2SamplerWide.getAsDouble());
+            c.setHorizonBars(horizonExploreSampler.getAsInt());
+            c.setAttention(rand.nextDouble() < 0.5);
+            c.setBidirectional(rand.nextDouble() < 0.15); // peu de modèles bi-directionnels
+            c.setNumEpochs(90 + rand.nextInt(20));
+            c.setPatience(12 + rand.nextInt(4));
+            c.setMinDelta(0.00025);
+            c.setBatchSize(batchExplore[rand.nextInt(batchExplore.length)]);
+            c.setSwingTradeType(pick(rand, new String[]{"range","breakout","mean_reversion"}, 0.34));
+            grid.add(c);
+        }
+
+        // ---- Innovation ----
+        int[] winInnov = {15, 30, 65};
+        int[] neuInnov = {64, 128, 256}; // garde plafond 256 (stabilité mémoire)
+        for (int i = 0; i < innovate; i++) {
+            LstmConfig c = baseConfigSkeleton();
+            c.setWindowSize(winInnov[rand.nextInt(winInnov.length)]);
+            c.setLstmNeurons(neuInnov[rand.nextInt(neuInnov.length)]);
+            c.setNumLstmLayers(rand.nextDouble() < 0.5 ? 1 : 3);
+            // extrêmes dropout (0.15 ou 0.28) ou valeur médiane
+            double[] dd = {0.15, 0.20, 0.28};
+            c.setDropoutRate(dd[rand.nextInt(dd.length)]);
+            c.setLearningRate(lrExploreSampler.getAsDouble());
+            c.setL2(l2SamplerWide.getAsDouble());
+            c.setHorizonBars(horizonInnovSampler.getAsInt());
+            c.setAttention(rand.nextDouble() < 0.75);
+            c.setBidirectional(rand.nextDouble() < 0.25);
+            c.setNumEpochs(60 + rand.nextInt(20));
+            c.setPatience(10 + rand.nextInt(4));
+            c.setMinDelta(0.0003);
+            c.setBatchSize(rand.nextDouble() < 0.5 ? 48 : 64); // batch intermédiaire
+            c.setSwingTradeType(pick(rand, new String[]{"breakout","mean_reversion"}, 0.5));
+            // Ajustements business pour tester sensibilité
+            c.setBusinessProfitFactorCap( rand.nextDouble() < 0.5 ? 3.5 : 4.0 );
+            c.setBusinessDrawdownGamma( rand.nextDouble() < 0.5 ? 1.3 : 1.5 );
+            grid.add(c);
+        }
+
+        // Mélange final pour éviter blocs séquentiels
+        java.util.Collections.shuffle(grid, rand);
+        // Harmonisation: seed différent par config (utile reproductibilité partielle)
+        long baseSeed = System.currentTimeMillis();
+        for (int i = 0; i < grid.size(); i++) {
+            grid.get(i).setSeed(baseSeed + i);
         }
         return grid;
     }
 
+    // Petit squelette initialisant les champs communs (évite duplication et respecte valeurs cohérentes)
+    private LstmConfig baseConfigSkeleton(){
+        LstmConfig c = new LstmConfig();
+        c.setOptimizer("adam");
+        c.setKFolds(3); // compromis temps / robustesse
+        c.setUseScalarV2(true);
+        c.setUseWalkForwardV2(true);
+        c.setNormalizationScope("window");
+        c.setNormalizationMethod("auto");
+        c.setBatchSize(64);
+        c.setSwingTradeType("range");
+        c.setThresholdK(1.5);
+        c.setThresholdType("ATR");
+        c.setEmbargoBars(3);
+        c.setWalkForwardSplits(3);
+        c.setCapital(10000.0);
+        c.setRiskPct(0.02);
+        c.setSizingK(1.2);
+        c.setFeePct(0.0);
+        c.setSlippagePct(0.0005);
+        c.setBusinessProfitFactorCap(4.0);
+        c.setBusinessDrawdownGamma(1.5);
+        return c;
+    }
+
+    private double sampleLogUniform(java.util.Random r, double min, double max){
+        double lnMin = Math.log(min);
+        double lnMax = Math.log(max);
+        return Math.exp( lnMin + r.nextDouble() * (lnMax - lnMin) );
+    }
+    private double round(double v){ return Math.round(v * 1e7) / 1e7; }
+    private String pick(java.util.Random r, String[] arr, double biasFirst){
+        if (arr.length == 0) return "";
+        if (biasFirst > 0 && r.nextDouble() < biasFirst) return arr[0];
+        return arr[r.nextInt(arr.length)];
+    }
+
     /**
-     * Tune automatiquement les hyperparamètres pour tous les symboles donnés.
-     * @param symbols les symboles à tuner
-     * @param grid la liste des configurations à tester
-     * @param jdbcTemplate accès base
+     * Méthode de tuning pour tous les symboles donnés.
+     *
+     * Cette méthode utilise un parallélisme maximal pour tuner plusieurs symboles en même temps.
+     * Chaque symbole est traité par un thread séparé, avec un contrôle de la mémoire pour éviter
+     * les erreurs OutOfMemory.
+     *
+     * Flux général:
+     *  1. Pour chaque symbole:
+     *       - Vérifie la mémoire disponible (waitForMemory)
+     *       - Démarre le tuning en appelant tuneSymbolMultiThread ou tuneSymbolTwoPhase
+     *       - Gère les exceptions et nettoie les ressources
+     *  2. Attente de la fin de tous les tunings
+     *  3. Rapport des statistiques finales (succès/échecs)
+     *
+     * Important:
+     *  - Ne pas modifier sans comprendre l'impact sur le parallélisme et la gestion mémoire.
+     *  - Les méthodes tuneSymbolMultiThread et tuneSymbolTwoPhase gèrent déjà leur propre
+     *    parallélisme interne, donc pas besoin de le gérer ici.
+     *
+     * @param symbols liste des symboles à tuner
+     * @param grid grille d'hyperparamètres à tester
+     * @param jdbcTemplate accès base de données
      * @param seriesProvider fournisseur de séries temporelles pour chaque symbole
      */
     public void tuneAllSymbols(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {

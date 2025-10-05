@@ -121,43 +121,6 @@ public class LstmHelper {
         return TradeUtils.mapping(results);
     }
 
-    /**
-     * Lance un entraînement (tuning) pour un symbole unique.
-     *
-     * Actuellement :
-     * - useRandomGrid=true forcé (random search)
-     * - Taille de grille 10 (hardcodée)
-     *
-     * NOTE :
-     * - NE PAS modifier la stratégie sans validation métier
-     *
-     * @param symbol symbole ciblé
-     */
-    public void trainLstm(String symbol) {
-        boolean useRandomGrid = true; // Stratégie actuelle : random search (phase 1 coarse)
-        List<LstmConfig> coarseGrid;
-        if (useRandomGrid) {
-            coarseGrid = lstmTuningService.generateRandomSwingTradeGrid(10);
-        } else {
-            coarseGrid = lstmTuningService.generateSwingTradeGrid();
-        }
-        BarSeries series = getBarBySymbol(symbol, null);
-        // Nouveau: tuning en deux phases (Étape 20)
-        lstmTuningService.tuneSymbolTwoPhase(symbol, coarseGrid, series, jdbcTemplate);
-    }
-
-    /**
-     * Variante: tuning en deux phases pour tous les symboles filtrés (optionnel).
-     * Utilise une petite grille random coarse pour chaque symbole, puis phase micro.
-     */
-    public void trainLstmTwoPhaseAllFiltered(int randomGridSize){
-        List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
-        for(String symbol : symbols){
-            List<LstmConfig> coarse = lstmTuningService.generateRandomSwingTradeGrid(randomGridSize);
-            BarSeries series = getBarBySymbol(symbol, null);
-            lstmTuningService.tuneSymbolTwoPhase(symbol, coarse, series, jdbcTemplate);
-        }
-    }
 
     /**
      * Récupère une prédiction LSTM pour un symbole.
@@ -407,47 +370,23 @@ public class LstmHelper {
         boolean[] bidirectionals = {true, false};
         boolean[] attentions = {true, false};
 
-        //for (String symbol : symbols) {
-            // Features dynamiques selon type de symbole
-            //List<String> features = getFeaturesForSymbol(symbol);
-            List<LstmConfig> grid;
-            if (useRandomGrid) {
+        List<LstmConfig> grid;
+        if (useRandomGrid) {
+            // Si budget limité (<=60 configs), utiliser la stratégie optimisée exploration/exploitation
+            if (randomGridSize <= 60) {
+                grid = lstmTuningService.generateRandomSwingTradeGridOptimized(randomGridSize);
+            } else {
                 grid = lstmTuningService.generateRandomSwingTradeGrid(
                         randomGridSize, horizonBars, numLstmLayers, batchSizes, bidirectionals, attentions
                 );
-            } else {
-                grid = lstmTuningService.generateSwingTradeGrid(horizonBars, numLstmLayers, batchSizes, bidirectionals, attentions
-                );
             }
-            // Appel pour ce symbole uniquement (singleton list)
-            lstmTuningService.tuneAllSymbols(symbols, grid, jdbcTemplate, s -> getBarBySymbol(s, null));
-        //}
+        } else {
+            grid = lstmTuningService.generateSwingTradeGrid(horizonBars, numLstmLayers, batchSizes, bidirectionals, attentions
+            );
+        }
+        lstmTuningService.tuneAllSymbols(symbols, grid, jdbcTemplate, s -> getBarBySymbol(s, null));
     }
 
-    /**
-     * Détermine dynamiquement la liste des features à utiliser selon le symbole.
-     *
-     * Règles simples :
-     * - Crypto (BTC*, ETH*) : momentum + volatilité + MACD
-     * - Indices (CAC*, SPX*) : focus sur moyennes + bandes
-     * - Tech US (AAPL, MSFT) : set enrichi
-     * - Sinon : set large par défaut
-     *
-     * @param symbol symbole
-     * @return liste de noms de features (doivent être reconnues côté pipeline)
-     */
-    public List<String> getFeaturesForSymbol(String symbol) {
-        if (symbol.startsWith("BTC") || symbol.startsWith("ETH")) {
-            return Arrays.asList("close", "volume", "rsi", "macd", "atr", "momentum", "day_of_week", "month");
-        } else if (symbol.startsWith("CAC") || symbol.startsWith("SPX")) {
-            return Arrays.asList("close", "sma", "ema", "rsi", "atr", "bollinger_high", "bollinger_low", "month");
-        } else if (symbol.startsWith("AAPL") || symbol.startsWith("MSFT")) {
-            return Arrays.asList("close", "volume", "rsi", "sma", "ema", "macd", "atr",
-                    "bollinger_high", "bollinger_low", "stochastic", "cci", "momentum", "day_of_week", "month");
-        }
-        return Arrays.asList("close", "volume", "rsi", "sma", "ema", "macd", "atr",
-                "bollinger_high", "bollinger_low", "stochastic", "cci", "momentum", "day_of_week", "month");
-    }
 
     /**
      * Retourne le rapport des exceptions rencontrées durant le tuning (collecté côté service).
