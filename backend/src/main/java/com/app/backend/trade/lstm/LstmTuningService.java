@@ -1048,92 +1048,103 @@ public class LstmTuningService {
         if (innovate < 1) { innovate = 1; if (explore > exploit) explore--; else exploit--; }
         List<LstmConfig> grid = new java.util.ArrayList<>(n);
 
-        // ---- Helpers ----
-        java.util.function.DoubleSupplier lrExploitSampler = () -> round(sampleLogUniform(rand, 2e-4, 6e-4));
-        java.util.function.DoubleSupplier lrExploreSampler = () -> round(sampleLogUniform(rand, 2e-4, 1.0e-3));
-        java.util.function.DoubleSupplier l2SamplerTight = () -> round(sampleLogUniform(rand, 5e-5, 2e-3));
-        java.util.function.DoubleSupplier l2SamplerWide = () -> round(sampleLogUniform(rand, 1e-5, 8e-3));
-        java.util.function.IntSupplier horizonExploreSampler = () -> new int[]{3,5,7,10}[rand.nextInt(4)];
-        java.util.function.IntSupplier horizonExploitSampler = () -> new int[]{5,7}[rand.nextInt(2)];
-        java.util.function.IntSupplier horizonInnovSampler = () -> new int[]{7,10}[rand.nextInt(2)];
+        // ---- Helpers (mis à jour pour plus d'amplitude) ----
+        // LR: on élargit les plages (exploitation reste prudente, exploration/innovation plus large)
+        java.util.function.DoubleSupplier lrExploitSampler = () -> round(sampleLogUniform(rand, 2e-4, 8e-4));
+        java.util.function.DoubleSupplier lrExploreSampler = () -> round(sampleLogUniform(rand, 2e-4, 1.8e-3));
+        java.util.function.DoubleSupplier lrInnovSampler   = () -> round(sampleLogUniform(rand, 1.5e-4, 2.0e-3));
+        // L2: on réduit la pénalisation maximale (éviter sur-régularisation qui aplatit les sorties)
+        java.util.function.DoubleSupplier l2SamplerTight = () -> round(sampleLogUniform(rand, 5e-5, 4e-4));
+        java.util.function.DoubleSupplier l2SamplerWide  = () -> round(sampleLogUniform(rand, 1e-5, 1e-3));
+        // Horizons plus longs pour laisser le modèle prédire des déplacements non triviaux
+        java.util.function.IntSupplier horizonExploitSampler = () -> new int[]{7,9,12}[rand.nextInt(3)];
+        java.util.function.IntSupplier horizonExploreSampler = () -> new int[]{5,7,9,12,15}[rand.nextInt(5)];
+        java.util.function.IntSupplier horizonInnovSampler   = () -> new int[]{9,12,15}[rand.nextInt(3)];
 
-        // ---- Exploitation ----
-        int[] winExp = {30, 40, 50, 55};
+        // ---- Exploitation (focus zone performante mais moins conservatrice) ----
+        int[] winExp = {30, 35, 45, 55};
         int[] neuExp = {128, 192, 256};
         for (int i = 0; i < exploit; i++) {
             LstmConfig c = baseConfigSkeleton();
             c.setWindowSize(winExp[rand.nextInt(winExp.length)]);
             c.setLstmNeurons(neuExp[rand.nextInt(neuExp.length)]);
-            c.setNumLstmLayers(rand.nextDouble() < 0.65 ? 2 : 3);
-            c.setDropoutRate(rand.nextDouble() < 0.6 ? 0.20 : 0.22);
+            c.setNumLstmLayers(rand.nextDouble() < 0.55 ? 2 : 3);
+            // Dropout plus bas pour laisser passer signal (0.12-0.20) avec rare 0.22
+            double[] dChoices = {0.12,0.15,0.18,0.20,0.22};
+            c.setDropoutRate(dChoices[rand.nextInt(dChoices.length)]);
             c.setLearningRate(lrExploitSampler.getAsDouble());
             c.setL2(l2SamplerTight.getAsDouble());
             c.setHorizonBars(horizonExploitSampler.getAsInt());
             c.setAttention(true);
             c.setBidirectional(false);
-            c.setNumEpochs(140 + rand.nextInt(30)); // 140-169
-            c.setPatience(18 + rand.nextInt(6));
-            c.setMinDelta(0.00015);
-            c.setBatchSize(64);
-            c.setSwingTradeType(pick(rand, new String[]{"range","mean_reversion"}, 0.7));
+            c.setNumEpochs(150 + rand.nextInt(25)); // un peu plus long pour mieux ajuster amplitude
+            c.setPatience(20 + rand.nextInt(5));
+            c.setMinDelta(0.00012);
+            c.setBatchSize(rand.nextDouble() < 0.5 ? 48 : 64); // batch plus petit pour moins lisser gradients
+            c.setSwingTradeType(pick(rand, new String[]{"range","mean_reversion"}, 0.6));
+            // Business scoring un peu moins pénalisant (cap plus haut, gamma plus doux)
+            c.setBusinessProfitFactorCap(4.5);
+            c.setBusinessDrawdownGamma(1.4);
             grid.add(c);
         }
 
-        // ---- Exploration ----
-        int[] winExplore = {20, 25, 35, 45, 60};
+        // ---- Exploration (diversité structurelle) ----
+        int[] winExplore = {18, 25, 35, 45, 60};
         int[] neuExplore = {96, 128, 160, 192, 224};
         int[] layersExplore = {1,2,3};
-        int[] batchExplore = {32, 64, 96};
+        int[] batchExplore = {32, 48, 64}; // on enlève 96 pour réduire smoothing
         for (int i = 0; i < explore; i++) {
             LstmConfig c = baseConfigSkeleton();
             c.setWindowSize(winExplore[rand.nextInt(winExplore.length)]);
             c.setLstmNeurons(neuExplore[rand.nextInt(neuExplore.length)]);
             c.setNumLstmLayers(layersExplore[rand.nextInt(layersExplore.length)]);
-            // dropout 0.15-0.28
-            c.setDropoutRate(round(0.15 + rand.nextDouble() * 0.13));
+            // Dropout éventail 0.10-0.22
+            c.setDropoutRate(round(0.10 + rand.nextDouble()*0.12));
             c.setLearningRate(lrExploreSampler.getAsDouble());
             c.setL2(l2SamplerWide.getAsDouble());
             c.setHorizonBars(horizonExploreSampler.getAsInt());
-            c.setAttention(rand.nextDouble() < 0.5);
-            c.setBidirectional(rand.nextDouble() < 0.15); // peu de modèles bi-directionnels
-            c.setNumEpochs(90 + rand.nextInt(20));
-            c.setPatience(12 + rand.nextInt(4));
-            c.setMinDelta(0.00025);
+            c.setAttention(rand.nextDouble() < 0.55);
+            c.setBidirectional(rand.nextDouble() < 0.18);
+            c.setNumEpochs(100 + rand.nextInt(20));
+            c.setPatience(14 + rand.nextInt(4));
+            c.setMinDelta(0.0002);
             c.setBatchSize(batchExplore[rand.nextInt(batchExplore.length)]);
             c.setSwingTradeType(pick(rand, new String[]{"range","breakout","mean_reversion"}, 0.34));
+            // 20% des configs exploration passent en normalisation globale pour augmenter variance prédictive
+            if (rand.nextDouble() < 0.20) c.setNormalizationScope("global");
+            c.setBusinessProfitFactorCap(5.0);
+            c.setBusinessDrawdownGamma(1.3);
             grid.add(c);
         }
 
-        // ---- Innovation ----
+        // ---- Innovation (idées agressives contrôlées) ----
         int[] winInnov = {15, 30, 65};
-        int[] neuInnov = {64, 128, 256}; // garde plafond 256 (stabilité mémoire)
+        int[] neuInnov = {64, 128, 256};
         for (int i = 0; i < innovate; i++) {
             LstmConfig c = baseConfigSkeleton();
             c.setWindowSize(winInnov[rand.nextInt(winInnov.length)]);
             c.setLstmNeurons(neuInnov[rand.nextInt(neuInnov.length)]);
             c.setNumLstmLayers(rand.nextDouble() < 0.5 ? 1 : 3);
-            // extrêmes dropout (0.15 ou 0.28) ou valeur médiane
-            double[] dd = {0.15, 0.20, 0.28};
+            // Dropout extrêmes + intermédiaires
+            double[] dd = {0.08, 0.12, 0.18, 0.24};
             c.setDropoutRate(dd[rand.nextInt(dd.length)]);
-            c.setLearningRate(lrExploreSampler.getAsDouble());
+            c.setLearningRate(lrInnovSampler.getAsDouble());
             c.setL2(l2SamplerWide.getAsDouble());
             c.setHorizonBars(horizonInnovSampler.getAsInt());
             c.setAttention(rand.nextDouble() < 0.75);
-            c.setBidirectional(rand.nextDouble() < 0.25);
-            c.setNumEpochs(60 + rand.nextInt(20));
-            c.setPatience(10 + rand.nextInt(4));
-            c.setMinDelta(0.0003);
-            c.setBatchSize(rand.nextDouble() < 0.5 ? 48 : 64); // batch intermédiaire
+            c.setBidirectional(rand.nextDouble() < 0.30);
+            c.setNumEpochs(70 + rand.nextInt(25));
+            c.setPatience(12 + rand.nextInt(5));
+            c.setMinDelta(0.00028);
+            c.setBatchSize(rand.nextDouble() < 0.5 ?  FortyEightOr(48,64,rand) : 64); // helper pour clarté
             c.setSwingTradeType(pick(rand, new String[]{"breakout","mean_reversion"}, 0.5));
-            // Ajustements business pour tester sensibilité
-            c.setBusinessProfitFactorCap( rand.nextDouble() < 0.5 ? 3.5 : 4.0 );
-            c.setBusinessDrawdownGamma( rand.nextDouble() < 0.5 ? 1.3 : 1.5 );
+            c.setBusinessProfitFactorCap(5.0);
+            c.setBusinessDrawdownGamma(1.2);
             grid.add(c);
         }
 
-        // Mélange final pour éviter blocs séquentiels
+        // Mélange final
         java.util.Collections.shuffle(grid, rand);
-        // Harmonisation: seed différent par config (utile reproductibilité partielle)
         long baseSeed = System.currentTimeMillis();
         for (int i = 0; i < grid.size(); i++) {
             grid.get(i).setSeed(baseSeed + i);
@@ -1141,42 +1152,34 @@ public class LstmTuningService {
         return grid;
     }
 
-    // Petit squelette initialisant les champs communs (évite duplication et respecte valeurs cohérentes)
+    // Helper spécifique innovation batch 48 (évite magic number multiple)
+    private int FortyEightOr(int choiceA, int choiceB, java.util.Random r){ return r.nextDouble()<0.5?choiceA:choiceB; }
+
+    // --- Helpers ajoutés pour génération optimisée ---
+    private double sampleLogUniform(java.util.Random r, double min, double max){
+        if(min<=0||max<=0||max<=min) return min;
+        double logMin = Math.log(min);
+        double logMax = Math.log(max);
+        return Math.exp(logMin + r.nextDouble() * (logMax - logMin));
+    }
+    private double round(double v){ return Math.round(v * 1e9)/1e9; }
+    private String pick(java.util.Random r, String[] options, double pFirst){
+        if(options==null||options.length==0) return "";
+        if(options.length==1) return options[0];
+        if(r.nextDouble() < pFirst) return options[0];
+        return options[1 + r.nextInt(options.length-1)];
+    }
     private LstmConfig baseConfigSkeleton(){
         LstmConfig c = new LstmConfig();
-        c.setOptimizer("adam");
-        c.setKFolds(3); // compromis temps / robustesse
         c.setUseScalarV2(true);
         c.setUseWalkForwardV2(true);
-        c.setNormalizationScope("window");
-        c.setNormalizationMethod("auto");
-        c.setBatchSize(64);
-        c.setSwingTradeType("range");
-        c.setThresholdK(1.5);
-        c.setThresholdType("ATR");
-        c.setEmbargoBars(3);
-        c.setWalkForwardSplits(3);
-        c.setCapital(10000.0);
-        c.setRiskPct(0.02);
-        c.setSizingK(1.2);
-        c.setFeePct(0.0);
-        c.setSlippagePct(0.0005);
+        c.setBaselineReplica(false); // par défaut non baseline
+        c.setCvMode("split");
         c.setBusinessProfitFactorCap(4.0);
-        c.setBusinessDrawdownGamma(1.5);
+        c.setBusinessDrawdownGamma(1.3);
         return c;
     }
 
-    private double sampleLogUniform(java.util.Random r, double min, double max){
-        double lnMin = Math.log(min);
-        double lnMax = Math.log(max);
-        return Math.exp( lnMin + r.nextDouble() * (lnMax - lnMin) );
-    }
-    private double round(double v){ return Math.round(v * 1e7) / 1e7; }
-    private String pick(java.util.Random r, String[] arr, double biasFirst){
-        if (arr.length == 0) return "";
-        if (biasFirst > 0 && r.nextDouble() < biasFirst) return arr[0];
-        return arr[r.nextInt(arr.length)];
-    }
 
     /**
      * Méthode de tuning pour tous les symboles donnés.

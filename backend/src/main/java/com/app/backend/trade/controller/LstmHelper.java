@@ -378,7 +378,7 @@ public class LstmHelper {
         List<LstmConfig> grid;
         if (useRandomGrid) {
             // Si budget limité (<=60 configs), utiliser la stratégie optimisée exploration/exploitation
-            if (randomGridSize <= 60) {
+            if (randomGridSize <= 200) {
                 grid = lstmTuningService.generateRandomSwingTradeGridOptimized(randomGridSize);
             } else {
                 grid = lstmTuningService.generateRandomSwingTradeGrid(
