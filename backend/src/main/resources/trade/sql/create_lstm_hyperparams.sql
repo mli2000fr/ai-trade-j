@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS lstm_hyperparams (
+CREATE TABLE IF NOT EXISTS trade_ai.lstm_hyperparams (
     symbol VARCHAR(32) PRIMARY KEY,
     window_size INT NOT NULL,
     lstm_neurons INT NOT NULL,
@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS lstm_hyperparams (
     mean_shift_sigma_threshold DOUBLE DEFAULT 2.0,
     use_multi_horizon_avg BOOLEAN DEFAULT FALSE,
     entry_threshold_factor DOUBLE DEFAULT 1.2,
+    phase INT,
     updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_lstm_hparams_updated_date (updated_date),
     INDEX idx_lstm_hparams_symbol_updated (symbol, updated_date)
