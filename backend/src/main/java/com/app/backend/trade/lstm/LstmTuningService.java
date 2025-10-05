@@ -432,8 +432,7 @@ public class LstmTuningService {
                     // ===== ENTRAÎNEMENT SUR LA PARTIE TRAIN UNIQUEMENT =====
                     // Création d'une sous-série contenant uniquement les données d'entraînement
                     BarSeries trainSeries = series.getSubSeries(0, trainEndBar);
-                    logger.debug("[TUNING][V2] [{}] Séparation données: train=[0,{}], test=[{},{}]",
-                               symbol, trainEndBar, trainEndBar, totalBars);
+                    logger.debug("[TUNING][V2] [{}] Séparation données: train=[0,{}], test=[{},{}]", symbol, trainEndBar, trainEndBar, totalBars);
 
                     // Entraîne le modèle UNIQUEMENT sur les données d'entraînement
                     LstmTradePredictor.TrainResult trFull = lstmTradePredictor.trainLstmScalarV2(trainSeries, config, null);
@@ -1340,6 +1339,38 @@ public class LstmTuningService {
             progress.status = "phase2"; progress.lastUpdate = System.currentTimeMillis();
             try { writeProgressMetrics(progress); } catch (Exception ignored) {}
             PhaseAggregate phase2 = runPhaseNoPersist(symbol, microGrid, phaseSeries, 2, "PHASE2", progress);
+            // --- LOG DISTRIBUTION PHASE 2 ---
+            if (phase2 != null && phase2.allResults != null && !phase2.allResults.isEmpty()) {
+                java.util.List<Double> scoresPhase2 = new java.util.ArrayList<>();
+                for (TuningResult r : phase2.allResults) {
+                    if (r != null && Double.isFinite(r.businessScore)) scoresPhase2.add(r.businessScore);
+                }
+                if (!scoresPhase2.isEmpty()) {
+                    double sumP2 = 0d; for (double v : scoresPhase2) sumP2 += v;
+                    double meanP2 = sumP2 / scoresPhase2.size();
+                    double varP2 = 0d; for (double v : scoresPhase2) { double d = v - meanP2; varP2 += d*d; }
+                    varP2 /= scoresPhase2.size();
+                    double stdP2 = Math.sqrt(varP2);
+                    scoresPhase2.sort(java.util.Comparator.reverseOrder());
+                    java.util.List<Double> top5P2 = scoresPhase2.subList(0, Math.min(5, scoresPhase2.size()));
+                    double maxP2 = scoresPhase2.get(0);
+                    double minP2 = scoresPhase2.get(scoresPhase2.size()-1);
+                    logger.info("[TUNING-2PH][PHASE2][DISTRIB] {} n={} mean={} std={} min={} max={} top5={} (dispersionRatio={})", symbol,
+                            scoresPhase2.size(),
+                            String.format(java.util.Locale.US, "%.6f", meanP2),
+                            String.format(java.util.Locale.US, "%.6f", stdP2),
+                            String.format(java.util.Locale.US, "%.6f", minP2),
+                            String.format(java.util.Locale.US, "%.6f", maxP2),
+                            top5P2,
+                            String.format(java.util.Locale.US, "%.3f", (meanP2 != 0 ? stdP2 / Math.abs(meanP2) : Double.NaN)));
+                    // Heuristique: alerter si écart-type > 40% de la valeur absolue moyenne
+                    if (meanP2 != 0 && stdP2 > Math.abs(meanP2) * 0.40) {
+                        logger.warn("[TUNING-2PH][PHASE2][DISTRIB] Dispersion anormale détectée (std > 40% | mean={} std={})", String.format("%.6f", meanP2), String.format("%.6f", stdP2));
+                    }
+                } else {
+                    logger.warn("[TUNING-2PH][PHASE2][DISTRIB] Aucune valeur de businessScore exploitable pour la distribution {}", symbol);
+                }
+            }
             if (phase2 == null || phase2.bestConfig == null) {
                 logger.warn("[TUNING-2PH][PHASE2] Aucun résultat – retour phase1 (hold-out si actif)");
                 if (enableHoldOut) {
