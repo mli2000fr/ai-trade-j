@@ -233,7 +233,9 @@ public class LstmHelper {
 
         // 7. Sauvegarde du signal du jour
         saveSignalHistory(symbol, preditLsdm);
-
+        loaded.model = null;
+        loaded.scalers = null;
+        preditLsdm.setLoadedModel(loaded);
         return preditLsdm;
     }
 

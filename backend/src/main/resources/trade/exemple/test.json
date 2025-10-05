@@ -1,9 +1,90 @@
-Améliorations recommandées:
-Ajouter un vrai hold-out final (jamais vu en phase 1 ni 2) pour confirmer le gagnant.
-Phase 2: recréer de nouveaux splits (ex: autre point de coupe, autre découpage walk-forward, autre seed) pour réduire la corrélation.
-Remplacer ratio par (improved - baseline) / max(ε, |baseline|) et imposer aussi un gain absolu minimal (ex: +0.02 de businessScore).
-Calculer l’écart-type du businessScore sur les splits; exiger improved > baseline + 1.0 * std (ou bootstrap).
-Inclure la config baseline inchangée dans la micro‑grille pour mesurer la dérive due au simple ré-entraînement.
-Réduire l’amplitude des perturbations (neurons ±16, dropout ±0.03, lr * {0.9,1.0,1.1}) si tu veux un vrai “affinage”.
-Logguer en phase 2 la distribution complète (moyenne, std, top5) pour détecter une dispersion anormale.
-Option: utiliser un critère régularisé: adjustedScore = businessScore - λ * (complexité) ou pénaliser trop de variations.
+tu travaille sur simulateTradingWalkForward, mais ne pas toucher les autres méthodes, voici à faire:
+
+
+Séparer responsabilités
+1.1 Extraire un TradeState (entryPrice, stopLoss, initialRiskPerShare, positionSize, barsInPos, highSinceEntry, partialTaken).
+1.2 Créer RiskManager (calcInitialStop, trailStop, shouldExit).
+1.3 Créer SignalEngine (predict, computeDelta, computeAdaptiveThreshold).
+1.4 Créer MetricsAccumulator (enregistre trade, calc final stats).
+Bénéfices: lisibilité, test unitaire ciblé.
+Préparation données & prédictions
+2.1 Limiter extractFeatureMatrix aux indices nécessaires (0..testEndBar-1).
+2.2 Option: fournir version stream/sliding pour séries très longues (éviter double[][] complet).
+2.3 Batch pré‑généré des fenêtres (INDArray) pour toutes les barres test -> un seul forward si mémoire OK (sinon chunking).
+2.4 Ajouter param config: predictionBatchingEnabled + batchChunkSize.
+2.5 Support optionnel shortEnabled (miroir LONG) via un second delta négatif.
+Optimisation percentile / seuil
+3.1 Remplacer recompute plein + tri par quickselect déjà en place + scheduler adaptatif (recalc quand |nouveau delta| > pct65 courant * α).
+3.2 Ajouter quantile approx (P² algorithm) en fallback pour mémoire réduite.
+3.3 Fusionner double logique (threshold ATR vs percentile) = max(atrThreshold, dynamicDeltaThreshold).
+Gestion risques & position sizing
+4.1 Ajouter floor sur initialRiskPerShare = entryPrice * minRiskPct (ex: 0.002).
+4.2 Ajouter hard max position notionnelle paramétrable (déjà 10% capital -> rendre configurable).
+4.3 Ajouter equity dynamique (capital += profits) si mode compounding activé.
+4.4 Introduire réduction riskPct après n pertes consécutives (factorLossDecay).
+4.5 Ajouter trailing mode configurable: ATR, HHV−ATR*k, Chandelier.
+Logique partielle & R multiples
+5.1 Conserver initialPositionSize pour calcul R exact après partial.
+5.2 Support multi‑partials: liste (targetR, size%).
+5.3 Journal détaillé (TradeLogEntry) stocké (entrée, partials[], sortie, R, maxAdverse, maxFavorable).
+5.4 Calcul MAE/MFE moyen (qualité exécution).
+Slippage / coûts réalistes
+6.1 Introduire interface CostModel (commission, slippage, impact).
+6.2 Slippage dynamique: base + impactFactor * (notional / ADV).
+6.3 ADV = moyenne volume * close sur N jours pré‑calculés.
+Filtrage signaux / qualité
+7.1 Ajouter filtre volatilité: ignorer si ATRpct < lowVolFloor.
+7.2 Ajouter filtre “regime” (ex: SMA50 slope > slopeMin).
+7.3 Ajouter cooldown après gros gagnant (éviter sur‑exposition momentum inversé).
+7.4 Ajouter neutralisation signaux autour publication (si calendrier externe disponible).
+Robustesse numérique
+8.1 Vérifier Double.isFinite pour toutes valeurs critiques (predicted, atr, rsi).
+8.2 Epsilon sur comparaisons stop (currentPrice <= stopLoss + eps).
+8.3 Anti “micro trades”: ignorer trade si stopDistancePct < minStopPct.
+Métriques avancées
+9.1 Ulcer Index, MAR, Expectancy en R, Payoff Ratio, Average Adverse Excursion (AAE).
+9.2 Distribution R: percentiles (10/25/50/75/90).
+9.3 Equity curve export (liste cumul).
+9.4 Gini concentration (dispersion gains).
+9.5 Consistency score (rolling 20 trade winrate variance).
+Structure configuration
+10.1 Regrouper paramètres stratégie dans StrategyConfig distinct (risk, thresholds, partials, trailing, costs).
+10.2 Valider config (throw si incohérence ex: sum(partials) > 1).
+10.3 Ajouter mode “strictOOS” (interdit toute normalisation > testEndBar).
+Tests unitaires
+11.1 Cas: aucun trade (winRate=0, profitFactor=0).
+11.2 Cas: un trade gagnant simple (R calcul cohérent).
+11.3 Cas: partial + trailing.
+11.4 Cas: drawdown progression (peak/trough).
+11.5 Test percentile stabilité (ajout séquentiel deltas croissants).
+11.6 Test batch vs single prediction (tolérance diff < 1e-9).
+Journalisation & debug
+12.1 Flag debugLevels: NONE | ENTRY | EXIT | FULL.
+12.2 Logger trade résumé (R, durée, MAE/MFE).
+12.3 Option output JSON trades pour front.
+12.4 Chrono sections (features, batchPredict, loop).
+Performance & mémoire
+13.1 Passer double[][] à float[][] si acceptable (réduction ~50% RAM).
+13.2 Recyclage buffers fenêtres (réduire allocations).
+13.3 Mode streaming: file circulaire pour features (windowSize + marge).
+13.4 ND4J workspaces inference (activation config).
+Extension futurs
+14.1 Ajouter support SHORT symétrique (gérer P&L signe inverse).
+14.2 Multi‑symbol simultané (paralléliser par partition).
+14.3 Hooks onEnter/onExit pour intégration broker simulateur.
+14.4 Risk overlay: maxPortfolioExposure.
+Sécurité / validation ex‑post
+15.1 Détecter outliers PnL > k * ATR * positionSize -> log suspicion.
+15.2 Vérifier monotonicité equity non inversée par bug signe.
+15.3 Sanity check finale: if (numTrades>0 && sharpe=0 && stdRet>0) => alerte.
+Ordre d’implémentation recommandé (phases)
+Phase 1 (rapide, forte valeur): refactor état, cost model, partial multi, R correct, tests basiques.
+Phase 2: batch prédictions optionnel généralisé, percentile amélioré, métriques avancées.
+Phase 3: risk adaptatif, trailing modes, coût dynamique.
+Phase 4: short side, hooks, performance mémoire.
+Phase 5: régime / filtres / calendrier exogène.
+Critères de complétion
+Couverture tests > 90% logique critique (risk, R, partial).
+Temps simulation réduit >30% avec batch activé.
+Pas de fuite future (strictOOS=ON).
+R calcul stable vs scénario manuel.

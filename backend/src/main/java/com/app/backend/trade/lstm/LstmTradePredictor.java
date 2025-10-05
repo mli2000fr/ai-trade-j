@@ -1830,6 +1830,7 @@ public class LstmTradePredictor {
         } else {
             predicted = predTargetEffective;
         }
+
         // ===== ADAPTATION SWING PRO (PHASE 10 BIS) : AJUSTEMENTS VOLATILITÉ & DEADZONE =====
         try {
             // ATR% courant pour calibrer l'amplitude utile d'un swing professionnel
@@ -2998,8 +2999,9 @@ public class LstmTradePredictor {
             .lastClose(lastClose)
             .predictedClose(predicted)
             .signal(signal)
+            .explication(posInfo)
             .lastDate(formattedDate)
-            .position(posInfo)
+            .position(position)
             .build();
     }
 
@@ -3074,33 +3076,81 @@ public class LstmTradePredictor {
      */
     public LoadedModel loadModelAndScalersFromDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException {
 
-        String sql = "SELECT model_blob, normalization_scope, scalers_json FROM lstm_models WHERE symbol = ?";
-        MultiLayerNetwork model = null;
-        ScalerSet scalers = null;
+        // Sélection explicite des colonnes nécessaires
+        String sql = "SELECT model_blob, scalers_json, total_series_tested, business_score, sum_profit, max_drawdown, win_rate, profit_factor, ratio, phase, rendement FROM lstm_models WHERE symbol = ?";
 
         try {
             Map<String,Object> result = jdbcTemplate.queryForMap(sql, symbol);
-            byte[] modelBlob = (byte[]) result.get("model_blob");
-            String scalersJson = (String) result.get("scalers_json");
 
+            // Récupération sécurisée des colonnes
+            Object modelBlobObj = result.get("model_blob");
+            byte[] modelBlob = modelBlobObj instanceof byte[] ? (byte[]) modelBlobObj : null;
+            String scalersJson = result.get("scalers_json") != null ? result.get("scalers_json").toString() : null;
+
+            // Fonctions utilitaires de parsing
+            java.util.function.Function<Object, Double> toDouble = (o) -> {
+                if (o == null) return Double.NaN;
+                if (o instanceof Number) return ((Number) o).doubleValue();
+                try { return Double.parseDouble(o.toString()); } catch (Exception e) { return Double.NaN; }
+            };
+            java.util.function.Function<Object, Integer> toInt = (o) -> {
+                if (o == null) return 0;
+                if (o instanceof Number) return ((Number) o).intValue();
+                try { return Integer.parseInt(o.toString()); } catch (Exception e) { return 0; }
+            };
+
+            double rendement = toDouble.apply(result.get("rendement"));
+            int totalSerieTested = toInt.apply(result.get("total_series_tested"));
+            double businnesScore = toDouble.apply(result.get("business_score"));
+            double sumProfil = toDouble.apply(result.get("sum_profit"));
+            double maxDrawdown = toDouble.apply(result.get("max_drawdown"));
+            double winRate = toDouble.apply(result.get("win_rate"));
+            double profitFactor = toDouble.apply(result.get("profit_factor"));
+            double ratio = toDouble.apply(result.get("ratio"));
+            double phaseD = toDouble.apply(result.get("phase"));
+
+            // Restitution du modèle si présent
+            MultiLayerNetwork model = null;
             if (modelBlob != null) {
                 try (ByteArrayInputStream bais = new ByteArrayInputStream(modelBlob)) {
                     model = ModelSerializer.restoreMultiLayerNetwork(bais);
+                } catch (Exception e) {
+                    logger.warn("Impossible de restaurer le modèle depuis la BDD pour {}: {}", symbol, e.getMessage());
                 }
             }
+
+            // Parse des scalers JSON si présent
+            ScalerSet scalers = null;
             if (scalersJson != null && !scalersJson.isBlank()) {
                 try {
                     com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                     scalers = mapper.readValue(scalersJson, ScalerSet.class);
                 } catch (Exception e) {
-                    logger.warn("Impossible de parser scalers_json : {}", e.getMessage());
+                    logger.warn("Impossible de parser scalers_json pour {} : {}", symbol, e.getMessage());
                 }
             }
+
             logger.info("Chargé modèle+scalers pour {} (scalers={})", symbol, scalers != null);
+
+            // Construction de l'objet LoadedModel renseigné
+            LoadedModel lm = new LoadedModel();
+            lm.model = model;
+            lm.scalers = scalers;
+            lm.rendement = Double.isFinite(rendement) ? rendement : 0.0;
+            lm.totalSerieTested = totalSerieTested;
+            lm.businnesScore = Double.isFinite(businnesScore) ? businnesScore : 0.0;
+            lm.sumProfil = Double.isFinite(sumProfil) ? sumProfil : 0.0;
+            lm.maxDrawdown = Double.isFinite(maxDrawdown) ? maxDrawdown : 0.0;
+            lm.winRate = Double.isFinite(winRate) ? winRate : 0.0;
+            lm.profitFactor = Double.isFinite(profitFactor) ? profitFactor : 0.0;
+            lm.ratio = Double.isFinite(ratio) ? ratio : 0.0;
+            lm.phase = (int) Math.round(Double.isFinite(phaseD) ? phaseD : 0.0);
+
+            return lm;
+
         } catch (EmptyResultDataAccessException e) {
             throw new IOException("Modèle non trouvé");
         }
-        return new LoadedModel(model, scalers);
     }
 
     /**
@@ -3109,7 +3159,16 @@ public class LstmTradePredictor {
     public static class LoadedModel {
         public MultiLayerNetwork model;
         public ScalerSet scalers;
-        public LoadedModel(MultiLayerNetwork m, ScalerSet s){this.model=m;this.scalers=s;}
+        public double rendement;
+        public int totalSerieTested;
+        public double businnesScore;
+        public double sumProfil;
+        public double maxDrawdown;
+        public double winRate;
+        public double profitFactor;
+        public double ratio;
+        public int phase;
+        public LoadedModel(){}
     }
 
     /* =========================================================
