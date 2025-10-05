@@ -2924,7 +2924,7 @@ public class LstmTradePredictor {
      */
     public void saveModelToDb(String symbol, JdbcTemplate jdbcTemplate, MultiLayerNetwork model,  LstmConfig config, ScalerSet scalers,
                               double mse, double profitFactor, double winRate, double maxDrawdown, double rmse, double sumProfit, int totalTrades, double businessScore,
-                              int totalSeriesTested, int phase) throws IOException {
+                              int totalSeriesTested, int phase, double ratio) throws IOException {
         if (model == null) return;
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         ModelSerializer.writeModel(model, baos, true);
@@ -2938,8 +2938,8 @@ public class LstmTradePredictor {
         String scalersJson = mapper.writeValueAsString(scalers);
         double rendement = config.getCapital() > 0 ? (sumProfit / config.getCapital()) : 0.0;
 
-        String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, scalers_json, mse, profit_factor, win_rate, max_drawdown, rmse, sum_profit, total_trades, business_score, total_series_tested, rendement, phase, updated_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)";
-        jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson, config.getNormalizationScope(), scalersJson, mse, profitFactor, winRate, maxDrawdown, rmse, sumProfit, totalTrades, businessScore, totalSeriesTested, phase, rendement);
+        String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, scalers_json, mse, profit_factor, win_rate, max_drawdown, rmse, sum_profit, total_trades, business_score, total_series_tested, rendement, phase, ratio, updated_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)";
+        jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson, config.getNormalizationScope(), scalersJson, mse, profitFactor, winRate, maxDrawdown, rmse, sumProfit, totalTrades, businessScore, totalSeriesTested, rendement, phase, ratio);
     }
 
     /**

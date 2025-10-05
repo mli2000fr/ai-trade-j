@@ -1464,7 +1464,7 @@ public class LstmTuningService {
             logger.info("[TUNING-2PH][PHASE2] Micro-grille générée: {} configs (avant top5={} * variations)", microGrid.size(), topN);
             if (microGrid.isEmpty()) {
                 logger.warn("[TUNING-2PH][PHASE2] Micro-grille vide – persistance phase1");
-                persistBest(symbol, phase1, jdbcTemplate);
+                persistBest(symbol, phase1, jdbcTemplate, 0);
                 progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime;
                 try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON fin phase1-only: {}", ex.getMessage()); }
                 return phase1.bestConfig;
@@ -1476,7 +1476,7 @@ public class LstmTuningService {
             PhaseAggregate phase2 = runPhaseNoPersist(symbol, microGrid, series, 2, "PHASE2", progress);
             if (phase2 == null || phase2.bestConfig == null) {
                 logger.warn("[TUNING-2PH][PHASE2] Aucun résultat valide – on garde phase1");
-                persistBest(symbol, phase1, jdbcTemplate);
+                persistBest(symbol, phase1, jdbcTemplate, 0);
                 progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime;
                 try { writeProgressMetrics(progress); } catch (Exception ex) { logger.warn("[TUNING][METRICS] Échec écriture JSON fin phase2 fallback: {}", ex.getMessage()); }
                 return phase1.bestConfig;
@@ -1488,11 +1488,11 @@ public class LstmTuningService {
             LstmConfig finalConfig; MultiLayerNetwork finalModel; LstmTradePredictor.ScalerSet finalScalers; double finalScore; double finalMse;
             if (ratio >= 1.05) {
                 logger.info("[TUNING-2PH][CHOIX] Phase2 retenue (amélioration >=5%) neurons={} lr={} dropout={}", phase2.bestConfig.getLstmNeurons(), phase2.bestConfig.getLearningRate(), phase2.bestConfig.getDropoutRate());
-                persistBest(symbol, phase2, jdbcTemplate);
+                persistBest(symbol, phase2, jdbcTemplate, ratio);
                 finalConfig = phase2.bestConfig; finalModel = phase2.bestModel; finalScalers = phase2.bestScalers; finalScore = improvedScore; finalMse = phase2.bestMse;
             } else {
                 logger.info("[TUNING-2PH][CHOIX] Amélioration insuffisante (<5%) – on garde phase1");
-                persistBest(symbol, phase1, jdbcTemplate);
+                persistBest(symbol, phase1, jdbcTemplate, 0);
                 finalConfig = phase1.bestConfig; finalModel = phase1.bestModel; finalScalers = phase1.bestScalers; finalScore = baselineScore; finalMse = phase1.bestMse;
             }
             progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime;
@@ -1759,7 +1759,7 @@ public class LstmTuningService {
     }
 
     private void persistBest(String symbol, PhaseAggregate pa,
-                              JdbcTemplate jdbcTemplate) {
+                              JdbcTemplate jdbcTemplate, double ratio) {
         if (pa.bestConfig == null || pa.bestModel == null || pa.bestScalers == null) {
             logger.warn("[TUNING-2PH][PERSIST] Impossible de persister (objets null)");
             return;
@@ -1781,7 +1781,8 @@ public class LstmTuningService {
                         pa.totalTrades,
                         pa.bestBusinessScore,
                         pa.totalSeriesTested,
-                        pa.phase);
+                        pa.phase,
+                        ratio);
             }
         } catch (Exception e) {
             logger.error("[TUNING-2PH][PERSIST] saveModelToDb échec: {}", e.getMessage());

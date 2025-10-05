@@ -8,5 +8,6 @@ CREATE TABLE trade_ai.lstm_models (
     total_series_tested INT,
     rendement DOUBLE,
     phase INT,
+    ratio DOUBLE,
     normalization_scope VARCHAR(16) DEFAULT 'window'
 );
