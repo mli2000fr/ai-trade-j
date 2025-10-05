@@ -533,7 +533,8 @@ public class LstmTuningService {
                             wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0),      // Ratio de Sortino
                             wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0),       // Ratio de Calmar
                             wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0),     // Rotation du portefeuille
-                            wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0) // Durée moyenne des positions
+                            wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0), // Durée moyenne des positions
+                            0
                     );
 
                     // ===== MESURE DE PERFORMANCE ET LOG =====
@@ -1654,7 +1655,7 @@ public class LstmTuningService {
                             wf.splits.stream().mapToDouble(m -> m.sortino).average().orElse(0.0),
                             wf.splits.stream().mapToDouble(m -> m.calmar).average().orElse(0.0),
                             wf.splits.stream().mapToDouble(m -> m.turnover).average().orElse(0.0),
-                            avgBarsInPosition
+                            avgBarsInPosition, phase
                     );
 
                     TuningResult tr = new TuningResult(

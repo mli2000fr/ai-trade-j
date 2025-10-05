@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS lstm_tuning_metrics (
+CREATE TABLE IF NOT EXISTS trade_ai.lstm_tuning_metrics (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   symbol VARCHAR(32) NOT NULL,
   window_size INT NOT NULL,

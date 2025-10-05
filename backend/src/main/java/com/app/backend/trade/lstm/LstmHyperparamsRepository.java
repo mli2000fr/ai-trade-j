@@ -206,7 +206,8 @@ public class LstmHyperparamsRepository {
             double sortino,
             double calmar,
             double turnover,
-            double avgBarsInPosition
+            double avgBarsInPosition,
+            int phase
     ) {
         jdbcTemplate.update(
                 SQL_SAVE_TUNING_METRICS,
@@ -239,7 +240,8 @@ public class LstmHyperparamsRepository {
                 turnover,
                 avgBarsInPosition,
                 config.isUseMultiHorizonAvg(),
-                config.getEntryThresholdFactor()
+                config.getEntryThresholdFactor(),
+                phase
         );
     }
 
