@@ -243,7 +243,7 @@ public class LstmConfig {
      * à la meilleure config phase 1) incluse dans la micro-grille phase 2 pour mesurer la dérive
      * due au simple ré-entraînement (drift stochastique). Si true: on ne modifie pas seed ni splits.
      */
-    private boolean baselineReplica = false;
+    private boolean baselineReplica = true;
 
     /**
      * Constructeur par défaut : charge les hyperparamètres depuis le fichier
