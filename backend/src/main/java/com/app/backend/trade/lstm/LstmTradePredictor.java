@@ -1004,7 +1004,7 @@ public class LstmTradePredictor {
      * Pipeline:
      *  1. Validation features (fallback 'close' si vide)
      *  2. Construction de séquences glissantes (fenêtres)
-     *  3. Création labels (prix futur ou log-return)
+     *  3. Création labels (prix futur ou log-returns)
      *  4. Normalisation feature par feature + label
      *  5. Transformation en NDArray & permutation => [batch, features, time]
      *  6. Initialisation du modèle
@@ -2878,6 +2878,7 @@ public class LstmTradePredictor {
             scalers = rebuildScalers(series, config);
         }
 
+        // Seuil swing de base (ATR ou returns selon config)
         double th = computeSwingTradeThreshold(series, config);
         double predicted = predictNextCloseWithScalerSet(symbol, series, config, model, scalers);
         predicted = Math.round(predicted * 1000.0) / 1000.0;
@@ -2885,29 +2886,120 @@ public class LstmTradePredictor {
         double[] closes = extractCloseValues(series);
         double lastClose = closes[closes.length - 1];
         double delta = predicted - lastClose;
+        double deltaPct = lastClose > 0 ? delta / lastClose : 0.0;
+
+        // ================== Filtres Swing Pro ==================
+        // 1. Volatilité (ATR)
+        double atrVal = 0.0; double atrPct = 0.0;
+        try {
+            ATRIndicator atrInd = new ATRIndicator(series, 14);
+            atrVal = atrInd.getValue(series.getEndIndex()).doubleValue();
+            if (lastClose > 0) atrPct = atrVal / lastClose;
+        } catch (Exception e) { logger.debug("[PREDIT][ATR] skip {}", e.toString()); }
+
+        // 2. Momentum RSI pour filtrer sur-achat / sur-vente
+        double rsiVal = 50.0;
+        try {
+            RSIIndicator rsi = new RSIIndicator(new ClosePriceIndicator(series), 14);
+            rsiVal = rsi.getValue(series.getEndIndex()).doubleValue();
+        } catch (Exception e) { logger.debug("[PREDIT][RSI] skip {}", e.toString()); }
+
+        // 3. Volume relatif (logique simple: volume courant vs moyenne 20)
+        double volRatio = 1.0;
+        try {
+            VolumeIndicator volInd = new VolumeIndicator(series);
+            double curVol = volInd.getValue(series.getEndIndex()).doubleValue();
+            double sumVol = 0.0; int count = 0;
+            for (int i = Math.max(0, series.getEndIndex() - 19); i <= series.getEndIndex(); i++) {
+                sumVol += volInd.getValue(i).doubleValue(); count++;
+            }
+            double avgVol = count > 0 ? sumVol / count : curVol;
+            if (avgVol > 0) volRatio = curVol / avgVol;
+        } catch (Exception e) { logger.debug("[PREDIT][VOL] skip {}", e.toString()); }
+
+        // 4. Confiance: distance relative au seuil principal (normalisée)
+        double confidence;
+        double absDeltaPct = Math.abs(deltaPct);
+        if (absDeltaPct <= th) confidence = 0.0; else confidence = Math.min(1.0, (absDeltaPct - th) / (th * 2.0));
+
+        // 5. Ajustements professionnels: neutraliser signaux faibles ou en conditions défavorables
+        boolean weaken = false;
+        // Sur-achat / sur-vente extrêmes -> éviter poursuite
+        if (deltaPct > 0 && rsiVal > 75) weaken = true; // trop sur-acheté
+        if (deltaPct < 0 && rsiVal < 25) weaken = true; // trop survendu (on évite vendre)
+        // Volume insuffisant => moins de fiabilité
+        if (volRatio < 0.7) weaken = true;
+        // Volatilité ultra basse => bruit (delta inférieur à 0.6 * seuil ATR dynamique)
+        if (atrPct > 0 && absDeltaPct < Math.max(th * 0.75, atrPct * 0.6)) weaken = true;
+        // Confiance faible intrinsèque
+        if (confidence < 0.20) weaken = true;
 
         SignalType signal =
             delta > th ? SignalType.UP :
                 (delta < -th ? SignalType.DOWN : SignalType.STABLE);
+
+        if (weaken && signal != SignalType.STABLE) {
+            // On réduit le signal à STABLE si les conditions pro ne sont pas réunies
+            logger.debug("[PREDIT][FILTER] signal={} affaibli -> STABLE (rsi={} volRatio={} atrPct={} conf={})", signal, String.format("%.1f", rsiVal), String.format("%.2f", volRatio), String.format("%.4f", atrPct), String.format("%.2f", confidence));
+            signal = SignalType.STABLE;
+            confidence = 0.0;
+        }
+
+        // 6. Estimation risk / target professionnelle (basée ATR)
+        double riskPerShare = atrVal * 1.3; // stop ~1.3 ATR
+        double targetPerShare = atrVal * 2.6; // objectif ~2R
+        double provisionalTarget = (signal == SignalType.UP)
+            ? lastClose + targetPerShare
+            : (signal == SignalType.DOWN)
+                ? lastClose - targetPerShare
+                : lastClose;
+        if (provisionalTarget <= 0) provisionalTarget = lastClose;
 
         String position = analyzePredictionPosition(
             Arrays.copyOfRange(closes, closes.length - config.getWindowSize(), closes.length),
             predicted
         );
 
+        // Enrichissement du champ position pour exposer les métriques utiles au front / supervision
+        String posInfo = String.format(
+            java.util.Locale.US,
+            "%s|dPct=%.3f%%|th=%.3f%%|ATR%%=%.3f%%|RSI=%.1f|VolR=%.2f|conf=%.2f|risk=%.4f|target=%.4f",
+            position,
+            deltaPct * 100.0,
+            th * 100.0,
+            atrPct * 100.0,
+            rsiVal,
+            volRatio,
+            confidence,
+            riskPerShare,
+            provisionalTarget
+        );
+
         String formattedDate = series.getLastBar()
             .getEndTime()
             .format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"));
 
-        logger.info("PREDICT win={} last={} pred={} delta={} thr={} signal={}",
-            config.getWindowSize(), lastClose, predicted, delta, th, signal);
+        logger.info("[PREDIT] win={} last={} pred={} delta={} ({}%) thr={} ({}) signal={} conf={} rsi={} volR={} atrPct={}",
+            config.getWindowSize(),
+            String.format(java.util.Locale.US, "%.4f", lastClose),
+            String.format(java.util.Locale.US, "%.4f", predicted),
+            String.format(java.util.Locale.US, "%.4f", delta),
+            String.format(java.util.Locale.US, "%.3f", deltaPct * 100.0),
+            String.format(java.util.Locale.US, "%.4f", th),
+            config.getThresholdType(),
+            signal,
+            String.format(java.util.Locale.US, "%.2f", confidence),
+            String.format(java.util.Locale.US, "%.1f", rsiVal),
+            String.format(java.util.Locale.US, "%.2f", volRatio),
+            String.format(java.util.Locale.US, "%.3f", atrPct * 100.0)
+        );
 
         return PreditLsdm.builder()
             .lastClose(lastClose)
             .predictedClose(predicted)
             .signal(signal)
             .lastDate(formattedDate)
-            .position(position)
+            .position(posInfo)
             .build();
     }
 
