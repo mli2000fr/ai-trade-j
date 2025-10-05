@@ -1797,9 +1797,11 @@ public class LstmTuningService {
     }
 
     private static double adjScore(TuningResult r) {
+        /* le drawdown pèse deux fois. C’est cohérent seulement si c’est intentionnel (sur‑pondération du risque). Sinon simplifier l’une des deux couches évite un biais excessif.
         if (r == null) return Double.NEGATIVE_INFINITY;
         double penalty = 1.0 - Math.max(0.0, Math.min(0.9, r.maxDrawdown));
-        return r.businessScore * penalty;
+        return r.businessScore * penalty;*/
+        return r.businessScore;
     }
 
     private static String keyOf(LstmConfig c) {
