@@ -611,6 +611,7 @@ public class LstmTuningService {
         // Compteurs pour statistiques finales
         int failedConfigs = 0;                                    // Nombre de configs échouées
         double bestBusinessScore = Double.NEGATIVE_INFINITY;      // Meilleur score business trouvé
+        double bestAdjScore = Double.NEGATIVE_INFINITY;           // Nouveau : suivi score ajusté (anti overfit winRate)
 
         // ===== RÉCUPÉRATION SÉQUENTIELLE DES RÉSULTATS =====
         // Parcours des Future dans l'ordre de soumission (maintien de la séquence)
@@ -629,15 +630,15 @@ public class LstmTuningService {
                     continue; // Passe à la config suivante
                 }
 
-                // ===== SÉLECTION DU MEILLEUR CANDIDAT =====
-                // Critère: maximisation du businessScore (métrique composite business)
-                if (result.businessScore > bestBusinessScore) {
-                    bestBusinessScore = result.businessScore;   // Nouveau record
-                    bestConfig = result.config;                 // Configuration gagnante
-                    bestModel = result.model;                   // Modèle associé
-                    bestScalers = result.scalers;               // Scalers correspondants
-                    bestScore = result.score;                   // MSE pour information
-                    bestResul = result;                         // Résultat complet
+                double adj = adjScore(result);
+                if (adj > bestAdjScore) {
+                    bestAdjScore = adj;
+                    bestBusinessScore = result.businessScore;   // conserve la valeur brute pour reporting
+                    bestConfig = result.config;
+                    bestModel = result.model;
+                    bestScalers = result.scalers;
+                    bestScore = result.score;
+                    bestResul = result;
                 }
 
             } catch (Exception e) {
@@ -705,8 +706,8 @@ public class LstmTuningService {
 
             // ===== LOG FINAL DE SUCCÈS =====
             // Résumé complet des meilleurs résultats trouvés
-            logger.info("[TUNING][V2] Fin tuning {} | Best businessScore={} | windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={}, meanMSE={}, durée={} ms",
-                    symbol, bestBusinessScore, bestConfig.getWindowSize(), bestConfig.getLstmNeurons(),
+            logger.info("[TUNING][V2] Fin tuning {} | Best businessScore={} (adj={}) | windowSize={}, neurons={}, dropout={}, lr={}, l1={}, l2={}, meanMSE={}, durée={} ms",
+                    symbol, bestBusinessScore, bestAdjScore, bestConfig.getWindowSize(), bestConfig.getLstmNeurons(),
                     bestConfig.getDropoutRate(), bestConfig.getLearningRate(), bestConfig.getL1(), bestConfig.getL2(),
                     bestScore, (endSymbol - startSymbol));
         // Étape 19: écrire métriques JSON
@@ -732,21 +733,6 @@ public class LstmTuningService {
             // Log non-critique: échec de nettoyage n'affecte pas le résultat
             logger.warn("Nettoyage ND4J échec : {}", e.getMessage());
         }
-
-        // ===== EXPORT RÉSUMÉ RUN JSON (Étape 23) =====
-            try {
-                writeRunSummaryJson(new LstmRunSummary(
-                    symbol,
-                    endSymbol,
-                    bestConfig,
-                    bestScore, // meanMse
-                    bestBusinessScore,
-                    bestScore,
-                    null // valLossCurve à remplir si disponible
-                ));
-            } catch (Exception ex) {
-                logger.warn("[TUNING][EXPORT] Échec export JSON résumé run: {}", ex.getMessage());
-            }
 
         // ===== RETOUR DU RÉSULTAT FINAL =====
         // Retourne la meilleure configuration trouvée (null si aucune valide)
@@ -1443,27 +1429,37 @@ public class LstmTuningService {
 
             java.util.Set<String> dedup = new java.util.HashSet<>();
             java.util.List<LstmConfig> microGrid = new java.util.ArrayList<>();
+            int indexTop = 0;
             for (TuningResult tr : top) {
+                indexTop++;
                 LstmConfig base = tr.config; int baseNeu = base.getLstmNeurons();
                 int[] neuVar = {baseNeu-16, baseNeu, baseNeu+16};
-                double[] lrVar = {base.getLearningRate()*0.9, base.getLearningRate(), base.getLearningRate()*1.1};
-                double[] drVar = {base.getDropoutRate()-0.03, base.getDropoutRate(), base.getDropoutRate()+0.03};
-                for (int nv : neuVar) { if (nv<16||nv>512) continue; for (double lr: lrVar){ lr=Math.max(1e-5, Math.min(0.01, lr)); for(double dr:drVar){ dr=Math.max(0.05, Math.min(0.40, dr)); LstmConfig c=cloneConfig(base); c.setLstmNeurons(nv); c.setLearningRate(lr); c.setDropoutRate(dr); if(dedup.add(keyOf(c))) microGrid.add(c); } } }
-            }
-            // --- Ajout explicite baseline ré-entraînement (inchangée) pour mesure dérive ---
-            if (phase1.bestConfig != null) {
-                String baselineKey = keyOf(phase1.bestConfig);
-                boolean present = false;
-                for (LstmConfig c : microGrid) {
-                    if (keyOf(c).equals(baselineKey)) { c.setBaselineReplica(true); present = true; break; }
+                double[] lrVar = {base.getLearningRate()*0.9, base.getLearningRate(), base.getLearningRate()*1.15}; // élargir 1.15
+                double[] drVar = {base.getDropoutRate()-0.05, base.getDropoutRate(), base.getDropoutRate()+0.04}; // variations plus larges
+                for (int nv : neuVar) {
+                    if (nv<16||nv>512) continue;
+                    for (double lr: lrVar){
+                        lr=Math.max(1e-5, Math.min(0.02, lr)); // plafond un peu plus haut pour dynamisme
+                        for(double dr:drVar){
+                            dr=Math.max(0.05, Math.min(0.35, dr));
+                            LstmConfig c=cloneConfig(base);
+                            c.setIndexTop(indexTop);
+                            c.setLstmNeurons(nv);
+                            c.setLearningRate(lr);
+                            c.setDropoutRate(dr);
+                            if(dedup.add(keyOf(c))) microGrid.add(c);
+                        }
+                    }
                 }
-                if (!present) {
-                    LstmConfig baselineReplica = cloneConfig(phase1.bestConfig);
-                    baselineReplica.setBaselineReplica(true); // flag pour éviter jitter seed/splits
-                    microGrid.add(baselineReplica);
-                    logger.info("[TUNING-2PH][PHASE2][BASELINE] Ajout réplique baseline sans variation (neurons={} lr={} dropout={})", baselineReplica.getLstmNeurons(), baselineReplica.getLearningRate(), baselineReplica.getDropoutRate());
-                } else {
-                    logger.info("[TUNING-2PH][PHASE2][BASELINE] Baseline déjà présente dans micro-grille (marquée baselineReplica)");
+            }
+            // Ajustements agressifs micro-grille (sauf baseline)
+            for (LstmConfig c : microGrid) {
+                if (!c.isBaselineReplica()) {
+                    c.setAggressivenessBoost(1.3);
+                    c.setLimitPredictionPct(0.0);
+                    c.setEntryPercentileQuantile(Math.max(0.45, c.getEntryPercentileQuantile() - 0.05));
+                    c.setDeadzoneFactor(Math.max(0.12, c.getDeadzoneFactor() * 0.6));
+                    c.setL2(Math.max(0.0, c.getL2() * 0.5)); // réduire régularisation
                 }
             }
             progress.totalConfigs += microGrid.size();
@@ -1604,7 +1600,6 @@ public class LstmTuningService {
 
             persistBest(symbol, finalAggregate, jdbcTemplate, ratioPersist);
             progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime; try { writeProgressMetrics(progress);} catch(Exception ignored) {}
-            try { writeRunSummaryJson(new LstmRunSummary(symbol, progress.endTime, finalAggregate.bestConfig, finalAggregate.bestMse, finalAggregate.bestBusinessScore, finalAggregate.bestMse, null)); } catch (Exception ignored) {}
             return finalAggregate.bestConfig;
         } catch (Exception e) {
             progress.status = "erreur"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime; try { writeProgressMetrics(progress);} catch(Exception ignored) {}
@@ -1652,7 +1647,7 @@ public class LstmTuningService {
         var futures = new java.util.ArrayList<java.util.concurrent.Future<TuningResult>>();
         var results = java.util.Collections.synchronizedList(new java.util.ArrayList<TuningResult>());
         for (int i=0;i<grid.size();i++) {
-            final int idx=i; LstmConfig cfg=grid.get(i); cfg.setUseScalarV2(true); cfg.setUseWalkForwardV2(true);
+            final int idx=i; LstmConfig cfg=grid.get(i); cfg.setUseScalarV2(true); cfg.setUseWalkForwardV2(true); // fix parenthèse
             // Auto-scale batch GPU phase1/2
             if (cudaBackend && gpuAutoBatchScale) {
                 int originalBatch = cfg.getBatchSize()>0?cfg.getBatchSize():32;
@@ -1721,12 +1716,12 @@ public class LstmTuningService {
                             wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0),
                             wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0),
                             wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0),
-                            wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0), phase + finalI * 10);
+                            wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0), phase + grid.get(finalI).getIndexTop() * 10);
                     TuningResult trRes=new TuningResult(cfg, model, scalers, meanMse, sumPF/splits, sumWin/splits, maxDrawdownPct, meanBusiness, stdBusiness, rmse, sumProfit, trades, wf.totalTestedBars);
                     results.add(trRes);
                     if(progress!=null){ progress.testedConfigs.incrementAndGet(); progress.lastUpdate=System.currentTimeMillis(); }
                     logger.info("[TUNING-2PH][{}] {} config {}/{} bs={} adj={} dd={} trades={} phase={}", phaseTag, symbol, idx+1, grid.size(), String.format("%.5f", meanBusiness), String.format("%.5f", adjScore(trRes)), String.format("%.4f", maxDrawdownPct), trades, phase);
-                    trRes.phase = phase + finalI * 10;
+                    trRes.phase = phase + grid.get(finalI).getIndexTop() * 10;
                     return trRes;
                 } catch(Exception ex){ if(progress!=null){ progress.testedConfigs.incrementAndGet(); progress.lastUpdate=System.currentTimeMillis(); } logger.error("[TUNING-2PH][{}][{}] Erreur config {}/{} : {}", phaseTag, symbol, idx+1, grid.size(), ex.getMessage()); return null; }
                 finally { model=null; try{ org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc(); org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread(); }catch(Exception ignore){} System.gc(); if(cudaBackend){ gpuController.markTrainingFinished(); if(permit) gpuController.releasePermit(); } }
@@ -1734,10 +1729,10 @@ public class LstmTuningService {
         }
         executor.shutdown(); for(var f: futures){ try{ f.get(); }catch(Exception ignored){} }
         if(results.isEmpty()) return null;
-        TuningResult best=null; double bestBS=Double.NEGATIVE_INFINITY; double bestStd=0; for(var r: results){ if(r==null) continue; if(r.businessScore>bestBS){ bestBS=r.businessScore; bestStd = r.businessScoreStd; best=r; } }
-        PhaseAggregate ag=new PhaseAggregate(); ag.bestConfig=best!=null?best.config:null; ag.bestModel=best!=null?best.model:null; ag.bestScalers=best!=null?best.scalers:null; ag.bestBusinessScore=bestBS; ag.bestBusinessScoreStd=bestStd; ag.bestMse=best!=null?best.score:Double.NaN; ag.profitFactor=best!=null?best.profitFactor:0; ag.winRate=best!=null?best.winRate:0; ag.maxDrawdown=best!=null?best.maxDrawdown:0; ag.rmse=best!=null?best.rmse:0; ag.sumProfit=best!=null?best.sumProfit:0; ag.totalTrades=best!=null?best.totalTrades:0; ag.totalSeriesTested=best!=null?best.totalSeriesTested:0; ag.phase=best.phase; ag.allResults=results; logger.info("[TUNING-2PH][{}] Fin phase {} | bestBS={} std={} ", symbol, phaseTag, String.format("%.6f", bestBS), String.format("%.6f", bestStd)); return ag;
+        TuningResult best=null; double bestAdj=Double.NEGATIVE_INFINITY; double bestRaw=Double.NEGATIVE_INFINITY; double bestStd=0;
+        for(var r: results){ if(r==null) continue; double a=adjScore(r); if(a>bestAdj){ bestAdj=a; bestRaw=r.businessScore; bestStd=r.businessScoreStd; best=r; } }
+        PhaseAggregate ag=new PhaseAggregate(); ag.bestConfig=best!=null?best.config:null; ag.bestModel=best!=null?best.model:null; ag.bestScalers=best!=null?best.scalers:null; ag.bestBusinessScore=bestRaw; ag.bestBusinessScoreStd=bestStd; ag.bestMse=best!=null?best.score:Double.NaN; ag.profitFactor=best!=null?best.profitFactor:0; ag.winRate=best!=null?best.winRate:0; ag.maxDrawdown=best!=null?best.maxDrawdown:0; ag.rmse=best!=null?best.rmse:0; ag.sumProfit=best!=null?best.sumProfit:0; ag.totalTrades=best!=null?best.totalTrades:0; ag.totalSeriesTested=best!=null?best.totalSeriesTested:0; ag.phase=best!=null?best.phase:phase; ag.allResults=results; logger.info("[TUNING-2PH][{}] Fin phase {} | bestRawBS={} bestAdjBS={} std={} trades={} ", symbol, phaseTag, String.format("%.6f", bestRaw), String.format("%.6f", bestAdj), String.format("%.6f", bestStd), best!=null?best.totalTrades:0); return ag;
     }
-
     private void persistBest(String symbol, PhaseAggregate pa, JdbcTemplate jdbcTemplate, double ratio){
         if(pa.bestConfig==null||pa.bestModel==null||pa.bestScalers==null){ logger.warn("[TUNING-2PH][PERSIST] Objets null – skip"); return; }
         try { hyperparamsRepository.saveHyperparams(symbol, pa.bestConfig, pa.phase); } catch(Exception e){ logger.error("[TUNING-2PH][PERSIST] saveHyperparams échec: {}", e.getMessage()); }
@@ -1760,27 +1755,18 @@ public class LstmTuningService {
         return c;
     }
     private static String keyOf(LstmConfig c){ return c.getLstmNeurons()+"|"+String.format(java.util.Locale.US,"%.6f",c.getLearningRate())+"|"+String.format(java.util.Locale.US,"%.4f",c.getDropoutRate()); }
-    private static double adjScore(TuningResult r){ return r==null?Double.NEGATIVE_INFINITY:r.businessScore; }
-
-    // --- Résumé run JSON (simplifié) ---
-    private void writeRunSummaryJson(LstmRunSummary summary) throws Exception {
-        // Fallback simple: sérialisation JSON manuelle minimale (évite dépendance supplémentaire)
-        if (summary == null) return;
-        String json = "{"+
-                "\"symbol\":\""+summary.symbol+"\","+
-                "\"timestamp\":"+summary.timestamp+","+
-                "\"bestWindowSize\":"+(summary.bestConfig!=null?summary.bestConfig.getWindowSize():-1)+","+
-                "\"bestNeurons\":"+(summary.bestConfig!=null?summary.bestConfig.getLstmNeurons():-1)+","+
-                "\"businessScore\":"+String.format(java.util.Locale.US,"%.6f",summary.businessScore)+","+
-                "\"meanMse\":"+String.format(java.util.Locale.US,"%.6f",summary.meanMse)+"}";
-        Path p = Path.of("lstm_run_summary_"+summary.symbol+".json");
-        Files.writeString(p, json, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
-    }
-
-    // POJO résumé (minimal)
-    private static class LstmRunSummary {
-        final String symbol; final long timestamp; final LstmConfig bestConfig; final double meanMse; final double businessScore; final double valMse; final Object curve;
-        LstmRunSummary(String symbol, long timestamp, LstmConfig bestConfig, double meanMse, double businessScore, double valMse, Object curve){ this.symbol=symbol; this.timestamp=timestamp; this.bestConfig=bestConfig; this.meanMse=meanMse; this.businessScore=businessScore; this.valMse=valMse; this.curve=curve; }
+    // Nouveau score ajusté: favorise modèles avec plus de trades et évite les modèles trop plats
+    private static double adjScore(TuningResult r){
+        if(r==null) return Double.NEGATIVE_INFINITY;
+        double base = r.businessScore;
+        if(r.totalTrades < 3) base *= 0.40; else if(r.totalTrades < 8) base *= 0.70; else if(r.totalTrades < 12) base *= 0.85;
+        double tradeRef = 30.0; double boost = Math.min(r.totalTrades / tradeRef, 1.6); // boost max +60%
+        base *= (0.9 + 0.12*boost);
+        if(r.businessScoreStd < 0.0005) base *= 0.70; else if(r.businessScoreStd < 0.001) base *= 0.88;
+        // Pénalités winRate extrêmes (soupçon sur-fit ou manque de robustesse)
+        if(r.winRate > 0.95) base *= 0.55; else if(r.winRate > 0.90) base *= 0.75; // trop parfait => suspect
+        if(r.winRate < 0.25) base *= 0.60; else if(r.winRate < 0.35) base *= 0.80;  // trop faible => faible généralisabilité
+        return base;
     }
 
 }

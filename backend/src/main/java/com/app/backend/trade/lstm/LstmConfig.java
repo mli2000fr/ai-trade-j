@@ -39,6 +39,7 @@ import org.springframework.stereotype.Component;
 @Getter
 @Component
 public class LstmConfig {
+    private int indexTop = 0;
     // =============================== Fenêtre & Structure du réseau ===============================
     /**
      * Taille de la séquence d'entrée (longueur de la fenêtre glissante) utilisée comme contexte
@@ -244,7 +245,37 @@ public class LstmConfig {
      * due au simple ré-entraînement (drift stochastique). Si true: on ne modifie pas seed ni splits.
      */
     private boolean baselineReplica = true;
-
+    // === Nouveaux paramètres agressivité / réduction prudence ===
+    /** Si true, utilise une logique OR (threshold ATR OU percentile) au lieu de AND pour déclencher une entrée. */
+    private boolean entryOrLogic = true;
+    /** Quantile (0-1) utilisé pour l'entrée via distribution des |delta| (ex-0.65). */
+    private double entryPercentileQuantile = 0.60; // moins strict que 0.65
+    /** Delta plancher absolu (relatif) minimal requis (ex: 0.0005 = 0.05%). */
+    private double entryDeltaFloor = 0.0005;
+    /** Ratio volume minimal vs moyenne (abaisse de 0.8 à 0.6 par défaut). */
+    private double volumeMinRatio = 0.6;
+    /** RSI overbought limit (au-delà on filtre). Relevé à 80 pour permettre plus d'entrées. */
+    private double rsiOverboughtLimit = 80.0;
+    /** Facteur deadzone (fraction du seuil swing). 0.5 auparavant figé. Réduction => plus de signaux. */
+    private double deadzoneFactor = 0.30;
+    /** Désactive totalement la deadzone si true. */
+    private boolean disableDeadzone = false;
+    /** Borne min ATR% pour le seuil dynamique d'entrée (remplace constante 0.001). */
+    private double thresholdAtrMin = 0.001;
+    /** Borne max ATR% (remplace constante 0.01). */
+    private double thresholdAtrMax = 0.01;
+    /** Multiplicateur sur le signal (delta prédictif) pour augmenter agressivité. */
+    private double aggressivenessBoost = 1.0;
+    /** Active fallback agressif si 0 trade trop longtemps. */
+    private boolean aggressiveFallbackEnabled = true;
+    /** Nombre de barres sans trade avant déclenchement fallback. */
+    private int fallbackNoTradeBars = 150;
+    /** Nombre additionnel de barres pour atteindre le relâchement maximal. */
+    private int fallbackMaxExtraBars = 300;
+    /** Quantile minimal atteint en fin de relâchement (percentile adaptatif). */
+    private double fallbackMinPercentileQuantile = 0.35;
+    /** Delta floor minimal atteint en fin de relâchement. */
+    private double fallbackMinDeltaFloor = 0.0001;
     /**
      * Constructeur par défaut : charge les hyperparamètres depuis le fichier
      * resources/lstm-config.properties si présent. Chaque paramètre possède une valeur de secours
@@ -313,6 +344,23 @@ public class LstmConfig {
                 // Nouveaux paramètres async iterator (Étape 4)
                 useAsyncIterator = Boolean.parseBoolean(props.getProperty("useAsyncIterator", "true"));
                 asyncQueueSize = Integer.parseInt(props.getProperty("asyncQueueSize", "8"));
+                // ===== Nouveaux paramètres agressivité =====
+                entryOrLogic = Boolean.parseBoolean(props.getProperty("entryOrLogic", String.valueOf(entryOrLogic)));
+                entryPercentileQuantile = Double.parseDouble(props.getProperty("entryPercentileQuantile", String.valueOf(entryPercentileQuantile)));
+                entryDeltaFloor = Double.parseDouble(props.getProperty("entryDeltaFloor", String.valueOf(entryDeltaFloor)));
+                volumeMinRatio = Double.parseDouble(props.getProperty("volumeMinRatio", String.valueOf(volumeMinRatio)));
+                rsiOverboughtLimit = Double.parseDouble(props.getProperty("rsiOverboughtLimit", String.valueOf(rsiOverboughtLimit)));
+                deadzoneFactor = Double.parseDouble(props.getProperty("deadzoneFactor", String.valueOf(deadzoneFactor)));
+                disableDeadzone = Boolean.parseBoolean(props.getProperty("disableDeadzone", String.valueOf(disableDeadzone)));
+                thresholdAtrMin = Double.parseDouble(props.getProperty("thresholdAtrMin", String.valueOf(thresholdAtrMin)));
+                thresholdAtrMax = Double.parseDouble(props.getProperty("thresholdAtrMax", String.valueOf(thresholdAtrMax)));
+                aggressivenessBoost = Double.parseDouble(props.getProperty("aggressivenessBoost", String.valueOf(aggressivenessBoost)));
+                // === Fallback agressif ===
+                aggressiveFallbackEnabled = Boolean.parseBoolean(props.getProperty("aggressiveFallbackEnabled", String.valueOf(aggressiveFallbackEnabled)));
+                fallbackNoTradeBars = Integer.parseInt(props.getProperty("fallbackNoTradeBars", props.getProperty("fallbackNoTradeBar", String.valueOf(fallbackNoTradeBars))));
+                fallbackMaxExtraBars = Integer.parseInt(props.getProperty("fallbackMaxExtraBars", String.valueOf(fallbackMaxExtraBars)));
+                fallbackMinPercentileQuantile = Double.parseDouble(props.getProperty("fallbackMinPercentileQuantile", String.valueOf(fallbackMinPercentileQuantile)));
+                fallbackMinDeltaFloor = Double.parseDouble(props.getProperty("fallbackMinDeltaFloor", String.valueOf(fallbackMinDeltaFloor)));
             }
             // FILET DE SECURITE : même si le fichier n'existe pas, on veut un optimizer par défaut.
             optimizer = props.getProperty("optimizer", "adam");
@@ -383,6 +431,23 @@ public class LstmConfig {
         try { this.useAsyncIterator = rs.getBoolean("use_async_iterator"); } catch (Exception ignored) {}
         try { this.asyncQueueSize = rs.getInt("async_queue_size"); } catch (Exception ignored) {}
         try { this.baselineReplica = rs.getBoolean("baseline_replica"); } catch (Exception ignored) {}
+        // ===== Lecture optionnelle nouveaux paramètres agressivité =====
+        try { this.entryOrLogic = rs.getBoolean("entry_or_logic"); } catch (Exception ignored) {}
+        try { this.entryPercentileQuantile = rs.getDouble("entry_percentile_quantile"); } catch (Exception ignored) {}
+        try { this.entryDeltaFloor = rs.getDouble("entry_delta_floor"); } catch (Exception ignored) {}
+        try { this.volumeMinRatio = rs.getDouble("volume_min_ratio"); } catch (Exception ignored) {}
+        try { this.rsiOverboughtLimit = rs.getDouble("rsi_overbought_limit"); } catch (Exception ignored) {}
+        try { this.deadzoneFactor = rs.getDouble("deadzone_factor"); } catch (Exception ignored) {}
+        try { this.disableDeadzone = rs.getBoolean("disable_deadzone"); } catch (Exception ignored) {}
+        try { this.thresholdAtrMin = rs.getDouble("threshold_atr_min"); } catch (Exception ignored) {}
+        try { this.thresholdAtrMax = rs.getDouble("threshold_atr_max"); } catch (Exception ignored) {}
+        try { this.aggressivenessBoost = rs.getDouble("aggressiveness_boost"); } catch (Exception ignored) {}
+        // === Fallback agressif (colonnes optionnelles) ===
+        try { this.aggressiveFallbackEnabled = rs.getBoolean("aggressive_fallback_enabled"); } catch (Exception ignored) {}
+        try { this.fallbackNoTradeBars = rs.getInt("fallback_no_trade_bars"); } catch (Exception ignored) {}
+        try { this.fallbackMaxExtraBars = rs.getInt("fallback_max_extra_bars"); } catch (Exception ignored) {}
+        try { this.fallbackMinPercentileQuantile = rs.getDouble("fallback_min_percentile_quantile"); } catch (Exception ignored) {}
+        try { this.fallbackMinDeltaFloor = rs.getDouble("fallback_min_delta_floor"); } catch (Exception ignored) {}
     }
 
     /**
