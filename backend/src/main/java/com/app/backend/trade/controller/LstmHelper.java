@@ -228,8 +228,24 @@ public class LstmHelper {
             throw new Exception("Modèle/scalers absents pour " + symbol + ", impossible de vérifier le drift.");
         }
 
+
         // 6. Exécution de la prédiction (utilise model/scalers si présents)
-        PreditLsdm preditLsdm = lstmTradePredictor.getPredit(symbol, series, config, model, scalers);
+        PreditLsdm preditLsdm = PreditLsdm.builder().build();
+        if(loaded.phase == 0 ){
+            preditLsdm = lstmTradePredictor.getPredit(symbol, series, config, model, scalers);
+        }else{
+            TradeStylePrediction tradeStylePrediction = lstmTradePredictor.predictTradeStyle(symbol, series, config, model, scalers);
+
+            preditLsdm.setLastClose(tradeStylePrediction.lastClose);
+            preditLsdm.setPredictedClose(tradeStylePrediction.predictedClose);
+            preditLsdm.setSignal(tradeStylePrediction.action.equals("BUY") ? SignalType.BUY :
+                    tradeStylePrediction.action.equals("SELL") ? SignalType.SELL : SignalType.NONE);
+            preditLsdm.setLastDate(java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM")));
+            preditLsdm.setPosition(tradeStylePrediction.tendance);
+            preditLsdm.setExplication(tradeStylePrediction.comment);
+            tradeStylePrediction.loadedModel = loaded;
+        }
+        preditLsdm.setLoadedModel(loaded);
 
         // 7. Sauvegarde du signal du jour
         saveSignalHistory(symbol, preditLsdm);

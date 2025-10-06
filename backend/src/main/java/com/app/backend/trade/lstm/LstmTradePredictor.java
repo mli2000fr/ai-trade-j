@@ -35,6 +35,7 @@ package com.app.backend.trade.lstm;
 
 import com.app.backend.trade.model.PreditLsdm;
 import com.app.backend.trade.model.SignalType;
+import com.app.backend.trade.model.TradeStylePrediction;
 import org.deeplearning4j.datasets.iterator.utilty.ListDataSetIterator;
 import org.deeplearning4j.datasets.iterator.AsyncDataSetIterator;
 import org.deeplearning4j.nn.conf.MultiLayerConfiguration;
@@ -3233,4 +3234,168 @@ public class LstmTradePredictor {
                 " | checksums c1="+String.format(java.util.Locale.US, "%.4f", cks1)+
                 " c3="+String.format(java.util.Locale.US, "%.4f", cks3));
     }
+
+
+    // ==== NOUVELLE PREDICTION STYLE TRADING (sans modification des méthodes existantes) ====
+    /**
+     * Prédiction avancée mimant la logique d'entrée de simulateTradingWalkForward pour un snapshot.
+     * Fournit: prix prédit, tendance (UP/DOWN/STABLE) et action (BUY/HOLD/SELL) + métriques décision.
+     * Entrée LONG only; SELL correspond à signal de faiblesse/éviter achat (ou sortie potentielle si en position externe).
+     */
+    public TradeStylePrediction predictTradeStyle(String symbol,
+                                                  BarSeries series,
+                                                  LstmConfig config,
+                                                  MultiLayerNetwork model,
+                                                  ScalerSet scalers) {
+        TradeStylePrediction out = new TradeStylePrediction();
+        try {
+            int barCount = series.getBarCount();
+            int window = config.getWindowSize();
+            if (barCount <= window + 2) {
+                double lc = series.getLastBar().getClosePrice().doubleValue();
+                out.lastClose = lc; out.predictedClose = lc; out.tendance = "STABLE"; out.action = "HOLD"; out.comment = "insuffisant"; return out;
+            }
+            // Assurer modèle & scalers
+            model = ensureModelWindowSize(model, config.getFeatures().size(), config);
+            if (scalers == null) scalers = rebuildScalers(series, config);
+
+            // Prix actuel
+            double lastClose = series.getLastBar().getClosePrice().doubleValue();
+            out.lastClose = lastClose;
+
+            // Prédiction principale
+            double predicted = predictNextCloseWithScalerSet(symbol, series, config, model, scalers);
+            out.predictedClose = predicted;
+            double rawDeltaPct = (lastClose > 0) ? (predicted - lastClose) / lastClose : 0.0;
+
+            // ATR & RSI & Volume (comme simulation)
+            double atrBar = 0, atrPct = 0; double rsiVal = 50; double volRatio = 1.0;
+            try {
+                ATRIndicator atrInd = new ATRIndicator(series, 14);
+                atrBar = atrInd.getValue(series.getEndIndex()).doubleValue();
+                if (lastClose > 0) atrPct = atrBar / lastClose;
+            } catch (Exception ignore) {}
+            try {
+                RSIIndicator rsi = new RSIIndicator(new ClosePriceIndicator(series), 14);
+                rsiVal = rsi.getValue(series.getEndIndex()).doubleValue();
+            } catch (Exception ignore) {}
+            try {
+                VolumeIndicator volInd = new VolumeIndicator(series);
+                double curVol = volInd.getValue(series.getEndIndex()).doubleValue();
+                double sum=0; int c=0; for(int i=Math.max(0, series.getEndIndex()-19); i<=series.getEndIndex(); i++){ sum+= volInd.getValue(i).doubleValue(); c++; }
+                double avg = c>0? sum/c:curVol; if (avg>0) volRatio = curVol/avg;
+            } catch (Exception ignore) {}
+
+            // Seuil ATR adaptatif (min/max)
+            double cfgMinTh = config.getThresholdAtrMin(); if (!(cfgMinTh > 0)) cfgMinTh = 0.001; if (cfgMinTh < 1e-4) cfgMinTh = 1e-4;
+            double cfgMaxTh = config.getThresholdAtrMax(); if (!(cfgMaxTh > cfgMinTh)) cfgMaxTh = Math.max(cfgMinTh*2, 0.01);
+            double atrAdaptiveThreshold = Math.min(cfgMaxTh, Math.max(cfgMinTh, atrPct));
+
+            // Paramètres d'entrée avancés (mêmes noms que simulation)
+            double basePercentileQ = Math.min(0.95, Math.max(0.50, config.getEntryPercentileQuantile()));
+            double deltaFloor = Math.max(0.0002, config.getEntryDeltaFloor());
+            boolean orLogic = config.isEntryOrLogic();
+            double aggressivenessBoost = config.getAggressivenessBoost() > 0 ? config.getAggressivenessBoost() : 1.0;
+
+            // Distribution historique des deltas prédits (approx) sur N dernières barres pour percentile
+            int lookbackForPercentile = Math.min(200, barCount - window - 2);
+            List<Double> absDeltas = new ArrayList<>();
+            if (lookbackForPercentile > 20) {
+                int start = barCount - lookbackForPercentile - 1;
+                double[] closes = extractCloseValues(series);
+                for (int b = start + window; b < barCount - 1; b++) { // exclut la dernière barre actuelle
+                    // Sous-série 0..b (b = endIndex-1 max) pour prédire b+1 (approx). On simplifie: prédire close courant en glissant.
+                    try {
+                        BarSeries sub = series.getSubSeries(0, b + 1);
+                        double prevClose = closes[b];
+                        double predB = predictNextCloseScalarV2(sub, config, model, scalers);
+                        if (prevClose > 0 && Double.isFinite(predB)) {
+                            double d = Math.abs((predB - prevClose) / prevClose);
+                            if (Double.isFinite(d)) absDeltas.add(d);
+                        }
+                    } catch (Exception ignore) { /* robuste */ }
+                }
+            }
+            double entryPercentileThreshold;
+            if (absDeltas.size() >= 32) {
+                Collections.sort(absDeltas);
+                int idx = (int)Math.floor(basePercentileQ * (absDeltas.size()-1));
+                if (idx < 0) idx = 0; if (idx >= absDeltas.size()) idx = absDeltas.size()-1;
+                entryPercentileThreshold = Math.max(absDeltas.get(idx), deltaFloor);
+            } else {
+                entryPercentileThreshold = deltaFloor;
+            }
+            out.percentileThreshold = entryPercentileThreshold;
+
+            // Signal strength + contrarian éventuel (logique proche simulation)
+            double signalStrength = rawDeltaPct * aggressivenessBoost;
+            // Construire rsiValues pour appel evaluateContrarian
+            double[] rsiValues = new double[barCount];
+            try {
+                RSIIndicator rsiAll = new RSIIndicator(new ClosePriceIndicator(series), 14);
+                for (int i=0;i<barCount;i++) rsiValues[i] = rsiAll.getValue(i).doubleValue();
+            } catch (Exception e){ Arrays.fill(rsiValues, rsiVal); }
+            ContrarianDecision contrarian = evaluateContrarian(signalStrength, lastClose, rsiValues, barCount-1, series.getSubSeries(Math.max(0, barCount-50), barCount));
+            if (contrarian.active) {
+                signalStrength = contrarian.adjustedSignalStrength;
+                out.contrarianAdjusted = true;
+                out.contrarianReason = contrarian.reason;
+            }
+            out.signalStrength = signalStrength;
+
+            // Filtres RSI/Volume (mêmes que simulation pour l'entrée)
+            boolean rsiFilter = rsiVal > config.getRsiOverboughtLimit();
+            boolean volumeFilter = !(volRatio >= config.getVolumeMinRatio());
+
+            boolean enter = !rsiFilter && !volumeFilter && (
+                    orLogic ? (signalStrength > entryPercentileThreshold || signalStrength > atrAdaptiveThreshold)
+                            : (signalStrength > entryPercentileThreshold && signalStrength > atrAdaptiveThreshold)
+            );
+
+            // Tendance brute (au-dessus / en-dessous seuil principal)
+            String tendance;
+            if (rawDeltaPct > atrAdaptiveThreshold) tendance = "UP"; else if (rawDeltaPct < -atrAdaptiveThreshold) tendance = "DOWN"; else tendance = "STABLE";
+            out.tendance = tendance;
+
+            // Action décisionnelle
+            String action;
+            if (enter && signalStrength > 0) action = "BUY";
+            else if (rawDeltaPct < -atrAdaptiveThreshold) action = "SELL"; // signal de faiblesse
+            else action = "HOLD";
+            out.action = action;
+
+            out.deltaPct = rawDeltaPct;
+            out.atrPct = atrPct;
+            out.rsi = rsiVal;
+            out.volumeRatio = volRatio;
+            out.thresholdAtrAdaptive = atrAdaptiveThreshold;
+            out.entryLogicOr = orLogic;
+            out.rsiFiltered = rsiFilter;
+            out.volumeFiltered = volumeFilter;
+            out.aggressivenessBoost = aggressivenessBoost;
+            out.symbol = symbol;
+            out.windowSize = window;
+            out.comment = String.format(java.util.Locale.US,
+                    "rawDelta=%.4f%% sig=%.4f thrATR=%.4f thrPct=%.4f rsi=%.1f volR=%.2f enter=%s",
+                    rawDeltaPct*100, signalStrength, atrAdaptiveThreshold, entryPercentileThreshold, rsiVal, volRatio, enter);
+
+            logger.info("[PRED-TRADE] {} last={} pred={} rawDeltaPct={} tendance={} action={} sig={} thATR={} thPct={} rsi={} volR={} atrPct={}",
+                    symbol,
+                    String.format(java.util.Locale.US, "%.4f", lastClose),
+                    String.format(java.util.Locale.US, "%.4f", predicted),
+                    String.format(java.util.Locale.US, "%.4f", rawDeltaPct*100),
+                    tendance, action,
+                    String.format(java.util.Locale.US, "%.5f", signalStrength),
+                    String.format(java.util.Locale.US, "%.5f", atrAdaptiveThreshold),
+                    String.format(java.util.Locale.US, "%.5f", entryPercentileThreshold),
+                    String.format(java.util.Locale.US, "%.1f", rsiVal),
+                    String.format(java.util.Locale.US, "%.2f", volRatio),
+                    enter);
+        } catch (Exception e) {
+            out.action = out.action == null? "HOLD": out.action; out.tendance = out.tendance==null?"STABLE":out.tendance; out.comment = "error:"+e.getMessage();
+            logger.warn("[PRED-TRADE][ERR] {}", e.toString());
+        }
+        return out;
+    }
+
 }
