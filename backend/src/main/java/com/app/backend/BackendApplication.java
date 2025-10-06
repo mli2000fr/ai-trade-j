@@ -27,6 +27,8 @@ public class BackendApplication {
             if(fp != DataType.FLOAT){
                 log.warn("[BOOT][WARN] defaultFloatingPointType != FLOAT ({}). Vérifier setDefaultDataTypes.", fp);
             }
+        } catch (NoClassDefFoundError | ExceptionInInitializerError t) {
+            log.error("[BOOT][ND4J] Impossible de récupérer backend/dtype: {}", t.getMessage());
         } catch (Throwable t) {
             log.error("[BOOT][ND4J] Impossible de récupérer backend/dtype: {}", t.getMessage());
         }

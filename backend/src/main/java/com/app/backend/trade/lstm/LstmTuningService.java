@@ -190,6 +190,8 @@ public class LstmTuningService {
             } else {
                 logger.info("Backend CUDA détecté (optimization parallélisme ajustée).");
             }
+        } catch (NoClassDefFoundError | ExceptionInInitializerError t) {
+            logger.error("[BOOT][ND4J] Impossible de récupérer backend/dtype: {}", t.getMessage());
         } catch (Exception e) {
             logger.error("Erreur lors de la détection du backend ND4J : {}", e.getMessage());
         } finally {
