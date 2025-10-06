@@ -10,6 +10,6 @@ CREATE TABLE trade_ai.lstm_models (
     phase INT,
     ratio DOUBLE,
     eligible BOOLEAN DEFAULT TRUE,
-    methode VARCHAR(100),
+    methode VARCHAR(100) DEFAULT 'unknown',
     normalization_scope VARCHAR(16) DEFAULT 'window'
 );
