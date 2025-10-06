@@ -100,7 +100,7 @@ public class LstmTuningService {
     private boolean gpuAutoBatchScale; // active l'augmentation de batch automatique
     @Value("${lstm.tuning.gpu.targetBatchSize:128}")
     private int gpuTargetBatchSize; // batch visé si inférieur
-    @Value("${lstm.tuning.gpu.scaleLearningRateOnBatch:false}")
+    @Value("${lstm.tuning.gpu.scaleLearningRateOnBatch:true}")
     private boolean gpuScaleLearningRateOnBatch; // ajuste LR proportionnellement à l'augmentation batch
 
     /**
@@ -1209,7 +1209,7 @@ public class LstmTuningService {
     public void tuneAllSymbols(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         long startAll = System.currentTimeMillis();
         logger.info("[TUNING] Début tuning multi-symboles ({} symboles, parallélisé) | twoPhase={} ", symbols.size(), enableTwoPhase);
-        int maxParallelSymbols = 2;//Math.max(1, effectiveMaxThreads);
+        int maxParallelSymbols = 4;//Math.max(1, effectiveMaxThreads);
         java.util.concurrent.ExecutorService symbolExecutor = java.util.concurrent.Executors.newFixedThreadPool(maxParallelSymbols);
         java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
         for (int i = 0; i < symbols.size(); i++) {
@@ -1347,7 +1347,7 @@ public class LstmTuningService {
                 "\"configsPerSecond\":"+String.format(java.util.Locale.US,"%.4f",cfgPerSec)+","+
                 "\"meanConfigDurationMs\":"+ (long)meanCfgMs +","+
                 "\"threadsUsed\":"+progress.threadsUsed+","+
-                "\"effectiveMaxThreads\":"+effectiveMaxThreads+","+
+                "\"effectiveMaxThreads\":"+effectiveMaxThreads+"," +
                 "\"startTime\":\""+startIso+"\","+
                 "\"endTime\":\""+endIso+"\"}";
         synchronized (METRICS_FILE_LOCK) {

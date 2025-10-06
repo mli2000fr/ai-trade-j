@@ -1985,6 +1985,8 @@ public class LstmTradePredictor {
         public double rWinRate;       // proportion trades R>0
         public double positiveRSkew;  // (mean R positif - |mean R négatif|) / (|mean R négatif|+1e-9)
         public int partialExitTrades; // nb trades avec partial take profit
+        // Nouvelle métrique amplitude prédictions (moyenne |pred - close_t| / close_t)
+        public double meanAbsPredDelta;
     }
     private static class ContrarianDecision { boolean active; double adjustedSignalStrength; String reason; }
     private ContrarianDecision evaluateContrarian(double rawSignalStrength, double lastClose, double[] rsiValues, int bar, BarSeries sub) {
@@ -2095,12 +2097,21 @@ public class LstmTradePredictor {
             // Calcul MSE sur ce split out-of-sample
             metrics.mse = computeSplitMse(series, testStartBar, testEndBar,
                                         preTrainedModel, preTrainedScalers, config);
+            metrics.meanAbsPredDelta = lastComputedMeanAbsPredDelta.get();
 
             // Calcul du business score
             double businessScore = computeBusinessScore(
                 metrics.profitFactor, metrics.winRate,
                 metrics.maxDrawdownPct, metrics.expectancy, config
             );
+            // Bonus léger contre sorties trop plates (amplitude moyenne des prédictions)
+            // clamp sur 2% (0.02) pour éviter inflation excessive si volatilité extrême
+            double ampClamp = 0.02;
+            double amp = metrics.meanAbsPredDelta; // déjà calculé lors du MSE
+            if (Double.isFinite(amp)) {
+                double ampBonus = 1.0 + 0.05 * Math.min(Math.max(amp, 0.0), ampClamp);
+                businessScore *= ampBonus;
+            }
             metrics.businessScore = businessScore;
 
             // ===== AGRÉGATION DES RÉSULTATS =====
@@ -2484,83 +2495,34 @@ public class LstmTradePredictor {
         double se = 0;
         int count = 0;
         double[] closes = extractCloseValues(series);
+        // Pour amplitude
+        double sumAbsPredDelta = 0; int countAmp = 0;
 
         for (int t = testStartBar; t < testEndBar; t++) {
             if (t - window < 1) continue; // si log-return => besoin de t-1
             BarSeries sub = series.getSubSeries(0, t); // exclut t (label à t)
             double pred = predictNextCloseScalarV2(sub, config, model, scalers);
-            if (config.isUseLogReturnTarget()) {
-                // Comparer dans l'espace log-return
-                double predLogReturn = Math.log(pred / closes[t - 1]);
-                double actual = Math.log(closes[t] / closes[t - 1]);
-                double err = predLogReturn - actual;
-                se += err * err;
-            } else {
-                // Comparer dans l'espace prix
-                double actual = closes[t];
-                double err = pred - actual;
-                se += err * err;
+            double actual = closes[t];
+            if (Double.isFinite(pred) && Double.isFinite(actual)) {
+                double diff = pred - actual;
+                se += diff * diff;
+                count++;
             }
-            count++;
-        }
-        return count > 0 ? se / count : Double.NaN;
-    }
-
-    // Étape 22: extraction des derniers labels réalisés (log-return simple ou moyenne multi-horizon)
-    // Retourne un tableau de taille <= lookback (peut être plus petit si historique insuffisant)
-    private double[] computeRecentLabelValues(BarSeries series, LstmConfig config, int lookback) {
-        if (!config.isUseLogReturnTarget()) {
-            return new double[0];
-        }
-        int n = series.getBarCount();
-        if (n < 3) return new double[0];
-        double[] closes = extractCloseValues(series);
-        int windowSize = config.getWindowSize();
-        int horizon = Math.max(1, config.getHorizonBars());
-
-        // Dernier index de départ i pour lequel la cible (fenêtre + horizon) existe
-        // En training labelSeq[i] utilise closes[i + windowSize -1] comme prev puis jusqu'à horizon après
-        int lastStart;
-        if (config.isUseMultiHorizonAvg()) {
-            lastStart = closes.length - windowSize - horizon; // besoin fenêtre + H pas futurs
-        } else {
-            lastStart = closes.length - windowSize - 1; // besoin fenêtre + 1 pas futur
-        }
-        if (lastStart < 0) return new double[0];
-
-        int firstStart = Math.max(0, lastStart - lookback + 1);
-        java.util.List<Double> labels = new java.util.ArrayList<>();
-
-        for (int i = firstStart; i <= lastStart; i++) {
-            if (config.isUseMultiHorizonAvg()) {
-                double prev = closes[i + windowSize - 1];
-                double sum = 0.0; int c = 0; double curPrev = prev;
-                for (int h = 1; h <= horizon; h++) {
-                    int idx = i + windowSize - 1 + h;
-                    if (idx < closes.length) {
-                        double next = closes[idx];
-                        double logRet = Math.log(next / prev);
-                        sum += logRet;
-                        prev = next;
-                        c++;
-                    }
-                }
-                labels.add(c > 0 ? (sum / c) : 0.0);
-            } else {
-                int prevIdx = i + windowSize - 1;
-                int nextIdx = i + windowSize;
-                if (nextIdx < closes.length) {
-                    double a = closes[prevIdx];
-                    double b = closes[nextIdx];
-                    double lr = (a > 0 && b > 0) ? Math.log(b / a) : 0.0;
-                    labels.add(Double.isFinite(lr) ? lr : 0.0);
-                }
+            // Amplitude par rapport au dernier close disponible (t-1)
+            double ref = closes[t-1];
+            if (Double.isFinite(pred) && Double.isFinite(ref) && ref != 0) {
+                sumAbsPredDelta += Math.abs(pred - ref) / ref;
+                countAmp++;
             }
         }
-        double[] out = new double[labels.size()];
-        for (int k = 0; k < labels.size(); k++) out[k] = labels.get(k);
-        return out;
+        double mse = count > 0 ? se / count : Double.NaN;
+        // Injection amplitude dans dernier split metrics si accessible via thread local? -> Simplifié: on stocke dans ThreadLocal static
+        lastComputedMeanAbsPredDelta.set(countAmp>0? sumAbsPredDelta / countAmp : 0.0);
+        return mse;
     }
+
+    // ThreadLocal pour laisser computeSplitMse communiquer l'amplitude au caller (évite refactor large signature)
+    private static final ThreadLocal<Double> lastComputedMeanAbsPredDelta = ThreadLocal.withInitial(() -> 0.0);
 
     /* =========================================================
      *                DRIFT DETECTION (STATISTIQUE)
@@ -2673,95 +2635,6 @@ public class LstmTradePredictor {
         }
         return 0.5 * (kl1 + kl2);
     }
-
-    /**
-     * Vérifie le drift sur chaque feature, et déclenche un réentraînement si drift détecté.
-     * Retourne un rapport détaillé.
-     */
-    public List<DriftReportEntry> checkDriftAndRetrainWithReport(BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers, String symbol) {
-        List<DriftReportEntry> reports = new ArrayList<>();
-        if (model == null || scalers == null) return reports;
-
-        double mseBefore = Double.NaN;
-        double mseAfter = Double.NaN;
-        try {
-            int total = series.getBarCount();
-            int testStart = Math.max(0, total - (config.getWindowSize() * 3));
-            mseBefore = computeSplitMse(series, testStart, total, model, scalers, config);
-        } catch (Exception ignored) {}
-
-        boolean retrain = false;
-        // Étape 22: Drift label (log-return) ciblé avant boucle features pour ne pas dépendre d'elles
-        if (config.isUseLogReturnTarget()) {
-            try {
-                int LOOKBACK = 250;
-                double[] recentLabels = computeRecentLabelValues(series, config, LOOKBACK);
-                if (recentLabels.length > 30) { // taille minimale
-                    double m=0; for(double v: recentLabels) m+=v; m=recentLabels.length>0? m/recentLabels.length:0;
-                    double var=0; for(double v: recentLabels){ double d=v-m; var+=d*d; } var = recentLabels.length>0? var/recentLabels.length:0; double std = Math.sqrt(var);
-                    scalers.labelDistMean = m;
-                    scalers.labelDistStd = std>1e-12? std : 1e-12; // éviter division par 0
-                    logger.info("[STEP22][LABEL_DIST][TRAIN] mean={} std={}", String.format(java.util.Locale.US, "%.6f", scalers.labelDistMean), String.format(java.util.Locale.US, "%.6f", scalers.labelDistStd));
-                } else {
-                    logger.debug("[STEP22][LABEL_DIST] Série insuffisante pour LOOKBACK={} (size={})", 250, recentLabels.length);
-                }
-            } catch (Exception ex) {
-                logger.warn("[STEP22][LABEL_DRIFT] Erreur calcul drift label: {}", ex.getMessage());
-            }
-        }
-
-        for (String feat : config.getFeatures()) {
-            FeatureScaler sc = scalers.featureScalers.get(feat);
-            if (sc == null) continue;
-
-            double[] vals = new double[series.getBarCount()];
-            // (Extraction isolée pour la feature)
-            for (int i = 0; i < series.getBarCount(); i++)
-                vals[i] = extractFeatureMatrix(series, Collections.singletonList(feat))[i][0];
-
-            DriftDetectionResult res = checkDriftForFeatureDetailed(
-                feat,
-                vals,
-                sc,
-                config.getKlDriftThreshold(),
-                config.getMeanShiftSigmaThreshold()
-            );
-            if (res.drift) retrain = true;
-
-            DriftReportEntry entry = new DriftReportEntry();
-            entry.eventDate = java.time.Instant.now();
-            entry.symbol = symbol;
-            entry.feature = feat;
-            entry.driftType = res.driftType;
-            entry.kl = res.kl;
-            entry.meanShift = res.meanShift;
-            entry.mseBefore = mseBefore;
-            entry.retrained = false;
-            reports.add(entry);
-        }
-
-        // Si drift détecté => réentraînement complet
-        if (retrain) {
-            TrainResult tr = trainLstmScalarV2(series, config, null);
-            if (tr.model != null) {
-                // Copie des paramètres dans l'ancien modèle
-                model.setParams(tr.model.params());
-                scalers.featureScalers = tr.scalers.featureScalers;
-                scalers.labelScaler = tr.scalers.labelScaler;
-                try {
-                    int total = series.getBarCount();
-                    int testStart = Math.max(0, total - (config.getWindowSize() * 3));
-                    mseAfter = computeSplitMse(series, testStart, total, model, scalers, config);
-                } catch (Exception ignored) {}
-                for (DriftReportEntry r : reports) {
-                    r.retrained = true;
-                    r.mseAfter = mseAfter;
-                }
-            }
-        }
-        return reports;
-    }
-
 
     /* =========================================================
      *              THRESHOLD & SPREAD UTILITAIRES

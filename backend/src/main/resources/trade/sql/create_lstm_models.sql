@@ -9,5 +9,7 @@ CREATE TABLE trade_ai.lstm_models (
     rendement DOUBLE,
     phase INT,
     ratio DOUBLE,
+    eligible BOOLEAN DEFAULT TRUE,
+    methode VARCHAR(100),
     normalization_scope VARCHAR(16) DEFAULT 'window'
 );

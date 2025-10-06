@@ -235,7 +235,7 @@ public class LstmConfig {
     /** Active l'AsyncDataSetIterator pour précharger les batchs (Étape 4). */
     private boolean useAsyncIterator = true;
     /** Taille de la file interne de préchargement async (2-8 recommandé). */
-    private int asyncQueueSize = 3;
+    private int asyncQueueSize = 8;
 
     // =============================== Marqueur baseline ré-entraînement ===============================
     /**
@@ -312,7 +312,7 @@ public class LstmConfig {
                 predictionResidualVarianceMin = Double.parseDouble(props.getProperty("predictionResidualVarianceMin", "0.000001"));
                 // Nouveaux paramètres async iterator (Étape 4)
                 useAsyncIterator = Boolean.parseBoolean(props.getProperty("useAsyncIterator", "true"));
-                asyncQueueSize = Integer.parseInt(props.getProperty("asyncQueueSize", "3"));
+                asyncQueueSize = Integer.parseInt(props.getProperty("asyncQueueSize", "8"));
             }
             // FILET DE SECURITE : même si le fichier n'existe pas, on veut un optimizer par défaut.
             optimizer = props.getProperty("optimizer", "adam");
