@@ -1275,6 +1275,7 @@ public class LstmTuningService {
         double businessScore;
         double businessScoreStd; // nouvel écart-type des businessScore sur les splits WF
         double rmse;
+        int phase; // 1 ou 2
         double sumProfit;
         int totalSeriesTested;
         int totalTrades;
@@ -1437,7 +1438,7 @@ public class LstmTuningService {
             // Top N pour micro-grille
             java.util.List<TuningResult> sorted = new java.util.ArrayList<>(phase1.allResults);
             sorted.sort((a,b)->Double.compare(adjScore(b), adjScore(a)));
-            int topN = Math.min(3, sorted.size());
+            int topN = Math.min(5, sorted.size());
             java.util.List<TuningResult> top = sorted.subList(0, topN);
 
             java.util.Set<String> dedup = new java.util.HashSet<>();
@@ -1674,6 +1675,7 @@ public class LstmTuningService {
                 cfg.setSeed(cfg.getSeed() + 777 + idx); // seed décalé (sauf baseline)
                 cfg.setWalkForwardSplits(Math.min(6, cfg.getWalkForwardSplits() + 1)); // plus de splits (sauf baseline)
             }
+            int finalI = i;
             futures.add(executor.submit(()->{
                 MultiLayerNetwork model=null; boolean permit=false; long stagger=0;
                 try {
@@ -1719,11 +1721,12 @@ public class LstmTuningService {
                             wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0),
                             wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0),
                             wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0),
-                            wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0), phase);
+                            wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0), phase + finalI * 10);
                     TuningResult trRes=new TuningResult(cfg, model, scalers, meanMse, sumPF/splits, sumWin/splits, maxDrawdownPct, meanBusiness, stdBusiness, rmse, sumProfit, trades, wf.totalTestedBars);
                     results.add(trRes);
                     if(progress!=null){ progress.testedConfigs.incrementAndGet(); progress.lastUpdate=System.currentTimeMillis(); }
                     logger.info("[TUNING-2PH][{}] {} config {}/{} bs={} adj={} dd={} trades={} phase={}", phaseTag, symbol, idx+1, grid.size(), String.format("%.5f", meanBusiness), String.format("%.5f", adjScore(trRes)), String.format("%.4f", maxDrawdownPct), trades, phase);
+                    trRes.phase = phase + finalI * 10;
                     return trRes;
                 } catch(Exception ex){ if(progress!=null){ progress.testedConfigs.incrementAndGet(); progress.lastUpdate=System.currentTimeMillis(); } logger.error("[TUNING-2PH][{}][{}] Erreur config {}/{} : {}", phaseTag, symbol, idx+1, grid.size(), ex.getMessage()); return null; }
                 finally { model=null; try{ org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc(); org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread(); }catch(Exception ignore){} System.gc(); if(cudaBackend){ gpuController.markTrainingFinished(); if(permit) gpuController.releasePermit(); } }
@@ -1732,7 +1735,7 @@ public class LstmTuningService {
         executor.shutdown(); for(var f: futures){ try{ f.get(); }catch(Exception ignored){} }
         if(results.isEmpty()) return null;
         TuningResult best=null; double bestBS=Double.NEGATIVE_INFINITY; double bestStd=0; for(var r: results){ if(r==null) continue; if(r.businessScore>bestBS){ bestBS=r.businessScore; bestStd = r.businessScoreStd; best=r; } }
-        PhaseAggregate ag=new PhaseAggregate(); ag.bestConfig=best!=null?best.config:null; ag.bestModel=best!=null?best.model:null; ag.bestScalers=best!=null?best.scalers:null; ag.bestBusinessScore=bestBS; ag.bestBusinessScoreStd=bestStd; ag.bestMse=best!=null?best.score:Double.NaN; ag.profitFactor=best!=null?best.profitFactor:0; ag.winRate=best!=null?best.winRate:0; ag.maxDrawdown=best!=null?best.maxDrawdown:0; ag.rmse=best!=null?best.rmse:0; ag.sumProfit=best!=null?best.sumProfit:0; ag.totalTrades=best!=null?best.totalTrades:0; ag.totalSeriesTested=best!=null?best.totalSeriesTested:0; ag.phase=phase; ag.allResults=results; logger.info("[TUNING-2PH][{}] Fin phase {} | bestBS={} std={} ", symbol, phaseTag, String.format("%.6f", bestBS), String.format("%.6f", bestStd)); return ag;
+        PhaseAggregate ag=new PhaseAggregate(); ag.bestConfig=best!=null?best.config:null; ag.bestModel=best!=null?best.model:null; ag.bestScalers=best!=null?best.scalers:null; ag.bestBusinessScore=bestBS; ag.bestBusinessScoreStd=bestStd; ag.bestMse=best!=null?best.score:Double.NaN; ag.profitFactor=best!=null?best.profitFactor:0; ag.winRate=best!=null?best.winRate:0; ag.maxDrawdown=best!=null?best.maxDrawdown:0; ag.rmse=best!=null?best.rmse:0; ag.sumProfit=best!=null?best.sumProfit:0; ag.totalTrades=best!=null?best.totalTrades:0; ag.totalSeriesTested=best!=null?best.totalSeriesTested:0; ag.phase=best.phase; ag.allResults=results; logger.info("[TUNING-2PH][{}] Fin phase {} | bestBS={} std={} ", symbol, phaseTag, String.format("%.6f", bestBS), String.format("%.6f", bestStd)); return ag;
     }
 
     private void persistBest(String symbol, PhaseAggregate pa, JdbcTemplate jdbcTemplate, double ratio){
