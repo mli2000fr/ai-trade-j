@@ -1437,7 +1437,7 @@ public class LstmTuningService {
             // Top N pour micro-grille
             java.util.List<TuningResult> sorted = new java.util.ArrayList<>(phase1.allResults);
             sorted.sort((a,b)->Double.compare(adjScore(b), adjScore(a)));
-            int topN = Math.min(5, sorted.size());
+            int topN = Math.min(3, sorted.size());
             java.util.List<TuningResult> top = sorted.subList(0, topN);
 
             java.util.Set<String> dedup = new java.util.HashSet<>();
