@@ -1077,7 +1077,7 @@ public class LstmTuningService {
             c.setBusinessDrawdownGamma(1.4);
             grid.add(c);
         }
-/*
+
         // ---- Exploration (diversité structurelle) ----
         int[] winExplore = {18, 25, 35, 45, 60};
         int[] neuExplore = {96, 128, 160, 192, 224};
@@ -1132,7 +1132,7 @@ public class LstmTuningService {
             c.setBusinessDrawdownGamma(1.2);
             grid.add(c);
         }
-*/
+
         // Mélange final
         java.util.Collections.shuffle(grid, rand);
         long baseSeed = System.currentTimeMillis();
