@@ -88,18 +88,18 @@ public class LstmTuningService {
     // === Nouveaux paramètres d'utilisation GPU ===
     @Value("${gpu.concurrency.min:1}")
     private int gpuMinConcurrency;
-    @Value("${gpu.concurrency.max:2}")
-    private int gpuMaxConcurrency; // augmenter (ex: 6) pour pousser plus de jobs simultanés
+    @Value("${gpu.concurrency.max:8}") // Augmenté à 8 pour pousser l'utilisation GPU
+    private int gpuMaxConcurrency;
     @Value("${gpu.concurrency.scaleUpThresholdPct:70.0}")
     private double gpuScaleUpThreshold;
     @Value("${gpu.concurrency.scaleDownThresholdPct:92.0}")
     private double gpuScaleDownThreshold;
     @Value("${lstm.tuning.gpu.enableStagger:true}")
-    private boolean gpuEnableStagger; // possibilité de désactiver le sleep d'échelonnage
+    private boolean gpuEnableStagger;
     @Value("${lstm.tuning.gpu.autoBatchScale:true}")
-    private boolean gpuAutoBatchScale; // active l'augmentation de batch automatique
-    @Value("${lstm.tuning.gpu.targetBatchSize:128}")
-    private int gpuTargetBatchSize; // batch visé si inférieur
+    private boolean gpuAutoBatchScale;
+    @Value("${lstm.tuning.gpu.targetBatchSize:128}") // Augmenté à 256 pour exploiter la mémoire GPU
+    private int gpuTargetBatchSize;
     @Value("${lstm.tuning.gpu.scaleLearningRateOnBatch:true}")
     private boolean gpuScaleLearningRateOnBatch; // ajuste LR proportionnellement à l'augmentation batch
 
@@ -232,6 +232,7 @@ public class LstmTuningService {
                     String.format(java.util.Locale.US, "%.1f", gpuScaleUpThreshold),
                     String.format(java.util.Locale.US, "%.1f", gpuScaleDownThreshold),
                     gpuTargetBatchSize, gpuAutoBatchScale, gpuEnableStagger, gpuScaleLearningRateOnBatch);
+            logger.info("[GPU][MONITOR] Utilisation VRAM initiale: {}%", String.format("%.2f", gpuController.getLastVramUsagePct()));
         }
     }
 
@@ -445,10 +446,11 @@ public class LstmTuningService {
                         permitAcquired = true;
                         int active = gpuController.getActiveTrainings();
                         if (gpuEnableStagger && active > 1) { // stagger optionnel
-                            staggerSleepMs = 1000L + (long)(Math.random()*1500L); // raccourci 1-2.5s pour réduire latence idle
+                            staggerSleepMs = 500L + (long)(Math.random()*500L); // réduit à 0.5-1s pour maximiser GPU
                             Thread.sleep(staggerSleepMs);
                         }
                         gpuController.markTrainingStarted();
+                        logger.info("[GPU][MONITOR] Utilisation VRAM: {}% (activeTrainings={})", String.format("%.2f", gpuController.getLastVramUsagePct()), active);
                     }
                     // ===== DÉBUT DE TRAITEMENT D'UNE CONFIGURATION =====
 
@@ -478,7 +480,7 @@ public class LstmTuningService {
                     // ===== ENTRAÎNEMENT SUR LA PARTIE TRAIN UNIQUEMENT =====
                     // Création d'une sous-série contenant uniquement les données d'entraînement
                     BarSeries trainSeries = series.getSubSeries(0, trainEndBar);
-                    logger.debug("[TUNING][V2] [{}] Séparation données: train=[0,{}], test=[{},{}]", symbol, trainEndBar, trainEndBar, totalBars);
+                    logger.debug("[TUNING][V2] [{}] Séparation données: train=[0,{}], test=[{},{}]","BTCUSDT", trainEndBar, trainEndBar, totalBars);
 
                     // Entraîne le modèle UNIQUEMENT sur les données d'entraînement
                     LstmTradePredictor.TrainResult trFull = lstmTradePredictor.trainLstmScalarV2(trainSeries, config, null);
@@ -1075,7 +1077,7 @@ public class LstmTuningService {
             c.setBusinessDrawdownGamma(1.4);
             grid.add(c);
         }
-
+/*
         // ---- Exploration (diversité structurelle) ----
         int[] winExplore = {18, 25, 35, 45, 60};
         int[] neuExplore = {96, 128, 160, 192, 224};
@@ -1130,7 +1132,7 @@ public class LstmTuningService {
             c.setBusinessDrawdownGamma(1.2);
             grid.add(c);
         }
-
+*/
         // Mélange final
         java.util.Collections.shuffle(grid, rand);
         long baseSeed = System.currentTimeMillis();
@@ -1197,7 +1199,7 @@ public class LstmTuningService {
     public void tuneAllSymbols(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         long startAll = System.currentTimeMillis();
         logger.info("[TUNING] Début tuning multi-symboles ({} symboles, parallélisé) | twoPhase={} ", symbols.size(), enableTwoPhase);
-        int maxParallelSymbols = 4;//Math.max(1, effectiveMaxThreads);
+        int maxParallelSymbols = 2;//Math.max(1, effectiveMaxThreads);
         java.util.concurrent.ExecutorService symbolExecutor = java.util.concurrent.Executors.newFixedThreadPool(maxParallelSymbols);
         java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
         for (int i = 0; i < symbols.size(); i++) {
@@ -1497,6 +1499,7 @@ public class LstmTuningService {
 
             progress.status = "phase2"; progress.lastUpdate = System.currentTimeMillis();
             try { writeProgressMetrics(progress); } catch (Exception ignored) {}
+
             PhaseAggregate phase2 = runPhaseNoPersist(symbol, microGrid, phaseSeries, 2, "PHASE2", progress);
             // --- LOG DISTRIBUTION PHASE 2 ---
             if (phase2 != null && phase2.allResults != null && !phase2.allResults.isEmpty()) {
@@ -1676,7 +1679,7 @@ public class LstmTuningService {
             futures.add(executor.submit(()->{
                 MultiLayerNetwork model=null; boolean permit=false; long stagger=0;
                 try {
-                    if (cudaBackend){ gpuController.acquirePermit(); permit=true; int active=gpuController.getActiveTrainings(); if(gpuEnableStagger && active>1){ stagger=1000+(long)(Math.random()*1500); Thread.sleep(stagger);} gpuController.markTrainingStarted(); }
+                    if (cudaBackend){ gpuController.acquirePermit(); permit=true; int active=gpuController.getActiveTrainings(); if(gpuEnableStagger && active>1){ stagger=1000+(long)(Math.random()*1500); Thread.sleep(stagger);} gpuController.markTrainingStarted(); logger.info("[GPU][MONITOR] Utilisation VRAM: {}% (activeTrainings={})", String.format("%.2f", gpuController.getLastVramUsagePct()), active); }
                     lstmTradePredictor.setGlobalSeeds(cfg.getSeed());
                     int totalBars=series.getBarCount();
                     int testSplitRatio = (phase == 2 ? 25 : 20);
