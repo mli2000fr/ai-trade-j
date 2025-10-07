@@ -2140,6 +2140,14 @@ public class LstmTradePredictor {
 
             logger.debug("[WALK-FORWARD-OOS] Split {}: MSE={}, PF={}, WinRate={}, BusinessScore={}",
                         s, metrics.mse, metrics.profitFactor, metrics.winRate, businessScore);
+
+            // ===== LIBÉRATION MÉMOIRE GPU APRÈS CHAQUE SPLIT =====
+            try {
+                org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread();
+            } catch (Exception e) {
+                logger.warn("Erreur lors de la libération mémoire GPU : {}", e.getMessage());
+            }
+            System.gc();
         }
 
         // ===== PHASE 4: CALCUL DES MOYENNES =====
@@ -2318,7 +2326,7 @@ public class LstmTradePredictor {
                     currentPercentileQ = basePercentileQ - prog * (basePercentileQ - fallbackMinQ);
                     currentDeltaFloor = baseDeltaFloor - prog * (baseDeltaFloor - fallbackMinDelta);
                     if (bar % 50 == 0) {
-                        logger.info("[SIM][FALLBACK] barsNoTrade={} prog={} pctQ={} deltaFloor={} (baseQ={} baseDelta={})", barsSinceLastEntryGlobal,
+                        logger.info("[SIM][FALLBACK] barsNoTrade={} prog={} pctQ={} minDelta={} (baseQ={} baseDelta={})", barsSinceLastEntryGlobal,
                                 String.format(java.util.Locale.US, "%.2f", prog),
                                 String.format(java.util.Locale.US, "%.3f", currentPercentileQ),
                                 String.format(java.util.Locale.US, "%.6f", currentDeltaFloor),
@@ -2421,7 +2429,7 @@ public class LstmTradePredictor {
                     tradeReturns.add((initialRiskPerShare * positionSizeResidualRisk)>0? totalTradePnL/(initialRiskPerShare*positionSizeResidualRisk):0);
                     barsHeldList.add(barsInPos);
                     consecutiveLosses = totalTradePnL<0? consecutiveLosses+1:0;
-                    equity += pnl; // Ajout du PnL final (avant: equity += 0) pour refléter la courbe d'équity
+                    equity += pnl; // Ajout du PnL final (avant: equity += 0) pour refléter la courbe d'équité
                     if (equity > peak) { peak = equity; trough = equity; } else if (equity < trough) { trough = equity; }
                     inPos=false; entryPrice=0; stopLoss=0; initialStopLoss=0; initialRiskPerShare=0; barsInPos=0; partialTaken=false; highSinceEntry=0; barsSinceExit=0;
                 }
@@ -2811,7 +2819,7 @@ public class LstmTradePredictor {
             .getEndTime()
             .format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"));
 
-        logger.info("[PREDIT] win={} last={} pred={} delta={} ({}%) thr={} ({}) signal={} conf={} rsi={} volR={} atrPct={}",
+        logger.info("[PREDICT] win={} last={} pred={} delta={} ({}%) thr={} ({}) signal={} conf={} rsi={} volR={} atrPct={}",
             config.getWindowSize(),
             String.format(java.util.Locale.US, "%.4f", lastClose),
             String.format(java.util.Locale.US, "%.4f", predicted),
@@ -3274,17 +3282,25 @@ public class LstmTradePredictor {
                 ATRIndicator atrInd = new ATRIndicator(series, 14);
                 atrBar = atrInd.getValue(series.getEndIndex()).doubleValue();
                 if (lastClose > 0) atrPct = atrBar / lastClose;
-            } catch (Exception ignore) {}
+            } catch (Exception e) { logger.debug("[PREDIT][ATR] skip {}", e.toString()); }
+
+            // 2. Momentum RSI pour filtrer sur-achat / sur-vente
             try {
                 RSIIndicator rsi = new RSIIndicator(new ClosePriceIndicator(series), 14);
                 rsiVal = rsi.getValue(series.getEndIndex()).doubleValue();
-            } catch (Exception ignore) {}
+            } catch (Exception e) { logger.debug("[PREDIT][RSI] skip {}", e.toString()); }
+
+            // 3. Volume relatif (logique simple: volume courant vs moyenne 20)
             try {
                 VolumeIndicator volInd = new VolumeIndicator(series);
                 double curVol = volInd.getValue(series.getEndIndex()).doubleValue();
-                double sum=0; int c=0; for(int i=Math.max(0, series.getEndIndex()-19); i<=series.getEndIndex(); i++){ sum+= volInd.getValue(i).doubleValue(); c++; }
-                double avg = c>0? sum/c:curVol; if (avg>0) volRatio = curVol/avg;
-            } catch (Exception ignore) {}
+                double sumVol = 0.0; int count = 0;
+                for (int i = Math.max(0, series.getEndIndex() - 19); i <= series.getEndIndex(); i++) {
+                    sumVol += volInd.getValue(i).doubleValue(); count++;
+                }
+                double avgVol = count > 0 ? sumVol / count : curVol;
+                if (avgVol > 0) volRatio = curVol / avgVol;
+            } catch (Exception e) { logger.debug("[PREDIT][VOL] skip {}", e.toString()); }
 
             // Seuil ATR adaptatif (min/max)
             double cfgMinTh = config.getThresholdAtrMin(); if (!(cfgMinTh > 0)) cfgMinTh = 0.001; if (cfgMinTh < 1e-4) cfgMinTh = 1e-4;
@@ -3379,7 +3395,7 @@ public class LstmTradePredictor {
                     "rawDelta=%.4f%% sig=%.4f thrATR=%.4f thrPct=%.4f rsi=%.1f volR=%.2f enter=%s",
                     rawDeltaPct*100, signalStrength, atrAdaptiveThreshold, entryPercentileThreshold, rsiVal, volRatio, enter);
 
-            logger.info("[PRED-TRADE] {} last={} pred={} rawDeltaPct={} tendance={} action={} sig={} thATR={} thPct={} rsi={} volR={} atrPct={}",
+            logger.info("[PRED-TRADE] {} last={} pred={} delta={} ({}%) thr={} ({}) signal={} conf={} rsi={} volR={} atrPct={}",
                     symbol,
                     String.format(java.util.Locale.US, "%.4f", lastClose),
                     String.format(java.util.Locale.US, "%.4f", predicted),
@@ -3390,7 +3406,9 @@ public class LstmTradePredictor {
                     String.format(java.util.Locale.US, "%.5f", entryPercentileThreshold),
                     String.format(java.util.Locale.US, "%.1f", rsiVal),
                     String.format(java.util.Locale.US, "%.2f", volRatio),
-                    enter);
+                    String.format(java.util.Locale.US, "%.3f", atrPct * 100.0)
+            );
+
         } catch (Exception e) {
             out.action = out.action == null? "HOLD": out.action; out.tendance = out.tendance==null?"STABLE":out.tendance; out.comment = "error:"+e.getMessage();
             logger.warn("[PRED-TRADE][ERR] {}", e.toString());
