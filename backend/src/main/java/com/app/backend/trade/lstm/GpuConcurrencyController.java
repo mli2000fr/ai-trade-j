@@ -82,8 +82,8 @@ public class GpuConcurrencyController {
             t.setDaemon(true);
             return t;
         });
-        monitorFuture = scheduler.scheduleAtFixedRate(this::monitor, 5, 15, TimeUnit.SECONDS); // intervalle réduit 15s
-        logger.info("[GPU][ADAPT] Monitoring VRAM démarré (intervalle 15s, plage {}..{})", minConcurrency, maxConcurrency);
+        monitorFuture = scheduler.scheduleAtFixedRate(this::monitor, 5, 5, TimeUnit.SECONDS); // intervalle réduit 5s
+        logger.info("[GPU][ADAPT] Monitoring VRAM démarré (intervalle 5s, plage {}..{})", minConcurrency, maxConcurrency);
     }
 
     /** Acquisition bloquante d'un permis. */

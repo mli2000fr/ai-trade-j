@@ -1,1 +1,6 @@
-plafond dynamique
+Réduire l’intervalle de monitoring (ex : 5-10 s).
+Vérifier la VRAM avant chaque lancement de job LSTM.
+Limiter la taille des batchs et des modèles selon la VRAM.
+Forcer la libération mémoire GPU après chaque tâche.
+Adapter les seuils de monitoring à la réalité de la charge.
+Vérifier les fuites mémoire dans le code ND4J/LSTM.

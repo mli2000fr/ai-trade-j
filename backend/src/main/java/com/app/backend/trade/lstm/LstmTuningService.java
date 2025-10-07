@@ -482,6 +482,12 @@ public class LstmTuningService {
                     BarSeries trainSeries = series.getSubSeries(0, trainEndBar);
                     logger.debug("[TUNING][V2] [{}] Séparation données: train=[0,{}], test=[{},{}]","BTCUSDT", trainEndBar, trainEndBar, totalBars);
 
+                    // Contrôle VRAM avant lancement du job LSTM
+                    double vramPct = gpuController.getLastVramUsagePct();
+                    if (vramPct > 90.0) {
+                        logger.error("[GPU][VRAM] Saturation détectée ({}%) : lancement LSTM bloqué.", vramPct);
+                        throw new IllegalStateException("VRAM GPU saturée, entraînement LSTM annulé.");
+                    }
                     // Entraîne le modèle UNIQUEMENT sur les données d'entraînement
                     LstmTradePredictor.TrainResult trFull = lstmTradePredictor.trainLstmScalarV2(trainSeries, config, null);
                     model = trFull.model;                    // Modèle neuronal entraîné
@@ -1416,6 +1422,16 @@ public class LstmTuningService {
         progress.status = "phase1";
         tuningProgressMap.put(symbol, progress);
         try {
+            // Contrôle VRAM avant lancement du job LSTM (phase 1)
+            double vramPct = gpuController.getLastVramUsagePct();
+            if (vramPct > 90.0) {
+                logger.error("[GPU][VRAM] Saturation détectée ({}%) : lancement LSTM bloqué.", vramPct);
+                progress.status = "vram_failed";
+                progress.endTime = System.currentTimeMillis();
+                progress.lastUpdate = progress.endTime;
+                try { writeProgressMetrics(progress); } catch (Exception ignored) {}
+                return null;
+            }
             // Phase 1
             logger.info("[TUNING-2PH][PHASE1] Début phase1 ({} configs) série utilisée={} (holdOutStart={})", coarseGrid.size(), phaseSeries.getBarCount(), enableHoldOut?holdOutStart:-1);
             PhaseAggregate phase1 = runPhaseNoPersist(symbol, coarseGrid, phaseSeries, 1, "PHASE1", progress);
