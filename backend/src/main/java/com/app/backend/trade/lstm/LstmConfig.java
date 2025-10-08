@@ -257,9 +257,9 @@ public class LstmConfig {
     /** RSI overbought limit (au-delà on filtre). Relevé à 80 pour permettre plus d'entrées. */
     private double rsiOverboughtLimit = 80.0;
     /** Facteur deadzone (fraction du seuil swing). 0.5 auparavant figé. Réduction => plus de signaux. */
-    private double deadzoneFactor = 0.20; // MODIFIÉ: moins strict
+    private double deadzoneFactor = 0.30;
     /** Désactive totalement la deadzone si true. */
-    private boolean disableDeadzone = true; // MODIFIÉ: pour test
+    private boolean disableDeadzone = false;
     /** Borne min ATR% pour le seuil dynamique d'entrée (remplace constante 0.001). */
     private double thresholdAtrMin = 0.001; // inchangé
     /** Borne max ATR% (remplace constante 0.01). */

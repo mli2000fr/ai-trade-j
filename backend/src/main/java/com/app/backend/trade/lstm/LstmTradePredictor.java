@@ -2094,7 +2094,7 @@ public class LstmTradePredictor {
             // IMPORTANT: testStartBar et testEndBar sont dans la zone [testStartFromBar, totalBars]
             // Ces données n'ont JAMAIS été vues par le modèle pendant l'entraînement
 
-            TradingMetricsV2 metrics = simulateTradingWalkForward(
+            TradingMetricsV2 metrics = simulateTradingWalkForwardBis(
                 series,                    // Série complète (pour contexte historique)
                 testStartBar,              // Début test (dans zone out-of-sample)
                 testEndBar,                // Fin test (dans zone out-of-sample)
@@ -2171,7 +2171,6 @@ public class LstmTradePredictor {
         return result;
     }
 
-
     public TradingMetricsV2 simulateTradingWalkForwardBis(
             BarSeries fullSeries,
             int testStartBar,
@@ -2187,15 +2186,44 @@ public class LstmTradePredictor {
         int winTrades = 0;
         double totalProfit = 0.0;
         List<Double> tradeProfits = new ArrayList<>();
-
+        List<Integer> barsHeldList = new ArrayList<>();
+        List<Double> positionValues = new ArrayList<>();
+        List<Double> tradeRMultiples = new ArrayList<>();
+        double[] closes = extractCloseValues(fullSeries);
+        int barsInPos = 0;
+        double initialRiskPerShare = 0.0;
+        double positionSize = 1.0;
+        double stopLoss = 0.0;
+        double capital = config != null && config.getCapital() > 0 ? config.getCapital() : 1.0;
+        double riskPct = config != null ? config.getRiskPct() : 0.01;
+        double meanAbsPredDeltaSum = 0.0;
+        int meanAbsPredDeltaCount = 0;
         for (int i = testStartBar; i <= testEndBar; i++) {
             BarSeries subSeries = fullSeries.getSubSeries(0, i + 1);
             TradeStylePrediction pred = predictTradeStyle("", subSeries, config, model, scalers);
             double close = subSeries.getLastBar().getClosePrice().doubleValue();
+            double predicted = pred.predictedClose;
+            if (Double.isFinite(predicted) && close != 0.0) {
+                meanAbsPredDeltaSum += Math.abs(predicted - close) / close;
+                meanAbsPredDeltaCount++;
+            }
             if ("BUY".equals(pred.action)) {
                 if (!inPosition) {
                     inPosition = true;
                     entryPrice = close;
+                    barsInPos = 0;
+                    // Calcul du stop et positionSize
+                    double atr = 0.0;
+                    try {
+                        ATRIndicator atrInd = new ATRIndicator(subSeries, 14);
+                        atr = atrInd.getValue(subSeries.getEndIndex()).doubleValue();
+                    } catch (Exception e) {}
+                    double stopDistance = atr > 0 ? atr : entryPrice * 0.01;
+                    stopLoss = entryPrice - stopDistance;
+                    initialRiskPerShare = entryPrice - stopLoss;
+                    double riskAmount = capital * riskPct;
+                    positionSize = initialRiskPerShare > 0 ? riskAmount / initialRiskPerShare : 1.0;
+                    positionValues.add(positionSize * entryPrice);
                 }
             } else if ("SELL".equals(pred.action)) {
                 if (inPosition) {
@@ -2204,10 +2232,18 @@ public class LstmTradePredictor {
                     tradeProfits.add(profit);
                     numTrades++;
                     if (profit > 0) winTrades++;
+                    barsHeldList.add(barsInPos);
+                    // Calcul R multiple
+                    double r = initialRiskPerShare > 0 ? profit / initialRiskPerShare : 0.0;
+                    tradeRMultiples.add(r);
                     inPosition = false;
                     entryPrice = 0.0;
+                    barsInPos = 0;
+                    initialRiskPerShare = 0.0;
+                    positionSize = 1.0;
                 }
             }
+            if (inPosition) barsInPos++;
         }
         // Si position ouverte à la fin, on la clôture au dernier prix
         if (inPosition) {
@@ -2217,33 +2253,84 @@ public class LstmTradePredictor {
             tradeProfits.add(profit);
             numTrades++;
             if (profit > 0) winTrades++;
+            barsHeldList.add(barsInPos);
+            double r = initialRiskPerShare > 0 ? profit / initialRiskPerShare : 0.0;
+            tradeRMultiples.add(r);
         }
         tm.totalProfit = totalProfit;
         tm.numTrades = numTrades;
         tm.winRate = numTrades > 0 ? (double) winTrades / numTrades : 0.0;
-        // Remplissage minimal des autres métriques
-        tm.profitFactor = 0.0;
-        tm.maxDrawdownPct = 0.0;
-        tm.expectancy = 0.0;
-        tm.sharpe = 0.0;
-        tm.sortino = 0.0;
-        tm.exposure = 0.0;
-        tm.turnover = 0.0;
-        tm.avgBarsInPosition = 0.0;
-        tm.mse = 0.0;
-        tm.businessScore = 0.0;
-        tm.calmar = 0.0;
-        tm.contrarianTrades = 0;
+        // Calculs réels des métriques principales
+        double gains = 0, losses = 0; int win = 0, loss = 0;
+        for (double p : tradeProfits) { if (p > 0) { gains += p; win++; } else if (p < 0) { losses += p; loss++; } }
+        tm.profitFactor = losses != 0 ? gains / Math.abs(losses) : (gains > 0 ? Double.POSITIVE_INFINITY : 0);
+        double equity = 0, peak = 0, trough = 0;
+        for (double p : tradeProfits) {
+            equity += p;
+            if (equity > peak) peak = equity;
+            if (equity < trough) trough = equity;
+        }
+        double ddAbs = peak - trough;
+        tm.maxDrawdownPct = peak != 0 ? ddAbs / Math.abs(peak) : 0.0;
+        double avgGain = win > 0 ? gains / win : 0, avgLoss = loss > 0 ? Math.abs(losses) / loss : 0;
+        tm.expectancy = (win + loss) > 0 ? (tm.winRate * avgGain - (1 - tm.winRate) * avgLoss) : 0;
+        double meanRet = tradeProfits.stream().mapToDouble(d -> d).average().orElse(0);
+        double stdRet = Math.sqrt(tradeProfits.stream().mapToDouble(d -> { double m = d - meanRet; return m * m; }).average().orElse(0));
+        tm.sharpe = stdRet > 0 ? meanRet / stdRet * Math.sqrt(Math.max(1, tradeProfits.size())) : 0;
+        double downsideStd = Math.sqrt(tradeProfits.stream().filter(r -> r < meanRet).mapToDouble(r -> { double dr = r - meanRet; return dr * dr; }).average().orElse(0));
+        tm.sortino = downsideStd > 0 ? meanRet / downsideStd : 0;
+        tm.turnover = numTrades > 0 ? (double) numTrades / 252.0 : 0.0;
+        double annualizedReturn = capital > 0 ? tm.totalProfit / capital : tm.totalProfit;
+        tm.calmar = tm.maxDrawdownPct > 0 ? annualizedReturn / tm.maxDrawdownPct : 0;
+        // Calcul métriques avancées demandées
+        int totalTestBars = testEndBar - testStartBar + 1;
+        int totalBarsInPosition = barsHeldList.stream().mapToInt(i -> i).sum();
+        tm.exposure = totalTestBars > 0 ? (double) totalBarsInPosition / totalTestBars : 0.0;
+        tm.avgBarsInPosition = barsHeldList.isEmpty() ? 0.0 : barsHeldList.stream().mapToInt(i -> i).average().orElse(0.0);
+        // MSE sur les trades (entry/exit vs close)
+        double mseSum = 0.0; int mseCount = 0;
+        for (int idx = 0, j = 0; idx < tradeProfits.size(); idx++) {
+            // On approxime l'entrée/sortie par le prix d'entrée et de sortie
+            // Ici, on ne stocke que le profit, donc on ne peut pas faire mieux sans refactor
+            // On laisse à 0 si non calculable
+        }
+        tm.mse = 0.0; // Non calculable sans refactor
+        tm.businessScore = computeBusinessScore(tm.profitFactor, tm.winRate, tm.maxDrawdownPct, tm.expectancy, config);
+        tm.contrarianTrades = 0; // Non simulé ici
         tm.normalTrades = numTrades;
         tm.contrarianRatio = 0.0;
-        tm.positionValueMean = 0.0;
-        tm.positionValueStd = 0.0;
-        tm.avgR = 0.0;
-        tm.medianR = 0.0;
-        tm.rWinRate = 0.0;
-        tm.positiveRSkew = 0.0;
-        tm.partialExitTrades = 0;
-        tm.meanAbsPredDelta = 0.0;
+        // Position value mean/std
+        if (!positionValues.isEmpty()) {
+            double sumPV = 0.0;
+            for (double v : positionValues) sumPV += v;
+            double meanPV = sumPV / positionValues.size();
+            double varPV = 0.0;
+            for (double v : positionValues) { double d = v - meanPV; varPV += d * d; }
+            varPV /= positionValues.size();
+            tm.positionValueMean = meanPV;
+            tm.positionValueStd = Math.sqrt(varPV);
+        } else {
+            tm.positionValueMean = 0.0;
+            tm.positionValueStd = 0.0;
+        }
+        // R multiples
+        if (!tradeRMultiples.isEmpty()) {
+            tm.avgR = tradeRMultiples.stream().mapToDouble(d -> d).average().orElse(0.0);
+            double[] sortedR = tradeRMultiples.stream().mapToDouble(d -> d).sorted().toArray();
+            tm.medianR = sortedR.length % 2 == 1 ? sortedR[sortedR.length / 2] : (sortedR[sortedR.length / 2 - 1] + sortedR[sortedR.length / 2]) / 2.0;
+            long winsR = tradeRMultiples.stream().filter(r -> r > 0).count();
+            tm.rWinRate = numTrades > 0 ? (double) winsR / numTrades : 0.0;
+            double meanPos = tradeRMultiples.stream().filter(r -> r > 0).mapToDouble(r -> r).average().orElse(0.0);
+            double meanNeg = tradeRMultiples.stream().filter(r -> r < 0).mapToDouble(r -> r).average().orElse(0.0);
+            tm.positiveRSkew = (meanPos - Math.abs(meanNeg)) / (Math.abs(meanNeg) + 1e-9);
+        } else {
+            tm.avgR = 0.0;
+            tm.medianR = 0.0;
+            tm.rWinRate = 0.0;
+            tm.positiveRSkew = 0.0;
+        }
+        tm.partialExitTrades = 0; // Non simulé ici
+        tm.meanAbsPredDelta = meanAbsPredDeltaCount > 0 ? meanAbsPredDeltaSum / meanAbsPredDeltaCount : 0.0;
         return tm;
     }
 
