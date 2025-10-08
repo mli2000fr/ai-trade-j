@@ -482,12 +482,7 @@ public class LstmTuningService {
                     BarSeries trainSeries = series.getSubSeries(0, trainEndBar);
                     logger.debug("[TUNING][V2] [{}] Séparation données: train=[0,{}], test=[{},{}]","BTCUSDT", trainEndBar, trainEndBar, totalBars);
 
-                    // Contrôle VRAM avant lancement du job LSTM
-                    double vramPct = gpuController.getLastVramUsagePct();
-                    if (vramPct > 90.0) {
-                        logger.error("[GPU][VRAM] Saturation détectée ({}%) : lancement LSTM bloqué.", vramPct);
-                        throw new IllegalStateException("VRAM GPU saturée, entraînement LSTM annulé.");
-                    }
+
                     // Entraîne le modèle UNIQUEMENT sur les données d'entraînement
                     LstmTradePredictor.TrainResult trFull = lstmTradePredictor.trainLstmScalarV2(trainSeries, config, null);
                     model = trFull.model;                    // Modèle neuronal entraîné
@@ -1058,55 +1053,53 @@ public class LstmTuningService {
         java.util.function.IntSupplier horizonInnovSampler   = () -> new int[]{9,12,15}[rand.nextInt(3)];
 
         // ---- Exploitation (focus zone performante mais moins conservatrice) ----
-        int[] winExp = {30, 35, 45, 55};
-        int[] neuExp = {128, 192, 256};
+        int[] winExp = {30, 35, 45};
+        int[] neuExp = {64, 96}; // Limite à 96 pour mémoire
         for (int i = 0; i < exploit; i++) {
             LstmConfig c = baseConfigSkeleton();
             c.setWindowSize(winExp[rand.nextInt(winExp.length)]);
             c.setLstmNeurons(neuExp[rand.nextInt(neuExp.length)]);
-            c.setNumLstmLayers(rand.nextDouble() < 0.55 ? 2 : 3);
-            // Dropout plus bas pour laisser passer signal (0.12-0.20) avec rare 0.22
-            double[] dChoices = {0.12,0.15,0.18,0.20,0.22};
+            c.setNumLstmLayers(rand.nextDouble() < 0.55 ? 2 : 1); // max 2 couches
+            double[] dChoices = {0.12,0.15,0.18,0.20}; // Dropout plus prudent
             c.setDropoutRate(dChoices[rand.nextInt(dChoices.length)]);
             c.setLearningRate(lrExploitSampler.getAsDouble());
             c.setL2(l2SamplerTight.getAsDouble());
             c.setHorizonBars(horizonExploitSampler.getAsInt());
-            c.setAttention(true);
-            c.setBidirectional(false);
-            c.setNumEpochs(150 + rand.nextInt(25)); // un peu plus long pour mieux ajuster amplitude
-            c.setPatience(20 + rand.nextInt(5));
+            c.setAttention(rand.nextDouble() < 0.5); // attention activé sur 50% des configs
+            c.setBidirectional(false); // jamais les deux
+            c.setNumEpochs(120 + rand.nextInt(20)); // moins d'époques
+            c.setPatience(12 + rand.nextInt(3));
             c.setMinDelta(0.00012);
-            c.setBatchSize(rand.nextDouble() < 0.5 ? 48 : 64); // batch plus petit pour moins lisser gradients
+            c.setBatchSize(32); // batch plus petit
             c.setSwingTradeType(pick(rand, new String[]{"range","mean_reversion"}, 0.6));
-            // Business scoring un peu moins pénalisant (cap plus haut, gamma plus doux)
             c.setBusinessProfitFactorCap(4.5);
             c.setBusinessDrawdownGamma(1.4);
             grid.add(c);
         }
 
         // ---- Exploration (diversité structurelle) ----
-        int[] winExplore = {18, 25, 35, 45, 60};
-        int[] neuExplore = {96, 128, 160, 192, 224};
-        int[] layersExplore = {1,2,3};
-        int[] batchExplore = {32, 48, 64}; // on enlève 96 pour réduire smoothing
+        int[] winExplore = {18, 25, 30}; // max 30
+        int[] neuExplore = {64, 96}; // max 96
+        int[] layersExplore = {1,2}; // max 2 couches
+        int[] batchExplore = {32, 48}; // max 48
         for (int i = 0; i < explore; i++) {
             LstmConfig c = baseConfigSkeleton();
             c.setWindowSize(winExplore[rand.nextInt(winExplore.length)]);
             c.setLstmNeurons(neuExplore[rand.nextInt(neuExplore.length)]);
             c.setNumLstmLayers(layersExplore[rand.nextInt(layersExplore.length)]);
-            // Dropout éventail 0.10-0.22
-            c.setDropoutRate(round(0.10 + rand.nextDouble()*0.12));
+            c.setDropoutRate(round(0.10 + rand.nextDouble()*0.10));
             c.setLearningRate(lrExploreSampler.getAsDouble());
             c.setL2(l2SamplerWide.getAsDouble());
             c.setHorizonBars(horizonExploreSampler.getAsInt());
-            c.setAttention(rand.nextDouble() < 0.55);
-            c.setBidirectional(rand.nextDouble() < 0.18);
-            c.setNumEpochs(100 + rand.nextInt(20));
-            c.setPatience(14 + rand.nextInt(4));
+            boolean att = rand.nextDouble() < 0.35;
+            boolean bidir = !att && rand.nextDouble() < 0.12; // jamais les deux
+            c.setAttention(att);
+            c.setBidirectional(bidir);
+            c.setNumEpochs(80 + rand.nextInt(15));
+            c.setPatience(10 + rand.nextInt(3));
             c.setMinDelta(0.0002);
             c.setBatchSize(batchExplore[rand.nextInt(batchExplore.length)]);
             c.setSwingTradeType(pick(rand, new String[]{"range","breakout","mean_reversion"}, 0.34));
-            // 20% des configs exploration passent en normalisation globale pour augmenter variance prédictive
             if (rand.nextDouble() < 0.20) c.setNormalizationScope("global");
             c.setBusinessProfitFactorCap(5.0);
             c.setBusinessDrawdownGamma(1.3);
@@ -1114,25 +1107,26 @@ public class LstmTuningService {
         }
 
         // ---- Innovation (idées agressives contrôlées) ----
-        int[] winInnov = {15, 30, 65};
-        int[] neuInnov = {64, 128, 256};
+        int[] winInnov = {15, 20}; // max 20
+        int[] neuInnov = {64}; // max 64
         for (int i = 0; i < innovate; i++) {
             LstmConfig c = baseConfigSkeleton();
             c.setWindowSize(winInnov[rand.nextInt(winInnov.length)]);
             c.setLstmNeurons(neuInnov[rand.nextInt(neuInnov.length)]);
-            c.setNumLstmLayers(rand.nextDouble() < 0.5 ? 1 : 3);
-            // Dropout extrêmes + intermédiaires
-            double[] dd = {0.08, 0.12, 0.18, 0.24};
+            c.setNumLstmLayers(1); // jamais plus d'une couche
+            double[] dd = {0.08, 0.12, 0.18};
             c.setDropoutRate(dd[rand.nextInt(dd.length)]);
             c.setLearningRate(lrInnovSampler.getAsDouble());
             c.setL2(l2SamplerWide.getAsDouble());
             c.setHorizonBars(horizonInnovSampler.getAsInt());
-            c.setAttention(rand.nextDouble() < 0.75);
-            c.setBidirectional(rand.nextDouble() < 0.30);
-            c.setNumEpochs(70 + rand.nextInt(25));
-            c.setPatience(12 + rand.nextInt(5));
+            boolean att = rand.nextDouble() < 0.25;
+            boolean bidir = !att && rand.nextDouble() < 0.10;
+            c.setAttention(att);
+            c.setBidirectional(bidir);
+            c.setNumEpochs(60 + rand.nextInt(10));
+            c.setPatience(8 + rand.nextInt(3));
             c.setMinDelta(0.00028);
-            c.setBatchSize(rand.nextDouble() < 0.5 ?  FortyEightOr(48,64,rand) : 64); // helper pour clarté
+            c.setBatchSize(32); // batch minimal
             c.setSwingTradeType(pick(rand, new String[]{"breakout","mean_reversion"}, 0.5));
             c.setBusinessProfitFactorCap(5.0);
             c.setBusinessDrawdownGamma(1.2);
@@ -1205,7 +1199,7 @@ public class LstmTuningService {
     public void tuneAllSymbols(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         long startAll = System.currentTimeMillis();
         logger.info("[TUNING] Début tuning multi-symboles ({} symboles, parallélisé) | twoPhase={} ", symbols.size(), enableTwoPhase);
-        int maxParallelSymbols = 2;//Math.max(1, effectiveMaxThreads);
+        int maxParallelSymbols = 6;//Math.max(1, effectiveMaxThreads);
         java.util.concurrent.ExecutorService symbolExecutor = java.util.concurrent.Executors.newFixedThreadPool(maxParallelSymbols);
         java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
         for (int i = 0; i < symbols.size(); i++) {
@@ -1461,7 +1455,7 @@ public class LstmTuningService {
                     for (double lr: lrVar){
                         lr=Math.max(1e-5, Math.min(0.02, lr)); // plafond un peu plus haut pour dynamisme
                         for(double dr:drVar){
-                            dr=Math.max(0.05, Math.min(0.35, dr));
+                            dr=Math.max(0.05, Math.min(0.40, dr));
                             LstmConfig c=cloneConfig(base);
                             c.setIndexTop(indexTop);
                             c.setLstmNeurons(nv);
