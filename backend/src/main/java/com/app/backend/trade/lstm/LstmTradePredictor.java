@@ -151,16 +151,19 @@ public class LstmTradePredictor {
         int effectiveLstmNeurons = lstmNeurons;
         double effectiveDropout = dropoutRate;
         if (gpuBackend) {
-            // Réduction coût régularisation (dropout) et augmentation capacité
+            // Réduction supplémentaire du coût régularisation (dropout) et augmentation capacité
             if (effectiveDropout > 0) {
-                effectiveDropout = Math.max(0.0, Math.min(0.25, effectiveDropout * 0.5)); // /2, borne haute 0.25
+                effectiveDropout = Math.max(0.0, Math.min(0.10, effectiveDropout * 0.5)); // /2, borne haute 0.10
             }
             effectiveLstmNeurons = Math.max(8, (int)Math.round(lstmNeurons * 1.25));
             if (effectiveLstmNeurons != lstmNeurons || effectiveDropout != dropoutRate) {
                 logger.info("[LSTM][ADAPT][GPU] backend=GPU lstmNeurons {}->{} dropout {}->{}", lstmNeurons, effectiveLstmNeurons, dropoutRate, effectiveDropout);
             }
         } else {
-            logger.debug("[LSTM][ADAPT] backend=CPU (pas d'augmentation neurones)");
+            if (effectiveDropout > 0) {
+                effectiveDropout = Math.max(0.0, Math.min(0.10, effectiveDropout)); // borne haute 0.10
+            }
+            logger.debug("[LSTM][ADAPT] backend=CPU (dropout plafonné à 0.10)");
         }
 
         // Remplace références locales par versions effectives
@@ -175,7 +178,7 @@ public class LstmTradePredictor {
         );
 
         // Régularisations - réduites pour permettre plus de variabilité
-        builder.l1(l1 * 0.5).l2(l2 * 0.5); // Réduction de 50% pour moins de contraintes
+        builder.l1(l1 * 0.2).l2(l2 * 0.2); // Réduction de 80% pour moins de contraintes
 
         // Activation des workspaces mémoire (optimisation Dl4J)
         builder.trainingWorkspaceMode(WorkspaceMode.ENABLED)
@@ -222,9 +225,9 @@ public class LstmTradePredictor {
                 listBuilder.layer(recurrent);
                 // Dropout plus agressif pour éviter le sur-apprentissage conservateur
                 if (dropoutRate > 0.0) {
-                    // Étape 9: Dropout récurrent plafonné à 0.25 (suppression *1.5 pour éviter sous-apprentissage)
+                    // Dropout récurrent plafonné à 0.10
                     listBuilder.layer(new DropoutLayer.Builder()
-                        .dropOut(Math.min(Math.max(dropoutRate, 0.0), 0.25))
+                        .dropOut(Math.min(Math.max(dropoutRate, 0.0), 0.10))
                         .build());
                 }
             }
@@ -258,9 +261,9 @@ public class LstmTradePredictor {
 
         // Dropout avant la couche finale pour éviter le sur-apprentissage
         if (dropoutRate > 0.0) {
-            // Étape 9: Dropout dense final = min(0.2, dropoutRate)
+            // Dropout dense final = min(0.10, dropoutRate)
             listBuilder.layer(new DropoutLayer.Builder()
-                .dropOut(Math.min(0.2, Math.max(dropoutRate, 0.0)))
+                .dropOut(Math.min(0.10, Math.max(dropoutRate, 0.0)))
                 .build());
         }
 
