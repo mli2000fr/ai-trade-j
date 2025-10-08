@@ -257,13 +257,13 @@ public class LstmConfig {
     /** RSI overbought limit (au-delà on filtre). Relevé à 80 pour permettre plus d'entrées. */
     private double rsiOverboughtLimit = 80.0;
     /** Facteur deadzone (fraction du seuil swing). 0.5 auparavant figé. Réduction => plus de signaux. */
-    private double deadzoneFactor = 0.30;
+    private double deadzoneFactor = 0.20;
     /** Désactive totalement la deadzone si true. */
-    private boolean disableDeadzone = false;
+    private boolean disableDeadzone = true;
     /** Borne min ATR% pour le seuil dynamique d'entrée (remplace constante 0.001). */
     private double thresholdAtrMin = 0.001; // inchangé
     /** Borne max ATR% (remplace constante 0.01). */
-    private double thresholdAtrMax = 0.08; // MODIFIÉ: 3% par défaut
+    private double thresholdAtrMax = 0.03; // MODIFIÉ: 3% par défaut
     /** Multiplicateur sur le signal (delta prédictif) pour augmenter agressivité. */
     private double aggressivenessBoost = 1.0;
     /** Active fallback agressif si 0 trade trop longtemps. */

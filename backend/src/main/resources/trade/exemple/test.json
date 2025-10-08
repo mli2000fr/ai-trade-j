@@ -1,6 +1,1 @@
-Réduire l’intervalle de monitoring (ex : 5-10 s).
-Vérifier la VRAM avant chaque lancement de job LSTM.
-Limiter la taille des batchs et des modèles selon la VRAM.
-Forcer la libération mémoire GPU après chaque tâche.
-Adapter les seuils de monitoring à la réalité de la charge.
-Vérifier les fuites mémoire dans le code ND4J/LSTM.
+Si ces valeurs sont trop élevées (ex : windowSize > 100, lstmNeurons > 128, features > 30, kFolds > 5), la mémoire peut exploser.
