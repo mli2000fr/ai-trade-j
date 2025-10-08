@@ -177,7 +177,7 @@ public class LstmConfig {
 
     // =============================== Entraînement (Batch / Validation) ===============================
     /** Taille des mini-lots (batch) durant l'entraînement. */
-    private int batchSize = 128; // Remplacé si override dans les properties
+    private int batchSize = 64; // Remplacé si override dans les properties
     /** Mode de validation croisée : split, timeseries, kfold. */
     private String cvMode = "split";
 
@@ -185,7 +185,7 @@ public class LstmConfig {
     /** Active pipeline étiquettes scalaires + walk-forward. */
     private boolean useScalarV2 = false;
     /** Utilise le log-return comme cible (target) plutôt que le prix normalisé. */
-    private boolean useLogReturnTarget = true;
+    private boolean useLogReturnTarget = false;
     /** Active la validation walk-forward (utilisé si useScalarV2 = true). */
     private boolean useWalkForwardV2 = true;
     /** Nombre de segments (splits) dans la validation walk-forward. */
@@ -261,9 +261,9 @@ public class LstmConfig {
     /** Désactive totalement la deadzone si true. */
     private boolean disableDeadzone = true;
     /** Borne min ATR% pour le seuil dynamique d'entrée (remplace constante 0.001). */
-    private double thresholdAtrMin = 0.001; // inchangé
+    private double thresholdAtrMin = 0.0005; // inchangé
     /** Borne max ATR% (remplace constante 0.01). */
-    private double thresholdAtrMax = 0.03; // MODIFIÉ: 3% par défaut
+    private double thresholdAtrMax = 0.10; // MODIFIÉ: 3% par défaut
     /** Multiplicateur sur le signal (delta prédictif) pour augmenter agressivité. */
     private double aggressivenessBoost = 1.0;
     /** Active fallback agressif si 0 trade trop longtemps. */

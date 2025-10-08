@@ -267,7 +267,7 @@ public class LstmTradePredictor {
                 .build());
         }
 
-        // Sélection dynamique de la fonction de perte / activation finale
+        // Sélection dynamique la fonction de perte / activation finale
         Activation outAct;
         ILossFunction lossFn;
         if (outputSize == 1 && !classification) {
@@ -1023,6 +1023,11 @@ public class LstmTradePredictor {
      * @return Résultat contenant modèle entraîné + scalers pour inversion/prédiction
      */
     public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config, Object unused) {
+        // Assouplissement temporaire de la deadzone pour l'entraînement
+        config.setDeadzoneFactor(0.1); // Facteur plus faible (deadzone très souple)
+        // Pour désactiver complètement, décommentez la ligne suivante :
+        // config.setDisableDeadzone(true);
+
         // === PROFILING GPU (Étape 7) : activation temporaire du debug ND4J pour tracer transferts CPU->GPU ===
         // NOTE: désactiver (supprimer ou mettre false) une fois l'analyse terminée pour éviter surcharge de logs.
         try {
@@ -1799,7 +1804,7 @@ public class LstmTradePredictor {
         // ===== VALIDATION DES DIMENSIONS APRÈS PERMUTATION =====
         // Vérification critique pour détecter les erreurs de shape
         if (input.size(1) != numFeatures || input.size(2) != windowSize) {
-            logger.warn("[SHAPE][PRED] Incohérence shape input: expected features={} time={} got features={} time={}",
+            logger.info("[SHAPE][PRED] Incohérence shape input: expected features={} time={} got features={} time={}",
                 numFeatures, windowSize, input.size(1), input.size(2));
         }
 
@@ -1824,7 +1829,7 @@ public class LstmTradePredictor {
             if (predTargetEffective < low || predTargetEffective > high) {
                 double before = predTargetEffective;
                 predTargetEffective = Math.max(low, Math.min(high, predTargetEffective));
-                logger.debug("[PREDICT][CLAMP] logReturn clamp {} -> {} (mean={} std={} range=[{},{}])",
+                logger.info("[PREDICT][CLAMP] logReturn clamp {} -> {} (mean={} std={} range=[{},{}])",
                         String.format("%.6f", before),
                         String.format("%.6f", predTargetEffective),
                         String.format("%.6f", scalers.labelDistMean),
@@ -1847,7 +1852,7 @@ public class LstmTradePredictor {
         double predicted;
         if (config.isUseLogReturnTarget()) {
             predicted = referencePrice * Math.exp(predTargetEffective);
-            logger.debug("[PREDICT][LOG-RETURN] referencePrice={} predTargetEff={} predicted={}",
+            logger.info("[PREDICT][LOG-RETURN] referencePrice={} predTargetEff={} predicted={}",
                     String.format("%.3f", referencePrice),
                     String.format("%.6f", predTargetEffective),
                     String.format("%.3f", predicted));
@@ -1868,7 +1873,7 @@ public class LstmTradePredictor {
                     double scale = Math.max(0.25, atrPct / 0.003);
                     double before = predicted;
                     predicted = referencePrice + deltaPct * scale * referencePrice;
-                    logger.debug("[PREDICT][ADAPT][LOWVOL] atrPct={} scale={} before={} after={}",
+                    logger.info("[PREDICT][ADAPT][LOWVOL] atrPct={} scale={} before={} after={}",
                             String.format("%.5f", atrPct),
                             String.format("%.3f", scale),
                             String.format("%.3f", before),
@@ -1879,7 +1884,7 @@ public class LstmTradePredictor {
                     if (scale < 1.0) {
                         double before = predicted;
                         predicted = referencePrice + deltaPct * scale * referencePrice;
-                        logger.debug("[PREDICT][ADAPT][HIGHVOL] atrPct={} scale={} before={} after={}",
+                        logger.info("[PREDICT][ADAPT][HIGHVOL] atrPct={} scale={} before={} after={}",
                                 String.format("%.5f", atrPct),
                                 String.format("%.3f", scale),
                                 String.format("%.3f", before),
@@ -1896,7 +1901,7 @@ public class LstmTradePredictor {
                     if (Math.abs((predicted - referencePrice) / referencePrice) < swingTh * dzFactor) {
                         double before = predicted;
                         predicted = referencePrice; // neutralise
-                        logger.debug("[PREDICT][DEADZONE-CFG] deltaPct={} < swingTh*{} (={}) -> neutralisation ({} -> {})",
+                        logger.info("[PREDICT][DEADZONE-CFG] deltaPct={} < swingTh*{} (={}) -> neutralisation ({} -> {})",
                                 String.format("%.5f", deltaPct),
                                 String.format("%.2f", dzFactor),
                                 String.format("%.5f", swingTh * dzFactor),
@@ -1908,7 +1913,7 @@ public class LstmTradePredictor {
                 }
             }
         } catch (Exception e) {
-            logger.debug("[PREDICT][ADAPT] Skip ajustements swing: {}", e.toString());
+            logger.info("[PREDICT][ADAPT] Skip ajustements swing: {}", e.toString());
         }
         // Sécurité prix non positif (marché fermé ou anomalie) => fallback last
         if (!(predicted > 0)) {
@@ -1952,7 +1957,7 @@ public class LstmTradePredictor {
         // ===== PHASE 12: LOG DE DEBUG ET RETOUR =====
 
         // Log détaillé pour debug et monitoring des prédictions
-        logger.debug("[PREDICT] Prédiction: referencePrice={}, predicted={}, predNorm={}, predTargetEff={}, limitPct={}",
+        logger.info("[PREDICT] Prédiction: referencePrice={}, predicted={}, predNorm={}, predTargetEff={}, limitPct={}",
                 String.format("%.3f", referencePrice),
                 String.format("%.3f", predicted),
                 String.format("%.6f", predNorm),
