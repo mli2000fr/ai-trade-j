@@ -232,7 +232,7 @@ public class LstmHelper {
         // 6. Exécution de la prédiction (utilise model/scalers si présents)
         PreditLsdm preditLsdm = PreditLsdm.builder().build();
         if(loaded.phase == 0 ){
-            preditLsdm = lstmTradePredictor.getPredit(symbol, series, config, model, scalers);
+            preditLsdm = lstmTradePredictor.getPredit(series, config, model, scalers);
         }else{
             TradeStylePrediction tradeStylePrediction = lstmTradePredictor.predictTradeStyle(symbol, series, config, model, scalers);
 

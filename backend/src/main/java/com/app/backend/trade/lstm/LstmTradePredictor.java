@@ -1931,7 +1931,7 @@ public class LstmTradePredictor {
     /**
      * Alias conservant signature existante.
      */
-    public double predictNextCloseWithScalerSet(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers){
+    public double predictNextCloseWithScalerSet(BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers){
         return predictNextCloseScalarV2(series, config, model, scalers);
     }
 
@@ -2169,6 +2169,82 @@ public class LstmTradePredictor {
                    result.meanMse, result.meanBusinessScore, result.splits.size());
 
         return result;
+    }
+
+
+    public TradingMetricsV2 simulateTradingWalkForwardBis(
+            BarSeries fullSeries,
+            int testStartBar,
+            int testEndBar,
+            MultiLayerNetwork model,
+            ScalerSet scalers,
+            LstmConfig config
+    ) {
+        TradingMetricsV2 tm = new TradingMetricsV2();
+        boolean inPosition = false;
+        double entryPrice = 0.0;
+        int numTrades = 0;
+        int winTrades = 0;
+        double totalProfit = 0.0;
+        List<Double> tradeProfits = new ArrayList<>();
+
+        for (int i = testStartBar; i <= testEndBar; i++) {
+            BarSeries subSeries = fullSeries.getSubSeries(0, i + 1);
+            TradeStylePrediction pred = predictTradeStyle("", subSeries, config, model, scalers);
+            double close = subSeries.getLastBar().getClosePrice().doubleValue();
+            if ("BUY".equals(pred.action)) {
+                if (!inPosition) {
+                    inPosition = true;
+                    entryPrice = close;
+                }
+            } else if ("SELL".equals(pred.action)) {
+                if (inPosition) {
+                    double profit = close - entryPrice;
+                    totalProfit += profit;
+                    tradeProfits.add(profit);
+                    numTrades++;
+                    if (profit > 0) winTrades++;
+                    inPosition = false;
+                    entryPrice = 0.0;
+                }
+            }
+        }
+        // Si position ouverte à la fin, on la clôture au dernier prix
+        if (inPosition) {
+            double close = fullSeries.getBar(testEndBar).getClosePrice().doubleValue();
+            double profit = close - entryPrice;
+            totalProfit += profit;
+            tradeProfits.add(profit);
+            numTrades++;
+            if (profit > 0) winTrades++;
+        }
+        tm.totalProfit = totalProfit;
+        tm.numTrades = numTrades;
+        tm.winRate = numTrades > 0 ? (double) winTrades / numTrades : 0.0;
+        // Remplissage minimal des autres métriques
+        tm.profitFactor = 0.0;
+        tm.maxDrawdownPct = 0.0;
+        tm.expectancy = 0.0;
+        tm.sharpe = 0.0;
+        tm.sortino = 0.0;
+        tm.exposure = 0.0;
+        tm.turnover = 0.0;
+        tm.avgBarsInPosition = 0.0;
+        tm.mse = 0.0;
+        tm.businessScore = 0.0;
+        tm.calmar = 0.0;
+        tm.contrarianTrades = 0;
+        tm.normalTrades = numTrades;
+        tm.contrarianRatio = 0.0;
+        tm.positionValueMean = 0.0;
+        tm.positionValueStd = 0.0;
+        tm.avgR = 0.0;
+        tm.medianR = 0.0;
+        tm.rWinRate = 0.0;
+        tm.positiveRSkew = 0.0;
+        tm.partialExitTrades = 0;
+        tm.meanAbsPredDelta = 0.0;
+        return tm;
     }
 
     /**
@@ -2693,14 +2769,13 @@ public class LstmTradePredictor {
     /**
      * Produit l'objet de prédiction (inclut signal directionnel).
      *
-     * @param symbol  Symbole (utilisé pour logs)
      * @param series  Série complète
      * @param config  Config LSTM
      * @param model   Modèle potentiellement déjà en mémoire
      * @param scalers Scalers associés
      * @return Objet PreditLsdm (DTO)
      */
-    public PreditLsdm getPredit(String symbol, BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers) {
+    public PreditLsdm getPredit(BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers) {
         int window = config.getWindowSize();
         if (series.getBarCount() <= window + 1) {
             double last = series.getLastBar().getClosePrice().doubleValue();
@@ -2720,7 +2795,7 @@ public class LstmTradePredictor {
 
         // Seuil swing de base (ATR ou returns selon config)
         double th = computeSwingTradeThreshold(series, config);
-        double predicted = predictNextCloseWithScalerSet(symbol, series, config, model, scalers);
+        double predicted = predictNextCloseWithScalerSet(series, config, model, scalers);
         predicted = Math.round(predicted * 1000.0) / 1000.0;
 
         double[] closes = extractCloseValues(series);
@@ -3272,7 +3347,7 @@ public class LstmTradePredictor {
             out.lastClose = lastClose;
 
             // Prédiction principale
-            double predicted = predictNextCloseWithScalerSet(symbol, series, config, model, scalers);
+            double predicted = predictNextCloseWithScalerSet(series, config, model, scalers);
             out.predictedClose = predicted;
             double rawDeltaPct = (lastClose > 0) ? (predicted - lastClose) / lastClose : 0.0;
 
