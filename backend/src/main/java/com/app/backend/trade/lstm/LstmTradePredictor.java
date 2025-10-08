@@ -1045,6 +1045,25 @@ public class LstmTradePredictor {
             config.setFeatures(new java.util.ArrayList<>(features)); // Mise à jour de la config
         }
 
+        // Enrichissement automatique des features si trop pauvre
+        if (features.size() == 1 && features.contains("close")) {
+            logger.warn("[TRAIN][FEATURES] Liste trop pauvre, enrichissement automatique avec indicateurs dynamiques");
+            List<String> enrichFeatures = new java.util.ArrayList<>(features);
+            enrichFeatures.add("rsi");
+            enrichFeatures.add("momentum");
+            enrichFeatures.add("volatility");
+            enrichFeatures.add("macd");
+            enrichFeatures.add("sma20");
+            enrichFeatures.add("ema20");
+            config.setFeatures(enrichFeatures);
+            features = enrichFeatures;
+        }
+        // Forcer l'utilisation du log-return comme label pour plus de dynamique
+        if (!config.isUseLogReturnTarget()) {
+            logger.warn("[TRAIN][LABEL] Forçage du mode log-return pour plus de dynamique");
+            config.setUseLogReturnTarget(true);
+        }
+
         // Extraction des paramètres de base depuis la configuration
         int windowSize = config.getWindowSize();    // Taille de la fenêtre temporelle (ex: 30 bars)
         int numFeatures = features.size();          // Nombre d'indicateurs à utiliser
@@ -2602,7 +2621,7 @@ public class LstmTradePredictor {
 
         // ================== Filtres Swing Pro ==================
         // 1. Volatilité (ATR)
-        double atrVal = 0.0; double atrPct = 0.0;
+        double atrVal = 0, atrPct = 0;
         try {
             ATRIndicator atrInd = new ATRIndicator(series, 14);
             atrVal = atrInd.getValue(series.getEndIndex()).doubleValue();
