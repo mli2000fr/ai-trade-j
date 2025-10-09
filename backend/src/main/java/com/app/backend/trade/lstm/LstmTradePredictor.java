@@ -1019,7 +1019,6 @@ public class LstmTradePredictor {
      *
      * @param series Série d'entraînement (historique OHLCV complet)
      * @param config Configuration LSTM (hyperparamètres, features, normalisation)
-     * @param unused Paramètre non utilisé (maintenu pour compatibilité legacy)
      * @return Résultat contenant modèle entraîné + scalers pour inversion/prédiction
      */
     public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config) {
@@ -1124,7 +1123,7 @@ public class LstmTradePredictor {
 
             // ===== CONSTRUCTION DU LABEL (CIBLE DE PRÉDICTION) =====
             if (config.isUseLogReturnTarget()) {
-                if (config.isUseMultiHorizonAvg()) { // Correction ici
+                if (config.isUseMultiHorizonAvg()) {
                     // Mode multi-horizon : moyenne des log-returns t+1..t+H
                     int H = config.getHorizonBars();
                     double prev = closes[i + windowSize - 1];
@@ -1152,65 +1151,58 @@ public class LstmTradePredictor {
                 labelSeq[i] = closes[i + windowSize];
             }
         }
-
-        // ===== PHASE 4: APPRENTISSAGE DES SCALERS (NORMALISATION) =====
-
-        // Création du conteneur pour tous les scalers de normalisation
+        // Amplification du label si la std est trop faible
+        double mean = 0.0;
+        for (double v : labelSeq) mean += v;
+        mean /= labelSeq.length;
+        double std = 0.0;
+        for (double v : labelSeq) std += (v - mean) * (v - mean);
+        std = Math.sqrt(std / labelSeq.length);
+        double minStd = 0.002; // seuil de volatilité minimale
+        double amplifyFactor = 2.0; // facteur d'amplification
+        if (std < minStd) {
+            logger.warn("[TRAIN][LABEL] std trop faible ({}), amplification des labels par {}", std, amplifyFactor);
+            for (int i = 0; i < labelSeq.length; i++) {
+                labelSeq[i] *= amplifyFactor;
+            }
+        }
+        // Normalisation des scalers
         ScalerSet scalers = new ScalerSet();
-
-        // Construction d'un scaler dédié pour chaque feature
         for (int f = 0; f < numFeatures; f++) {
-            // Extraction de toutes les valeurs historiques pour cette feature
-            // Utilise toutes les barres disponibles (pas seulement les séquences)
             double[] col = new double[numSeq + windowSize];
             for (int i = 0; i < numSeq + windowSize; i++) {
                 col[i] = matrix[i][f]; // Toutes les valeurs de la feature f
             }
-
-            // Sélection du type de normalisation selon la nature de la feature
-            // RSI, MACD, momentum -> Z-Score (centré-réduit)
-            // Prix, volumes, ATR -> Min-Max (0-1)
             FeatureScaler.Type type =
                 getFeatureNormalizationType(features.get(f)).equals("zscore")
                     ? FeatureScaler.Type.ZSCORE    // Normalisation (x - mean) / std
                     : FeatureScaler.Type.MINMAX;   // Normalisation (x - min) / (max - min)
-
-            // Création et apprentissage du scaler sur les données historiques
             FeatureScaler scaler = new FeatureScaler(type);
             scaler.fit(col); // Calcule min/max ou mean/std selon le type
-
-            // Stockage du scaler avec le nom de la feature comme clé
             scalers.featureScalers.put(features.get(f), scaler);
         }
-
-        // Création du scaler pour les labels:
-        //  - Si prédiction de log-return => ZSCORE (évite compression extrême autour de 0)
-        //  - Sinon (prix direct) => MINMAX
-        FeatureScaler.Type labelType = config.isUseLogReturnTarget()
-            ? FeatureScaler.Type.ZSCORE
-            : FeatureScaler.Type.MINMAX;
-        FeatureScaler labelScaler = new FeatureScaler(labelType);
+        FeatureScaler labelScaler = new FeatureScaler(config.isUseLogReturnTarget() ? FeatureScaler.Type.ZSCORE : FeatureScaler.Type.MINMAX);
         labelScaler.fit(labelSeq);
-        scalers.labelScaler = labelScaler; // Stockage pour utilisation ultérieure
+        scalers.labelScaler = labelScaler;
         // Étape 22: stocker distribution label brute (log-return ou moyenne multi-horizon) pour dérive future
         if (config.isUseLogReturnTarget()) {
             double m = 0; for (double v : labelSeq) m += v; m = labelSeq.length>0? m/labelSeq.length:0;
-            double var=0; for (double v: labelSeq){ double d=v-m; var+=d*d; } var = labelSeq.length>0? var/labelSeq.length:0; double std = Math.sqrt(var);
+            double var=0; for (double v: labelSeq){ double d=v-m; var+=d*d; } var = labelSeq.length>0? var/labelSeq.length:0; double stdLabelDist = Math.sqrt(var);
             scalers.labelDistMean = m;
-            scalers.labelDistStd = std>1e-12? std : 1e-12; // éviter division par 0
+            scalers.labelDistStd = stdLabelDist>1e-12? stdLabelDist : 1e-12; // éviter division par 0
             logger.info("[STEP22][LABEL_DIST][TRAIN] mean={} std={}", String.format(java.util.Locale.US, "%.6f", scalers.labelDistMean), String.format(java.util.Locale.US, "%.6f", scalers.labelDistStd));
         }
 
         // Vérification qualité normalisation label (std ≈ 1 si ZSCORE)
         double[] normLabels = scalers.labelScaler.transform(labelSeq);
-        if (labelType == FeatureScaler.Type.ZSCORE) {
+        if (labelScaler.type == FeatureScaler.Type.ZSCORE) {
             double m=0, v=0; int n=normLabels.length;
             for(double d: normLabels) m += d; m = n>0? m/n:0;
-            for(double d: normLabels) v += (d-m)*(d-m); v = n>0? v/n:0; double std = Math.sqrt(v);
-            if (std < 1e-3) {
-                logger.warn("[TRAIN][LABEL][WARN] Std normalisée très faible (<1e-3) => plateau potentiel. std={}", std);
+            for(double d: normLabels) v += (d-m)*(d-m); v = n>0? v/n:0; double normStd = Math.sqrt(v);
+            if (normStd < 1e-3) {
+                logger.warn("[TRAIN][LABEL][WARN] Std normalisée très faible (<1e-3) => plateau potentiel. std={}", normStd);
             } else {
-                logger.debug("[TRAIN][LABEL] Normalisation label ZSCORE ok. mean={} std={}", String.format("%.4f", m), String.format("%.4f", std));
+                logger.debug("[TRAIN][LABEL] Normalisation label ZSCORE ok. mean={} std={}", String.format("%.4f", m), String.format("%.4f", normStd));
             }
         }
 
@@ -2718,7 +2710,7 @@ public class LstmTradePredictor {
             .getEndTime()
             .format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"));
 
-        logger.info("[PREDICT] win={} last={} pred={} delta={} ({}%) thr={} ({}) signal={} conf={} rsi={} volR={} atrPct={}",
+        logger.info("[PRED-TRADE] win={} last={} pred={} delta={} ({}%) thr={} ({}) signal={} conf={} rsi={} volR={} atrPct={}",
             config.getWindowSize(),
             String.format(java.util.Locale.US, "%.4f", lastClose),
             String.format(java.util.Locale.US, "%.4f", predicted),
@@ -2736,7 +2728,7 @@ public class LstmTradePredictor {
         return PreditLsdm.builder()
             .lastClose(lastClose)
             .predictedClose(predicted)
-            .signal(signal)
+            .signal(SignalType.STABLE) // Signal par défaut, peut être ajusté par la logique métier
             .explication(posInfo)
             .lastDate(formattedDate)
             .position(position)
@@ -3232,7 +3224,8 @@ public class LstmTradePredictor {
             // Distribution historique des deltas prédits (approx) sur N dernières barres pour percentile
             int lookbackForPercentile = Math.min(100, barCount - window - 2); // réduit à 100 pour accélérer
             List<Double> absDeltas = new ArrayList<>();
-            if (lookbackForPercentile > 20) {
+            /*if (lookbackForPercentile > 20) {
+                Collections.sort(absDeltas);
                 int start = barCount - lookbackForPercentile - 1;
                 double[] closes = extractCloseValues(series);
                 // Échantillonnage : une barre sur deux
@@ -3245,12 +3238,11 @@ public class LstmTradePredictor {
                             double d = Math.abs((predB - prevClose) / prevClose);
                             if (Double.isFinite(d)) absDeltas.add(d);
                         }
-                    } catch (Exception ignore) { /* robuste */ }
+                    } catch (Exception ignore) { }
                 }
-            }
+            }*/
             double entryPercentileThreshold;
             if (absDeltas.size() >= 32) {
-                Collections.sort(absDeltas);
                 int idx = (int)Math.floor(basePercentileQ * (absDeltas.size()-1));
                 if (idx < 0) idx = 0; if (idx >= absDeltas.size()) idx = absDeltas.size()-1;
                 entryPercentileThreshold = Math.max(absDeltas.get(idx), deltaFloor);
@@ -3311,7 +3303,7 @@ public class LstmTradePredictor {
                     "rawDelta=%.4f%% sig=%.4f thrATR=%.4f thrPct=%.4f rsi=%.1f volR=%.2f enter=%s",
                     rawDeltaPct*100, signalStrength, atrAdaptiveThreshold, entryPercentileThreshold, rsiVal, volRatio, enter);
 
-            logger.info("[PRED-TRADE] {} last={} pred={} delta={} ({}%) thr={} ({}) signal={} conf={} rsi={} volR={} atrPct={}",
+            logger.info("[PRED-TRADE] win={} last={} pred={} delta={} ({}%) thr={} ({}) signal={} conf={} rsi={} volR={} atrPct={}",
                     symbol,
                     String.format(java.util.Locale.US, "%.4f", lastClose),
                     String.format(java.util.Locale.US, "%.4f", predicted),

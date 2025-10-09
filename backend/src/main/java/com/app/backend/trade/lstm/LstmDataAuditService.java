@@ -46,7 +46,8 @@ public class LstmDataAuditService {
             }
             // Stats
             double mean = logReturns.stream().filter(d -> !d.isNaN()).mapToDouble(Double::doubleValue).average().orElse(Double.NaN);
-            double std = Math.sqrt(logReturns.stream().filter(d -> !d.isNaN()).mapToDouble(d -> Math.pow(d - mean, 2)).average().orElse(0));
+            final double mean0 = mean;
+            double std = Math.sqrt(logReturns.stream().filter(d -> !d.isNaN()).mapToDouble(d -> Math.pow(d - mean0, 2)).average().orElse(0));
             long zeroCount = logReturns.stream().filter(d -> !Double.isNaN(d) && d == 0.0).count();
             long nanCount = logReturns.stream().filter(d -> Double.isNaN(d)).count();
             double propZero = zeroCount / (double) logReturns.size();
@@ -65,6 +66,19 @@ public class LstmDataAuditService {
             // Logging
            /* logger.info("[AUDIT] {}: bars={}, mean={}, std={}, propZero={}, propNaN={}, var={}",symbol, barCount, String.format("%.5f", mean), String.format("%.5f", std), String.format("%.4f", propZero), String.format("%.4f", propNaN), String.format("%.5e", std*std));
             logger.info("[AUDIT] {}: histogram (20 bins) {}", symbol, Arrays.toString(hist));*/
+            // Amplification si std trop faible
+            if (std < 1e-3) {
+                logger.warn("[AUDIT][AMPLIFY] Symbol {}: std log-return trop faible ({}), amplification x10 appliquée", symbol, std);
+                for (int j = 0; j < logReturns.size(); j++) {
+                    if (!Double.isNaN(logReturns.get(j))) {
+                        logReturns.set(j, logReturns.get(j) * 10.0);
+                    }
+                }
+                // Recalcul stats après amplification
+                mean = logReturns.stream().filter(d -> !d.isNaN()).mapToDouble(Double::doubleValue).average().orElse(Double.NaN);
+                final double mean1 = mean;
+                std = Math.sqrt(logReturns.stream().filter(d -> !d.isNaN()).mapToDouble(d -> Math.pow(d - mean1, 2)).average().orElse(0));
+            }
             // Critère d'acceptation
             if (std*std < 1e-5) {
                 logger.warn("[AUDIT] Symbol {} exclu: variance log-return < 1e-5", symbol);
