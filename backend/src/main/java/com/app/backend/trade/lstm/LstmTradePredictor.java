@@ -3154,6 +3154,7 @@ public class LstmTradePredictor {
                                                   LstmConfig config,
                                                   MultiLayerNetwork model,
                                                   ScalerSet scalers) {
+
         TradeStylePrediction out = new TradeStylePrediction();
         try {
             int barCount = series.getBarCount();
@@ -3182,7 +3183,8 @@ public class LstmTradePredictor {
             double lastClose = series.getLastBar().getClosePrice().doubleValue();
             out.lastClose = lastClose;
             // Prédiction principale
-            double predicted = predictNextCloseWithScalerSet(series, config, model, scalers);
+            java.util.Random rand = new java.util.Random();
+            double predicted = predictNextCloseScalarFast(series, config, model, scalers);
             out.predictedClose = predicted;
             double rawDeltaPct = (lastClose > 0) ? (predicted - lastClose) / lastClose : 0.0;
             // Si la prédiction est exactement égale au dernier close, ajouter un commentaire explicite
