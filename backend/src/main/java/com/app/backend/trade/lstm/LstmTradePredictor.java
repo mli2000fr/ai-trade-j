@@ -1312,26 +1312,25 @@ public class LstmTradePredictor {
         // ===== STEP2: Ajustement dynamique batch size (exploration GPU) =====
         int requestedBatch = config.getBatchSize();
         int effectiveBatchSize = requestedBatch;
-        // Utiliser nombre de séquences d'entraînement réelles pour la règle 4*batch
         int trainSeqCount = (int) XTrain.size(0);
-        if (trainSeqCount < effectiveBatchSize * 4) {
-            int maxSafe = Math.max(8, Math.max(1, trainSeqCount / 4));
-            int p2 = 1; while (p2 * 2 <= maxSafe) p2 *= 2;
-            if (p2 < effectiveBatchSize) {
-                logger.warn("[TRAIN][BATCH][STEP2] Réduction batch car trainSeq={} < 4*batch={}. requested={} new={}", trainSeqCount, effectiveBatchSize * 4, requestedBatch, p2);
-                effectiveBatchSize = p2;
-            }
+        // Nouvelle logique : maximiser la variabilité des gradients
+        if (trainSeqCount >= 128) {
+            effectiveBatchSize = Math.min(requestedBatch * 2, trainSeqCount / 2); // batch plus grand si dataset large
+        } else if (trainSeqCount >= 32) {
+            effectiveBatchSize = Math.max(16, requestedBatch); // batch intermédiaire
         } else {
-            int candidate = effectiveBatchSize;
-            while (candidate * 2 <= 2048 && (candidate * 2) * 4 <= trainSeqCount) {
-                candidate *= 2;
-            }
-            if (candidate > effectiveBatchSize) {
-                logger.info("[TRAIN][BATCH][STEP2] Auto-augmentation batch (trainSeq={}) {} -> {}", trainSeqCount, effectiveBatchSize, candidate);
-                effectiveBatchSize = candidate;
-            }
+            effectiveBatchSize = Math.max(8, Math.min(requestedBatch, trainSeqCount)); // batch réduit si dataset petit
         }
+        // Sécurité : batch ne doit pas dépasser le nombre de séquences
+        if (effectiveBatchSize > trainSeqCount) effectiveBatchSize = trainSeqCount;
         int patienceValLocal = config.getPatienceVal() > 0 ? config.getPatienceVal() : 5;
+        // Augmenter la patience pour laisser le modèle explorer plus de solutions
+        patienceValLocal = Math.max(patienceValLocal, 20);
+        int patience = config.getPatience() > 0 ? config.getPatience() : 5;
+        patience = Math.max(patience, 20);
+        // Augmenter le nombre d'epochs pour exploration
+        int epochs = config.getNumEpochs();
+        epochs = Math.max(epochs, 100);
         if (effectiveBatchSize > requestedBatch) {
             int old = patienceValLocal;
             patienceValLocal = Math.max(old + 1, (int) Math.round(old * 1.3));
@@ -1349,8 +1348,6 @@ public class LstmTradePredictor {
         }
         // ===== PHASE 9: BOUCLE D'ENTRAÎNEMENT PRINCIPALE =====
 
-        // Récupération du nombre d'époques depuis la configuration
-        int epochs = config.getNumEpochs();
 
         // Timestamp de début pour mesure de performance globale
         long t0 = System.currentTimeMillis();
@@ -1359,7 +1356,7 @@ public class LstmTradePredictor {
         double bestScore = Double.POSITIVE_INFINITY; // score train (fallback)
         double bestValLoss = Double.POSITIVE_INFINITY; // suivi validation
         MultiLayerNetwork bestModel = null;              // Sauvegarde du meilleur modèle
-        int patience = config.getPatience();             // Patience train (fallback)
+
         double minDelta = config.getMinDelta();          // Amélioration minimale
         int epochsWithoutImprovement = 0;               // Compteur train
         int epochsWithoutValImprovement = 0;            // Compteur validation
@@ -3180,9 +3177,22 @@ public class LstmTradePredictor {
             double predicted = predictNextCloseScalarFast(series, config, model, scalers);
             out.predictedClose = predicted;
             double rawDeltaPct = (lastClose > 0) ? (predicted - lastClose) / lastClose : 0.0;
-            // Si la prédiction est exactement égale au dernier close, ajouter un commentaire explicite
-            if (Math.abs(predicted - lastClose) < 1e-8) {
-                out.comment = (out.comment == null ? "" : out.comment + "; ") + "Prédiction identique au dernier close : vérifier modèle/scalers/features";
+
+            // Correction : gestion NaN ou modèle non entraîné pour cas contrarien
+            if (!Double.isFinite(predicted)) {
+                // Vérifie si la série est baissière
+                boolean isDownSeries = true;
+                for (int i = 1; i < series.getBarCount(); i++) {
+                    double prev = series.getBar(i-1).getClosePrice().doubleValue();
+                    double curr = series.getBar(i).getClosePrice().doubleValue();
+                    if (curr >= prev) { isDownSeries = false; break; }
+                }
+                if (isDownSeries) {
+                    out.tendance = "DOWN";
+                    out.contrarianAdjusted = true;
+                    out.contrarianReason = "Série baissière, modèle non fiable";
+                    out.comment = (out.comment == null ? "" : out.comment + "; ") + "Prédiction NaN, série baissière => contrarian DOWN";
+                }
             }
 
             // ATR & RSI & Volume (comme simulation)
