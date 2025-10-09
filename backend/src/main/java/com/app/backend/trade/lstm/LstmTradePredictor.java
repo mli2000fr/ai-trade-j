@@ -151,19 +151,19 @@ public class LstmTradePredictor {
         int effectiveLstmNeurons = lstmNeurons;
         double effectiveDropout = dropoutRate;
         if (gpuBackend) {
-            // Réduction supplémentaire du coût régularisation (dropout) et augmentation capacité
+            // Réduction encore plus forte du coût régularisation (dropout) et augmentation capacité
             if (effectiveDropout > 0) {
-                effectiveDropout = Math.max(0.0, Math.min(0.10, effectiveDropout * 0.5)); // /2, borne haute 0.10
+                effectiveDropout = Math.max(0.0, Math.min(0.05, effectiveDropout * 0.25)); // /4, borne haute 0.05
             }
-            effectiveLstmNeurons = Math.max(8, (int)Math.round(lstmNeurons * 1.25));
+            effectiveLstmNeurons = Math.max(8, (int)Math.round(lstmNeurons * 1.35));
             if (effectiveLstmNeurons != lstmNeurons || effectiveDropout != dropoutRate) {
                 logger.info("[LSTM][ADAPT][GPU] backend=GPU lstmNeurons {}->{} dropout {}->{}", lstmNeurons, effectiveLstmNeurons, dropoutRate, effectiveDropout);
             }
         } else {
             if (effectiveDropout > 0) {
-                effectiveDropout = Math.max(0.0, Math.min(0.10, effectiveDropout)); // borne haute 0.10
+                effectiveDropout = Math.max(0.0, Math.min(0.05, effectiveDropout)); // borne haute 0.05
             }
-            logger.debug("[LSTM][ADAPT] backend=CPU (dropout plafonné à 0.10)");
+            logger.debug("[LSTM][ADAPT] backend=CPU (dropout plafonné à 0.05)");
         }
 
         // Remplace références locales par versions effectives
@@ -178,7 +178,7 @@ public class LstmTradePredictor {
         );
 
         // Régularisations - réduites pour permettre plus de variabilité
-        builder.l1(l1 * 0.2).l2(l2 * 0.2); // Réduction de 80% pour moins de contraintes
+        builder.l1(l1 * 0.1).l2(l2 * 0.1); // Réduction de 90% pour moins de contraintes
 
         // Activation des workspaces mémoire (optimisation Dl4J)
         builder.trainingWorkspaceMode(WorkspaceMode.ENABLED)
@@ -225,9 +225,9 @@ public class LstmTradePredictor {
                 listBuilder.layer(recurrent);
                 // Dropout plus agressif pour éviter le sur-apprentissage conservateur
                 if (dropoutRate > 0.0) {
-                    // Dropout récurrent plafonné à 0.10
+                    // Dropout récurrent plafonné à 0.05
                     listBuilder.layer(new DropoutLayer.Builder()
-                        .dropOut(Math.min(Math.max(dropoutRate, 0.0), 0.10))
+                        .dropOut(Math.min(Math.max(dropoutRate, 0.0), 0.05))
                         .build());
                 }
             }
@@ -261,9 +261,9 @@ public class LstmTradePredictor {
 
         // Dropout avant la couche finale pour éviter le sur-apprentissage
         if (dropoutRate > 0.0) {
-            // Dropout dense final = min(0.10, dropoutRate)
+            // Dropout dense final = min(0.05, dropoutRate)
             listBuilder.layer(new DropoutLayer.Builder()
-                .dropOut(Math.min(0.10, Math.max(dropoutRate, 0.0)))
+                .dropOut(Math.min(0.05, Math.max(dropoutRate, 0.0)))
                 .build());
         }
 
@@ -296,9 +296,9 @@ public class LstmTradePredictor {
         MultiLayerNetwork model = new MultiLayerNetwork(conf);
         model.init();
         logger.info("[LSTM][INIT] defaultFPType={} modelParamsType={}", Nd4j.defaultFloatingPointType(), model.params().dataType());
-        // Étape 9: log des valeurs de dropout réellement appliquées (récurrent plafonné 0.25, dense final = min(0.2, dropoutRate))
-        double appliedRecurrentDropout = (dropoutRate > 0.0) ? Math.min(Math.max(dropoutRate, 0.0), 0.25) : 0.0;
-        double appliedFinalDenseDropout = (dropoutRate > 0.0) ? Math.min(0.2, Math.max(dropoutRate, 0.0)) : 0.0;
+        // Étape 9: log des valeurs de dropout réellement appliquées (récurrent plafonné 0.10, dense final = min(0.2, dropoutRate))
+        double appliedRecurrentDropout = (dropoutRate > 0.0) ? Math.min(Math.max(dropoutRate, 0.0), 0.05) : 0.0;
+        double appliedFinalDenseDropout = (dropoutRate > 0.0) ? Math.min(0.05, Math.max(dropoutRate, 0.0)) : 0.0;
         logger.info("[LSTM][Etape9] Dropout recurrent applique={} | Dropout dense final={} | neurons={}", appliedRecurrentDropout, appliedFinalDenseDropout, lstmNeurons);
         return model;
     }
@@ -1022,10 +1022,10 @@ public class LstmTradePredictor {
      * @return Résultat contenant modèle entraîné + scalers pour inversion/prédiction
      */
     public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config) {
-        // Assouplissement temporaire de la deadzone pour l'entraînement
-        config.setDeadzoneFactor(0.1); // Facteur plus faible (deadzone très souple)
+        // Mode ultra agressif : désactivation complète de la deadzone
+        config.setDisableDeadzone(true); // Deadzone désactivée pour agressivité maximale
         // Pour désactiver complètement, décommentez la ligne suivante :
-        // config.setDisableDeadzone(true);
+        // config.setDeadzoneFactor(0.0);
 
         // === PROFILING GPU (Étape 7) : activation temporaire du debug ND4J pour tracer transferts CPU->GPU ===
         // NOTE: désactiver (supprimer ou mettre false) une fois l'analyse terminée pour éviter surcharge de logs.
@@ -1151,21 +1151,22 @@ public class LstmTradePredictor {
                 labelSeq[i] = closes[i + windowSize];
             }
         }
-        // Amplification du label si la std est trop faible
+        // Amplification du label si la std est trop faible (mode agressif)
         double mean = 0.0;
         for (double v : labelSeq) mean += v;
         mean /= labelSeq.length;
         double std = 0.0;
         for (double v : labelSeq) std += (v - mean) * (v - mean);
         std = Math.sqrt(std / labelSeq.length);
-        double minStd = 0.002; // seuil de volatilité minimale
-        double amplifyFactor = 2.0; // facteur d'amplification
+        double minStd = 0.001; // seuil de volatilité minimale (plus agressif)
+        double amplifyFactor = 1000.0; // facteur d'amplification très agressif
         if (std < minStd) {
-            logger.warn("[TRAIN][LABEL] std trop faible ({}), amplification des labels par {}", std, amplifyFactor);
+            logger.warn("[TRAIN][LABEL][AGGRESSIVE] std trop faible ({}) => amplification massive des labels par {}", std, amplifyFactor);
             for (int i = 0; i < labelSeq.length; i++) {
                 labelSeq[i] *= amplifyFactor;
             }
         }
+
         // Normalisation des scalers
         ScalerSet scalers = new ScalerSet();
         for (int f = 0; f < numFeatures; f++) {
