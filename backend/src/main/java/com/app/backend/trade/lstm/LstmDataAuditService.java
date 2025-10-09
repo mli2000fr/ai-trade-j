@@ -63,9 +63,8 @@ public class LstmDataAuditService {
                 hist[bin]++;
             }
             // Logging
-            logger.info("[AUDIT] {}: bars={}, mean={}, std={}, propZero={}, propNaN={}, var={}",
-                    symbol, barCount, String.format("%.5f", mean), String.format("%.5f", std), String.format("%.4f", propZero), String.format("%.4f", propNaN), String.format("%.5e", std*std));
-            logger.info("[AUDIT] {}: histogram (20 bins) {}", symbol, Arrays.toString(hist));
+           /* logger.info("[AUDIT] {}: bars={}, mean={}, std={}, propZero={}, propNaN={}, var={}",symbol, barCount, String.format("%.5f", mean), String.format("%.5f", std), String.format("%.4f", propZero), String.format("%.4f", propNaN), String.format("%.5e", std*std));
+            logger.info("[AUDIT] {}: histogram (20 bins) {}", symbol, Arrays.toString(hist));*/
             // Critère d'acceptation
             if (std*std < 1e-5) {
                 logger.warn("[AUDIT] Symbol {} exclu: variance log-return < 1e-5", symbol);
@@ -73,7 +72,7 @@ public class LstmDataAuditService {
             }
             validSymbols.add(symbol);
         }
-        logger.info("[AUDIT] Symboles valides: {}", validSymbols);
+        //logger.info("[AUDIT] Symboles valides: {}", validSymbols);
         return validSymbols;
     }
 }

@@ -1022,7 +1022,7 @@ public class LstmTradePredictor {
      * @param unused Paramètre non utilisé (maintenu pour compatibilité legacy)
      * @return Résultat contenant modèle entraîné + scalers pour inversion/prédiction
      */
-    public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config, Object unused) {
+    public TrainResult trainLstmScalarV2(BarSeries series, LstmConfig config) {
         // Assouplissement temporaire de la deadzone pour l'entraînement
         config.setDeadzoneFactor(0.1); // Facteur plus faible (deadzone très souple)
         // Pour désactiver complètement, décommentez la ligne suivante :
@@ -1972,7 +1972,7 @@ public class LstmTradePredictor {
      * Alias conservant signature existante.
      */
     public double predictNextCloseWithScalerSet(BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers){
-        return predictNextCloseScalarV2(series, config, model, scalers);
+        return predictNextCloseScalarFast(series, config, model, scalers);
     }
 
     /**
@@ -2390,7 +2390,7 @@ public class LstmTradePredictor {
         for (int t = testStartBar; t < testEndBar; t++) {
             if (t - window < 1) continue; // si log-return => besoin de t-1
             BarSeries sub = series.getSubSeries(0, t); // exclut t (label à t)
-            double pred = predictNextCloseScalarV2(sub, config, model, scalers);
+            double pred = predictNextCloseScalarFast(sub, config, model, scalers);
             double actual = closes[t];
             if (Double.isFinite(pred) && Double.isFinite(actual)) {
                 double diff = pred - actual;
@@ -3228,17 +3228,17 @@ public class LstmTradePredictor {
             double aggressivenessBoost = config.getAggressivenessBoost() > 0 ? config.getAggressivenessBoost() : 1.0;
 
             // Distribution historique des deltas prédits (approx) sur N dernières barres pour percentile
-            int lookbackForPercentile = Math.min(200, barCount - window - 2);
+            int lookbackForPercentile = Math.min(100, barCount - window - 2); // réduit à 100 pour accélérer
             List<Double> absDeltas = new ArrayList<>();
             if (lookbackForPercentile > 20) {
                 int start = barCount - lookbackForPercentile - 1;
                 double[] closes = extractCloseValues(series);
-                for (int b = start + window; b < barCount - 1; b++) { // exclut la dernière barre actuelle
-                    // Sous-série 0..b (b = endIndex-1 max) pour prédire b+1 (approx). On simplifie: prédire close courant en glissant.
+                // Échantillonnage : une barre sur deux
+                for (int b = start + window; b < barCount - 1; b += 2) { // step=2 pour accélérer
                     try {
                         BarSeries sub = series.getSubSeries(0, b + 1);
                         double prevClose = closes[b];
-                        double predB = predictNextCloseScalarV2(sub, config, model, scalers);
+                        double predB = predictNextCloseScalarFast(sub, config, model, scalers);
                         if (prevClose > 0 && Double.isFinite(predB)) {
                             double d = Math.abs((predB - prevClose) / prevClose);
                             if (Double.isFinite(d)) absDeltas.add(d);
@@ -3330,4 +3330,42 @@ public class LstmTradePredictor {
         return out;
     }
 
+    /**
+     * Version optimisée/minimale : retourne juste le prix prédit sans limitation, logs, ni ajustements.
+     * Prérequis : model, config et scalers sont valides et cohérents.
+     */
+    public double predictNextCloseScalarFast(BarSeries series, LstmConfig config, MultiLayerNetwork model, ScalerSet scalers) {
+        List<String> features = config.getFeatures();
+        int windowSize = config.getWindowSize();
+        if (series.getBarCount() <= windowSize) {
+            throw new IllegalArgumentException("Pas assez de barres: " + series.getBarCount() + " <= " + windowSize);
+        }
+        double[][] matrix = extractFeatureMatrix(series, features);
+        int numFeatures = features.size();
+        double[][] normMatrix = new double[matrix.length][numFeatures];
+        for (int f = 0; f < numFeatures; f++) {
+            double[] col = new double[matrix.length];
+            for (int i = 0; i < matrix.length; i++) {
+                col[i] = matrix[i][f];
+            }
+            double[] normCol = scalers.featureScalers.get(features.get(f)).transform(col);
+            for (int i = 0; i < matrix.length; i++) {
+                normMatrix[i][f] = normCol[i];
+            }
+        }
+        double[][][] seq = new double[1][windowSize][numFeatures];
+        for (int j = 0; j < windowSize; j++) {
+            System.arraycopy(normMatrix[normMatrix.length - windowSize + j], 0, seq[0][j], 0, numFeatures);
+        }
+        org.nd4j.linalg.api.ndarray.INDArray input = Nd4j.create(seq).permute(0, 2, 1).dup('c');
+        double predNorm = model.output(input).getDouble(0);
+        double predTarget = scalers.labelScaler.inverse(predNorm);
+        double[] closes = extractCloseValues(series);
+        double referencePrice = closes[closes.length - 1];
+        if (config.isUseLogReturnTarget()) {
+            return referencePrice * Math.exp(predTarget);
+        } else {
+            return predTarget;
+        }
+    }
 }

@@ -68,8 +68,8 @@ public class GpuConcurrencyController {
             permits.release(diff);
             targetMax = minConcurrency;
         }
-        logger.info("[GPU][CONF] Concurrence GPU min={} max={} upIf<{}% downIf>{}% (targetCurrent={})", minConcurrency, maxConcurrency,
-                String.format("%.1f", scaleUpThresholdPct), String.format("%.1f", scaleDownThresholdPct), targetMax);
+        /*logger.info("[GPU][CONF] Concurrence GPU min={} max={} upIf<{}% downIf>{}% (targetCurrent={})", minConcurrency, maxConcurrency,
+                String.format("%.1f", scaleUpThresholdPct), String.format("%.1f", scaleDownThresholdPct), targetMax);*/
     }
 
     /** Démarre le monitoring adaptatif. Sans effet si déjà lancé ou si CUDA indisponible. */
@@ -83,7 +83,7 @@ public class GpuConcurrencyController {
             return t;
         });
         monitorFuture = scheduler.scheduleAtFixedRate(this::monitor, 5, 5, TimeUnit.SECONDS); // intervalle réduit 5s
-        logger.info("[GPU][ADAPT] Monitoring VRAM démarré (intervalle 5s, plage {}..{})", minConcurrency, maxConcurrency);
+        //logger.info("[GPU][ADAPT] Monitoring VRAM démarré (intervalle 5s, plage {}..{})", minConcurrency, maxConcurrency);
     }
 
     /** Acquisition bloquante d'un permis. */
@@ -113,7 +113,7 @@ public class GpuConcurrencyController {
             long now = System.currentTimeMillis();
             if (now - lastVramLogTs > 60000) { // log VRAM toutes les 60s max
                 lastVramLogTs = now;
-                logger.info("[GPU][VRAM] usage={}%, concurrency={} (permitsAvail={})", String.format("%.1f", usage), targetMax, permits.availablePermits());
+                //logger.info("[GPU][VRAM] usage={}%, concurrency={} (permitsAvail={})", String.format("%.1f", usage), targetMax, permits.availablePermits());
             }
             if (usage > scaleDownThresholdPct && targetMax > minConcurrency) {
                 adjust(targetMax - 1, usage, "DOWN");
@@ -136,7 +136,7 @@ public class GpuConcurrencyController {
             }
         }
         targetMax = newMax;
-        logger.info("[GPU][ADAPT][{}] VRAM={}%, concurrence {} -> {}", dir, String.format("%.1f", usage), old, newMax);
+        //logger.info("[GPU][ADAPT][{}] VRAM={}%, concurrence {} -> {}", dir, String.format("%.1f", usage), old, newMax);
     }
 
     /** @return pourcentage VRAM utilisée ou -1 si indisponible/erreur. */

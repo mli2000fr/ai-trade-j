@@ -145,12 +145,12 @@ public class LstmConfig {
         "atr", "atr_14", "atr_21",
         "bollinger_high", "bollinger_low", "bollinger_width",
         "stochastic", "stochastic_d", "williams_r",
-        "cci", "momentum", "roc",
+        "cci", "momentum", "roc"
+    );/*,
         "adx", "di_plus", "di_minus",
         "obv", "volume_ratio",
         "price_position", "volatility_regime",
-        "day_of_week", "month", "quarter"
-    );
+        "day_of_week", "month", "quarter"*/
 
     // =============================== Architecture avancée ===============================
     /** Nombre de couches LSTM empilées (stack). */
@@ -163,7 +163,7 @@ public class LstmConfig {
      * Si true, la cible (label) sera la moyenne des log-returns t+1..t+H (H = horizonBars),
      * pour lisser le bruit court terme. Sinon, cible classique (log-return t+1).
      */
-    private boolean useMultiHorizonAvg = false;
+    private boolean useMultiHorizonAvg = true;
 
     // =============================== Labeling & Prédiction ===============================
     /** Horizon temporel (nombre de barres à l'avance) pour lequel on veut prédire la dynamique. */
