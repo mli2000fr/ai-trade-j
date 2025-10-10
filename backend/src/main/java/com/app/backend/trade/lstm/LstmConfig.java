@@ -137,7 +137,9 @@ public class LstmConfig {
      * Features optimisées pour swing trade professionnel (3-10 jours)
      */
     private java.util.List<String> features = java.util.Arrays.asList(
-        "close", "volume", "high", "low", "open",
+        "close"
+    );/*,
+    , "volume", "high", "low", "open",
         "rsi", "rsi_14", "rsi_21",
         "sma", "sma_20", "sma_50",
         "ema", "ema_12", "ema_26", "ema_50",
@@ -146,7 +148,7 @@ public class LstmConfig {
         "bollinger_high", "bollinger_low", "bollinger_width",
         "stochastic", "stochastic_d", "williams_r",
         "cci", "momentum", "roc"
-    );/*,
+
         "adx", "di_plus", "di_minus",
         "obv", "volume_ratio",
         "price_position", "volatility_regime",

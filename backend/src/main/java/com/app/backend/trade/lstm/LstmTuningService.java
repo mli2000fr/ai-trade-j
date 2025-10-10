@@ -1075,7 +1075,7 @@ public class LstmTuningService {
             c.setBusinessDrawdownGamma(1.4);
             c.setWalkForwardSplits(4 + rand.nextInt(2)); // 4-5 splits
             grid.add(c);
-        }/*
+        }
         // ---- Exploration (diversité structurelle) ----
         int[] winExplore = {18, 25, 30}; // max 30
         int[] neuExplore = {64, 96}; // max 96
@@ -1134,7 +1134,7 @@ public class LstmTuningService {
             c.setWalkForwardSplits(4 + rand.nextInt(2)); // 4-5 splits
             grid.add(c);
         }
-*/
+
         java.util.Collections.shuffle(grid, rand);
         long baseSeed = System.currentTimeMillis();
         for (int i = 0; i < grid.size(); i++) {
@@ -1455,6 +1455,7 @@ public class LstmTuningService {
                 for (int nv : neuVar) {
                     if (nv<16||nv>512) continue;
                     for (double lr: lrVar){
+                        cpt++;
                         lr=Math.max(1e-5, Math.min(0.02, lr)); // plafond un peu plus haut pour dynamisme
                         for(double dr:drVar){
                             dr=Math.max(0.05, Math.min(0.40, dr));
@@ -1464,7 +1465,6 @@ public class LstmTuningService {
                             c.setLearningRate(lr);
                             c.setDropoutRate(dr);
                             if(dedup.add(keyOf(c)) && cpt < 2) microGrid.add(c);
-                            cpt++;
                         }
                     }
                 }

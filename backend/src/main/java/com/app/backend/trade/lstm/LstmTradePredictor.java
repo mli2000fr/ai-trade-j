@@ -283,10 +283,12 @@ public class LstmTradePredictor {
         }
 
         listBuilder.layer(new OutputLayer.Builder(lossFn)
-            .nIn(Math.max(16, denseOut / 2))
-            .nOut(outputSize)
-            .activation(outAct)
-            .build());
+                .l1(l1 * 0.05)
+                .l2(l2 * 0.05)
+                .nIn(Math.max(16, denseOut / 2))
+                .nOut(outputSize)
+                .activation(outAct)
+                .build());
 
         // IMPORTANT: On force explicitement le type d'entrée
         // Ici on travaille conceptuellement avec du recurrent(inputSize)
@@ -2257,15 +2259,19 @@ public class LstmTradePredictor {
                 }
             } else if ("SELL".equals(pred.action)) {
                 if (inPosition) {
-                    double profit = close - entryPrice;
+                    double profit = (close - entryPrice) * positionSize;
                     totalProfit += profit;
                     tradeProfits.add(profit);
                     numTrades++;
                     if (profit > 0) winTrades++;
                     barsHeldList.add(barsInPos);
                     // Calcul R multiple
-                    double r = initialRiskPerShare > 0 ? profit / initialRiskPerShare : 0.0;
+                    double r = initialRiskPerShare > 0 ? profit / (initialRiskPerShare * positionSize) : 0.0;
                     tradeRMultiples.add(r);
+                    System.out.println(String.format(
+                            "[EXIT] Entry=%.4f | Duration=%d | Exit=%.4f | Qty=%.2f | Profit=%.4f",
+                            entryPrice, barsInPos, close, positionSize, profit
+                    ));
                     inPosition = false;
                     entryPrice = 0;
                     barsInPos = 0;
@@ -2278,21 +2284,26 @@ public class LstmTradePredictor {
         // Si position ouverte à la fin, on la clôture au dernier prix
         if (inPosition) {
             double close = fullSeries.getBar(testEndBar).getClosePrice().doubleValue();
-            double profit = close - entryPrice;
+            double profit = (close - entryPrice) * positionSize; // Correction ici
             totalProfit += profit;
             tradeProfits.add(profit);
             numTrades++;
             if (profit > 0) winTrades++;
             barsHeldList.add(barsInPos);
-            double r = initialRiskPerShare > 0 ? profit / initialRiskPerShare : 0.0;
+            double r = initialRiskPerShare > 0 ? profit / (initialRiskPerShare * positionSize) : 0.0;
             tradeRMultiples.add(r);
+
+            System.out.println(String.format(
+                    "[EXIT] fin Entry=%.4f | Duration=%d | Exit=%.4f | Qty=%.2f | Profit=%.4f",
+                    entryPrice, barsInPos, close, positionSize, profit
+            ));
         }
         tm.totalProfit = totalProfit;
         tm.numTrades = numTrades;
         tm.winRate = numTrades > 0 ? (double) winTrades / numTrades : 0.0;
         // Calculs réels des métriques principales
         double gains = 0, losses = 0; int win = 0, loss = 0;
-        for (double p : tradeProfits) { if (p > 0) { gains += p; win++; } else if (p < 0) { losses += p; loss++; } }
+        for (double p : tradeProfits) { if (p > 0) gains += p; else losses += p; }
         tm.profitFactor = losses != 0 ? gains / Math.abs(losses) : (gains > 0 ? Double.POSITIVE_INFINITY : 0);
         double equity = 0, peak = 0, trough = 0;
         for (double p : tradeProfits) {
@@ -3294,10 +3305,12 @@ public class LstmTradePredictor {
 
             // Action décisionnelle
             String action;
+            double sellThreshold = Math.max(0.001, config.getThresholdAtrMin() * 0.5);
             if (enter && signalStrength > 0) action = "BUY";
-            else if (rawDeltaPct < -atrAdaptiveThreshold) action = "SELL"; // signal de faiblesse
+            else if (rawDeltaPct < -sellThreshold) action = "SELL"; // signal de faiblesse
             else action = "HOLD";
             out.action = action;
+            logger.info("[DEBUG][TRADE] bar={} action={} rawDeltaPct={} threshold={}", barCount, action, rawDeltaPct, atrAdaptiveThreshold);
 
             out.deltaPct = rawDeltaPct;
             out.atrPct = atrPct;
@@ -3373,4 +3386,6 @@ public class LstmTradePredictor {
             return predTarget;
         }
     }
+
+
 }
