@@ -204,6 +204,8 @@ public class LstmConfig {
     // =============================== Paramètres Trading (Simulation / Backtest) ===============================
     /** Capital total simulé pour calculer la taille de position. */
     private double capital = 10000.0;
+    private double stopLossPct = 0.1; // 10% stop loss par défaut
+    private double takeProfitPct = 0.1; // 20% take profit par défaut
     /** Pourcentage du capital risqué par trade (ex: 0.01 = 1%). */
     private double riskPct = 0.01;
     /** Facteur multiplicateur dans la formule de sizing basée sur l'ATR. */
@@ -252,7 +254,7 @@ public class LstmConfig {
     private boolean entryOrLogic = true;
     /** Quantile (0-1) utilisé pour l'entrée via distribution des |delta| (ex-0.65). */
     private double entryPercentileQuantile = 0.60; // moins strict que 0.65
-    /** Delta plancher absolu (relatif) minimal requis (ex: 0.0005 = 0.05%). */
+    /** Delta plancher absolu (relatif) minimal regquis (ex: 0.0005 = 0.05%). */
     private double entryDeltaFloor = 0.0005;
     /** Ratio volume minimal vs moyenne (abaisse de 0.8 à 0.6 par défaut). */
     private double volumeMinRatio = 0.6;
@@ -346,6 +348,8 @@ public class LstmConfig {
                 // Nouveaux paramètres async iterator (Étape 4)
                 useAsyncIterator = Boolean.parseBoolean(props.getProperty("useAsyncIterator", "true"));
                 asyncQueueSize = Integer.parseInt(props.getProperty("asyncQueueSize", "8"));
+                stopLossPct = Double.parseDouble(props.getProperty("stopLossPct", "0.1"));
+                takeProfitPct = Double.parseDouble(props.getProperty("takeProfitPct", "0.1"));
                 // ===== Nouveaux paramètres agressivité =====
                 entryOrLogic = Boolean.parseBoolean(props.getProperty("entryOrLogic", String.valueOf(entryOrLogic)));
                 entryPercentileQuantile = Double.parseDouble(props.getProperty("entryPercentileQuantile", String.valueOf(entryPercentileQuantile)));

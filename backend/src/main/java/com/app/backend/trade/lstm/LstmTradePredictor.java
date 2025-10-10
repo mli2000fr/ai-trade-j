@@ -1428,6 +1428,32 @@ public class LstmTradePredictor {
             }
             // Calcul des losses train & validation après fit (cohérentes avec état courant)
             double trainLoss = model.score(trainDs);
+            // === Pénalité platitude ===
+            double flatPenalty = 0.0;
+            try {
+                org.nd4j.linalg.api.ndarray.INDArray predsTrain = model.output(XTrain, false);
+                int nPred = (int) predsTrain.size(0);
+                double meanPred = 0.0;
+                for (int i = 0; i < nPred; i++) {
+                    meanPred += predsTrain.getDouble(i);
+                }
+                meanPred /= nPred > 0 ? nPred : 1;
+                double varPred = 0.0;
+                for (int i = 0; i < nPred; i++) {
+                    double d = predsTrain.getDouble(i) - meanPred;
+                    varPred += d * d;
+                }
+                varPred /= nPred > 0 ? nPred : 1;
+                double flatThreshold = 5; // seuil de variance minimale
+                double alpha = 2; // force de la pénalité
+                if (varPred < flatThreshold) {
+                    flatPenalty = alpha * (flatThreshold - varPred);
+                    trainLoss += flatPenalty;
+                    logger.warn("[TRAIN][FLAT-PENALTY] Pénalité platitude appliquée: varPred={} < seuil={} => penalty={}", String.format("%.6f", varPred), String.format("%.6f", flatThreshold), String.format("%.6f", flatPenalty));
+                }
+            } catch (Exception e) {
+                logger.debug("[TRAIN][FLAT-PENALTY] Erreur calcul pénalité platitude: {}", e.toString());
+            }
             // Sécurité NaN sur loss
             if (Double.isNaN(trainLoss) || Double.isInfinite(trainLoss)) {
                 logger.error("[TRAIN][MONITOR][CRIT] trainLoss={} (NaN/Inf) epoch {} -> arrêt (réactiver gradient clipping)", trainLoss, epoch);
@@ -1995,19 +2021,11 @@ public class LstmTradePredictor {
         double predNorm = model.output(input).getDouble(0);
         double predTarget = scalers.labelScaler.inverse(predNorm);
         double referencePrice = closes[endBarInclusive];
-        double predicted;
         if (config.isUseLogReturnTarget()) {
-            predicted = referencePrice * Math.exp(predTarget);
+            return referencePrice * Math.exp(predTarget);
         } else {
-            predicted = predTarget;
+            return predTarget;
         }
-        double limitPct = config.getLimitPredictionPct();
-        if (limitPct > 0) {
-            double min = referencePrice * (1 - limitPct);
-            double max = referencePrice * (1 + limitPct);
-            if (predicted < min) predicted = min; else if (predicted > max) predicted = max;
-        }
-        return predicted;
     }
 
 
@@ -2241,6 +2259,32 @@ public class LstmTradePredictor {
             if (Double.isFinite(predicted) && close != 0.0) {
                 meanAbsPredDeltaSum += Math.abs(predicted - close) / close;
                 meanAbsPredDeltaCount++;
+            }
+            // --- AJOUT DU CONTROLE DRAWDOWN ---
+            if (inPosition) {
+                double latentDrawdown = entryPrice > 0 ? (entryPrice - close) / entryPrice : 0.0;
+                if ((latentDrawdown >= config.getStopLossPct() || -latentDrawdown <= config.getTakeProfitPct())
+                        && !"BUY".equals(pred.action)) {
+                    // Vente forcée si drawdown >= 10% et action HOLD ou SELL
+                    double profit = (close - entryPrice) * positionSize;
+                    totalProfit += profit;
+                    tradeProfits.add(profit);
+                    numTrades++;
+                    if (profit > 0) winTrades++;
+                    barsHeldList.add(barsInPos);
+                    double r = initialRiskPerShare > 0 ? profit / (initialRiskPerShare * positionSize) : 0.0;
+                    tradeRMultiples.add(r);
+                    inPosition = false;
+                    entryPrice = 0;
+                    barsInPos = 0;
+                    initialRiskPerShare = 0;
+                    positionSize = 1.0;
+                    stopLoss = 0.0;
+                    // On continue à la prochaine barre
+                    currentEquity = capital + totalProfit;
+                    equityCurve.add(currentEquity);
+                    continue;
+                }
             }
             if ("BUY".equals(pred.action)) {
                 if (!inPosition) {
