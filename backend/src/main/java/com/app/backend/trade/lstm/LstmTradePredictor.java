@@ -2010,6 +2010,7 @@ public class LstmTradePredictor {
         return predicted;
     }
 
+
     // === Step15: métriques trading & décision contrarian (réintégration) ===
     public static class TradingMetricsV2 implements Serializable {
         public double totalProfit, profitFactor, winRate, maxDrawdownPct, expectancy, sharpe, sortino, exposure, turnover, avgBarsInPosition, mse, businessScore, calmar;
@@ -2230,6 +2231,8 @@ public class LstmTradePredictor {
         double riskPct = config != null ? config.getRiskPct() : 0.01;
         double meanAbsPredDeltaSum = 0.0;
         int meanAbsPredDeltaCount = 0;
+        List<Double> equityCurve = new ArrayList<>();
+        double currentEquity = capital;
         for (int i = testStartBar; i <= testEndBar; i++) {
             BarSeries subSeries = fullSeries.getSubSeries(0, i + 1);
             TradeStylePrediction pred = predictTradeStyle("", subSeries, config, model, scalers);
@@ -2265,13 +2268,8 @@ public class LstmTradePredictor {
                     numTrades++;
                     if (profit > 0) winTrades++;
                     barsHeldList.add(barsInPos);
-                    // Calcul R multiple
                     double r = initialRiskPerShare > 0 ? profit / (initialRiskPerShare * positionSize) : 0.0;
                     tradeRMultiples.add(r);
-                    System.out.println(String.format(
-                            "[EXIT] Entry=%.4f | Duration=%d | Exit=%.4f | Qty=%.2f | Profit=%.4f",
-                            entryPrice, barsInPos, close, positionSize, profit
-                    ));
                     inPosition = false;
                     entryPrice = 0;
                     barsInPos = 0;
@@ -2279,6 +2277,14 @@ public class LstmTradePredictor {
                     positionSize = 1.0;
                 }
             }
+            // Mise à jour de la courbe d'equity à chaque barre
+            if (inPosition) {
+                // Valeur latente de la position + capital
+                currentEquity = capital + (close - entryPrice) * positionSize;
+            } else {
+                currentEquity = capital + totalProfit;
+            }
+            equityCurve.add(currentEquity);
             if (inPosition) barsInPos++;
         }
         // Si position ouverte à la fin, on la clôture au dernier prix
@@ -2303,16 +2309,22 @@ public class LstmTradePredictor {
         tm.winRate = numTrades > 0 ? (double) winTrades / numTrades : 0.0;
         // Calculs réels des métriques principales
         double gains = 0, losses = 0; int win = 0, loss = 0;
-        for (double p : tradeProfits) { if (p > 0) gains += p; else losses += p; }
-        tm.profitFactor = losses != 0 ? gains / Math.abs(losses) : (gains > 0 ? Double.POSITIVE_INFINITY : 0);
-        double equity = 0, peak = 0, trough = 0;
         for (double p : tradeProfits) {
-            equity += p;
-            if (equity > peak) peak = equity;
-            if (equity < trough) trough = equity;
+            if (p > 0) { gains += p; win++; }
+            else { losses += p; loss++; }
         }
-        double ddAbs = peak - trough;
-        tm.maxDrawdownPct = peak != 0 ? ddAbs / Math.abs(peak) : 0.0;
+        tm.profitFactor = losses != 0 ? gains / Math.abs(losses) : (gains > 0 ? Double.POSITIVE_INFINITY : 0);
+        // Correction du calcul du max drawdown
+        double maxDrawdown = 0.0;
+        double maxEquity = 0.0;
+        if (!equityCurve.isEmpty()) {
+            for (double equity : equityCurve) {
+                if (equity > maxEquity) maxEquity = equity;
+                double drawdown = maxEquity - equity;
+                if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+            }
+        }
+        tm.maxDrawdownPct = maxEquity != 0 ? maxDrawdown / Math.abs(maxEquity) : 0.0;
         double avgGain = win > 0 ? gains / win : 0, avgLoss = loss > 0 ? Math.abs(losses) / loss : 0;
         tm.expectancy = (win + loss) > 0 ? (tm.winRate * avgGain - (1 - tm.winRate) * avgLoss) : 0;
         double meanRet = tradeProfits.stream().mapToDouble(d -> d).average().orElse(0);
@@ -3232,21 +3244,21 @@ public class LstmTradePredictor {
                 if (avgVol > 0) volRatio = curVol / avgVol;
             } catch (Exception e) { logger.debug("[PREDIT][VOL] skip {}", e.toString()); }
 
-            // Seuil ATR adaptatif (min/max)
-            double cfgMinTh = config.getThresholdAtrMin(); if (!(cfgMinTh > 0)) cfgMinTh = 0.001; if (cfgMinTh < 1e-4) cfgMinTh = 1e-4;
-            double cfgMaxTh = config.getThresholdAtrMax(); if (!(cfgMaxTh > cfgMinTh)) cfgMaxTh = Math.max(cfgMinTh*2, 0.01);
-            double atrAdaptiveThreshold = Math.min(cfgMaxTh, Math.max(cfgMinTh, atrPct));
+        // Seuil ATR adaptatif (min/max)
+        double cfgMinTh = config.getThresholdAtrMin(); if (!(cfgMinTh > 0)) cfgMinTh = 0.001; if (cfgMinTh < 1e-4) cfgMinTh = 1e-4;
+        double cfgMaxTh = config.getThresholdAtrMax(); if (!(cfgMaxTh > cfgMinTh)) cfgMaxTh = Math.max(cfgMinTh*2, 0.01);
+        double atrAdaptiveThreshold = Math.min(cfgMaxTh, Math.max(cfgMinTh, atrPct));
 
-            // Paramètres d'entrée avancés (mêmes noms que simulation)
-            double basePercentileQ = Math.min(0.95, Math.max(0.50, config.getEntryPercentileQuantile()));
-            double deltaFloor = Math.max(0.0002, config.getEntryDeltaFloor());
-            boolean orLogic = config.isEntryOrLogic();
-            double aggressivenessBoost = config.getAggressivenessBoost() > 0 ? config.getAggressivenessBoost() : 1.0;
+        // Paramètres d'entrée avancés (mêmes noms que simulation)
+        double basePercentileQ = Math.min(0.95, Math.max(0.50, config.getEntryPercentileQuantile()));
+        double deltaFloor = Math.max(0.0002, config.getEntryDeltaFloor());
+        boolean orLogic = config.isEntryOrLogic();
+        double aggressivenessBoost = config.getAggressivenessBoost() > 0 ? config.getAggressivenessBoost() : 1.0;
 
-            // Distribution historique des deltas prédits (approx) sur N dernières barres pour percentile
-            int lookbackForPercentile = Math.min(100, barCount - window - 2); // réduit à 100 pour accélérer
-            List<Double> absDeltas = new ArrayList<>();
-            /*if (lookbackForPercentile > 20) {
+        // Distribution historique des deltas prédits (approx) sur N dernières barres pour percentile
+        int lookbackForPercentile = Math.min(100, barCount - window - 2); // réduit à 100 pour accélérer
+        List<Double> absDeltas = new ArrayList<>();
+        /*if (lookbackForPercentile > 20) {
                 Collections.sort(absDeltas);
                 int start = barCount - lookbackForPercentile - 1;
                 double[] closes = extractCloseValues(series);

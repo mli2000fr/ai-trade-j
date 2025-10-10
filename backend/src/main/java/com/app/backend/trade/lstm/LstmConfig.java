@@ -137,17 +137,17 @@ public class LstmConfig {
      * Features optimisées pour swing trade professionnel (3-10 jours)
      */
     private java.util.List<String> features = java.util.Arrays.asList(
-        "close"
+        "close", "volume", "high", "low", "open",
+            "rsi", "rsi_14", "rsi_21",
+            "sma", "sma_20", "sma_50",
+            "ema", "ema_12", "ema_26", "ema_50",
+            "macd", "macd_signal", "macd_histogram",
+            "atr", "atr_14", "atr_21",
+            "bollinger_high", "bollinger_low", "bollinger_width",
+            "stochastic", "stochastic_d", "williams_r",
+            "cci", "momentum", "roc"
     );/*,
-    , "volume", "high", "low", "open",
-        "rsi", "rsi_14", "rsi_21",
-        "sma", "sma_20", "sma_50",
-        "ema", "ema_12", "ema_26", "ema_50",
-        "macd", "macd_signal", "macd_histogram",
-        "atr", "atr_14", "atr_21",
-        "bollinger_high", "bollinger_low", "bollinger_width",
-        "stochastic", "stochastic_d", "williams_r",
-        "cci", "momentum", "roc"
+    ,
 
         "adx", "di_plus", "di_minus",
         "obv", "volume_ratio",
@@ -179,7 +179,7 @@ public class LstmConfig {
 
     // =============================== Entraînement (Batch / Validation) ===============================
     /** Taille des mini-lots (batch) durant l'entraînement. */
-    private int batchSize = 64; // Remplacé si override dans les properties
+    private int batchSize = 128; // Remplacé si override dans les properties
     /** Mode de validation croisée : split, timeseries, kfold. */
     private String cvMode = "split";
 
@@ -187,7 +187,7 @@ public class LstmConfig {
     /** Active pipeline étiquettes scalaires + walk-forward. */
     private boolean useScalarV2 = false;
     /** Utilise le log-return comme cible (target) plutôt que le prix normalisé. */
-    private boolean useLogReturnTarget = false;
+    private boolean useLogReturnTarget = true;
     /** Active la validation walk-forward (utilisé si useScalarV2 = true). */
     private boolean useWalkForwardV2 = true;
     /** Nombre de segments (splits) dans la validation walk-forward. */

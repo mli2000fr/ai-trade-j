@@ -1048,8 +1048,8 @@ public class LstmTuningService {
         java.util.function.IntSupplier horizonInnovSampler   = () -> new int[]{9,12,15}[rand.nextInt(3)];
 
         // ---- Exploitation (focus zone performante mais moins conservatrice) ----
-        int[] winExp = {30, 35, 45};
-        int[] neuExp = {64, 96}; // Limite à 96 pour mémoire
+        int[] winExp = {30, 35, 45, 55};
+        int[] neuExp = {64, 96, 128}; // Limite à 96 pour mémoire
         int[] batchExp = {48, 64}; // batch augmenté
         for (int i = 0; i < exploit; i++) {
             LstmConfig c = baseConfigSkeleton();
@@ -1066,7 +1066,7 @@ public class LstmTuningService {
             boolean bidir = !att && rand.nextDouble() < 0.10;
             c.setAttention(att);
             c.setBidirectional(bidir);
-            c.setNumEpochs(50 + rand.nextInt(21)); // 50-70 époques
+            c.setNumEpochs(100 + rand.nextInt(21)); // 50-70 époques
             c.setPatience(5 + rand.nextInt(4)); // 5-8
             c.setMinDelta(0.00018);
             c.setBatchSize(batchExp[rand.nextInt(batchExp.length)]);
@@ -1077,10 +1077,10 @@ public class LstmTuningService {
             grid.add(c);
         }
         // ---- Exploration (diversité structurelle) ----
-        int[] winExplore = {18, 25, 30}; // max 30
-        int[] neuExplore = {64, 96}; // max 96
+        int[] winExplore = {18, 25, 30, 45, 60}; // max 30
+        int[] neuExplore = {64, 96, 128, 160}; // max 96
         int[] layersExplore = {1,2}; // max 2 couches
-        int[] batchExplore = {48, 64}; // batch augmenté
+        int[] batchExplore = {32, 48, 64}; // batch augmenté
         for (int i = 0; i < explore; i++) {
             LstmConfig c = baseConfigSkeleton();
             c.setWindowSize(winExplore[rand.nextInt(winExplore.length)]);
@@ -1107,8 +1107,8 @@ public class LstmTuningService {
         }
 
         // ---- Innovation (idées agressives contrôlées) ----
-        int[] winInnov = {15, 20}; // max 20
-        int[] neuInnov = {64}; // max 64
+        int[] winInnov = {15, 30, 60}; // max 20
+        int[] neuInnov = {6, 128}; // max 64
         int[] batchInnov = {48, 64}; // batch augmenté
         for (int i = 0; i < innovate; i++) {
             LstmConfig c = baseConfigSkeleton();
@@ -1439,7 +1439,7 @@ public class LstmTuningService {
             // Top N pour micro-grille
             java.util.List<TuningResult> sorted = new java.util.ArrayList<>(phase1.allResults);
             sorted.sort((a,b)->Double.compare(adjScore(b), adjScore(a)));
-            int topN = Math.min(5, sorted.size());
+            int topN = Math.min(3, sorted.size());
             java.util.List<TuningResult> top = sorted.subList(0, topN);
 
             java.util.Set<String> dedup = new java.util.HashSet<>();
@@ -1464,7 +1464,7 @@ public class LstmTuningService {
                             c.setLstmNeurons(nv);
                             c.setLearningRate(lr);
                             c.setDropoutRate(dr);
-                            if(dedup.add(keyOf(c)) && cpt < 2) microGrid.add(c);
+                            if(dedup.add(keyOf(c))) microGrid.add(c);
                         }
                     }
                 }
