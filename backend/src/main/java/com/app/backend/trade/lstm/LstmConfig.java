@@ -348,7 +348,7 @@ public class LstmConfig {
                 // Nouveaux paramètres async iterator (Étape 4)
                 useAsyncIterator = Boolean.parseBoolean(props.getProperty("useAsyncIterator", "true"));
                 asyncQueueSize = Integer.parseInt(props.getProperty("asyncQueueSize", "8"));
-                stopLossPct = Double.parseDouble(props.getProperty("stopLossPct", "0.1"));
+                stopLossPct = Double.parseDouble(props.getProperty("stopLossPct", "0.05"));
                 takeProfitPct = Double.parseDouble(props.getProperty("takeProfitPct", "0.1"));
                 // ===== Nouveaux paramètres agressivité =====
                 entryOrLogic = Boolean.parseBoolean(props.getProperty("entryOrLogic", String.valueOf(entryOrLogic)));

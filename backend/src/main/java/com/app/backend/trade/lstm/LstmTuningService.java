@@ -555,7 +555,7 @@ public class LstmTuningService {
                             wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0),
                             wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0),
                             wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0),
-                            0
+                            0, 0, 0, 0, false
                     );
                     long endConfig = System.currentTimeMillis();
                     long cfgDuration = (endConfig-startConfig);
@@ -568,7 +568,7 @@ public class LstmTuningService {
                         p.lastUpdate = System.currentTimeMillis();
                         p.cumulativeConfigDurationMs.addAndGet(cfgDuration);
                     }
-                    return new TuningResult(config, model, scalers, meanMse, meanPF, meanWinRate, maxDrawdownPct, meanBusinessScore, stdBusinessScore, rmse, sumProfit, totalTrades, series.getBarCount() - trainEndBar);
+                    return new TuningResult(config, model, scalers, meanMse, meanPF, meanWinRate, maxDrawdownPct, meanBusinessScore, stdBusinessScore, rmse, sumProfit, totalTrades, series.getBarCount() - trainEndBar, -1);
 
                 } catch (Exception e){
                     // ===== GESTION CENTRALISÉE DES ERREURS =====
@@ -700,7 +700,7 @@ public class LstmTuningService {
                 synchronized (modelSaveLock) { // Sérialisation disque synchronisée
                     lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate, bestModel, bestConfig, bestScalers,
                         bestScore,  bestResul.profitFactor,  bestResul.winRate,  bestResul.maxDrawdown,  bestResul.rmse,  bestResul.sumProfit,  bestResul.totalTrades,  bestResul.businessScore,
-                        bestResul.totalSeriesTested, 0, 0);
+                        bestResul.totalSeriesTested, -1, -1, -1, -1, false, 0);
                 }
             } catch (Exception e) {
                 // Log d'erreur non-bloquante (les hyperparamètres sont sauvés)
@@ -1266,12 +1266,13 @@ public class LstmTuningService {
         double businessScore;
         double businessScoreStd; // nouvel écart-type des businessScore sur les splits WF
         double rmse;
-        int phase; // 1 ou 2
+        int numberGrid;
+        int numberGridTop;
         double sumProfit;
         int totalSeriesTested;
         int totalTrades;
-        TuningResult(LstmConfig c, MultiLayerNetwork m, LstmTradePredictor.ScalerSet s, double score, double pf, double wr, double dd, double bs, double bsStd, double rmse, double sumProfit, int totalTrades, int totalSeriesTested)
-        { this.config=c; this.model=m; this.scalers=s; this.score=score; this.profitFactor=pf; this.winRate=wr; this.maxDrawdown=dd; this.businessScore=bs; this.businessScoreStd=bsStd; this.rmse = rmse; this.sumProfit=sumProfit; this.totalTrades=totalTrades; this.totalSeriesTested=totalSeriesTested;}
+        TuningResult(LstmConfig c, MultiLayerNetwork m, LstmTradePredictor.ScalerSet s, double score, double pf, double wr, double dd, double bs, double bsStd, double rmse, double sumProfit, int totalTrades, int totalSeriesTested, int numberGrid)
+        { this.numberGrid = numberGrid;this.config=c; this.model=m; this.scalers=s; this.score=score; this.profitFactor=pf; this.winRate=wr; this.maxDrawdown=dd; this.businessScore=bs; this.businessScoreStd=bsStd; this.rmse = rmse; this.sumProfit=sumProfit; this.totalTrades=totalTrades; this.totalSeriesTested=totalSeriesTested;}
     }
 
     /**
@@ -1499,7 +1500,11 @@ public class LstmTuningService {
                         finalAg.sumProfit = ho1.sumProfit;
                         finalAg.totalTrades = ho1.totalTrades;
                         finalAg.totalSeriesTested = ho1.totalSeriesTested;
-                        finalAg.phase = FINAL_HOLD_OUT_PHASE + phase1.phase;
+                        finalAg.phaseFinal = 1;
+                        finalAg.phaseGrid = 1;
+                        finalAg.numberGrid = phase1.numberGrid;
+                        finalAg.phase1TopN = 1;
+                        finalAg.holdOut = true;
                         persistBest(symbol, finalAg, jdbcTemplate, 0);
                         progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime; try { writeProgressMetrics(progress);} catch(Exception ignored) {}
                         return phase1.bestConfig;
@@ -1555,7 +1560,12 @@ public class LstmTuningService {
                         finalAg.bestConfig = phase1.bestConfig; finalAg.bestModel = ho1.model; finalAg.bestScalers = ho1.scalers;
                         finalAg.bestBusinessScore = ho1.businessScore; finalAg.bestMse = ho1.meanMse; finalAg.profitFactor = ho1.profitFactor;
                         finalAg.winRate = ho1.winRate; finalAg.maxDrawdown = ho1.maxDrawdown; finalAg.rmse = ho1.rmse; finalAg.sumProfit = ho1.sumProfit;
-                        finalAg.totalTrades = ho1.totalTrades; finalAg.totalSeriesTested = ho1.totalSeriesTested; finalAg.phase = FINAL_HOLD_OUT_PHASE + phase1.phase;
+                        finalAg.totalTrades = ho1.totalTrades; finalAg.totalSeriesTested = ho1.totalSeriesTested;
+                        finalAg.phaseFinal = 1;
+                        finalAg.phaseGrid = 1;
+                        finalAg.numberGrid = phase1.numberGrid;
+                        finalAg.phase1TopN = 1;
+                        finalAg.holdOut = true;
                         persistBest(symbol, finalAg, jdbcTemplate, 0);
                         progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime; try { writeProgressMetrics(progress);} catch(Exception ignored) {}
                         return phase1.bestConfig;
@@ -1607,7 +1617,11 @@ public class LstmTuningService {
                     finalAggregate.sumProfit = chosen.sumProfit;
                     finalAggregate.totalTrades = chosen.totalTrades;
                     finalAggregate.totalSeriesTested = chosen.totalSeriesTested;
-                    finalAggregate.phase = FINAL_HOLD_OUT_PHASE + (fromPhase2 ? provisional.phase : phase1.phase);
+                    finalAggregate.phaseFinal = fromPhase2 ? 2 : 1;
+                    finalAggregate.phaseGrid = fromPhase2 ? provisional.phaseGrid : phase1.phaseGrid;
+                    finalAggregate.numberGrid = fromPhase2 ? provisional.numberGrid : phase1.numberGrid;
+                    finalAggregate.phase1TopN = fromPhase2 ? provisional.phase1TopN : 1;
+                    finalAggregate.holdOut = true;
                 } else {
                     logger.warn("[TUNING-2PH][HOLDOUT] Échec évaluation hold-out – on persiste sélection provisoire");
                     finalAggregate = provisional;
@@ -1629,7 +1643,12 @@ public class LstmTuningService {
     // ---- Structures internes pour la phase deux (restaurées) ----
     private static class PhaseAggregate {
         LstmConfig bestConfig; MultiLayerNetwork bestModel; LstmTradePredictor.ScalerSet bestScalers;
-        double bestBusinessScore; double bestBusinessScoreStd; double bestMse; double profitFactor; double winRate; double maxDrawdown; double rmse; double sumProfit; int totalTrades; int totalSeriesTested; int phase; java.util.List<TuningResult> allResults; }
+        double bestBusinessScore; double bestBusinessScoreStd; double bestMse; double profitFactor; double winRate; double maxDrawdown;
+        double rmse; double sumProfit; int totalTrades; int totalSeriesTested; int phaseFinal;
+        int phaseGrid;
+        int numberGrid;
+        int phase1TopN;
+        boolean holdOut; java.util.List<TuningResult> allResults; }
 
     // --- Structure évaluation hold-out ---
     private static class HoldOutEval { LstmConfig config; MultiLayerNetwork model; LstmTradePredictor.ScalerSet scalers; double businessScore; double meanMse; double rmse; double profitFactor; double winRate; double maxDrawdown; double sumProfit; int totalTrades; int totalSeriesTested; }
@@ -1738,13 +1757,18 @@ public class LstmTuningService {
                         wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0),
                         wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0),
                         wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0),
-                        wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0), phase + grid.get(idx).getIndexTop() * 10);
-                TuningResult trRes=new TuningResult(cfg, model, scalers, meanMse, sumPF/splits, sumWin/splits, maxDrawdownPct, meanBusiness, stdBusiness, rmse, sumProfit, trades, wf.totalTestedBars);
+                        wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0), -1,
+                        phase, i + 1, -1, false);
+                TuningResult trRes=new TuningResult(cfg, model, scalers, meanMse, sumPF/splits, sumWin/splits, maxDrawdownPct, meanBusiness, stdBusiness, rmse, sumProfit, trades, wf.totalTestedBars, i + 1);
                 results.add(trRes);
                 if(progress!=null){ progress.testedConfigs.incrementAndGet(); progress.lastUpdate=System.currentTimeMillis(); }
                 //logger.info("[TUNING-2PH][{}] {} config {}/{} bs={} adj={} dd={} trades={} phase={}", phaseTag, symbol, idx+1, grid.size(), String.format("%.5f", meanBusiness), String.format("%.5f", adjScore(trRes)), String.format("%.4f", maxDrawdownPct), trades, phase);
-                trRes.phase = phase + grid.get(idx).getIndexTop() * 10;
-            } catch(Exception ex){ if(progress!=null){ progress.testedConfigs.incrementAndGet(); progress.lastUpdate=System.currentTimeMillis(); } logger.error("[TUNING-2PH][{}][{}] Erreur config {}/{} : {}", phaseTag, symbol, idx+1, grid.size(), ex.getMessage()); results.add(null); }
+                trRes.numberGridTop = grid.get(idx).getIndexTop();
+                trRes.numberGrid = i + 1;
+            } catch(Exception ex){
+                if(progress!=null){ progress.testedConfigs.incrementAndGet(); progress.lastUpdate=System.currentTimeMillis(); }
+                logger.error("[TUNING-2PH][{}][{}] Erreur config {}/{} : {}", phaseTag, symbol, idx+1, grid.size(), ex.getMessage()); results.add(null);
+            }
             finally { model=null; try{ org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc(); org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread(); }catch(Exception ignore){} System.gc(); if(cudaBackend){ gpuController.markTrainingFinished(); if(permit) gpuController.releasePermit(); } }
         }
         // Suppression de la récupération des futures
@@ -1752,14 +1776,29 @@ public class LstmTuningService {
         if(results.isEmpty()) return null;
         TuningResult best=null; double bestAdj=Double.NEGATIVE_INFINITY; double bestRaw=Double.NEGATIVE_INFINITY; double bestStd=0;
         for(var r: results){ if(r==null) continue; double a=adjScore(r); if(a>bestAdj){ bestAdj=a; bestRaw=r.businessScore; bestStd=r.businessScoreStd; best=r; } }
-        PhaseAggregate ag=new PhaseAggregate(); ag.bestConfig=best!=null?best.config:null; ag.bestModel=best!=null?best.model:null; ag.bestScalers=best!=null?best.scalers:null; ag.bestBusinessScore=bestRaw; ag.bestBusinessScoreStd=bestStd; ag.bestMse=best!=null?best.score:Double.NaN; ag.profitFactor=best!=null?best.profitFactor:0; ag.winRate=best!=null?best.winRate:0; ag.maxDrawdown=best!=null?best.maxDrawdown:0; ag.rmse=best!=null?best.rmse:0; ag.sumProfit=best!=null?best.sumProfit:0; ag.totalTrades=best!=null?best.totalTrades:0; ag.totalSeriesTested=best!=null?best.totalSeriesTested:0; ag.phase=best!=null?best.phase:phase; ag.allResults=results; 
+        PhaseAggregate ag=new PhaseAggregate();
+        ag.bestConfig=best!=null?best.config:null; ag.bestModel=best!=null?best.model:null; ag.bestScalers=best!=null?best.scalers:null;
+        ag.bestBusinessScore=bestRaw; ag.bestBusinessScoreStd=bestStd; ag.bestMse=best!=null?best.score:Double.NaN; ag.profitFactor=best!=null?best.profitFactor:0;
+        ag.winRate=best!=null?best.winRate:0; ag.maxDrawdown=best!=null?best.maxDrawdown:0; ag.rmse=best!=null?best.rmse:0; ag.sumProfit=best!=null?best.sumProfit:0;
+        ag.totalTrades=best!=null?best.totalTrades:0; ag.totalSeriesTested=best!=null?best.totalSeriesTested:0;
+        ag.phaseFinal = -1;
+        ag.phaseGrid = phase;
+        ag.numberGrid = best!=null?best.numberGrid:-1;
+        ag.phase1TopN = best!=null?best.numberGridTop:-1;
+        ag.holdOut = true;
+        ag.allResults=results;
         //logger.info("[TUNING-2PH][{}] Fin phase {} | bestRawBS={} bestAdjBS={} std={} trades={} ", symbol, phaseTag, String.format("%.6f", bestRaw), String.format("%.6f", bestAdj), String.format("%.6f", bestStd), best!=null?best.totalTrades:0); 
         return ag;
     }
     private void persistBest(String symbol, PhaseAggregate pa, JdbcTemplate jdbcTemplate, double ratio){
         if(pa.bestConfig==null||pa.bestModel==null||pa.bestScalers==null){ logger.warn("[TUNING-2PH][PERSIST] Objets null – skip"); return; }
-        try { hyperparamsRepository.saveHyperparams(symbol, pa.bestConfig, pa.phase); } catch(Exception e){ logger.error("[TUNING-2PH][PERSIST] saveHyperparams échec: {}", e.getMessage()); }
-        try { synchronized (modelSaveLock){ lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate, pa.bestModel, pa.bestConfig, pa.bestScalers, pa.bestMse, pa.profitFactor, pa.winRate, pa.maxDrawdown, pa.rmse, pa.sumProfit, pa.totalTrades, pa.bestBusinessScore, pa.totalSeriesTested, pa.phase, ratio); } }
+        try { hyperparamsRepository.saveHyperparams(symbol, pa.bestConfig, pa.phaseGrid); } catch(Exception e){ logger.error("[TUNING-2PH][PERSIST] saveHyperparams échec: {}", e.getMessage()); }
+        try { synchronized (modelSaveLock){ lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate, pa.bestModel, pa.bestConfig, pa.bestScalers, pa.bestMse,
+                pa.profitFactor, pa.winRate, pa.maxDrawdown, pa.rmse, pa.sumProfit, pa.totalTrades, pa.bestBusinessScore, pa.totalSeriesTested, pa.phaseFinal,
+            pa.phaseGrid,
+            pa.numberGrid,
+            pa.phase1TopN,
+            pa.holdOut, ratio); } }
         catch(Exception e){ logger.error("[TUNING-2PH][PERSIST] saveModelToDb échec: {}", e.getMessage()); }
     }
 

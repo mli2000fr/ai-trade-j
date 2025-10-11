@@ -27,14 +27,14 @@ CREATE TABLE IF NOT EXISTS trade_ai.lstm_tuning_metrics (
   sortino DOUBLE,
   calmar DOUBLE,
   turnover DOUBLE,
-  phase INT,
+  phase_final INT,
+  phase_grid INT,
+  number_grid INT,
+  phase_1_top_n INT,
+  holdOut BOOLEAN NOT NULL DEFAULT FALSE,
   avg_bars_in_position DOUBLE,
   use_multi_horizon_avg TINYINT(1) NOT NULL DEFAULT 0,
   entry_threshold_factor DOUBLE,
   tested_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_symbol_date (symbol, tested_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Optionnel: contrainte d'unicité sur une configuration donnée
--- ALTER TABLE lstm_tuning_metrics
---   ADD UNIQUE uk_cfg (symbol, window_size, lstm_neurons, dropout_rate, learning_rate, optimizer);

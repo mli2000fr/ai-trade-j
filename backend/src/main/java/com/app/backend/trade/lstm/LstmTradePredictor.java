@@ -2131,6 +2131,10 @@ public class LstmTradePredictor {
             // Calcul des bornes du split dans la zone out-of-sample uniquement
             int testStartBar = testStartFromBar + (s - 1) * splitSize + config.getEmbargoBars();
             int testEndBar = (s == splits) ? totalBars : testStartFromBar + s * splitSize;
+            // Ajout du contrôle pour que testEndBar ne dépasse jamais la taille de la série
+            if (testEndBar > series.getBarCount()) {
+                testEndBar = series.getBarCount();
+            }
             totalTestedBars = totalTestedBars + testEndBar - testStartBar;
             // Vérification que le split est suffisamment grand
             if (testStartBar + windowSize + 5 >= testEndBar) {
@@ -2333,7 +2337,12 @@ public class LstmTradePredictor {
         }
         // Si position ouverte à la fin, on la clôture au dernier prix
         if (inPosition) {
-            double close = fullSeries.getBar(testEndBar).getClosePrice().doubleValue();
+            double close = fullSeries.getBarCount() > testEndBar
+                    ? fullSeries.getBar(testEndBar).getClosePrice().doubleValue()
+                    : fullSeries.getLastBar().getClosePrice().doubleValue();
+            if(testEndBar >= fullSeries.getBarCount()){
+                logger.warn("[simulateTradingWalkForwardBis][warn] index testEndBar={} fullSeries.getBarCount={}", testEndBar, fullSeries.getBarCount());
+            }
             double profit = (close - entryPrice) * positionSize; // Correction ici
             totalProfit += profit;
             tradeProfits.add(profit);
@@ -2825,7 +2834,11 @@ public class LstmTradePredictor {
      */
     public void saveModelToDb(String symbol, JdbcTemplate jdbcTemplate, MultiLayerNetwork model,  LstmConfig config, ScalerSet scalers,
                               double mse, double profitFactor, double winRate, double maxDrawdown, double rmse, double sumProfit, int totalTrades, double businessScore,
-                              int totalSeriesTested, int phase, double ratio) throws IOException {
+                              int totalSeriesTested, int phase_final,
+                              int phase_grid,
+                              int number_grid,
+                              int phase_1_top_n,
+                              boolean holdOut, double ratio) throws IOException {
         if (model == null) return;
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         ModelSerializer.writeModel(model, baos, true);
@@ -2839,8 +2852,12 @@ public class LstmTradePredictor {
         String scalersJson = mapper.writeValueAsString(scalers);
         double rendement = config.getCapital() > 0 ? (sumProfit / config.getCapital()) : 0.0;
 
-        String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, scalers_json, mse, profit_factor, win_rate, max_drawdown, rmse, sum_profit, total_trades, business_score, total_series_tested, rendement, phase, ratio, updated_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)";
-        jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson, config.getNormalizationScope(), scalersJson, mse, profitFactor, winRate, maxDrawdown, rmse, sumProfit, totalTrades, businessScore, totalSeriesTested, rendement, phase, ratio);
+        String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, scalers_json, mse, profit_factor, " +
+                "win_rate, max_drawdown, rmse, sum_profit, total_trades, business_score, total_series_tested, rendement, " +
+                "phase_final, phase_grid, number_grid, phase_1_top_n, holdOut, ratio, updated_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)";
+        jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson, config.getNormalizationScope(),
+                scalersJson, mse, profitFactor, winRate, maxDrawdown, rmse, sumProfit, totalTrades, businessScore, totalSeriesTested, rendement,
+                phase_final, phase_grid, number_grid, phase_1_top_n, holdOut, ratio);
     }
 
     /**
