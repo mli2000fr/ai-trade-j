@@ -204,7 +204,7 @@ public class LstmConfig {
     // =============================== Paramètres Trading (Simulation / Backtest) ===============================
     /** Capital total simulé pour calculer la taille de position. */
     private double capital = 10000.0;
-    private double stopLossPct = 0.1; // 10% stop loss par défaut
+    private double stopLossPct = 0.05; // 10% stop loss par défaut
     private double takeProfitPct = 0.1; // 20% take profit par défaut
     /** Pourcentage du capital risqué par trade (ex: 0.01 = 1%). */
     private double riskPct = 0.01;

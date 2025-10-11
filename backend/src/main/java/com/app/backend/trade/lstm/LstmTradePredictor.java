@@ -2263,7 +2263,7 @@ public class LstmTradePredictor {
             // --- AJOUT DU CONTROLE DRAWDOWN ---
             if (inPosition) {
                 double latentDrawdown = entryPrice > 0 ? (entryPrice - close) / entryPrice : 0.0;
-                if ((latentDrawdown >= config.getStopLossPct() || -latentDrawdown <= config.getTakeProfitPct())
+                if ((latentDrawdown >= config.getStopLossPct() || -latentDrawdown >= config.getTakeProfitPct())
                         && !"BUY".equals(pred.action)) {
                     // Vente forcée si drawdown >= 10% et action HOLD ou SELL
                     double profit = (close - entryPrice) * positionSize;

@@ -382,7 +382,8 @@ public class LstmHelper {
      * @param randomGridSize nombre de configs tirées si random
      */
     public void tuneAllSymbols(boolean useRandomGrid, int randomGridSize) {
-        List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
+        List<String> symbols = Arrays.asList("NVDA,MNSO,META,OLLI,BAC,CCB,MS,ONIT".split(","));
+        //List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
 
         // Valeurs testées (ne pas modifier sans validation)
         int[] horizonBars = {3, 5, 10};
