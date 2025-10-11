@@ -555,7 +555,7 @@ public class LstmTuningService {
                             wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0),
                             wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0),
                             wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0),
-                            0, 0, 0, 0, false
+                            0, 0, 0, false
                     );
                     long endConfig = System.currentTimeMillis();
                     long cfgDuration = (endConfig-startConfig);
@@ -700,7 +700,7 @@ public class LstmTuningService {
                 synchronized (modelSaveLock) { // Sérialisation disque synchronisée
                     lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate, bestModel, bestConfig, bestScalers,
                         bestScore,  bestResul.profitFactor,  bestResul.winRate,  bestResul.maxDrawdown,  bestResul.rmse,  bestResul.sumProfit,  bestResul.totalTrades,  bestResul.businessScore,
-                        bestResul.totalSeriesTested, -1, -1, -1, -1, false, 0);
+                        bestResul.totalSeriesTested, -1, -1, -1, false, 0);
                 }
             } catch (Exception e) {
                 // Log d'erreur non-bloquante (les hyperparamètres sont sauvés)
@@ -1500,7 +1500,6 @@ public class LstmTuningService {
                         finalAg.sumProfit = ho1.sumProfit;
                         finalAg.totalTrades = ho1.totalTrades;
                         finalAg.totalSeriesTested = ho1.totalSeriesTested;
-                        finalAg.phaseFinal = 1;
                         finalAg.phaseGrid = 1;
                         finalAg.numberGrid = phase1.numberGrid;
                         finalAg.phase1TopN = 1;
@@ -1561,7 +1560,6 @@ public class LstmTuningService {
                         finalAg.bestBusinessScore = ho1.businessScore; finalAg.bestMse = ho1.meanMse; finalAg.profitFactor = ho1.profitFactor;
                         finalAg.winRate = ho1.winRate; finalAg.maxDrawdown = ho1.maxDrawdown; finalAg.rmse = ho1.rmse; finalAg.sumProfit = ho1.sumProfit;
                         finalAg.totalTrades = ho1.totalTrades; finalAg.totalSeriesTested = ho1.totalSeriesTested;
-                        finalAg.phaseFinal = 1;
                         finalAg.phaseGrid = 1;
                         finalAg.numberGrid = phase1.numberGrid;
                         finalAg.phase1TopN = 1;
@@ -1617,7 +1615,6 @@ public class LstmTuningService {
                     finalAggregate.sumProfit = chosen.sumProfit;
                     finalAggregate.totalTrades = chosen.totalTrades;
                     finalAggregate.totalSeriesTested = chosen.totalSeriesTested;
-                    finalAggregate.phaseFinal = fromPhase2 ? 2 : 1;
                     finalAggregate.phaseGrid = fromPhase2 ? provisional.phaseGrid : phase1.phaseGrid;
                     finalAggregate.numberGrid = fromPhase2 ? provisional.numberGrid : phase1.numberGrid;
                     finalAggregate.phase1TopN = fromPhase2 ? provisional.phase1TopN : 1;
@@ -1644,7 +1641,7 @@ public class LstmTuningService {
     private static class PhaseAggregate {
         LstmConfig bestConfig; MultiLayerNetwork bestModel; LstmTradePredictor.ScalerSet bestScalers;
         double bestBusinessScore; double bestBusinessScoreStd; double bestMse; double profitFactor; double winRate; double maxDrawdown;
-        double rmse; double sumProfit; int totalTrades; int totalSeriesTested; int phaseFinal;
+        double rmse; double sumProfit; int totalTrades; int totalSeriesTested;
         int phaseGrid;
         int numberGrid;
         int phase1TopN;
@@ -1757,7 +1754,7 @@ public class LstmTuningService {
                         wf.splits.stream().mapToDouble(m->m.sortino).average().orElse(0.0),
                         wf.splits.stream().mapToDouble(m->m.calmar).average().orElse(0.0),
                         wf.splits.stream().mapToDouble(m->m.turnover).average().orElse(0.0),
-                        wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0), -1,
+                        wf.splits.stream().mapToDouble(m->m.avgBarsInPosition).average().orElse(0.0),
                         phase, i + 1, -1, false);
                 TuningResult trRes=new TuningResult(cfg, model, scalers, meanMse, sumPF/splits, sumWin/splits, maxDrawdownPct, meanBusiness, stdBusiness, rmse, sumProfit, trades, wf.totalTestedBars, i + 1);
                 results.add(trRes);
@@ -1781,7 +1778,6 @@ public class LstmTuningService {
         ag.bestBusinessScore=bestRaw; ag.bestBusinessScoreStd=bestStd; ag.bestMse=best!=null?best.score:Double.NaN; ag.profitFactor=best!=null?best.profitFactor:0;
         ag.winRate=best!=null?best.winRate:0; ag.maxDrawdown=best!=null?best.maxDrawdown:0; ag.rmse=best!=null?best.rmse:0; ag.sumProfit=best!=null?best.sumProfit:0;
         ag.totalTrades=best!=null?best.totalTrades:0; ag.totalSeriesTested=best!=null?best.totalSeriesTested:0;
-        ag.phaseFinal = -1;
         ag.phaseGrid = phase;
         ag.numberGrid = best!=null?best.numberGrid:-1;
         ag.phase1TopN = best!=null?best.numberGridTop:-1;
@@ -1794,7 +1790,7 @@ public class LstmTuningService {
         if(pa.bestConfig==null||pa.bestModel==null||pa.bestScalers==null){ logger.warn("[TUNING-2PH][PERSIST] Objets null – skip"); return; }
         try { hyperparamsRepository.saveHyperparams(symbol, pa.bestConfig, pa.phaseGrid); } catch(Exception e){ logger.error("[TUNING-2PH][PERSIST] saveHyperparams échec: {}", e.getMessage()); }
         try { synchronized (modelSaveLock){ lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate, pa.bestModel, pa.bestConfig, pa.bestScalers, pa.bestMse,
-                pa.profitFactor, pa.winRate, pa.maxDrawdown, pa.rmse, pa.sumProfit, pa.totalTrades, pa.bestBusinessScore, pa.totalSeriesTested, pa.phaseFinal,
+                pa.profitFactor, pa.winRate, pa.maxDrawdown, pa.rmse, pa.sumProfit, pa.totalTrades, pa.bestBusinessScore, pa.totalSeriesTested,
             pa.phaseGrid,
             pa.numberGrid,
             pa.phase1TopN,

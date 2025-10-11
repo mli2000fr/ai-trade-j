@@ -79,8 +79,8 @@ public class LstmHyperparamsRepository {
                     "symbol, window_size, lstm_neurons, dropout_rate, learning_rate, l1, l2, num_epochs, patience, min_delta, optimizer, " +
                     "normalization_scope, normalization_method, swing_trade_type, features, mse, rmse, horizon_bars, " +
                     "profit_total, profit_factor, win_rate, max_drawdown, num_trades, business_score, sortino, calmar, turnover, avg_bars_in_position, " +
-                    "use_multi_horizon_avg, entry_threshold_factor, phase_final, phase_grid, number_grid, phase_1_top_n, holdOut, tested_date" +
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+                    "use_multi_horizon_avg, entry_threshold_factor, phase_grid, number_grid, phase_1_top_n, holdOut, tested_date" +
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
 
 
     // =========================================================
@@ -208,7 +208,6 @@ public class LstmHyperparamsRepository {
             double calmar,
             double turnover,
             double avgBarsInPosition,
-            int phase_final,
             int phase_grid,
             int number_grid,
             int phase_1_top_n,
@@ -246,7 +245,6 @@ public class LstmHyperparamsRepository {
                 avgBarsInPosition,
                 config.isUseMultiHorizonAvg(),
                 config.getEntryThresholdFactor(),
-                phase_final,
                 phase_grid,
                 number_grid,
                 phase_1_top_n,
