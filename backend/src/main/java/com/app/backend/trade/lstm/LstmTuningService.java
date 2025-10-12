@@ -1,11 +1,17 @@
 package com.app.backend.trade.lstm;
 
+import com.app.backend.trade.exception.AucunSplitValideException;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.annotations.Expose;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -700,7 +706,7 @@ public class LstmTuningService {
                 synchronized (modelSaveLock) { // Sérialisation disque synchronisée
                     lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate, bestModel, bestConfig, bestScalers,
                         bestScore,  bestResul.profitFactor,  bestResul.winRate,  bestResul.maxDrawdown,  bestResul.rmse,  bestResul.sumProfit,  bestResul.totalTrades,  bestResul.businessScore,
-                        bestResul.totalSeriesTested, -1, -1, -1, false, 0);
+                        bestResul.totalSeriesTested, -1, -1, -1, "", false, "", 0);
                 }
             } catch (Exception e) {
                 // Log d'erreur non-bloquante (les hyperparamètres sont sauvés)
@@ -1259,19 +1265,33 @@ public class LstmTuningService {
         LstmConfig config;
         MultiLayerNetwork model;
         LstmTradePredictor.ScalerSet scalers;
+        @Expose
         int top;
+        @Expose
         String topLabel;
+        @Expose
         double score;
+        @Expose
         double profitFactor;
+        @Expose
         double winRate;
+        @Expose
         double maxDrawdown;
+        @Expose
         double businessScore;
+        @Expose
         double businessScoreStd; // nouvel écart-type des businessScore sur les splits WF
+        @Expose
         double rmse;
+        @Expose
         int numberGrid;
+        @Expose
         int numberGridTop;
+        @Expose
         double sumProfit;
+        @Expose
         int totalSeriesTested;
+        @Expose
         int totalTrades;
         TuningResult(LstmConfig c, MultiLayerNetwork m, LstmTradePredictor.ScalerSet s, double score, double pf, double wr, double dd, double bs, double bsStd, double rmse, double sumProfit, int totalTrades, int totalSeriesTested, int numberGrid)
         { this.numberGrid = numberGrid;this.config=c; this.model=m; this.scalers=s; this.score=score; this.profitFactor=pf; this.winRate=wr; this.maxDrawdown=dd; this.businessScore=bs; this.businessScoreStd=bsStd; this.rmse = rmse; this.sumProfit=sumProfit; this.totalTrades=totalTrades; this.totalSeriesTested=totalSeriesTested;}
@@ -1435,8 +1455,9 @@ public class LstmTuningService {
             // Phase 1
             //logger.info("[TUNING-2PH][PHASE1] Début phase1 ({} configs) série utilisée={} (holdOutStart={})", coarseGrid.size(), phaseSeries.getBarCount(), enableHoldOut?holdOutStart:-1);
             PhaseAggregate phase1 = runPhaseNoPersist(symbol, coarseGrid, phaseSeries, 1, "PHASE1", progress);
-            if (phase1 == null || phase1.bestConfig == null) {
+            if (phase1 == null || phase1.bestConfig == null || phase1.allResults == null || phase1.allResults.isEmpty()) {
                 progress.status = "failed"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime;
+                logger.error("[TUNING-2PH] Erreur globale {} : {}", symbol, "aucun résultat de phase 1");
                 try { writeProgressMetrics(progress); } catch (Exception ignored) {}
                 return null;
             }
@@ -1444,17 +1465,31 @@ public class LstmTuningService {
             // Top N pour micro-grille
             java.util.List<TuningResult> sorted = new java.util.ArrayList<>(phase1.allResults);
             sorted.sort((a,b)->Double.compare(adjScore(b), adjScore(a)));
+
             java.util.List<TuningResult> sortedRendement = new java.util.ArrayList<>(phase1.allResults);
             sortedRendement.sort((a,b)->Double.compare(adjScoreRendement(b), adjScoreRendement(a)));
+
             int topN = Math.min(5, sorted.size());
             java.util.List<TuningResult> top = sorted.subList(0, topN);
-            java.util.List<TuningResult> topRendement = sortedRendement.subList(0, topN);
+            for(int it = 0; it < top.size(); it++){
+                top.get(it).top = it+1;
+                top.get(it).topLabel = "BS";
+            }
+
+            int topRN = Math.min(5, sortedRendement.size());
+            java.util.List<TuningResult> topRendement = sortedRendement.subList(0, topRN);
+
+            for(int itr = 0; itr < topRendement.size(); itr++){
+                topRendement.get(itr).top = itr+1;
+                topRendement.get(itr).topLabel = "BSR";
+            }
             // Fusionne les deux listes sans doublons (basé sur l'objet TuningResult)
-            java.util.Set<TuningResult> fusion = new java.util.LinkedHashSet<>();
-            fusion.addAll(top);
-            fusion.addAll(topRendement);
+            //java.util.Set<TuningResult> fusion = new java.util.LinkedHashSet<>();
+            List<TuningResult> fusionList = new ArrayList<>();
+            fusionList.addAll(top);
+            fusionList.addAll(topRendement);
             // Si tu veux une List ensuite :
-            java.util.List<TuningResult> fusionList = new java.util.ArrayList<>(fusion);
+
 
 
             java.util.Set<String> dedup = new java.util.HashSet<>();
@@ -1501,7 +1536,7 @@ public class LstmTuningService {
             try { writeProgressMetrics(progress); } catch (Exception ignored) {}
             if(isOnlyPhase1){
                 for(TuningResult tuR : fusionList){
-                    HoldOutEval holdOutEval = evaluateHoldOut(symbol, tuR.config, series, holdOutStart);
+                    HoldOutEval holdOutEval = evaluateHoldOutFull(symbol, tuR.config, tuR.model, tuR.scalers, series, holdOutStart);
                     if (holdOutEval != null) {
                         PhaseAggregate finalAg = new PhaseAggregate();
                         finalAg.bestConfig = tuR.config;
@@ -1521,15 +1556,18 @@ public class LstmTuningService {
                         finalAg.phase1TopN = tuR.top;
                         finalAg.holdOut = true;
                         finalAg.phase1TopNLabel = tuR.topLabel;
+                        Gson gson = new GsonBuilder().excludeFieldsWithoutExposeAnnotation().create();
+                        finalAg.tuningResult = gson.toJson(tuR);
                         persistBest(symbol, finalAg, jdbcTemplate, 0);
                         progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime; try { writeProgressMetrics(progress);} catch(Exception ignored) {}
-                        return null;
+
                     }
                 }
+                return null;
             }else if (microGrid.isEmpty()) {
                 logger.warn("[TUNING-2PH][PHASE2] Micro-grille vide – validation directe phase1");
                 if (enableHoldOut) {
-                    HoldOutEval ho1 = evaluateHoldOut(symbol, phase1.bestConfig, series, holdOutStart);
+                    HoldOutEval ho1 = evaluateHoldOutFull(symbol, phase1.bestConfig, phase1.bestModel, phase1.bestScalers, series, holdOutStart);
                     if (ho1 != null) {
                         PhaseAggregate finalAg = new PhaseAggregate();
                         finalAg.bestConfig = phase1.bestConfig;
@@ -1597,7 +1635,7 @@ public class LstmTuningService {
             if (phase2 == null || phase2.bestConfig == null) {
                 logger.warn("[TUNING-2PH][PHASE2] Aucun résultat – retour phase1 (hold-out si actif)");
                 if (enableHoldOut) {
-                    HoldOutEval ho1 = evaluateHoldOut(symbol, phase1.bestConfig, series, holdOutStart);
+                    HoldOutEval ho1 = evaluateHoldOutFull(symbol, phase1.bestConfig, phase1.bestModel, phase1.bestScalers, series, holdOutStart);
                     if (ho1 != null) {
                         PhaseAggregate finalAg = new PhaseAggregate();
                         finalAg.bestConfig = phase1.bestConfig; finalAg.bestModel = ho1.model; finalAg.bestScalers = ho1.scalers;
@@ -1640,8 +1678,12 @@ public class LstmTuningService {
             PhaseAggregate finalAggregate;
             if (enableHoldOut) {
                 //logger.info("[TUNING-2PH][HOLDOUT] Validation hold-out des candidats");
-                HoldOutEval ho1 = evaluateHoldOut(symbol, phase1.bestConfig, series, holdOutStart);
-                HoldOutEval hoProv = fromPhase2 ? evaluateHoldOut(symbol, provisional.bestConfig, series, holdOutStart) : ho1;
+                HoldOutEval ho1 = evaluateHoldOutFull(symbol, phase1.bestConfig,
+                        provisional.bestModel, provisional.bestScalers,
+                        series, holdOutStart);
+                HoldOutEval hoProv = fromPhase2 ? evaluateHoldOutFull(symbol, provisional.bestConfig,
+                        provisional.bestModel, provisional.bestScalers,
+                        series, holdOutStart) : ho1;
                 if (ho1 != null && hoProv != null) {
                     boolean acceptProv = fromPhase2 && hoProv.businessScore >= ho1.businessScore * 1.00; // au moins égal en hold-out
                     HoldOutEval chosen = acceptProv ? hoProv : ho1;
@@ -1689,6 +1731,7 @@ public class LstmTuningService {
         int phaseGrid;
         int numberGrid;
         int phase1TopN;
+        String tuningResult;
         String phase1TopNLabel;
         boolean holdOut; java.util.List<TuningResult> allResults; }
 
@@ -1712,7 +1755,20 @@ public class LstmTuningService {
         } catch (Exception e) { logger.warn("[TUNING-2PH][HOLDOUT] Échec {} : {}", symbol, e.getMessage()); return null; }
         finally { try { org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc(); } catch (Exception ignored) {} try { org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread(); } catch (Exception ignored) {} System.gc(); }
     }
-
+    private HoldOutEval evaluateHoldOutFull(String symbol, LstmConfig config, MultiLayerNetwork model, LstmTradePredictor.ScalerSet scalers, BarSeries fullSeries, int holdOutStart) {
+        try {
+            waitForMemory();
+            if (holdOutStart <= 0 || holdOutStart >= fullSeries.getBarCount()-config.getWindowSize()-10) return null;
+            lstmTradePredictor.setGlobalSeeds(config.getSeed());
+            LstmTradePredictor.WalkForwardResultV2 wf = lstmTradePredictor.walkForwardEvaluateOutOfSample(fullSeries, config, model, scalers, holdOutStart);
+            double sumB=0,sumPF=0,sumWin=0,maxDrawdownPct=0,sumProfit=0; int splits=0,trades=0; for(var m: wf.splits){ sumB += Double.isFinite(m.businessScore)?m.businessScore:0; sumPF += Double.isFinite(m.profitFactor)?m.profitFactor:0; sumWin+=m.winRate; if(m.maxDrawdownPct>maxDrawdownPct) maxDrawdownPct=m.maxDrawdownPct; sumProfit+=m.totalProfit; trades+=m.numTrades; splits++; }
+            if (splits==0) return null;
+            HoldOutEval ho=new HoldOutEval(); ho.config=config; ho.model=model; ho.scalers=scalers; ho.businessScore=sumB/splits; ho.meanMse=wf.meanMse; ho.rmse=Double.isFinite(wf.meanMse)&&wf.meanMse>=0?Math.sqrt(wf.meanMse):Double.NaN; ho.profitFactor=sumPF/splits; ho.winRate=sumWin/splits; ho.maxDrawdown=maxDrawdownPct; ho.sumProfit=sumProfit; ho.totalTrades=trades; ho.totalSeriesTested=wf.totalTestedBars;
+            //logger.info("[TUNING-2PH][HOLDOUT] {} neurons={} lr={} dropout={} bs={} pf={} wr={} dd={}", symbol, config.getLstmNeurons(), config.getLearningRate(), config.getDropoutRate(), String.format("%.5f", ho.businessScore), String.format("%.4f", ho.profitFactor), String.format("%.4f", ho.winRate), String.format("%.4f", ho.maxDrawdown));
+            return ho;
+        } catch (Exception e) { logger.warn("[TUNING-2PH][HOLDOUT] Échec {} : {}", symbol, e.getMessage()); return null; }
+        finally { try { org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc(); } catch (Exception ignored) {} try { org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread(); } catch (Exception ignored) {} System.gc(); }
+    }
     private PhaseAggregate runPhaseNoPersist(String symbol,
                                              java.util.List<LstmConfig> grid,
                                              BarSeries series,
@@ -1792,7 +1848,7 @@ public class LstmTuningService {
                     sumBusinessSq+=bsSplit*bsSplit; // accumulation pour variance
                     sumProfit+=m.totalProfit;
                     trades+=m.numTrades; splits++; }
-                if (splits==0) throw new IllegalStateException("Aucun split valide");
+                if (splits==0) throw new AucunSplitValideException("Aucun split valide");
                 double meanMse=wf.meanMse; double meanBusiness=sumBusiness/splits; double variance = (sumBusinessSq / splits) - (meanBusiness*meanBusiness); if(variance<0) variance=0; double stdBusiness = Math.sqrt(variance);
                 double rmse=(Double.isFinite(meanMse)&&meanMse>=0)?Math.sqrt(meanMse):Double.NaN;
                 hyperparamsRepository.saveTuningMetrics(symbol,cfg,meanMse,rmse,sumProfit,sumPF/splits,sumWin/splits,maxDrawdownPct,trades,meanBusiness,
@@ -1807,9 +1863,12 @@ public class LstmTuningService {
                 //logger.info("[TUNING-2PH][{}] {} config {}/{} bs={} adj={} dd={} trades={} phase={}", phaseTag, symbol, idx+1, grid.size(), String.format("%.5f", meanBusiness), String.format("%.5f", adjScore(trRes)), String.format("%.4f", maxDrawdownPct), trades, phase);
                 trRes.numberGridTop = grid.get(idx).getIndexTop();
                 trRes.numberGrid = i + 1;
+            } catch(AucunSplitValideException ex){
+                if(progress!=null){ progress.testedConfigs.incrementAndGet(); progress.lastUpdate=System.currentTimeMillis(); }
+                logger.warn("[TUNING-2PH][{}][{}] AucunSplitValideException {}/{} : {}", phaseTag, symbol, idx+1, grid.size(), ex.getMessage());
             } catch(Exception ex){
                 if(progress!=null){ progress.testedConfigs.incrementAndGet(); progress.lastUpdate=System.currentTimeMillis(); }
-                logger.error("[TUNING-2PH][{}][{}] Erreur config {}/{} : {}", phaseTag, symbol, idx+1, grid.size(), ex.getMessage()); results.add(null);
+                logger.error("[TUNING-2PH]Exception[{}][{}] Erreur config {}/{} : {}", phaseTag, symbol, idx+1, grid.size(), ex.getMessage());
             }
             finally { model=null; try{ org.nd4j.linalg.factory.Nd4j.getMemoryManager().invokeGc(); org.nd4j.linalg.factory.Nd4j.getWorkspaceManager().destroyAllWorkspacesForCurrentThread(); }catch(Exception ignore){} System.gc(); if(cudaBackend){ gpuController.markTrainingFinished(); if(permit) gpuController.releasePermit(); } }
         }
@@ -1840,7 +1899,7 @@ public class LstmTuningService {
             pa.numberGrid,
             pa.phase1TopN,
             pa.phase1TopNLabel,
-            pa.holdOut, ratio); } }
+            pa.holdOut, pa.tuningResult, ratio); } }
         catch(Exception e){ logger.error("[TUNING-2PH][PERSIST] saveModelToDb échec: {}", e.getMessage()); }
     }
 

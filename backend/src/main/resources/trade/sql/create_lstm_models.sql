@@ -1,5 +1,6 @@
 CREATE TABLE trade_ai.lstm_models (
-    symbol VARCHAR(32) PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    symbol VARCHAR(32),
     updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     hyperparams_json TEXT,
     scalers_json TEXT,
@@ -12,6 +13,7 @@ CREATE TABLE trade_ai.lstm_models (
       phase_1_top_n INT,
       phase_1_top_n_label VARCHAR(32),
       holdOut BOOLEAN NOT NULL DEFAULT FALSE,
+      tuning_result_json TEXT,
     ratio DOUBLE,
     eligible BOOLEAN DEFAULT TRUE,
     normalization_scope VARCHAR(16) DEFAULT 'window'

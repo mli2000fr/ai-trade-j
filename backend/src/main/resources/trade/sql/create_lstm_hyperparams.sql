@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS trade_ai.lstm_hyperparams (
-    symbol VARCHAR(32) PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    symbol VARCHAR(32),
     window_size INT NOT NULL,
     lstm_neurons INT NOT NULL,
     dropout_rate DOUBLE NOT NULL,
@@ -46,7 +47,3 @@ CREATE TABLE IF NOT EXISTS trade_ai.lstm_hyperparams (
     INDEX idx_lstm_hparams_updated_date (updated_date),
     INDEX idx_lstm_hparams_symbol_updated (symbol, updated_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- IMPORTANT: l'ordre des colonnes ci-dessus correspond exactement à celui utilisé dans REPLACE INTO
--- de LstmHyperparamsRepository (sauf updated_date géré par CURRENT_TIMESTAMP). Ajouter toute nouvelle
--- colonne AVANT updated_date et l'insérer aussi dans la requête Java dans le même ordre.

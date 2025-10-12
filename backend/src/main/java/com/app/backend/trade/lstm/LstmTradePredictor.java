@@ -2847,8 +2847,8 @@ public class LstmTradePredictor {
                               int phase_grid,
                               int number_grid,
                               int phase_1_top_n,
-                              int phase_1_top_n_label,
-                              boolean holdOut, double ratio) throws IOException {
+                              String phase_1_top_n_label,
+                              boolean holdOut, String tuningResult, double ratio) throws IOException {
         if (model == null) return;
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         ModelSerializer.writeModel(model, baos, true);
@@ -2864,10 +2864,10 @@ public class LstmTradePredictor {
 
         String sql = "REPLACE INTO lstm_models (symbol, model_blob, hyperparams_json, normalization_scope, scalers_json, mse, profit_factor, " +
                 "win_rate, max_drawdown, rmse, sum_profit, total_trades, business_score, total_series_tested, rendement, " +
-                "phase_grid, number_grid, phase_1_top_n, phase_1_top_n_label, holdOut, ratio, updated_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)";
+                "phase_grid, number_grid, phase_1_top_n, phase_1_top_n_label, holdOut, tuning_result_json, ratio, updated_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)";
         jdbcTemplate.update(sql, symbol, modelBytes, hyperparamsJson, config.getNormalizationScope(),
                 scalersJson, mse, profitFactor, winRate, maxDrawdown, rmse, sumProfit, totalTrades, businessScore, totalSeriesTested, rendement,
-                phase_grid, number_grid, phase_1_top_n, phase_1_top_n_label, holdOut, ratio);
+                phase_grid, number_grid, phase_1_top_n, phase_1_top_n_label, holdOut, tuningResult, ratio);
     }
 
     /**
