@@ -10,6 +10,7 @@ CREATE TABLE trade_ai.lstm_models (
       phase_grid INT,
       number_grid INT,
       phase_1_top_n INT,
+      phase_1_top_n_label VARCHAR(32),
       holdOut BOOLEAN NOT NULL DEFAULT FALSE,
     ratio DOUBLE,
     eligible BOOLEAN DEFAULT TRUE,

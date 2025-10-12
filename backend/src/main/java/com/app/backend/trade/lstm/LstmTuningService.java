@@ -1200,7 +1200,7 @@ public class LstmTuningService {
     public void tuneAllSymbols(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         long startAll = System.currentTimeMillis();
         //logger.info("[TUNING] Début tuning multi-symboles ({} symboles, parallélisé) | twoPhase={} ", symbols.size(), enableTwoPhase);
-        int maxParallelSymbols = 6;//Math.max(1, effectiveMaxThreads);
+        int maxParallelSymbols = Math.max(1, effectiveMaxThreads);
         java.util.concurrent.ExecutorService symbolExecutor = java.util.concurrent.Executors.newFixedThreadPool(maxParallelSymbols);
         java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
         for (int i = 0; i < symbols.size(); i++) {
@@ -1259,6 +1259,8 @@ public class LstmTuningService {
         LstmConfig config;
         MultiLayerNetwork model;
         LstmTradePredictor.ScalerSet scalers;
+        int top;
+        String topLabel;
         double score;
         double profitFactor;
         double winRate;
@@ -1388,6 +1390,8 @@ public class LstmTuningService {
      *  - Pas de sauvegarde hyperparams / modèle avant la décision finale => évite blocage par isSymbolAlreydyTuned
      */
     public LstmConfig tuneSymbolTwoPhase(String symbol, List<LstmConfig> coarseGrid, BarSeries series, JdbcTemplate jdbcTemplate) {
+        boolean isOnlyPhase1 = true;
+
         if (isSymbolAlreydyTuned(symbol, jdbcTemplate)) {
             //logger.info("[TUNING-2PH] Symbole {} déjà tuné – abandon", symbol);
             return null;
@@ -1440,49 +1444,89 @@ public class LstmTuningService {
             // Top N pour micro-grille
             java.util.List<TuningResult> sorted = new java.util.ArrayList<>(phase1.allResults);
             sorted.sort((a,b)->Double.compare(adjScore(b), adjScore(a)));
+            java.util.List<TuningResult> sortedRendement = new java.util.ArrayList<>(phase1.allResults);
+            sortedRendement.sort((a,b)->Double.compare(adjScoreRendement(b), adjScoreRendement(a)));
             int topN = Math.min(5, sorted.size());
             java.util.List<TuningResult> top = sorted.subList(0, topN);
+            java.util.List<TuningResult> topRendement = sortedRendement.subList(0, topN);
+            // Fusionne les deux listes sans doublons (basé sur l'objet TuningResult)
+            java.util.Set<TuningResult> fusion = new java.util.LinkedHashSet<>();
+            fusion.addAll(top);
+            fusion.addAll(topRendement);
+            // Si tu veux une List ensuite :
+            java.util.List<TuningResult> fusionList = new java.util.ArrayList<>(fusion);
+
 
             java.util.Set<String> dedup = new java.util.HashSet<>();
             java.util.List<LstmConfig> microGrid = new java.util.ArrayList<>();
-            int indexTop = 0;
-            int cpt = 0;
-            for (TuningResult tr : top) {
-                indexTop++;
-                LstmConfig base = tr.config; int baseNeu = base.getLstmNeurons();
-                int[] neuVar = {baseNeu-16, baseNeu, baseNeu+16};
-                double[] lrVar = {base.getLearningRate()*0.9, base.getLearningRate(), base.getLearningRate()*1.15}; // élargir 1.15
-                double[] drVar = {base.getDropoutRate()-0.05, base.getDropoutRate(), base.getDropoutRate()+0.04}; // variations plus larges
-                for (int nv : neuVar) {
-                    if (nv<16||nv>512) continue;
-                    for (double lr: lrVar){
-                        cpt++;
-                        lr=Math.max(1e-5, Math.min(0.02, lr)); // plafond un peu plus haut pour dynamisme
-                        for(double dr:drVar){
-                            dr=Math.max(0.05, Math.min(0.40, dr));
-                            LstmConfig c=cloneConfig(base);
-                            c.setIndexTop(indexTop);
-                            c.setLstmNeurons(nv);
-                            c.setLearningRate(lr);
-                            c.setDropoutRate(dr);
-                            if(dedup.add(keyOf(c))) microGrid.add(c);
+            if(!isOnlyPhase1){
+                int indexTop = 0;
+                int cpt = 0;
+                for (TuningResult tr : top) {
+                    indexTop++;
+                    LstmConfig base = tr.config; int baseNeu = base.getLstmNeurons();
+                    int[] neuVar = {baseNeu-16, baseNeu, baseNeu+16};
+                    double[] lrVar = {base.getLearningRate()*0.9, base.getLearningRate(), base.getLearningRate()*1.15}; // élargir 1.15
+                    double[] drVar = {base.getDropoutRate()-0.05, base.getDropoutRate(), base.getDropoutRate()+0.04}; // variations plus larges
+                    for (int nv : neuVar) {
+                        if (nv<16||nv>512) continue;
+                        for (double lr: lrVar){
+                            cpt++;
+                            lr=Math.max(1e-5, Math.min(0.02, lr)); // plafond un peu plus haut pour dynamisme
+                            for(double dr:drVar){
+                                dr=Math.max(0.05, Math.min(0.40, dr));
+                                LstmConfig c=cloneConfig(base);
+                                c.setIndexTop(indexTop);
+                                c.setLstmNeurons(nv);
+                                c.setLearningRate(lr);
+                                c.setDropoutRate(dr);
+                                if(dedup.add(keyOf(c))) microGrid.add(c);
+                            }
                         }
                     }
                 }
-            }
-            // Ajustements agressifs micro-grille (sauf baseline)
-            for (LstmConfig c : microGrid) {
-                if (!c.isBaselineReplica()) {
-                    c.setAggressivenessBoost(1.3);
-                    c.setLimitPredictionPct(0.0);
-                    c.setEntryPercentileQuantile(Math.max(0.45, c.getEntryPercentileQuantile() - 0.05));
-                    c.setDeadzoneFactor(Math.max(0.12, c.getDeadzoneFactor() * 0.6));
-                    c.setL2(Math.max(0.0, c.getL2() * 0.5)); // réduire régularisation
+                // Ajustements agressifs micro-grille (sauf baseline)
+                for (LstmConfig c : microGrid) {
+                    if (!c.isBaselineReplica()) {
+                        c.setAggressivenessBoost(1.3);
+                        c.setLimitPredictionPct(0.0);
+                        c.setEntryPercentileQuantile(Math.max(0.45, c.getEntryPercentileQuantile() - 0.05));
+                        c.setDeadzoneFactor(Math.max(0.12, c.getDeadzoneFactor() * 0.6));
+                        c.setL2(Math.max(0.0, c.getL2() * 0.5)); // réduire régularisation
+                    }
                 }
             }
+
             progress.totalConfigs += microGrid.size();
             try { writeProgressMetrics(progress); } catch (Exception ignored) {}
-            if (microGrid.isEmpty() || true) {
+            if(isOnlyPhase1){
+                for(TuningResult tuR : fusionList){
+                    HoldOutEval holdOutEval = evaluateHoldOut(symbol, tuR.config, series, holdOutStart);
+                    if (holdOutEval != null) {
+                        PhaseAggregate finalAg = new PhaseAggregate();
+                        finalAg.bestConfig = tuR.config;
+                        finalAg.bestModel = holdOutEval.model;
+                        finalAg.bestScalers = holdOutEval.scalers;
+                        finalAg.bestBusinessScore = holdOutEval.businessScore;
+                        finalAg.bestMse = holdOutEval.meanMse;
+                        finalAg.profitFactor = holdOutEval.profitFactor;
+                        finalAg.winRate = holdOutEval.winRate;
+                        finalAg.maxDrawdown = holdOutEval.maxDrawdown;
+                        finalAg.rmse = holdOutEval.rmse;
+                        finalAg.sumProfit = holdOutEval.sumProfit;
+                        finalAg.totalTrades = holdOutEval.totalTrades;
+                        finalAg.totalSeriesTested = holdOutEval.totalSeriesTested;
+                        finalAg.phaseGrid = 1;
+                        finalAg.numberGrid = tuR.numberGrid;
+                        finalAg.phase1TopN = tuR.top;
+                        finalAg.holdOut = true;
+                        finalAg.phase1TopNLabel = tuR.topLabel;
+                        persistBest(symbol, finalAg, jdbcTemplate, 0);
+                        progress.status = "termine"; progress.endTime = System.currentTimeMillis(); progress.lastUpdate = progress.endTime; try { writeProgressMetrics(progress);} catch(Exception ignored) {}
+                        return null;
+                    }
+                }
+            }else if (microGrid.isEmpty()) {
                 logger.warn("[TUNING-2PH][PHASE2] Micro-grille vide – validation directe phase1");
                 if (enableHoldOut) {
                     HoldOutEval ho1 = evaluateHoldOut(symbol, phase1.bestConfig, series, holdOutStart);
@@ -1645,6 +1689,7 @@ public class LstmTuningService {
         int phaseGrid;
         int numberGrid;
         int phase1TopN;
+        String phase1TopNLabel;
         boolean holdOut; java.util.List<TuningResult> allResults; }
 
     // --- Structure évaluation hold-out ---
@@ -1794,6 +1839,7 @@ public class LstmTuningService {
             pa.phaseGrid,
             pa.numberGrid,
             pa.phase1TopN,
+            pa.phase1TopNLabel,
             pa.holdOut, ratio); } }
         catch(Exception e){ logger.error("[TUNING-2PH][PERSIST] saveModelToDb échec: {}", e.getMessage()); }
     }
@@ -1826,5 +1872,34 @@ public class LstmTuningService {
         if(r.winRate < 0.25) base *= 0.60; else if(r.winRate < 0.35) base *= 0.80;  // trop faible => faible généralisabilité
         return base;
     }
+    private static double adjScoreRendement(TuningResult r){
+        if(r == null) return Double.NEGATIVE_INFINITY;
+        double rendement = r.sumProfit;
+        double base = r.businessScore * 0.6 + rendement * 0.4; // pondération : 40% rendement, 60% businessScore
 
+        // Bonus si rendement élevé
+        if(rendement > 0) base *= (1.0 + Math.min(rendement / 100.0, 0.5)); // max +50% si rendement > 50
+
+        // Pénalités sur le nombre de trades
+        if(r.totalTrades < 3) base *= 0.40;
+        else if(r.totalTrades < 8) base *= 0.70;
+        else if(r.totalTrades < 12) base *= 0.85;
+
+        // Boost sur le nombre de trades
+        double tradeRef = 30.0;
+        double boost = Math.min(r.totalTrades / tradeRef, 1.6);
+        base *= (0.9 + 0.12 * boost);
+
+        // Robustesse (écart-type)
+        if(r.businessScoreStd < 0.0005) base *= 0.70;
+        else if(r.businessScoreStd < 0.001) base *= 0.88;
+
+        // Pénalités winRate extrêmes
+        if(r.winRate > 0.95) base *= 0.55;
+        else if(r.winRate > 0.90) base *= 0.75;
+        if(r.winRate < 0.25) base *= 0.60;
+        else if(r.winRate < 0.35) base *= 0.80;
+
+        return base;
+    }
 }
