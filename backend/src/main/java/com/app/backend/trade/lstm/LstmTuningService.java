@@ -28,8 +28,6 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static java.lang.Math.round;
-
 /**
  * LstmTuningService
  *
@@ -1470,27 +1468,27 @@ public class LstmTuningService {
             sortedRendement.sort((a,b)->Double.compare(adjScoreRendement(b), adjScoreRendement(a)));
 
             int topN = Math.min(5, sorted.size());
-            java.util.List<TuningResult> top = sorted.subList(0, topN);
-            for(int it = 0; it < top.size(); it++){
-                top.get(it).top = it+1;
-                top.get(it).topLabel = "BS";
+            java.util.List<TuningResult> top = new java.util.ArrayList<>();
+            for(int it = 0; it < topN; it++){
+                TuningResult trClone = cloneTuningResult(sorted.get(it));
+                trClone.top = it+1;
+                trClone.topLabel = "BS";
+                top.add(trClone);
             }
 
             int topRN = Math.min(5, sortedRendement.size());
-            java.util.List<TuningResult> topRendement = sortedRendement.subList(0, topRN);
-
-            for(int itr = 0; itr < topRendement.size(); itr++){
-                topRendement.get(itr).top = itr+1;
-                topRendement.get(itr).topLabel = "BSR";
+            java.util.List<TuningResult> topRendement = new java.util.ArrayList<>();
+            for(int itr = 0; itr < topRN; itr++){
+                TuningResult trClone = cloneTuningResult(sortedRendement.get(itr));
+                trClone.top = itr+1;
+                trClone.topLabel = "BSR";
+                topRendement.add(trClone);
             }
             // Fusionne les deux listes sans doublons (basé sur l'objet TuningResult)
             //java.util.Set<TuningResult> fusion = new java.util.LinkedHashSet<>();
             List<TuningResult> fusionList = new ArrayList<>();
             fusionList.addAll(top);
             fusionList.addAll(topRendement);
-            // Si tu veux une List ensuite :
-
-
 
             java.util.Set<String> dedup = new java.util.HashSet<>();
             java.util.List<LstmConfig> microGrid = new java.util.ArrayList<>();
@@ -1960,5 +1958,30 @@ public class LstmTuningService {
         else if(r.winRate < 0.35) base *= 0.80;
 
         return base;
+    }
+
+    // Java
+    private TuningResult cloneTuningResult(TuningResult src) {
+
+        TuningResult clone = new TuningResult(
+                src.config,
+                src.model,
+                src.scalers,
+                src.score,
+                src.profitFactor,
+                src.winRate,
+                src.maxDrawdown,
+                src.businessScore,
+                src.businessScoreStd,
+                src.rmse,
+                src.sumProfit,
+                src.totalTrades,
+                src.totalSeriesTested,
+                src.numberGrid
+        );
+        clone.top = src.top;
+        clone.topLabel = src.topLabel;
+        clone.numberGridTop = src.numberGridTop;
+        return clone;
     }
 }
