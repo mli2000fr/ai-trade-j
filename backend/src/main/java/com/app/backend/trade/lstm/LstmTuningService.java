@@ -1200,7 +1200,7 @@ public class LstmTuningService {
     public void tuneAllSymbols(List<String> symbols, List<LstmConfig> grid, JdbcTemplate jdbcTemplate, java.util.function.Function<String, BarSeries> seriesProvider) {
         long startAll = System.currentTimeMillis();
         //logger.info("[TUNING] Début tuning multi-symboles ({} symboles, parallélisé) | twoPhase={} ", symbols.size(), enableTwoPhase);
-        int maxParallelSymbols = Math.max(1, effectiveMaxThreads);
+        int maxParallelSymbols = 6;//Math.max(1, effectiveMaxThreads);
         java.util.concurrent.ExecutorService symbolExecutor = java.util.concurrent.Executors.newFixedThreadPool(maxParallelSymbols);
         java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
         for (int i = 0; i < symbols.size(); i++) {
@@ -1440,7 +1440,7 @@ public class LstmTuningService {
             // Top N pour micro-grille
             java.util.List<TuningResult> sorted = new java.util.ArrayList<>(phase1.allResults);
             sorted.sort((a,b)->Double.compare(adjScore(b), adjScore(a)));
-            int topN = Math.min(3, sorted.size());
+            int topN = Math.min(5, sorted.size());
             java.util.List<TuningResult> top = sorted.subList(0, topN);
 
             java.util.Set<String> dedup = new java.util.HashSet<>();
@@ -1482,7 +1482,7 @@ public class LstmTuningService {
             }
             progress.totalConfigs += microGrid.size();
             try { writeProgressMetrics(progress); } catch (Exception ignored) {}
-            if (microGrid.isEmpty()) {
+            if (microGrid.isEmpty() || true) {
                 logger.warn("[TUNING-2PH][PHASE2] Micro-grille vide – validation directe phase1");
                 if (enableHoldOut) {
                     HoldOutEval ho1 = evaluateHoldOut(symbol, phase1.bestConfig, series, holdOutStart);
@@ -1617,7 +1617,7 @@ public class LstmTuningService {
                     finalAggregate.totalSeriesTested = chosen.totalSeriesTested;
                     finalAggregate.phaseGrid = fromPhase2 ? provisional.phaseGrid : phase1.phaseGrid;
                     finalAggregate.numberGrid = fromPhase2 ? provisional.numberGrid : phase1.numberGrid;
-                    finalAggregate.phase1TopN = fromPhase2 ? provisional.phase1TopN : 1;
+                    finalAggregate.phase1TopN = fromPhase2 ? provisional.phase1TopN : phase1.phase1TopN;
                     finalAggregate.holdOut = true;
                 } else {
                     logger.warn("[TUNING-2PH][HOLDOUT] Échec évaluation hold-out – on persiste sélection provisoire");
@@ -1676,7 +1676,7 @@ public class LstmTuningService {
                                              TuningProgress progress) {
         waitForMemory();
         long start = System.currentTimeMillis();
-        int numThreads = 1; // Désormais séquentiel
+        int numThreads = 2; // Désormais séquentiel
         if (numThreads < 1) numThreads = 1;
         if (progress != null && progress.threadsUsed == 0) progress.threadsUsed = numThreads;
         // Suppression du pool de threads

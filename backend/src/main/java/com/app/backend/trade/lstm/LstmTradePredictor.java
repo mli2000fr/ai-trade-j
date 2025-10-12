@@ -1153,6 +1153,14 @@ public class LstmTradePredictor {
                 labelSeq[i] = closes[i + windowSize];
             }
         }
+
+        /* Ajout de bruit gaussien faible aux labels, évite trop plat
+        java.util.Random rnd = new java.util.Random();
+        for (int i = 0; i < labelSeq.length; i++) {
+            labelSeq[i] += rnd.nextGaussian() * 0.0005; // bruit faible, ajustable
+        }*/
+
+
         // Amplification du label si la std est trop faible (mode agressif)
         double mean = 0.0;
         for (double v : labelSeq) mean += v;
@@ -1168,6 +1176,7 @@ public class LstmTradePredictor {
                 labelSeq[i] *= amplifyFactor;
             }
         }
+
 
         // Normalisation des scalers
         ScalerSet scalers = new ScalerSet();
@@ -1444,8 +1453,8 @@ public class LstmTradePredictor {
                     varPred += d * d;
                 }
                 varPred /= nPred > 0 ? nPred : 1;
-                double flatThreshold = 5; // seuil de variance minimale
-                double alpha = 2; // force de la pénalité
+                double flatThreshold = 2; // seuil de variance minimale
+                double alpha = 8; // force de la pénalité
                 if (varPred < flatThreshold) {
                     flatPenalty = alpha * (flatThreshold - varPred);
                     trainLoss += flatPenalty;

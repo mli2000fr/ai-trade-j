@@ -1,1 +1,2 @@
-Si ces valeurs sont trop élevées (ex : windowSize > 100, lstmNeurons > 128, features > 30, kFolds > 5), la mémoire peut exploser.
+1: 100 phase 1 et top 5
+2: 200 phase 1 et top 0, pas de phase 2

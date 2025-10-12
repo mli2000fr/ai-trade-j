@@ -156,7 +156,7 @@ public class LstmConfig {
 
     // =============================== Architecture avancée ===============================
     /** Nombre de couches LSTM empilées (stack). */
-    private int numLstmLayers = 2;
+    private int numLstmLayers = 3;
     /** Active (true) ou non (false) un LSTM bidirectionnel (avant + arrière). */
     private boolean bidirectional = false;
     /** Active une couche d'attention au-dessus des sorties LSTM (si supportée par le backend). */
