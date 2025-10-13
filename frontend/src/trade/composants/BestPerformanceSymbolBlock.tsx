@@ -237,8 +237,30 @@ const BestPerformanceSymbolBlock: React.FC = () => {
     });
   }, [data]);
 
+  const getFilteredData = () => {
+    return data.filter(row => {
+      let singleOk = true;
+      let mixOk = true;
+      let lstmOk = true;
+      if (buySingleOnly) {
+        const indice = indices[row.single.symbol];
+        singleOk = (typeof indice === 'object' && indice.type && indice.type.startsWith('BUY')) ? true : false;
+      }
+      if (buyMixOnly) {
+        const indiceMix = indicesMix[row.mix.symbol ?? ''];
+        mixOk = (typeof indiceMix === 'object' && indiceMix.type && indiceMix.type.startsWith('BUY')) ? true : false;
+      }
+      if (buyLstmOnly) {
+        const lstm = lstmResults[row.single.symbol];
+        lstmOk = (typeof lstm === 'object' && lstm.signal && lstm.signal.startsWith('UP')) ? true : false;
+      }
+      return singleOk && mixOk && lstmOk;
+    });
+  };
+
   const handleCopy = () => {
-    const selectedSymbols = data
+    const filteredData = getFilteredData();
+    const selectedSymbols = filteredData
       .map((row, idx) => checkedRows[idx] ? row.single.symbol : null)
       .filter(Boolean)
       .join(',');
