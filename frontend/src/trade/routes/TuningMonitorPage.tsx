@@ -57,7 +57,7 @@ const TuningMonitorPage: React.FC = () => {
   };
 
   // Vérifie si un tuning est en cours
-  const isTuningEnCours = progress.some((row: any) => row.status === 'en_cours');
+  const isTuningEnCours = progress.some((row: any) => row.status === 'en_cours' || row.status.startsWith('phase'));
 
   return (<>
     {!isTuningEnCours && (<Box p={4} textAlign="center">
