@@ -151,7 +151,6 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
                       const resultObjSingle = selected.single.finalResult as Record<string, any>;
                       const resultObjMix = selected.mix.finalResult as Record<string, any>;
 
-                        debugger;
                       return (
                         <TableRow key={key}>
                           <TableCell sx={{ fontWeight: 'bold' }}>{key}</TableCell>
