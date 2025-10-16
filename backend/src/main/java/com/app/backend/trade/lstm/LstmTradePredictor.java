@@ -2899,7 +2899,7 @@ public class LstmTradePredictor {
     public LoadedModel loadModelAndScalersFromDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException {
 
         // Sélection explicite des colonnes nécessaires
-        String sql = "SELECT model_blob, scalers_json, total_series_tested, business_score, sum_profit, max_drawdown, win_rate, profit_factor, ratio, phase, rendement FROM lstm_models WHERE symbol = ?";
+fix        String sql = "SELECT model_blob, scalers_json, total_series_tested, business_score, sum_profit, max_drawdown, win_rate, profit_factor, ratio, phase_grid, rendement FROM lstm_models WHERE symbol = ?";
 
         try {
             Map<String,Object> result = jdbcTemplate.queryForMap(sql, symbol);
@@ -2929,7 +2929,7 @@ public class LstmTradePredictor {
             double winRate = toDouble.apply(result.get("win_rate"));
             double profitFactor = toDouble.apply(result.get("profit_factor"));
             double ratio = toDouble.apply(result.get("ratio"));
-            double phaseD = toDouble.apply(result.get("phase"));
+            double phaseD = toDouble.apply(result.get("phase_grid"));
 
             // Restitution du modèle si présent
             MultiLayerNetwork model = null;
