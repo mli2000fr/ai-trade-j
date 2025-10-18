@@ -77,7 +77,6 @@ const TuningMonitorPage: React.FC = () => {
         <Box display="flex" alignItems="center" gap={1} mb={2}>
           {progress[0]?.status === 'termine' ? <CheckCircleIcon color="success" /> : progress[0]?.status === 'erreur' ? <ErrorIcon color="error" /> : <HourglassTopIcon color="info" />}
           <Typography variant="h5" gutterBottom>Suivi du tuning LSTM</Typography>
-          <Chip label={progress[0]?.status || ''} color={progress[0]?.status === 'termine' ? 'success' : progress[0]?.status === 'erreur' ? 'error' : 'info'} size="small" sx={{ ml: 2 }} />
         </Box>
         <Divider sx={{ mb: 2 }} />
         {progress.map((row: any, idx: number) => {
@@ -93,7 +92,7 @@ const TuningMonitorPage: React.FC = () => {
               </Box>
               <Box display="flex" justifyContent="space-between" mb={1}>
                 <Typography>Statut :</Typography>
-                <Chip label={row.status === 'en_cours' ? 'En cours' : row.status === 'termine' ? 'Terminé' : 'Erreur'} color={row.status === 'termine' ? 'success' : row.status === 'erreur' ? 'error' : 'info'} size="small" />
+                <Chip label={(row.status === 'en_cours' || row.status.startsWith('phase')) ? 'En cours' : row.status === 'termine' ? 'Terminé' : 'Erreur'} color={row.status === 'termine' ? 'success' : row.status === 'erreur' ? 'error' : 'info'} size="small" />
               </Box>
               <Box display="flex" justifyContent="space-between" mb={1}>
                 <Typography>Durée :</Typography>
@@ -103,16 +102,6 @@ const TuningMonitorPage: React.FC = () => {
             </Box>
           );
         })}
-        {(progress[0]?.status === 'termine' || progress[0]?.status === 'erreur') && (
-          <Button
-            variant="contained"
-            color="info"
-            onClick={() => callApi('/api/lstm/tuneAllSymbols', 'Relancer le tuning')}
-            sx={{ mt: 2 }}
-          >
-            {loading === 'Relancer le tuning' ? <CircularProgress size={24} /> : 'Relancer le tuning'}
-          </Button>
-        )}
       </Paper>
       {/* Bloc reporting d'erreur tuning */}
       {tuningErrors.length > 0 && (

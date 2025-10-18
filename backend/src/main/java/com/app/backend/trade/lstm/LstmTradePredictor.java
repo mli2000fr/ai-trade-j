@@ -2872,6 +2872,28 @@ public class LstmTradePredictor {
                 phase_grid, number_grid, phase_1_top_n, phase_1_top_n_label, holdOut, tuningResult, ratio);
     }
 
+    /**
+     * Charge uniquement le modèle (ancienne version sans scalers).
+     */
+    public MultiLayerNetwork loadModelFromDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException {
+        LstmConfig config = hyperparamsRepository.loadHyperparams(symbol);
+        if (config == null) throw new IOException("Aucun hyperparamètre pour " + symbol);
+
+        String sql = "SELECT model_blob, normalization_scope FROM lstm_models WHERE symbol = ?";
+        try {
+            Map<String, Object> result = jdbcTemplate.queryForMap(sql, symbol);
+            byte[] modelBytes = (byte[]) result.get("model_blob");
+            if (modelBytes != null) {
+                ByteArrayInputStream bais = new ByteArrayInputStream(modelBytes);
+                MultiLayerNetwork model = ModelSerializer.restoreMultiLayerNetwork(bais);
+                logger.info("Modèle chargé {}", symbol);
+                return model;
+            }
+        } catch (EmptyResultDataAccessException e) {
+            throw new IOException("Modèle non trouvé");
+        }
+        return null;
+    }
 
     /**
      * Charge modèle + scalers (JSON) + hyperparams.
@@ -2942,7 +2964,7 @@ public class LstmTradePredictor {
             double winRate = toDouble.apply(result.get("win_rate"));
             double profitFactor = toDouble.apply(result.get("profit_factor"));
             double ratio = toDouble.apply(result.get("ratio"));
-            double phaseD = toDouble.apply(result.get("phase"));
+            double phaseD = toDouble.apply(result.get("phase_grid"));
 
             // Restitution du modèle si présent
             MultiLayerNetwork model = null;
