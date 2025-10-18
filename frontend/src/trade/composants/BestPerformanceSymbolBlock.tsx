@@ -40,6 +40,7 @@ interface PreditLstm {
     lastDate?: string | null;
     signal?: string | null;
     position?: string | null;
+    loadedModel?: any | null;
 }
 
 interface SignalInfo {
@@ -252,7 +253,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
       }
       if (buyLstmOnly) {
         const lstm = lstmResults[row.single.symbol];
-        lstmOk = (typeof lstm === 'object' && lstm.signal && lstm.signal.startsWith('UP')) ? true : false;
+        lstmOk = (typeof lstm === 'object' && lstm.signal && lstm.signal.startsWith('BUY')) ? true : false;
       }
       return singleOk && mixOk && lstmOk;
     });
@@ -418,7 +419,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     size="small"
                   />
                 }
-                label="Up/Lstm"
+                label="Buy/Lstm"
                 sx={{ ml: 2 }}
               />
               <Button
@@ -515,26 +516,32 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <TableRow>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
-                    <TableCell colSpan={4} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', fontSize: '1rem' }}>LSTM</TableCell>
-                    <TableCell colSpan={9} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
-                    <TableCell colSpan={9} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
+                    <TableCell colSpan={10} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', fontSize: '1rem' }}>LSTM</TableCell>
+                    <TableCell colSpan={8} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
+                    <TableCell colSpan={8} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Last Price</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Prédit Price</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9',  minWidth: 120, width: 130, maxWidth: 300 }}>Prédit Price</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 120, width: 130, maxWidth: 300  }}>Prédit Indice</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 180, width: 180, maxWidth: 300  }}>Position</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9'}}>Position</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Rendement</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 100, width: 130, maxWidth: 300 }}>
+                      <Tooltip title="Doit être > 1 pour être intéressant" arrow placement="top" enterDelay={200} leaveDelay={100}
+                         slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
+                         <span>Profit Factor</span>
+                       </Tooltip>
+                      </TableCell>
+
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Max Drawdown</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 80, width: 130, maxWidth: 300  }}>Win Rate</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 100, width: 130, maxWidth: 300 }}>Score Swing Trade</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Nombre de trades</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 120, width: 130, maxWidth: 300 }}>Rendement</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 130, maxWidth: 300 }}>
-                    <Tooltip title="Profit moyen par trade (Doit être positif)" arrow placement="top" enterDelay={200} leaveDelay={100}
-                      slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
-                      <span>Avg PnL</span>
-                    </Tooltip>
-                    </TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 130, maxWidth: 300 }}>
                     <Tooltip title="Doit être > 1 pour être intéressant" arrow placement="top" enterDelay={200} leaveDelay={100}
                        slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
@@ -550,15 +557,9 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     </TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Win Rate</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 130, maxWidth: 300 }}>Score Swing Trade</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Durée moyenne trade</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Nombre de trades</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 120, width: 130, maxWidth: 300  }}>Rendement</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300 }}>
-                    <Tooltip title="Profit moyen par trade (Doit être positif)" arrow placement="top" enterDelay={200} leaveDelay={100}
-                      slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
-                      <span>Avg PnL</span>
-                    </Tooltip>
-                    </TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300 }}>
                     <Tooltip title="Doit être > 1 pour être intéressant" arrow placement="top" enterDelay={200} leaveDelay={100}
                        slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
@@ -574,7 +575,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     </TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Win Rate</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300  }}>Score Swing Trade</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Durée moyenne trade</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Nombre de trades</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Détails</TableCell>
                   </TableRow>
                 </TableHead>
@@ -593,7 +594,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     }
                     if (buyLstmOnly) {
                       const lstm = lstmResults[row.single.symbol];
-                      lstmOk = (typeof lstm === 'object' && lstm.signal && lstm.signal.startsWith('UP')) ? true : false;
+                      lstmOk = (typeof lstm === 'object' && lstm.signal && lstm.signal.startsWith('BUY')) ? true : false;
                     }
                     return singleOk && mixOk && lstmOk;
                   }).map((row, i) => {
@@ -639,7 +640,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                              lstmResults[row.single.symbol] === 'pending'
                                ? (<CircularProgress size={16} />)
                                : (lstmResult && lstmResult.predictedClose
-                                  ? (lstmResult.predictedClose + (pctUD !== null ? ' (' + pctUD.toFixed(2) + '%)' : ''))
+                                  ? (lstmResult.predictedClose.toFixed(2) + (pctUD !== null ? ' (' + pctUD.toFixed(2) + '%)' : ''))
                                   : '-')
                            }</TableCell>
                         <TableCell align="center">{
@@ -656,6 +657,48 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                                 ? (lstmResult?.position)
                                 : '-')
                          }</TableCell>
+                       <TableCell align="center"><b>{
+                         lstmResults[row.single.symbol] === 'pending'
+                           ? (<CircularProgress size={16} />)
+                           : (lstmResult && lstmResult?.loadedModel?.rendement
+                              ? ((lstmResult?.loadedModel?.rendement * 100).toFixed(2) + ' %')
+                              : '-')
+                       }</b></TableCell>
+                        <TableCell align="center">{
+                            lstmResults[row.single.symbol] === 'pending'
+                              ? (<CircularProgress size={16} />)
+                              : (lstmResult && lstmResult?.loadedModel?.profitFactor
+                                 ? ((lstmResult?.loadedModel?.profitFactor * 100).toFixed(2))
+                                 : '-')
+                          }</TableCell>
+                        <TableCell align="center">{
+                           lstmResults[row.single.symbol] === 'pending'
+                             ? (<CircularProgress size={16} />)
+                             : (lstmResult && lstmResult?.loadedModel?.maxDrawdown
+                                ? ((lstmResult?.loadedModel?.maxDrawdown * 100).toFixed(2) + ' %')
+                                : '-')
+                         }</TableCell>
+                        <TableCell align="center">{
+                           lstmResults[row.single.symbol] === 'pending'
+                             ? (<CircularProgress size={16} />)
+                             : (lstmResult && lstmResult?.loadedModel?.winRate
+                                ? ((lstmResult?.loadedModel?.winRate * 100).toFixed(2) + ' %')
+                                : '-')
+                         }</TableCell>
+                         <TableCell align="center">{
+                            lstmResults[row.single.symbol] === 'pending'
+                              ? (<CircularProgress size={16} />)
+                              : (lstmResult && lstmResult?.loadedModel?.businnesScore
+                                 ? ((lstmResult?.loadedModel?.businnesScore * 100).toFixed(2))
+                                 : '-')
+                          }</TableCell>
+                         <TableCell align="center">{
+                            lstmResults[row.single.symbol] === 'pending'
+                              ? (<CircularProgress size={16} />)
+                              : (lstmResult && lstmResult?.loadedModel?.totalTrades
+                                 ? (lstmResult?.loadedModel?.totalTrades)
+                                 : '-')
+                          }</TableCell>
                         <TableCell align="center">{
                           indices[row.single.symbol] === 'pending'
                             ? (<CircularProgress size={16} />)
@@ -664,13 +707,12 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                                 : '-')
                         }</TableCell>
                         <TableCell align="center"><b>{(row.single.finalResult.rendement * 100).toFixed(2)} %</b></TableCell>
-                        <TableCell align="center">{row.single.finalResult.avgPnL.toFixed(2)}</TableCell>
                         <TableCell align="center">{row.single.finalResult.profitFactor.toFixed(2)}</TableCell>
                         <TableCell align="center">{(row.single.finalResult.maxDrawdown * 100).toFixed(2)} %</TableCell>
                         <TableCell align="center">{row.single.finalResult.sharpeRatio.toFixed(2)}</TableCell>
                         <TableCell align="center">{(row.single.finalResult.winRate * 100).toFixed(2)} %</TableCell>
                         <TableCell align="center">{row.single.finalResult.scoreSwingTrade !== undefined ? (row.single.finalResult.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
-                        <TableCell align="center">{row.single.finalResult.avgTradeBars !== undefined ? row.single.finalResult.avgTradeBars.toFixed(2) : '-'}</TableCell>
+                        <TableCell align="center">{row.single.finalResult.tradeCount !== undefined ? row.single.finalResult.tradeCount : '-'}</TableCell>
                         <TableCell align="center">{
                           indiceMixRaw === 'pending'
                             ? (<CircularProgress size={16} />)
@@ -679,13 +721,12 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                               : '-'
                         }</TableCell>
                         <TableCell align="center"><b>{(row.mix.finalResult.rendement * 100).toFixed(2)} %</b></TableCell>
-                        <TableCell align="center">{row.mix.finalResult.avgPnL.toFixed(2)}</TableCell>
                         <TableCell align="center">{row.mix.finalResult.profitFactor.toFixed(2)}</TableCell>
                         <TableCell align="center">{(row.mix.finalResult.maxDrawdown * 100).toFixed(2)} %</TableCell>
                         <TableCell align="center">{row.mix.finalResult.sharpeRatio.toFixed(2)}</TableCell>
                         <TableCell align="center">{(row.mix.finalResult.winRate * 100).toFixed(2)} %</TableCell>
                         <TableCell align="center">{row.mix.finalResult.scoreSwingTrade !== undefined ? (row.mix.finalResult.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
-                        <TableCell align="center">{row.mix.finalResult.avgTradeBars !== undefined ? row.mix.finalResult.avgTradeBars.toFixed(2) : '-'}</TableCell>
+                        <TableCell align="center">{row.mix.finalResult.tradeCount !== undefined ? row.mix.finalResult.tradeCount : '-'}</TableCell>
                         <TableCell align="center"><Button size="small" variant="outlined" onClick={() => { setSelected(row); setOpen(true); }}>Détails</Button></TableCell>
                       </TableRow>
                     );

@@ -2935,6 +2935,7 @@ public class LstmTradePredictor {
 
             double rendement = toDouble.apply(result.get("rendement"));
             int totalSerieTested = toInt.apply(result.get("total_series_tested"));
+            int totalTrades = toInt.apply(result.get("total_trades"));
             double businnesScore = toDouble.apply(result.get("business_score"));
             double sumProfil = toDouble.apply(result.get("sum_profit"));
             double maxDrawdown = toDouble.apply(result.get("max_drawdown"));
@@ -3014,6 +3015,7 @@ public class LstmTradePredictor {
             lm.resultTuning = resultTuning;
             lm.rendement = Double.isFinite(rendement) ? rendement : 0.0;
             lm.totalSerieTested = totalSerieTested;
+            lm.totalTrades = totalTrades;
             lm.businnesScore = Double.isFinite(businnesScore) ? businnesScore : 0.0;
             lm.sumProfil = Double.isFinite(sumProfil) ? sumProfil : 0.0;
             lm.maxDrawdown = Double.isFinite(maxDrawdown) ? maxDrawdown : 0.0;
@@ -3058,6 +3060,7 @@ public class LstmTradePredictor {
         public ScalerSet scalers;
         public double rendement;
         public int totalSerieTested;
+        public int totalTrades;
         public double businnesScore;
         public double sumProfil;
         public double maxDrawdown;

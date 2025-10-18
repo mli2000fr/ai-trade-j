@@ -19,3 +19,4 @@ CREATE TABLE trade_ai.lstm_models (
     eligible BOOLEAN DEFAULT TRUE,
     normalization_scope VARCHAR(16) DEFAULT 'window'
 );
+CREATE INDEX idx_signal_lstm_symbol ON trade_ai.lstm_models(symbol);

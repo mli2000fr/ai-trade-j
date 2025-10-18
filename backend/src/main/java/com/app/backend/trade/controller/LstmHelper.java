@@ -6,6 +6,7 @@ import com.app.backend.trade.lstm.LstmTradePredictor;
 import com.app.backend.trade.lstm.LstmTuningService;
 import com.app.backend.trade.model.*;
 import com.app.backend.trade.util.TradeUtils;
+import com.google.gson.Gson;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
@@ -179,14 +180,13 @@ public class LstmHelper {
             preditLsdm.setExplication(tradeStylePrediction.comment);
             tradeStylePrediction.loadedModel = loaded;
         }
+        loaded.model = null;
+        loaded.scalers = null;
+        loaded.config = null;
         preditLsdm.setLoadedModel(loaded);
 
         // 7. Sauvegarde du signal du jour
         saveSignalHistory(symbol, preditLsdm);
-        loaded.model = null;
-        loaded.scalers = null;
-        preditLsdm.setLoadedModel(loaded);
-        preditLsdm.setResultTuning(loaded.resultTuning);
         return preditLsdm;
     }
 
@@ -202,14 +202,15 @@ public class LstmHelper {
      */
     public void saveSignalHistory(String symbol, PreditLsdm preditLsdm) {
         java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
-        String insertSql = "INSERT INTO signal_lstm (symbol, signal_lstm, price_lstm, price_clo, position_lstm, lstm_created_at) VALUES (?, ?, ?, ?, ?, ?)";
+        String insertSql = "INSERT INTO signal_lstm (symbol, signal_lstm, price_lstm, price_clo, position_lstm, lstm_created_at, result_tuning) VALUES (?, ?, ?, ?, ?, ?, ?)";
         jdbcTemplate.update(insertSql,
                 symbol,
                 preditLsdm.getSignal().name(),
                 preditLsdm.getPredictedClose(),
                 preditLsdm.getLastClose(),
                 preditLsdm.getPosition(),
-                java.sql.Date.valueOf(lastTradingDay));
+                java.sql.Date.valueOf(lastTradingDay),
+                preditLsdm.getLoadedModel() != null ? new Gson().toJson(preditLsdm.getLoadedModel()) : null);
     }
 
     /**
@@ -238,6 +239,9 @@ public class LstmHelper {
                     double priceClo = rs.getDouble("price_clo");
                     String positionLstm = rs.getString("position_lstm");
                     java.sql.Date lastDate = rs.getDate("lstm_created_at");
+                    String tuning_result =  rs.getString("result_tuning");
+                    LstmTradePredictor.LoadedModel loadedModel = new Gson().fromJson(tuning_result, LstmTradePredictor.LoadedModel.class);
+
 
                     // Conversion robuste du type de signal
                     SignalType type;
@@ -260,6 +264,7 @@ public class LstmHelper {
                                 .lastDate(dateSavedStr)
                                 .predictedClose(priceLstm)
                                 .position(positionLstm)
+                                .loadedModel(loadedModel)
                                 .build();
                     } else {
                         return null;

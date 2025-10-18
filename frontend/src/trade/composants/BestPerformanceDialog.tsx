@@ -179,33 +179,6 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
                 </Table>
               </AccordionDetails>
             </Accordion>
-
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie d'entrée (Single)</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.single.entryName}</b></Typography>
-                {selected.single.entryParams && renderObjectTable(selected.single.entryParams)}
-              </AccordionDetails>
-            </Accordion>
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie de sortie (Single)</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.single.exitName}</b></Typography>
-                {selected.single.exitParams && renderObjectTable(selected.single.exitParams)}
-              </AccordionDetails>
-            </Accordion>
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Paramètres d'optimisation (Single)</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                {selected.single.paramsOptim && renderObjectTable(selected.single.paramsOptim)}
-              </AccordionDetails>
-            </Accordion>
           </div>
         )}
       </DialogContent>

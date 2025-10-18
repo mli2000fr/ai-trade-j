@@ -10,7 +10,8 @@ import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -1247,6 +1248,8 @@ public class LstmTuningService {
         return (expPos * pfAdj * winRate) / (denom + 1e-9);
     }
 
+    @Data
+    @NoArgsConstructor
     public static class TuningResult {
         LstmConfig config;
         MultiLayerNetwork model;
@@ -1275,6 +1278,8 @@ public class LstmTuningService {
         int numberGridTop;
         @Expose
         double sumProfit;
+        @Expose
+        double rendement;
         @Expose
         int totalSeriesTested;
         @Expose
