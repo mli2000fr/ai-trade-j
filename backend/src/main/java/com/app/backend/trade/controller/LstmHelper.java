@@ -149,21 +149,7 @@ public class LstmHelper {
             return preditLsdmDb;
         }
 
-        // 2. Charger la config (hyperparamètres) sauvegardée
-        LstmConfig config = lstmTuningService.hyperparamsRepository.loadHyperparams(symbol);
-        if (config == null) {
-            // Log informatif + retour neutre (IMPORTANT : ne pas changer le contenu renvoyé)
-            logger.info("Hyperparamètres existants trouvés pour {}. Ignorer le tuning.", symbol);
-            return PreditLsdm.builder()
-                    .lastClose(0)
-                    .predictedClose(0)
-                    .signal(SignalType.NONE)
-                    .position("")
-                    .lastDate("")
-                    .build();
-        }
-
-        // 3. Charger modèle + scalers (si échec : on continue quand même => modèle null => prédiction fallback)
+        // 3. Charger modèle + scalers + config (si échec : on continue quand même => modèle null => prédiction fallback)
         LstmTradePredictor.LoadedModel loaded = null;
         try {
             loaded = lstmTradePredictor.loadModelAndScalersFromDb(symbol, jdbcTemplate);
@@ -172,62 +158,10 @@ public class LstmHelper {
         }
         MultiLayerNetwork model = loaded != null ? loaded.model : null;
         LstmTradePredictor.ScalerSet scalers = loaded != null ? loaded.scalers : null;
+        LstmConfig config = loaded != null ? loaded.config : null;
 
         // 4. Charger les données prix (BarSeries complet)
         BarSeries series = getBarBySymbol(symbol, null);
-
-        // 5. Vérification drift + éventuel retrain + reporting
-        if (model != null && scalers != null) {
-            /*
-            try {
-                java.util.List<LstmTradePredictor.DriftReportEntry> reports =
-                        lstmTradePredictor.checkDriftAndRetrainWithReport(series, config, model, scalers, symbol);
-
-                if (!reports.isEmpty()) {
-                    for (LstmTradePredictor.DriftReportEntry r : reports) {
-                        // Ajout mémoire
-                        driftReports.add(r);
-
-                        // Insertion BD (best-effort) - si la table n'existe pas : simple log debug
-                        try {
-                            String sql = "INSERT INTO lstm_drift_report (event_date, symbol, feature, drift_type, kl, mean_shift, mse_before, mse_after, retrained) VALUES (?,?,?,?,?,?,?,?,?)";
-                            jdbcTemplate.update(sql,
-                                    java.sql.Timestamp.from(r.eventDate),
-                                    r.symbol,
-                                    r.feature,
-                                    r.driftType,
-                                    r.kl,
-                                    r.meanShift,
-                                    r.mseBefore,
-                                    r.mseAfter,
-                                    r.retrained
-                            );
-                        } catch (Exception ex) {
-                            logger.debug("Table lstm_drift_report absente ou insertion échouée: {}", ex.getMessage());
-                        }
-
-                        // Log détaillé (utile monitoring)
-                        logger.info("[DRIFT-REPORT] symbol={} feature={} type={} kl={} meanShift={}σ mseBefore={} mseAfter={} retrained={}",
-                                r.symbol, r.feature, r.driftType, r.kl, r.meanShift, r.mseBefore, r.mseAfter, r.retrained);
-                    }
-
-                    /* Si au moins un retrain a eu lieu => sauvegarde du modèle
-                    boolean retrained = reports.stream().anyMatch(rr -> rr.retrained);
-                    if (retrained) {
-                        try {
-                            lstmTradePredictor.saveModelToDb(symbol, model, jdbcTemplate, config, scalers);
-                        } catch (Exception e) {
-                            logger.warn("Erreur lors de la sauvegarde du modèle/scalers après retrain : {}", e.getMessage());
-                        }
-                    }*
-                }
-            } catch (Exception e) {
-                logger.warn("Erreur pendant le drift reporting: {}", e.getMessage());
-            }*/
-        }else{
-            throw new Exception("Modèle/scalers absents pour " + symbol + ", impossible de vérifier le drift.");
-        }
-
 
         // 6. Exécution de la prédiction (utilise model/scalers si présents)
         PreditLsdm preditLsdm = PreditLsdm.builder().build();
@@ -252,6 +186,7 @@ public class LstmHelper {
         loaded.model = null;
         loaded.scalers = null;
         preditLsdm.setLoadedModel(loaded);
+        preditLsdm.setResultTuning(loaded.resultTuning);
         return preditLsdm;
     }
 

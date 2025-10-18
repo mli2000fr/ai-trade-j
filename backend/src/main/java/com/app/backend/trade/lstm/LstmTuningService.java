@@ -372,14 +372,6 @@ public class LstmTuningService {
         // Variable de trace pour le meilleur score MSE (information, pas utilisée pour sélection)
         double bestScore = Double.POSITIVE_INFINITY;
 
-        // Double vérification: chercher des hyperparamètres existants en base
-        // (redondant avec isSymbolAlreydyTuned mais protection supplémentaire)
-        LstmConfig existing = hyperparamsRepository.loadHyperparams(symbol);
-        if(existing != null){
-            //logger.info("Hyperparamètres existants trouvés pour {}. Ignorer le tuning.", symbol);
-            return existing; // Retourner la config existante
-        }
-
         // ===== PHASE 4: INITIALISATION DES VARIABLES DE RÉSULTATS =====
 
         // Variables pour stocker la meilleure configuration trouvée
@@ -692,10 +684,6 @@ public class LstmTuningService {
 
         // Vérification que nous avons un résultat valide complet
         if (bestConfig != null && bestModel != null && bestScalers != null) {
-
-            // ===== SAUVEGARDE DES HYPERPARAMÈTRES GAGNANTS =====
-            // Persistance de la configuration optimale pour réutilisation
-            hyperparamsRepository.saveHyperparams(symbol, bestConfig, 0);
 
             try {
                 // ===== SAUVEGARDE DU MODÈLE COMPLET =====
@@ -1259,7 +1247,7 @@ public class LstmTuningService {
         return (expPos * pfAdj * winRate) / (denom + 1e-9);
     }
 
-    private static class TuningResult {
+    public static class TuningResult {
         LstmConfig config;
         MultiLayerNetwork model;
         LstmTradePredictor.ScalerSet scalers;
@@ -1890,7 +1878,6 @@ public class LstmTuningService {
     }
     private void persistBest(String symbol, PhaseAggregate pa, JdbcTemplate jdbcTemplate, double ratio){
         if(pa.bestConfig==null||pa.bestModel==null||pa.bestScalers==null){ logger.warn("[TUNING-2PH][PERSIST] Objets null – skip"); return; }
-        try { hyperparamsRepository.saveHyperparams(symbol, pa.bestConfig, pa.phaseGrid); } catch(Exception e){ logger.error("[TUNING-2PH][PERSIST] saveHyperparams échec: {}", e.getMessage()); }
         try { synchronized (modelSaveLock){ lstmTradePredictor.saveModelToDb(symbol, jdbcTemplate, pa.bestModel, pa.bestConfig, pa.bestScalers, pa.bestMse,
                 pa.profitFactor, pa.winRate, pa.maxDrawdown, pa.rmse, pa.sumProfit, pa.totalTrades, pa.bestBusinessScore, pa.totalSeriesTested,
             pa.phaseGrid,

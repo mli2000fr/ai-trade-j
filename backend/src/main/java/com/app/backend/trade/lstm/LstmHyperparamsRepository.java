@@ -11,7 +11,6 @@ import java.util.List;
 
 /**
  * Repository (accès base de données) dédié au stockage et à la récupération :
- * 1. Des hyperparamètres d'un modèle LSTM (table: lstm_hyperparams)
  * 2. Des métriques de tuning associées (table: lstm_tuning_metrics)
  *
  * Points importants pour un débutant :
@@ -49,26 +48,6 @@ public class LstmHyperparamsRepository {
     // Très important : ne pas changer l'ordre des colonnes sans ajuster l'ordre des paramètres.
     // =========================================================
 
-    /**
-     * Requête d'UPSERT (via REPLACE INTO) des hyperparamètres.
-     * CURRENT_TIMESTAMP met à jour automatiquement la colonne updated_date.
-     */
-    private static final String SQL_SAVE_HYPERPARAMS =
-            "REPLACE INTO lstm_hyperparams (" +
-                    "symbol, window_size, lstm_neurons, dropout_rate, learning_rate, " +
-                    "num_epochs, patience, min_delta, k_folds, optimizer, l1, l2, normalization_scope, " +
-                    "normalization_method, swing_trade_type, num_layers, bidirectional, attention, features, horizon_bars, " +
-                    "threshold_type, threshold_k, limit_prediction_pct, batch_size, cv_mode, use_scalar_v2, use_log_return_target, use_walk_forward_v2, " +
-                    "walk_forward_splits, embargo_bars, seed, business_profit_factor_cap, business_drawdown_gamma, capital, risk_pct, sizing_k, fee_pct, slippage_pct, " +
-                    "kl_drift_threshold, mean_shift_sigma_threshold, use_multi_horizon_avg, entry_threshold_factor, phase) " +
-                    // 42 colonnes ci-dessus => 42 placeholders ci-dessous
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
-
-    /**
-     * Requête de sélection d'un jeu d'hyperparamètres selon le symbole (clé).
-     */
-    private static final String SQL_LOAD_HYPERPARAMS =
-            "SELECT * FROM lstm_hyperparams WHERE symbol = ?";
 
     /**
      * Requête d'insertion des métriques de tuning. Pas de REPLACE ici : on garde l'historique.
@@ -95,84 +74,6 @@ public class LstmHyperparamsRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    // =========================================================
-    // Méthodes publiques (API du repository)
-    // =========================================================
-
-    /**
-     * Sauvegarde (ou remplace) les hyperparamètres associés à un symbole.
-     * REPLACE INTO => si la clé existe déjà, elle est remplacée (équivalent à un UPSERT).
-     *
-     * @param symbol symbole boursier (clé primaire attendue dans la table).
-     * @param config objet contenant tous les hyperparamètres.
-     */
-    public void saveHyperparams(String symbol, LstmConfig config, int phase) {
-        // Important : l'ordre des paramètres DOIT correspondre strictement
-        // à l'ordre des colonnes dans SQL_SAVE_HYPERPARAMS ci-dessus.
-        jdbcTemplate.update(
-                SQL_SAVE_HYPERPARAMS,
-                symbol,
-                config.getWindowSize(),
-                config.getLstmNeurons(),
-                config.getDropoutRate(),
-                config.getLearningRate(),
-                config.getNumEpochs(),
-                config.getPatience(),
-                config.getMinDelta(),
-                config.getKFolds(),
-                config.getOptimizer(),
-                config.getL1(),
-                config.getL2(),
-                config.getNormalizationScope(),
-                config.getNormalizationMethod(),
-                config.getSwingTradeType(),
-                config.getNumLstmLayers(),
-                config.isBidirectional(),
-                config.isAttention(),
-                gson.toJson(config.getFeatures()), // Conversion liste -> JSON
-                config.getHorizonBars(),
-                config.getThresholdType(),
-                config.getThresholdK(),
-                config.getLimitPredictionPct(),
-                config.getBatchSize(),
-                config.getCvMode(),
-                config.isUseScalarV2(),
-                config.isUseLogReturnTarget(),
-                config.isUseWalkForwardV2(),
-                config.getWalkForwardSplits(),
-                config.getEmbargoBars(),
-                config.getSeed(),
-                config.getBusinessProfitFactorCap(),
-                config.getBusinessDrawdownGamma(),
-                config.getCapital(),
-                config.getRiskPct(),
-                config.getSizingK(),
-                config.getFeePct(),
-                config.getSlippagePct(),
-                config.getKlDriftThreshold(),
-                config.getMeanShiftSigmaThreshold(),
-                config.isUseMultiHorizonAvg(),
-                config.getEntryThresholdFactor(),
-                phase
-        );
-    }
-
-    /**
-     * Charge les hyperparamètres pour un symbole donné.
-     * Retourne null si aucun enregistrement trouvé (le code appelant doit gérer ce cas).
-     *
-     * @param symbol symbole boursier.
-     * @return LstmConfig ou null.
-     */
-    public LstmConfig loadHyperparams(String symbol) {
-        // query(..., ResultSetExtractor, params...) :
-        // rs.next() ? ... : null => on récupère la première ligne si disponible.
-        return jdbcTemplate.query(
-                SQL_LOAD_HYPERPARAMS,
-                rs -> rs.next() ? mapRowToConfig(rs) : null,
-                symbol
-        );
-    }
 
     /**
      * Enregistre une ligne de métriques de tuning (historisation).

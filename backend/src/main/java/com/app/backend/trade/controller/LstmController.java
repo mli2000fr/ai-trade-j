@@ -74,6 +74,7 @@ public class LstmController {
      */
     @GetMapping("/predict")
     public PreditLsdm predictNextClose(@RequestParam String symbol) throws Exception {
+
         return lsdmHelper.getPredit(symbol);
     }
 

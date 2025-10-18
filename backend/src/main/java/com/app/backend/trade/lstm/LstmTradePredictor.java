@@ -36,6 +36,8 @@ package com.app.backend.trade.lstm;
 import com.app.backend.trade.model.PreditLsdm;
 import com.app.backend.trade.model.SignalType;
 import com.app.backend.trade.model.TradeStylePrediction;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
 import org.deeplearning4j.datasets.iterator.utilty.ListDataSetIterator;
 import org.deeplearning4j.datasets.iterator.AsyncDataSetIterator;
 import org.deeplearning4j.nn.conf.MultiLayerConfiguration;
@@ -2870,28 +2872,6 @@ public class LstmTradePredictor {
                 phase_grid, number_grid, phase_1_top_n, phase_1_top_n_label, holdOut, tuningResult, ratio);
     }
 
-    /**
-     * Charge uniquement le modèle (ancienne version sans scalers).
-     */
-    public MultiLayerNetwork loadModelFromDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException {
-        LstmConfig config = hyperparamsRepository.loadHyperparams(symbol);
-        if (config == null) throw new IOException("Aucun hyperparamètre pour " + symbol);
-
-        String sql = "SELECT model_blob, normalization_scope FROM lstm_models WHERE symbol = ?";
-        try {
-            Map<String, Object> result = jdbcTemplate.queryForMap(sql, symbol);
-            byte[] modelBytes = (byte[]) result.get("model_blob");
-            if (modelBytes != null) {
-                ByteArrayInputStream bais = new ByteArrayInputStream(modelBytes);
-                MultiLayerNetwork model = ModelSerializer.restoreMultiLayerNetwork(bais);
-                logger.info("Modèle chargé {}", symbol);
-                return model;
-            }
-        } catch (EmptyResultDataAccessException e) {
-            throw new IOException("Modèle non trouvé");
-        }
-        return null;
-    }
 
     /**
      * Charge modèle + scalers (JSON) + hyperparams.
@@ -2899,15 +2879,48 @@ public class LstmTradePredictor {
     public LoadedModel loadModelAndScalersFromDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException {
 
         // Sélection explicite des colonnes nécessaires
-        String sql = "SELECT model_blob, scalers_json, total_series_tested, business_score, sum_profit, max_drawdown, win_rate, profit_factor, ratio, phase, rendement FROM lstm_models WHERE symbol = ?";
+        String sql = "SELECT * FROM lstm_models WHERE symbol = ? order by sum_profit desc limit 1";
 
         try {
             Map<String,Object> result = jdbcTemplate.queryForMap(sql, symbol);
 
             // Récupération sécurisée des colonnes
             Object modelBlobObj = result.get("model_blob");
-            byte[] modelBlob = modelBlobObj instanceof byte[] ? (byte[]) modelBlobObj : null;
+            //byte[] modelBlob = modelBlobObj instanceof byte[] ? (byte[]) modelBlobObj : null;
+
+            byte[] modelBlob = null;
+            try {
+                if (modelBlobObj instanceof byte[]) {
+                    modelBlob = (byte[]) modelBlobObj;
+                } else if (modelBlobObj instanceof java.sql.Blob) {
+                    java.sql.Blob blob = (java.sql.Blob) modelBlobObj;
+                    try (InputStream is = blob.getBinaryStream(); ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                        byte[] buf = new byte[8192];
+                        int r;
+                        while ((r = is.read(buf)) > 0) baos.write(buf, 0, r);
+                        modelBlob = baos.toByteArray();
+                    }
+                } else if (modelBlobObj instanceof String) {
+                    String s = (String) modelBlobObj;
+                    try {
+                        modelBlob = java.util.Base64.getDecoder().decode(s);
+                    } catch (IllegalArgumentException iae) {
+                        // Essayer hex
+                        try { modelBlob = hexStringToByteArray(s); } catch (Exception ex) { /* ignore */ }
+                    }
+                }
+            } catch (Exception e) {
+                logger.warn("[LOAD][MODEL] erreur lecture model_blob type={} : {}", modelBlobObj != null ? modelBlobObj.getClass().getName() : "null", e.getMessage());
+            }
+
+
             String scalersJson = result.get("scalers_json") != null ? result.get("scalers_json").toString() : null;
+            String hyperparams = result.get("hyperparams_json") != null ? result.get("hyperparams_json").toString() : null;
+            if(hyperparams == null) throw new IOException("Aucun hyperparamètre pour " + symbol);
+            ObjectMapper mapper = new ObjectMapper();
+            LstmConfig config = mapper.readValue(hyperparams, LstmConfig.class);
+            String tuning_result = result.get("tuning_result_json") != null ? result.get("tuning_result_json").toString() : null;
+            LstmTuningService.TuningResult resultTuning = new Gson().fromJson(tuning_result, LstmTuningService.TuningResult.class);
 
             // Fonctions utilitaires de parsing
             java.util.function.Function<Object, Double> toDouble = (o) -> {
@@ -2934,10 +2947,51 @@ public class LstmTradePredictor {
             // Restitution du modèle si présent
             MultiLayerNetwork model = null;
             if (modelBlob != null) {
-                try (ByteArrayInputStream bais = new ByteArrayInputStream(modelBlob)) {
+                // Log utile pour debug : taille et premiers octets (vérifier signature ZIP PK..)
+                try {
+                    int len = modelBlob.length;
+                    byte[] head = Arrays.copyOfRange(modelBlob, 0, Math.min(8, len));
+                    logger.info("[LOAD][MODEL] model_blob size={} head={}", len, bytesToHex(head));
+                } catch (Exception ignored) {}
+                try{
+                    ByteArrayInputStream bais = new ByteArrayInputStream(modelBlob);
                     model = ModelSerializer.restoreMultiLayerNetwork(bais);
                 } catch (Exception e) {
                     logger.warn("Impossible de restaurer le modèle depuis la BDD pour {}: {}", symbol, e.getMessage());
+                    try {
+                        // Écrire le blob dans un fichier temporaire pour inspection
+                        String tmpDir = System.getProperty("java.io.tmpdir");
+                        java.nio.file.Path tmpFile = java.nio.file.Files.createTempFile(java.nio.file.Paths.get(tmpDir), "model_blob_", ".bin");
+                        java.nio.file.Files.write(tmpFile, modelBlob);
+                        logger.warn("[LOAD][MODEL][DIAG] Dump temporaire écrit: {} (size={})", tmpFile.toString(), modelBlob.length);
+                    } catch (Exception ex) {
+                        logger.warn("[LOAD][MODEL][DIAG] Impossible d'écrire dump temporaire: {}", ex.getMessage());
+                    }
+
+                    // Tenter d'énumérer les entrées ZIP pour voir ce que contient le fichier
+                    try (java.io.ByteArrayInputStream bais2 = new java.io.ByteArrayInputStream(modelBlob);
+                         java.util.zip.ZipInputStream zis = new java.util.zip.ZipInputStream(bais2)) {
+                        java.util.zip.ZipEntry ze;
+                        List<String> entries = new ArrayList<>();
+                        while ((ze = zis.getNextEntry()) != null) {
+                            entries.add(String.format("%s (size=%d)", ze.getName(), ze.getSize()));
+                        }
+                        logger.warn("[LOAD][MODEL][DIAG] Zip entries: {}", String.join(", ", entries));
+                    } catch (Exception ex) {
+                        logger.warn("[LOAD][MODEL][DIAG] Impossible de lister entrées ZIP: {}", ex.getMessage());
+                    }
+
+                    // Essayer de restaurer en tant que ComputationGraph (au cas où le modèle enregistré serait un ComputationGraph)
+                    try (ByteArrayInputStream bais3 = new ByteArrayInputStream(modelBlob)) {
+                        try {
+                            org.deeplearning4j.nn.graph.ComputationGraph cg = ModelSerializer.restoreComputationGraph(bais3);
+                            if (cg != null) {
+                                logger.warn("[LOAD][MODEL][DIAG] Le blob contient un ComputationGraph (pas un MultiLayerNetwork). Conversion impossible automatique.");
+                            }
+                        } catch (Exception ex) {
+                            logger.debug("[LOAD][MODEL][DIAG] restoreComputationGraph échoué: {}", ex.getMessage());
+                        }
+                    } catch (Exception ignored) {}
                 }
             }
 
@@ -2945,7 +2999,6 @@ public class LstmTradePredictor {
             ScalerSet scalers = null;
             if (scalersJson != null && !scalersJson.isBlank()) {
                 try {
-                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                     scalers = mapper.readValue(scalersJson, ScalerSet.class);
                 } catch (Exception e) {
                     logger.warn("Impossible de parser scalers_json pour {} : {}", symbol, e.getMessage());
@@ -2958,6 +3011,8 @@ public class LstmTradePredictor {
             LoadedModel lm = new LoadedModel();
             lm.model = model;
             lm.scalers = scalers;
+            lm.config = config;
+            lm.resultTuning = resultTuning;
             lm.rendement = Double.isFinite(rendement) ? rendement : 0.0;
             lm.totalSerieTested = totalSerieTested;
             lm.businnesScore = Double.isFinite(businnesScore) ? businnesScore : 0.0;
@@ -2975,6 +3030,27 @@ public class LstmTradePredictor {
         }
     }
 
+    // Utilitaire: convertit une chaine hex en tableau d'octets
+    private static byte[] hexStringToByteArray(String s) {
+        s = s.replaceAll("\\s+", "");
+        int len = s.length();
+        if (len % 2 != 0) throw new IllegalArgumentException("Invalid hex string");
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
+                    + Character.digit(s.charAt(i+1), 16));
+        }
+        return data;
+    }
+
+    // Utilitaire: affiche des octets en hex pour debug
+    private static String bytesToHex(byte[] bytes) {
+        if (bytes == null) return "null";
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) sb.append(String.format("%02X", b));
+        return sb.toString();
+    }
+
     /**
      * Wrapper pour retour groupé.
      */
@@ -2989,6 +3065,8 @@ public class LstmTradePredictor {
         public double winRate;
         public double profitFactor;
         public double ratio;
+        public LstmTuningService.TuningResult resultTuning;
+        public LstmConfig config;
         public int phase;
         public LoadedModel(){}
     }
