@@ -59,6 +59,7 @@ interface BestInOutStrategy {
   rendementSum?: any;
   rendementDiff?: any;
   rendementScore?: any;
+  top?: number;
   finalResult: {
     rendement: number;
     tradeCount: number;
@@ -100,6 +101,7 @@ interface BestCombinationResult {
   outStrategyNames: string[];
   inParams: Record<string, any>;
   outParams: Record<string, any>;
+  top?: number;
   finalResult: {
     rendement: number;
     maxDrawdown: number;
@@ -156,6 +158,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [indicesMix, setIndicesMix] = useState<{ [symbol: string]: SignalInfo | string }>({});
   const [sort, setSort] = useState<string>('single:score_swing_trade');
   const [topProfil, setTopProfil] = useState(true);
+  const [topClassement, setTopClassement] = useState(false);
   const [bougies, setBougies] = useState<any[]>([]);
   const [bougiesLoading, setBougiesLoading] = useState(false);
   const [bougiesError, setBougiesError] = useState<string | null>(null);
@@ -255,6 +258,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
         const lstm = lstmResults[row.single.symbol];
         lstmOk = (typeof lstm === 'object' && lstm.signal && lstm.signal.startsWith('BUY')) ? true : false;
       }
+      let classement = row?.single?.top || row?.mix?.top;
+      if (topClassement && classement == null) return false;
       return singleOk && mixOk && lstmOk;
     });
   };
@@ -389,6 +394,19 @@ const BestPerformanceSymbolBlock: React.FC = () => {
               <FormControlLabel
                 control={
                   <Checkbox
+                    checked={topClassement}
+                    onChange={e => setTopClassement(e.target.checked)}
+                    disabled={searchMode}
+                    size="small"
+                  />
+                }
+                label="Top classement"
+                sx={{ ml: 2 }}
+              />
+
+              <FormControlLabel
+                control={
+                  <Checkbox
                     checked={buySingleOnly}
                     onChange={e => setBuySingleOnly(e.target.checked)}
                     disabled={searchMode}
@@ -515,7 +533,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
+                    <TableCell colSpan={2} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                     <TableCell colSpan={10} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', fontSize: '1rem' }}>LSTM</TableCell>
                     <TableCell colSpan={8} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
                     <TableCell colSpan={8} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
@@ -524,6 +542,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <TableRow>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Classement</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Last Price</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9',  minWidth: 120, width: 130, maxWidth: 300 }}>Prédit Price</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 120, width: 130, maxWidth: 300  }}>Prédit Indice</TableCell>
@@ -596,6 +615,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                       const lstm = lstmResults[row.single.symbol];
                       lstmOk = (typeof lstm === 'object' && lstm.signal && lstm.signal.startsWith('BUY')) ? true : false;
                     }
+                    let classement = row?.single?.top || row?.mix?.top;
+                    if (topClassement && classement == null) return false;
                     return singleOk && mixOk && lstmOk;
                   }).map((row, i) => {
                     let bgColor = undefined;
@@ -611,6 +632,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     // Vérifie que indice est un objet et non une chaîne
                     if (indice && indice.type === 'BUY') bgColor = 'rgba(76, 175, 80, 0.5)';
                     if (indice && indice.type === 'SELL') bgColor = 'rgba(244, 67, 54, 0.05)';
+                    const classement = row?.single?.top || row?.mix?.top;
                     return (
                       <TableRow
                         key={i}
@@ -629,6 +651,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                             <span>{row.single.symbol}</span>
                           </Tooltip>
                         </TableCell>
+                        <TableCell align="center"><b>{classement == null ? '' : classement}</b></TableCell>
                         <TableCell align="center">{
                             lstmResults[row.single.symbol] === 'pending'
                               ? (<CircularProgress size={16} />)

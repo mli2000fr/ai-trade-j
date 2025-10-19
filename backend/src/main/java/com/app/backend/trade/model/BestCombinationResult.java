@@ -22,6 +22,7 @@ public class BestCombinationResult {
     public RiskResult finalResult;
     public RiskResult testResult;
     public ParamsOptim contextOptim;
+    public Integer top;
 
     public static BestCombinationResult empty() {
         BestCombinationResult result = new BestCombinationResult();

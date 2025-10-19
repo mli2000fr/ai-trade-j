@@ -430,7 +430,7 @@ public class BestCombinationStrategyHelper {
 
 
     public BestCombinationResult getBestCombinationResult(String symbol) {
-        String sql = "SELECT * FROM best_in_out_mix_strategy WHERE symbol = ? ORDER BY update_date DESC LIMIT 1";
+        String sql = "SELECT s.*, stm.top FROM best_in_out_mix_strategy s LEFT JOIN swing_trade_metrics stm ON s.symbol = stm.symbol WHERE s.symbol = ? ORDER BY s.update_date DESC LIMIT 1";
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, symbol);
         if (rows.isEmpty()) return null;
         Map<String, Object> row = rows.get(0);
@@ -462,6 +462,14 @@ public class BestCombinationStrategyHelper {
                 .nbSimples(row.get("nb_simples") != null ? ((Integer) row.get("nb_simples")).intValue() : 0)
                 .build();
         result.testResult = new com.google.gson.Gson().fromJson((String)row.get("result_test"), RiskResult.class);
+        // Ajout du champ top
+        if (row.containsKey("top") && row.get("top") != null) {
+            try {
+                result.top = ((Number) row.get("top")).intValue();
+            } catch (Exception e) {
+                result.top = null;
+            }
+        }
         return result;
     }
 
@@ -939,9 +947,12 @@ public class BestCombinationStrategyHelper {
     public List<BestCombinationResult> getBestPerfActions(Integer limit, String sort, Boolean filtered){
         String orderBy = (sort == null || sort.isBlank()) ? "rendement_score" : sort;
 
-        String sql = "SELECT s.*, a.name FROM best_in_out_mix_strategy s JOIN alpaca_asset a ON s.symbol = a.symbol WHERE s.profit_factor <> 0 AND s.max_drawdown <> 0 AND s.win_rate < 1 and filtre_out = false";
+        String sql = "SELECT s.*, a.name, stm.top FROM best_in_out_mix_strategy s " +
+                "JOIN alpaca_asset a ON s.symbol = a.symbol " +
+                "LEFT JOIN swing_trade_metrics stm ON s.symbol = stm.symbol " +
+                "WHERE s.profit_factor <> 0 AND s.max_drawdown <> 0 AND s.win_rate < 1 and s.filtre_out = false";
         if (filtered != null && filtered) {
-            sql += " AND fltred_out = false";
+            sql += " AND s.fltred_out = false";
         }
         sql += " ORDER BY s." + orderBy + " DESC";
         if (limit != null && limit > 0) {
@@ -977,9 +988,26 @@ public class BestCombinationStrategyHelper {
                     .nbSimples(rs.getInt("nb_simples"))
                     .build();
             result.testResult = new com.google.gson.Gson().fromJson(rs.getString("result_test"), RiskResult.class);
+            // Ajout du champ top
+            if (hasColumn(rs, "top")) {
+                try {
+                    result.top = rs.getInt("top");
+                } catch (Exception e) {
+                    result.top = null;
+                }
+            }
             return result;
         });
         return results;
+    }
+
+    // Vérifie si le ResultSet contient la colonne demandée
+    private boolean hasColumn(java.sql.ResultSet rs, String columnName) {
+        try {
+            return rs.findColumn(columnName) > 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
 
