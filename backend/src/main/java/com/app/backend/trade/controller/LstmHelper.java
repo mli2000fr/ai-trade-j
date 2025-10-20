@@ -12,7 +12,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Controller;
 import org.ta4j.core.BarSeries;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import org.slf4j.Logger;
@@ -143,7 +142,7 @@ public class LstmHelper {
      * @return PreditLsdm objet contenant signal + prix prédits + métadonnées
      * @throws IOException si erreur IO interne (propagée depuis prédicteur)
      */
-    public PreditLsdm getPredit(String symbol) throws Exception {
+    public PreditLsdm getPredit(String symbol) {
         // 1. Vérifier si une prédiction du jour existe déjà (évite recalcul)
         PreditLsdm preditLsdmDb = this.getPreditFromDB(symbol);
         if (preditLsdmDb != null) {

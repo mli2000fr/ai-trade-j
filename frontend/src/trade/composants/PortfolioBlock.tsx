@@ -34,9 +34,11 @@ interface PortfolioBlockProps {
 }
 interface SignalInfo {
     symbol: string;
-    type: string;
-    date?: string | null;
-    dateStr?: string;
+    typeSingle: string;
+    typeMix: string;
+    typeLstm?: string;
+    positionLstm: string;
+    sell?: boolean | null;
 }
 
 const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, loading, compteId, resetSellErrorKey, onRefreshPortfolio }) => {
@@ -88,7 +90,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
     if (symbolsToFetch.length === 0) return;
     symbolsToFetch.forEach((symbol: string) => {
       setIndices(prev => ({ ...prev, [symbol]: 'pending' }));
-      fetch(`/api/stra/strategies/get_indice?symbol=${encodeURIComponent(symbol)}`)
+      fetch(`/api/result/indice?symbol=${encodeURIComponent(symbol)}`)
         .then(res => res.json())
         .then((data: SignalInfo) => {
           setIndices(prev => ({ ...prev, [symbol]: data ?? '-' }));
@@ -312,7 +314,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                   <TableHead>
                     <TableRow>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Indice</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Indice (S/M/L)</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Prix d'achat</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Prix actuel</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Quantité</TableCell>
@@ -327,16 +329,17 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                       const isNegative = pos.unrealized_pl < 0;
                       const cellStyle = isNegative ? { color: 'error.main' } : {};
                       const indice = indices[pos.symbol] as SignalInfo | string;
-                      const isSellSignal = typeof indice === 'object' && indice !== null && indice.type === 'SELL';
+                      const signalStr = typeof indice === 'object' ? ('('+indice?.typeSingle?.charAt(0)+'/'+indice?.typeMix?.charAt(0)+'/'+indice?.typeLstm?.charAt(0)+')') : '-';
+                      const isSellSignal = typeof indice === 'object' && indice !== null && indice.sell === true;
                       const isPendingSignal = indice === 'pending';
                       const signalCellStyle = isSellSignal ? { color: 'error.main', fontWeight: 'bold' } : cellStyle;
                       let signalCellContent;
                       if (isPendingSignal) {
                         signalCellContent = <CircularProgress size={16} />;
                       } else if (isSellSignal) {
-                        signalCellContent = <Button variant="contained" color="error" size="small" onClick={() => handleSell(pos)} disabled={pos.qty <= 0}>SELL</Button>;
-                      } else if (typeof indice === 'object' && indice !== null && indice.type) {
-                        signalCellContent = indice.type + ' (' + indice.dateStr + ')';
+                        signalCellContent = <Button variant="contained" color="error" size="small" onClick={() => handleSell(pos)} disabled={pos.qty <= 0}>SELL {signalStr}</Button>;
+                      } else if (typeof indice === 'object' && indice !== null && indice.typeLstm) {
+                        signalCellContent = indice.positionLstm + ' ' + signalStr;
                       } else if (typeof indice === 'string') {
                         signalCellContent = indice;
                       } else {

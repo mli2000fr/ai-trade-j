@@ -1,6 +1,7 @@
 package com.app.backend.trade.controller;
 
 
+import com.app.backend.trade.model.GlobalIndice;
 import com.app.backend.trade.model.MixResultat;
 import com.app.backend.trade.model.SymbolPerso;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,5 +42,8 @@ public class GlobalStrategyController {
     }
 
 
-
+    @GetMapping("/indice")
+    public ResponseEntity<GlobalIndice> getIndice(@RequestParam(value = "symbol", required = true) String symbol) {
+        return ResponseEntity.ok(globalStrategyHelper.getIndice(symbol));
+    }
 }

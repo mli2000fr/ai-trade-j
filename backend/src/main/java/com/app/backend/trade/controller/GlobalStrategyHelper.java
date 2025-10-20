@@ -1,9 +1,7 @@
 package com.app.backend.trade.controller;
 
 
-import com.app.backend.trade.model.BestCombinationResult;
-import com.app.backend.trade.model.MixResultat;
-import com.app.backend.trade.model.SymbolPerso;
+import com.app.backend.trade.model.*;
 import com.app.backend.trade.strategy.BestInOutStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,6 +19,9 @@ public class GlobalStrategyHelper {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private LstmHelper lstmHelper;
 
     @Autowired
     private BestCombinationStrategyHelper bestCombinationStrategyHelper;
@@ -84,6 +85,20 @@ public class GlobalStrategyHelper {
                 .id(rs.getString("id"))
                 .build()
         );
+    }
+    public GlobalIndice getIndice(String symbol){
+        SignalInfo singleS = strategieHelper.getBestInOutSignal(symbol);
+        SignalInfo mixS = bestCombinationStrategyHelper.getSignal(symbol);
+        PreditLsdm preditLsdm = lstmHelper.getPredit(symbol);
+        return GlobalIndice.builder()
+                .typeSingle(singleS.getType())
+                .typeMix(mixS.getType())
+                .typeLstm(preditLsdm.getSignal())
+                .symbol(symbol)
+                .positionLstm(preditLsdm.getPosition())
+                .isSell(SignalType.SELL.name().equals(preditLsdm.getSignal().name()))
+                .build();
+
     }
 
 }
