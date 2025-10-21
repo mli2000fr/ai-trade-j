@@ -537,7 +537,6 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     <TableCell colSpan={10} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', fontSize: '1rem' }}>LSTM</TableCell>
                     <TableCell colSpan={8} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
                     <TableCell colSpan={8} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
