@@ -950,7 +950,7 @@ public class BestCombinationStrategyHelper {
         String sql = "SELECT s.*, a.name, stm.top FROM best_in_out_mix_strategy s " +
                 "JOIN alpaca_asset a ON s.symbol = a.symbol " +
                 "LEFT JOIN swing_trade_metrics stm ON s.symbol = stm.symbol " +
-                "WHERE s.profit_factor <> 0 AND s.max_drawdown <> 0 AND s.win_rate < 1 and s.filtre_out = false";
+                "WHERE s.profit_factor <> 0 AND s.max_drawdown <> 0 AND s.win_rate < 1 and a.filtre_out = false";
         if (filtered != null && filtered) {
             sql += " AND s.fltred_out = false";
         }
