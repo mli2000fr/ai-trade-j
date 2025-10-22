@@ -53,4 +53,9 @@ public class GlobalStrategyController {
         //http://localhost:8080/api/result/getSymbolBuy
         return ResponseEntity.ok(globalStrategyHelper.getSymbolBuy());
     }
+
+    @GetMapping("/symbol-buy/monitor")
+    public ResponseEntity<Integer> getSymbolBuyMonitor() {
+        return ResponseEntity.ok(globalStrategyHelper.getLastSymbolBuyCount());
+    }
 }

@@ -3,6 +3,7 @@ import { Box, Tabs, Tab } from '@mui/material';
 import CroisedStrategiesMonitorPage from './CroisedStrategiesMonitorPage';
 import MixStrategiesMonitorPage from './MixStrategiesMonitorPage';
 import UpdateDailyValueMonitorPage from './UpdateDailyValueMonitorPage';
+import SymbolBuyMonitorPage from './SymbolBuyMonitorPage';
 import TuningMonitorPage from './TuningMonitorPage';
 
 const MonitoringPage: React.FC = () => {

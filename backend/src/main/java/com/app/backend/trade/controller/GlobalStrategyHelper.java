@@ -30,6 +30,8 @@ public class GlobalStrategyHelper {
     private static final String FORMAT_DATE = "dd_MM_yy";
     private static final String NOM_SYM_BUY = "TopBuy";
 
+    private int lastSymbolBuyCount = 0;
+
     public List<MixResultat> getBestScoreAction(Integer limit, String type, String sort, String search, Boolean topProfil, Boolean topClassement) {
 
         if(search != null && !search.isEmpty()) {
@@ -137,7 +139,7 @@ public class GlobalStrategyHelper {
 
         List<SymbolPerso> listSymPerso = this.getSymbolsPerso();
         boolean isExistant = listSymPerso.stream().anyMatch(sp -> lastTradingDayStr.equals(sp.getDate())
-            && NOM_SYM_BUY.equals(sp.getName()));
+            && sp.getName().startsWith(NOM_SYM_BUY));
         if(isExistant){
             return "existant";
         }
@@ -147,24 +149,30 @@ public class GlobalStrategyHelper {
             return rs.getString("symbol");
         });
         List<String> listeSymBut = new ArrayList<>();
+        int executedCount = 0;
         for(String symbol : listeSym) {
             SignalInfo single = strategieHelper.getBestInOutSignal(symbol);
             SignalInfo mix = bestCombinationStrategyHelper.getSignal(symbol);
             PreditLsdm predit = lstmHelper.getPredit(symbol, "rendement");
-            if(single != null && mix != null && predit != null
+            if(single != null && mix != null
             && single.getType() == SignalType.BUY
             && mix.getType() == SignalType.BUY
-            && predit.getSignal() == SignalType.BUY) {
+                    && predit != null && predit.getSignal() == SignalType.BUY) {
                 listeSymBut.add(symbol);
             }
+            executedCount++;
+            lastSymbolBuyCount = executedCount;
         }
         String symbolBuy = String.join(",", listeSymBut);
         String insertSql = "INSERT INTO symbol_perso (name, created_at, symbols) VALUES (?, ?, ?)";
         jdbcTemplate.update(insertSql,
-                "symbol_buy_" + lastTradingDayStr,
+                NOM_SYM_BUY + lastTradingDayStr,
                 lastTradingDay,
                 symbolBuy);
         return symbolBuy;
     }
 
+    public int getLastSymbolBuyCount() {
+        return lastSymbolBuyCount;
+    }
 }
