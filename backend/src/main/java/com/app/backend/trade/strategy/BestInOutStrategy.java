@@ -15,21 +15,21 @@ public class BestInOutStrategy {
     public Object entryParams;
     public String exitName;
     public Object exitParams;
-    public RiskResult result;
-    public RiskResult check;
+    public RiskResult finalResult;
+    public RiskResult testResult;
     public ParamsOptim paramsOptim;
-    public double rendementSum;
-    public double rendementDiff;
-    public double rendementScore;
 
-    public static BestInOutStrategy empty() {
+    public static BestInOutStrategy empty(){
+        return empty("");
+    }
+    public static BestInOutStrategy empty(String symbol) {
         BestInOutStrategy result = new BestInOutStrategy();
-        result.symbol = "";
+        result.symbol = symbol;
         result.entryName = "";
         result.entryParams = null;
         result.exitName = "";
         result.exitParams = null;
-        result.result = RiskResult.builder()
+        result.finalResult = RiskResult.builder()
             .rendement(0.0)
             .maxDrawdown(0.0)
             .tradeCount(0)
@@ -40,9 +40,8 @@ public class BestInOutStrategy {
             .maxTradeGain(0.0)
             .maxTradeLoss(0.0)
             .scoreSwingTrade(0.0)
-            .fltredOut(false)
             .build();
-        result.check = RiskResult.builder()
+        result.testResult = RiskResult.builder()
             .rendement(0.0)
             .maxDrawdown(0.0)
             .tradeCount(0)
@@ -53,12 +52,8 @@ public class BestInOutStrategy {
             .maxTradeGain(0.0)
             .maxTradeLoss(0.0)
             .scoreSwingTrade(0.0)
-            .fltredOut(false)
             .build();
         result.paramsOptim = null;
-        result.rendementSum = 0.0;
-        result.rendementDiff = 0.0;
-        result.rendementScore = 0.0;
         return result;
     }
 }

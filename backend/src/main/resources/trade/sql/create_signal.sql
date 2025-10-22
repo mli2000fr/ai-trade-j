@@ -1,8 +1,13 @@
 CREATE TABLE trade_ai.signal (
-    id int PRIMARY KEY AUTO_INCREMENT,
-    symbol VARCHAR(16) NOT NULL,
-    signal_single VARCHAR(16),
-    signal_mix VARCHAR(16),
-    single_created_at DATE,
-    mix_created_at DATE
+    symbol VARCHAR(20),
+    created_date DATE,
+    signal_single VARCHAR(20),
+    signal_mix VARCHAR(20),
+    signal_lstm VARCHAR(20),
+    price_lstm DOUBLE,
+    position_lstm VARCHAR(100),
+    price_clo DOUBLE,
+    PRIMARY KEY (symbol, created_date)
 );
+
+CREATE INDEX idx_symbol_created_date ON trade_ai.signal(symbol, created_date);

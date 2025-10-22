@@ -1,5 +1,6 @@
 CREATE TABLE trade_ai.symbol_perso (
-    id VARCHAR(64) PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    symbols VARCHAR(1000)
+    created_at DATE,
+    symbols TEXT NOT NULL
 );

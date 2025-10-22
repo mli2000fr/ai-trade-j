@@ -4,6 +4,7 @@ public enum SignalType {
     BUY,
     SELL,
     HOLD,
+    CONFIT,
     UP,
     DOWN,
     STABLE,

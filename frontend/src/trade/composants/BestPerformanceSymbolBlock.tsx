@@ -38,8 +38,9 @@ interface PreditLstm {
     lastClose: number;
     predictedClose: number;
     lastDate?: string | null;
-    signal?: SignalInfo;
+    signal?: string | null;
     position?: string | null;
+    loadedModel?: any | null;
 }
 
 interface SignalInfo {
@@ -58,31 +59,32 @@ interface BestInOutStrategy {
   rendementSum?: any;
   rendementDiff?: any;
   rendementScore?: any;
-  result: {
+  top?: number;
+  finalResult: {
     rendement: number;
     tradeCount: number;
     winRate: number;
     maxDrawdown: number;
     avgPnL: number;
+    sharpeRatio: number;
     profitFactor: number;
     avgTradeBars: number;
     maxTradeGain: number;
     maxTradeLoss: number;
     scoreSwingTrade?: number;
-    fltredOut?: boolean;
   };
-  check: {
+  testResult: {
     rendement: number;
     tradeCount: number;
     winRate: number;
     maxDrawdown: number;
     avgPnL: number;
+    sharpeRatio: number;
     profitFactor: number;
     avgTradeBars: number;
     maxTradeGain: number;
     maxTradeLoss: number;
     scoreSwingTrade?: number;
-    fltredOut?: boolean;
   };
   paramsOptim: {
     initialCapital: number;
@@ -99,31 +101,32 @@ interface BestCombinationResult {
   outStrategyNames: string[];
   inParams: Record<string, any>;
   outParams: Record<string, any>;
-  result: {
+  top?: number;
+  finalResult: {
     rendement: number;
     maxDrawdown: number;
+    avgPnL: number;
+    sharpeRatio: number;
     tradeCount: number;
     winRate: number;
-    avgPnL: number;
     profitFactor: number;
     avgTradeBars: number;
     maxTradeGain: number;
     maxTradeLoss: number;
     scoreSwingTrade?: number;
-    fltredOut?: boolean;
   };
-  check: {
+  testResult: {
     rendement: number;
     maxDrawdown: number;
+    avgPnL: number;
+    sharpeRatio: number;
     tradeCount: number;
     winRate: number;
-    avgPnL: number;
     profitFactor: number;
     avgTradeBars: number;
     maxTradeGain: number;
     maxTradeLoss: number;
     scoreSwingTrade?: number;
-    fltredOut?: boolean;
   };
   rendementSum: number;
   rendementDiff: number;
@@ -153,8 +156,10 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [limit, setLimit] = useState<number>(20);
   const [indices, setIndices] = useState<{ [symbol: string]: SignalInfo | string }>({});
   const [indicesMix, setIndicesMix] = useState<{ [symbol: string]: SignalInfo | string }>({});
-  const [sort, setSort] = useState<string>('single:rendement_score');
-  const [showOnlyNonFiltered, setShowOnlyNonFiltered] = useState(true);
+  const [sort, setSort] = useState<string>('single:score_swing_trade');
+  const [topProfil, setTopProfil] = useState(true);
+  const [topClassement, setTopClassement] = useState(false);
+  const [filtreClassement, setFiltreClassement] = useState(false);
   const [bougies, setBougies] = useState<any[]>([]);
   const [bougiesLoading, setBougiesLoading] = useState(false);
   const [bougiesError, setBougiesError] = useState<string | null>(null);
@@ -165,6 +170,9 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [selectedSymbolPerso, setSelectedSymbolPerso] = useState<string>('');
   const [symbolPersoData, setSymbolPersoData] = useState<{symbols: string[]} | null>(null);
   const [isToday, setIsToday] = useState(false);
+  const [buySingleOnly, setBuySingleOnly] = useState(false);
+  const [buyMixOnly, setBuyMixOnly] = useState(false);
+  const [buyLstmOnly, setBuyLstmOnly] = useState(false);
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const fetchData = (searchModeParam = false, searchValueParam = '') => {
@@ -177,8 +185,11 @@ const BestPerformanceSymbolBlock: React.FC = () => {
       const type = sort.split(':')[0];
       const tri = sort.split(':')[1];
       url += `limit=${limit}&type=${type}&sort=${tri}`;
-      if (showOnlyNonFiltered) {
-        url += `&filtered=true`;
+      if (topProfil) {
+        url += `&topProfil=true`;
+      }
+      if (topClassement) {
+        url += `&topClassement=true`;
       }
     }
     fetch(url)
@@ -194,7 +205,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   useEffect(() => {
     fetchData(false, '');
     // eslint-disable-next-line
-  }, [limit, sort, showOnlyNonFiltered]);
+  }, [limit, sort, topProfil, topClassement]);
 
   useEffect(() => {
     if (!data || data.length === 0) return;
@@ -221,9 +232,11 @@ const BestPerformanceSymbolBlock: React.FC = () => {
         .catch(() => {
           setIndicesMix(prev => ({ ...prev, [symbol]: '-' }));
         });
-      // Ajout fetch LSDM
+      // Ajout fetch LSTM
       setLstmResults(prev => ({ ...prev, [symbol]: 'pending' }));
-      fetch(`/api/lstm/predict?symbol=${encodeURIComponent(symbol)}`)
+      const type = sort.split(':')[0];
+      const index = type === 'lstm' ? sort.split(':')[1] : 'rendement';
+      fetch(`/api/lstm/predict?symbol=${encodeURIComponent(symbol)}&index=${encodeURIComponent(index)}`)
         .then(res => res.json())
         .then((data: any) => {
           setLstmResults(prev => ({ ...prev, [symbol]: data ?? '-' }));
@@ -234,8 +247,32 @@ const BestPerformanceSymbolBlock: React.FC = () => {
     });
   }, [data]);
 
+  const getFilteredData = () => {
+    return data.filter(row => {
+      let singleOk = true;
+      let mixOk = true;
+      let lstmOk = true;
+      if (buySingleOnly) {
+        const indice = indices[row.single.symbol];
+        singleOk = (typeof indice === 'object' && indice.type && indice.type.startsWith('BUY')) ? true : false;
+      }
+      if (buyMixOnly) {
+        const indiceMix = indicesMix[row.mix.symbol ?? ''];
+        mixOk = (typeof indiceMix === 'object' && indiceMix.type && indiceMix.type.startsWith('BUY')) ? true : false;
+      }
+      if (buyLstmOnly) {
+        const lstm = lstmResults[row.single.symbol];
+        lstmOk = (typeof lstm === 'object' && lstm.signal && lstm.signal.startsWith('BUY')) ? true : false;
+      }
+      let classement = row?.single?.top || row?.mix?.top;
+      if (filtreClassement && classement == null) return false;
+      return singleOk && mixOk && lstmOk;
+    });
+  };
+
   const handleCopy = () => {
-    const selectedSymbols = data
+    const filteredData = getFilteredData();
+    const selectedSymbols = filteredData
       .map((row, idx) => checkedRows[idx] ? row.single.symbol : null)
       .filter(Boolean)
       .join(',');
@@ -295,7 +332,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
 
   useEffect(() => {
     setCheckedRows({});
-  }, [sort, showOnlyNonFiltered]);
+  }, [sort, topProfil]);
 
   useEffect(() => {
     fetch('/api/result/symbol_pero')
@@ -328,6 +365,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <MenuItem value={30}>30</MenuItem>
                   <MenuItem value={50}>50</MenuItem>
                   <MenuItem value={100}>100</MenuItem>
+                  <MenuItem value={500}>500</MenuItem>
                 </Select>
               </FormControl>
               <FormControl size="small" sx={{ minWidth: 180 }}>
@@ -340,31 +378,93 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   onChange={e => setSort(e.target.value)}
                   disabled={searchMode}
                 >
-                  <MenuItem value="single:rendement_score">Single - Score Rendement</MenuItem>
+                  <MenuItem value="lstm:classement">Classement</MenuItem>
+                  <MenuItem value="lstm:business_score">LSTM - Score Buissine</MenuItem>
+                  <MenuItem value="lstm:rendement">LSTM - Rendement</MenuItem>
                   <MenuItem value="single:rendement">Single - Rendement</MenuItem>
-                  <MenuItem value="single:rendement_check">Single - Rendement Check</MenuItem>
-                  <MenuItem value="single:rendement_sum">Single - Rendement Sum</MenuItem>
                   <MenuItem value="single:score_swing_trade">Single - Score Swing Trade</MenuItem>
-                  <MenuItem value="single:score_swing_trade_check">Single - Score Swing Trade Check</MenuItem>
-                  <MenuItem value="mix:rendement_score">Mix - Score Rendement</MenuItem>
                   <MenuItem value="mix:rendement">Mix - Rendement</MenuItem>
-                  <MenuItem value="mix:rendement_check">Mix - Rendement Check</MenuItem>
-                  <MenuItem value="mix:rendement_sum">Mix - Rendement Sum</MenuItem>
                   <MenuItem value="mix:score_swing_trade">Mix - Score Swing Trade</MenuItem>
-                  <MenuItem value="mix:score_swing_trade_check">Mix - Score Swing Trade Check</MenuItem>
                 </Select>
               </FormControl>
-
-              <FormControlLabel
+              {/* Cacher la case 'Top profil' si lstm:business_score ou lstm:rendement */}
+              {!(sort === 'lstm:business_score' || sort === 'lstm:rendement' || sort === 'lstm:classement') && (
+                  <>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={topProfil}
+                      onChange={e => setTopProfil(e.target.checked)}
+                      disabled={searchMode}
+                      size="small"
+                    />
+                  }
+                  label="Top profil"
+                  sx={{ ml: 2 }}
+                />
+                <FormControlLabel
+                                  control={
+                                    <Checkbox
+                                      checked={filtreClassement}
+                                      onChange={e => setFiltreClassement(e.target.checked)}
+                                      disabled={searchMode}
+                                      size="small"
+                                    />
+                                  }
+                                  label="Filtre classement"
+                                  sx={{ ml: 2 }}
+                                />
+                                </>
+              )}
+              {(sort === 'lstm:business_score' || sort === 'lstm:rendement') && (
+                  <FormControlLabel
                 control={
                   <Checkbox
-                    checked={showOnlyNonFiltered}
-                    onChange={e => setShowOnlyNonFiltered(e.target.checked)}
+                    checked={topClassement}
+                    onChange={e => setTopClassement(e.target.checked)}
                     disabled={searchMode}
                     size="small"
                   />
                 }
-                label="Fiable"
+                label="Filtre classement"
+                sx={{ ml: 2 }}
+              />
+                )}
+
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={buySingleOnly}
+                    onChange={e => setBuySingleOnly(e.target.checked)}
+                    disabled={searchMode}
+                    size="small"
+                  />
+                }
+                label="Buy/Single"
+                sx={{ ml: 2 }}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={buyMixOnly}
+                    onChange={e => setBuyMixOnly(e.target.checked)}
+                    disabled={searchMode}
+                    size="small"
+                  />
+                }
+                label="Buy/Mix"
+                sx={{ ml: 2 }}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={buyLstmOnly}
+                    onChange={e => setBuyLstmOnly(e.target.checked)}
+                    disabled={searchMode}
+                    size="small"
+                  />
+                }
+                label="Buy/Lstm"
                 sx={{ ml: 2 }}
               />
               <Button
@@ -460,34 +560,91 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
-                    <TableCell colSpan={4} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', fontSize: '1rem' }}>LSDM</TableCell>
-                    <TableCell colSpan={5} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
-                    <TableCell colSpan={5} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
-                    <TableCell sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
+                    <TableCell colSpan={3} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#e0e0e0' }}></TableCell>
+                    <TableCell colSpan={10} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', fontSize: '1rem' }}>LSTM</TableCell>
+                    <TableCell colSpan={8} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
+                    <TableCell colSpan={8} align="center" sx={{ position: 'sticky', top: 0, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}></TableCell> {/* Case à cocher */}
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Last Price</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Prédit Price</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 120, width: 130, maxWidth: 300  }}>Prédit Indice</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 180, width: 180, maxWidth: 300  }}>Position</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 130, maxWidth: 300 }}>Rendement (model|check)</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Score Rendement</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 130, maxWidth: 300 }}>Score Swing Trade (model|check)</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Durée moyenne trade</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300  }}>Rendement</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Score Rendement</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300  }}>Score Swing Trade</TableCell>
-                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Durée moyenne trade</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Classement</TableCell>
                     <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Détails</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Last Price</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9',  minWidth: 120, width: 130, maxWidth: 300 }}>Prédit Price</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 120, width: 130, maxWidth: 300  }}>Prédit Indice</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9'}}>Position</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Rendement</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 100, width: 130, maxWidth: 300 }}>
+                      <Tooltip title="Doit être > 1 pour être intéressant" arrow placement="top" enterDelay={200} leaveDelay={100}
+                         slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
+                         <span>Profit Factor</span>
+                       </Tooltip>
+                      </TableCell>
+
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Max Drawdown</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 80, width: 130, maxWidth: 300  }}>Win Rate</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9', minWidth: 100, width: 130, maxWidth: 300 }}>Score Swing Trade</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#cff6c9' }}>Nombre de trades</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Rendement</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 130, maxWidth: 300 }}>
+                    <Tooltip title="Doit être > 1 pour être intéressant" arrow placement="top" enterDelay={200} leaveDelay={100}
+                       slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
+                       <span>Profit Factor</span>
+                     </Tooltip>
+                    </TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Max Drawdown</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 130, maxWidth: 300 }}>
+                    <Tooltip title="Doit être positif et idéalement > 1" arrow placement="top" enterDelay={200} leaveDelay={100}
+                        slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
+                        <span>Sharpe Ratio</span>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Win Rate</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9', minWidth: 100, width: 130, maxWidth: 300 }}>Score Swing Trade</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#c8e6c9' }}>Nombre de trades</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 100, maxWidth: 300 }}>Indice</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Rendement</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300 }}>
+                    <Tooltip title="Doit être > 1 pour être intéressant" arrow placement="top" enterDelay={200} leaveDelay={100}
+                       slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
+                       <span>Profit Factor</span>
+                     </Tooltip>
+                    </TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Max Drawdown</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300 }}>
+                    <Tooltip title="Doit être positif et idéalement > 1" arrow placement="top" enterDelay={200} leaveDelay={100}
+                        slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
+                        <span>Sharpe Ratio</span>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Win Rate</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb', minWidth: 100, width: 130, maxWidth: 300  }}>Score Swing Trade</TableCell>
+                    <TableCell align="center" sx={{ position: 'sticky', top: 36, zIndex: 2, fontWeight: 'bold', backgroundColor: '#bbdefb' }}>Nombre de trades</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {data.map((row, i) => {
+                  {data.filter(row => {
+                    let singleOk = true;
+                    let mixOk = true;
+                    let lstmOk = true;
+                    if (buySingleOnly) {
+                      const indice = indices[row.single.symbol];
+                      singleOk = (typeof indice === 'object' && indice.type && indice.type.startsWith('BUY')) ? true : false;
+                    }
+                    if (buyMixOnly) {
+                      const indiceMix = indicesMix[row.mix.symbol ?? ''];
+                      mixOk = (typeof indiceMix === 'object' && indiceMix.type && indiceMix.type.startsWith('BUY')) ? true : false;
+                    }
+                    if (buyLstmOnly) {
+                      const lstm = lstmResults[row.single.symbol];
+                      lstmOk = (typeof lstm === 'object' && lstm.signal && lstm.signal.startsWith('BUY')) ? true : false;
+                    }
+                    let classement = row?.single?.top || row?.mix?.top;
+                    if (filtreClassement && classement == null) return false;
+                    return singleOk && mixOk && lstmOk;
+                  }).map((row, i) => {
                     let bgColor = undefined;
                     const indice = indices[row.single.symbol] as SignalInfo;
                     const lstmResult = lstmResults[row.single.symbol] as PreditLstm;
@@ -496,10 +653,12 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     if (indiceMixRaw && typeof indiceMixRaw === 'object' && 'type' in indiceMixRaw) {
                       indiceMix = indiceMixRaw as SignalInfo;
                     }
+                    const pctUD = lstmResult && (lstmResult.lastClose && lstmResult.predictedClose) ? ((lstmResult.predictedClose - lstmResult.lastClose) / lstmResult.lastClose) * 100 : null;
 
                     // Vérifie que indice est un objet et non une chaîne
-                    if (indice && indice.type === 'BUY' && !row.single.result.fltredOut) bgColor = 'rgba(76, 175, 80, 0.5)';
+                    if (indice && indice.type === 'BUY') bgColor = 'rgba(76, 175, 80, 0.5)';
                     if (indice && indice.type === 'SELL') bgColor = 'rgba(244, 67, 54, 0.05)';
+                    const classement = row?.single?.top || row?.mix?.top;
                     return (
                       <TableRow
                         key={i}
@@ -512,67 +671,112 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                         }}
                       >
                         <TableCell><input type="checkbox" checked={!!checkedRows[i]} onChange={e => setCheckedRows({...checkedRows, [i]: e.target.checked})} /></TableCell>
-                        <TableCell>
+                        <TableCell align="center">
                           <Tooltip title={row?.name || row.single.symbol} arrow placement="top" enterDelay={200} leaveDelay={100}
                             slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
                             <span>{row.single.symbol}</span>
                           </Tooltip>
                         </TableCell>
-                        <TableCell>{
+                        <TableCell align="center"><b>{classement == null ? '' : classement}</b></TableCell>
+                        <TableCell align="center"><Button size="small" variant="outlined" onClick={() => { setSelected(row); setOpen(true); }}>Détails</Button></TableCell>
+                        <TableCell align="center">{
                             lstmResults[row.single.symbol] === 'pending'
                               ? (<CircularProgress size={16} />)
                               : (lstmResult && lstmResult.lastClose
                                   ? (lstmResult.lastClose)
                                   : '-')
                           }</TableCell>
-                          <TableCell>{
+                          <TableCell align="center">{
                              lstmResults[row.single.symbol] === 'pending'
                                ? (<CircularProgress size={16} />)
                                : (lstmResult && lstmResult.predictedClose
-                                  ? (lstmResult.predictedClose)
+                                  ? (lstmResult.predictedClose.toFixed(2) + (pctUD !== null ? ' (' + pctUD.toFixed(2) + '%)' : ''))
                                   : '-')
                            }</TableCell>
-                        <TableCell>{
+                        <TableCell align="center">{
                           lstmResults[row.single.symbol] === 'pending'
                             ? (<CircularProgress size={16} />)
                             : (lstmResult && lstmResult.signal
                                 ? (lstmResult.signal + ' (' + lstmResult.lastDate + ')')
                                 : '-')
                         }</TableCell>
-                        <TableCell>{
+                        <TableCell align="center">{
                            lstmResults[row.single.symbol] === 'pending'
                              ? (<CircularProgress size={16} />)
                              : (lstmResult && lstmResult?.position
                                 ? (lstmResult?.position)
                                 : '-')
                          }</TableCell>
-                        <TableCell>{
+                       <TableCell align="center"><b>{
+                         lstmResults[row.single.symbol] === 'pending'
+                           ? (<CircularProgress size={16} />)
+                           : (lstmResult && lstmResult?.loadedModel?.rendement
+                              ? ((lstmResult?.loadedModel?.rendement * 100).toFixed(2) + ' %')
+                              : '-')
+                       }</b></TableCell>
+                        <TableCell align="center">{
+                            lstmResults[row.single.symbol] === 'pending'
+                              ? (<CircularProgress size={16} />)
+                              : (lstmResult && lstmResult?.loadedModel?.profitFactor
+                                 ? ((lstmResult?.loadedModel?.profitFactor * 100).toFixed(2))
+                                 : '-')
+                          }</TableCell>
+                        <TableCell align="center">{
+                           lstmResults[row.single.symbol] === 'pending'
+                             ? (<CircularProgress size={16} />)
+                             : (lstmResult && lstmResult?.loadedModel?.maxDrawdown
+                                ? ((lstmResult?.loadedModel?.maxDrawdown * 100).toFixed(2) + ' %')
+                                : '-')
+                         }</TableCell>
+                        <TableCell align="center">{
+                           lstmResults[row.single.symbol] === 'pending'
+                             ? (<CircularProgress size={16} />)
+                             : (lstmResult && lstmResult?.loadedModel?.winRate
+                                ? ((lstmResult?.loadedModel?.winRate * 100).toFixed(2) + ' %')
+                                : '-')
+                         }</TableCell>
+                         <TableCell align="center">{
+                            lstmResults[row.single.symbol] === 'pending'
+                              ? (<CircularProgress size={16} />)
+                              : (lstmResult && lstmResult?.loadedModel?.businnesScore
+                                 ? ((lstmResult?.loadedModel?.businnesScore * 100).toFixed(2))
+                                 : '-')
+                          }</TableCell>
+                         <TableCell align="center">{
+                            lstmResults[row.single.symbol] === 'pending'
+                              ? (<CircularProgress size={16} />)
+                              : (lstmResult && lstmResult?.loadedModel?.totalTrades
+                                 ? (lstmResult?.loadedModel?.totalTrades)
+                                 : '-')
+                          }</TableCell>
+                        <TableCell align="center">{
                           indices[row.single.symbol] === 'pending'
                             ? (<CircularProgress size={16} />)
                             : (indice && indice.type
-                                ? (row.single.result.fltredOut
-                                    ? <span style={{ color: 'red', fontWeight: 'bold' }}>{indice.type + ' (' + indice.dateStr + ')'}</span>
-                                    : indice.type + ' (' + indice.dateStr + ')')
+                                ? (indice.type + ' (' + indice.dateStr + ')')
                                 : '-')
                         }</TableCell>
-                        <TableCell>{(row.single.result.rendement * 100).toFixed(2)}% | {(row.single.check.rendement * 100).toFixed(2)}%</TableCell>
-                        <TableCell>{(row.single.rendementScore * 100).toFixed(2)}</TableCell>
-                        <TableCell>{row.single.result.scoreSwingTrade !== undefined ? (row.single.result.scoreSwingTrade).toFixed(2) : '-'} | {row.single.check.scoreSwingTrade !== undefined ? (row.single.check.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
-                        <TableCell>{row.single.result.avgTradeBars !== undefined ? row.single.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
-                        <TableCell>{
+                        <TableCell align="center"><b>{(row.single.finalResult.rendement * 100).toFixed(2)} %</b></TableCell>
+                        <TableCell align="center">{row.single.finalResult.profitFactor.toFixed(2)}</TableCell>
+                        <TableCell align="center">{(row.single.finalResult.maxDrawdown * 100).toFixed(2)} %</TableCell>
+                        <TableCell align="center">{row.single.finalResult.sharpeRatio.toFixed(2)}</TableCell>
+                        <TableCell align="center">{(row.single.finalResult.winRate * 100).toFixed(2)} %</TableCell>
+                        <TableCell align="center">{row.single.finalResult.scoreSwingTrade !== undefined ? (row.single.finalResult.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
+                        <TableCell align="center">{row.single.finalResult.tradeCount !== undefined ? row.single.finalResult.tradeCount : '-'}</TableCell>
+                        <TableCell align="center">{
                           indiceMixRaw === 'pending'
                             ? (<CircularProgress size={16} />)
                             : indiceMix
-                              ? (row.mix.result.fltredOut
-                                  ? <span style={{ color: 'red', fontWeight: 'bold' }}>{indiceMix.type + ' (' + indiceMix.dateStr + ')'}</span>
-                                  : indiceMix.type + ' (' + indiceMix.dateStr + ')')
+                              ? (indiceMix.type + ' (' + indiceMix.dateStr + ')')
                               : '-'
                         }</TableCell>
-                        <TableCell>{(row.mix.result.rendement * 100).toFixed(2)}% | {(row.mix.check.rendement * 100).toFixed(2)}%</TableCell>
-                        <TableCell>{(row.mix.rendementScore * 100).toFixed(2)}</TableCell>
-                        <TableCell>{row.mix.result.scoreSwingTrade !== undefined ? (row.mix.result.scoreSwingTrade).toFixed(2) : '-'} | {row.mix.check.scoreSwingTrade !== undefined ? (row.mix.check.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
-                        <TableCell>{row.mix.result.avgTradeBars !== undefined ? row.mix.result.avgTradeBars.toFixed(2) : '-'}</TableCell>
-                        <TableCell><Button size="small" variant="outlined" onClick={() => { setSelected(row); setOpen(true); }}>Détails</Button></TableCell>
+                        <TableCell align="center"><b>{(row.mix.finalResult.rendement * 100).toFixed(2)} %</b></TableCell>
+                        <TableCell align="center">{row.mix.finalResult.profitFactor.toFixed(2)}</TableCell>
+                        <TableCell align="center">{(row.mix.finalResult.maxDrawdown * 100).toFixed(2)} %</TableCell>
+                        <TableCell align="center">{row.mix.finalResult.sharpeRatio.toFixed(2)}</TableCell>
+                        <TableCell align="center">{(row.mix.finalResult.winRate * 100).toFixed(2)} %</TableCell>
+                        <TableCell align="center">{row.mix.finalResult.scoreSwingTrade !== undefined ? (row.mix.finalResult.scoreSwingTrade).toFixed(2) : '-'}</TableCell>
+                        <TableCell align="center">{row.mix.finalResult.tradeCount !== undefined ? row.mix.finalResult.tradeCount : '-'}</TableCell>
                       </TableRow>
                     );
                   })}

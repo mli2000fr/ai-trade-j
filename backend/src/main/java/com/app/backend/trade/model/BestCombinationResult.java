@@ -19,12 +19,10 @@ public class BestCombinationResult {
     public List<String> outStrategyNames;
     public Map<String, Object> inParams = new HashMap<>();
     public Map<String, Object> outParams = new HashMap<>();
-    public RiskResult result;
-    public RiskResult check;
-    public double rendementSum;
-    public double rendementDiff;
-    public double rendementScore;
+    public RiskResult finalResult;
+    public RiskResult testResult;
     public ParamsOptim contextOptim;
+    public Integer top;
 
     public static BestCombinationResult empty() {
         BestCombinationResult result = new BestCombinationResult();
@@ -33,7 +31,7 @@ public class BestCombinationResult {
         result.outStrategyNames = List.of();
         result.inParams = new HashMap<>();
         result.outParams = new HashMap<>();
-        result.result = RiskResult.builder()
+        result.finalResult = RiskResult.builder()
             .rendement(0.0)
             .maxDrawdown(0.0)
             .tradeCount(0)
@@ -44,9 +42,8 @@ public class BestCombinationResult {
             .maxTradeGain(0.0)
             .maxTradeLoss(0.0)
             .scoreSwingTrade(0.0)
-            .fltredOut(false)
             .build();
-        result.check = RiskResult.builder()
+        result.testResult = RiskResult.builder()
             .rendement(0.0)
             .maxDrawdown(0.0)
             .tradeCount(0)
@@ -57,11 +54,7 @@ public class BestCombinationResult {
             .maxTradeGain(0.0)
             .maxTradeLoss(0.0)
             .scoreSwingTrade(0.0)
-            .fltredOut(false)
             .build();
-        result.rendementSum = 0.0;
-        result.rendementDiff = 0.0;
-        result.rendementScore = 0.0;
         result.contextOptim = new ParamsOptim();
         return result;
     }

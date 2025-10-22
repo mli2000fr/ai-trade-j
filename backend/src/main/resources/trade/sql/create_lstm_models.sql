@@ -1,7 +1,22 @@
 CREATE TABLE trade_ai.lstm_models (
-    symbol VARCHAR(32) PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    symbol VARCHAR(32),
     updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     hyperparams_json TEXT,
+    scalers_json TEXT,
     model_blob LONGBLOB,
+    mse DOUBLE, profit_factor DOUBLE, win_rate DOUBLE, max_drawdown DOUBLE, rmse DOUBLE,
+    sum_profit DOUBLE, total_trades INT, business_score DOUBLE,
+    total_series_tested INT,
+    rendement DOUBLE,
+      phase_grid INT,
+      number_grid INT,
+      phase_1_top_n INT,
+      phase_1_top_n_label VARCHAR(32),
+      holdOut BOOLEAN NOT NULL DEFAULT FALSE,
+      tuning_result_json TEXT,
+    ratio DOUBLE,
+    eligible BOOLEAN DEFAULT TRUE,
     normalization_scope VARCHAR(16) DEFAULT 'window'
 );
+CREATE INDEX idx_signal_lstm_symbol ON trade_ai.lstm_models(symbol);

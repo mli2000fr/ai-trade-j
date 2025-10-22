@@ -45,15 +45,18 @@ public class AlpacaService {
     private final OrderRepository orderRepository;
     private final CompteService compteService;
 
+    private final JdbcTemplate jdbcTemplate;
+
     private final Gson gson = new GsonBuilder()
             .registerTypeAdapter(OffsetDateTime.class, new OffsetDateTimeAdapter())
             .create();
 
 
     @Autowired
-    public AlpacaService(OrderRepository orderRepository, CompteService compteService) {
+    public AlpacaService(OrderRepository orderRepository, CompteService compteService, JdbcTemplate jdbcTemplate) {
         this.orderRepository = orderRepository;
         this.compteService = compteService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
@@ -358,7 +361,13 @@ public class AlpacaService {
         headers.set("APCA-API-SECRET-KEY", compte.getSecret());
         HttpEntity<Void> request = new HttpEntity<>(headers);
         ResponseEntity<Map[]> positionsResponse = restTemplate.exchange(positionsUrl, HttpMethod.GET, request, Map[].class);
-        dto.setPositions(positionsResponse.getBody() != null ? Arrays.asList(positionsResponse.getBody()) : List.of());
+        List<Map<String, Object>> positions = positionsResponse.getBody() != null ? Arrays.asList(positionsResponse.getBody()) : List.of();
+        for(Map<String, Object> pos : positions){
+            if(pos.get("symbol") != null){
+                pos.put("name", this.getNameSymbol(String.valueOf(pos.get("symbol"))));
+            }
+        }
+        dto.setPositions(positions);
 
         // Récupérer les infos du compte
         String accountUrl = apiBaseUrl + "/account";
@@ -380,6 +389,11 @@ public class AlpacaService {
         }
 
         return dto;
+    }
+
+    public String getNameSymbol(String symbol) {
+        String sql = "SELECT name FROM alpaca_asset WHERE symbol = ?";
+        return jdbcTemplate.queryForObject(sql, new Object[]{symbol}, String.class);
     }
 
     /**
@@ -732,8 +746,8 @@ public class AlpacaService {
     public String getHistoricalBarsJson(String symbol, int limit) {
         return getHistoricalBars(symbol, TradeUtils.getStartDate(limit), TradeUtils.getDateToDay(), "1Day");
     }
-    public List<DailyValue> getHistoricalBarsJsonDaysMin(String symbol) {
-        String json = getHistoricalBars(symbol, TradeUtils.getDateToDayStart(), TradeUtils.getDateToDayEnd(), "1Min");
+    public List<DailyValue> getHistoricalBarsJsonDaysMin(String symbol, String dateStart) {
+        String json = getHistoricalBars(symbol, dateStart, TradeUtils.getDateToDayEnd(), "1Min");
         return mapBougies(json);
     }
     public List<DailyValue> getHistoricalBars(String symbol, String startDate, String endDate) {

@@ -1,5 +1,8 @@
 package com.app.backend.trade.model;
 
+import com.app.backend.trade.lstm.LstmConfig;
+import com.app.backend.trade.lstm.LstmTradePredictor;
+import com.app.backend.trade.lstm.LstmTuningService;
 import lombok.Builder;
 import lombok.Data;
 
@@ -11,5 +14,8 @@ public class PreditLsdm {
     private SignalType signal;
     private String lastDate;
     private String position;
+    private String explication;
+    private LstmTradePredictor.LoadedModel loadedModel;
+    public LstmTuningService.TuningResult resultTuning;
 
 }

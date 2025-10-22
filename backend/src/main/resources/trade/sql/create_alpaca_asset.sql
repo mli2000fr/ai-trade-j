@@ -6,4 +6,5 @@ CREATE TABLE alpaca_asset (
     name VARCHAR(128),
     created_at TIMESTAMP,
     eligible BOOLEAN DEFAULT FALSE,
+    filtre_out BOOLEAN DEFAULT FALSE
 );

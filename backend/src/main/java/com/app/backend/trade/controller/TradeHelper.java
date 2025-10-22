@@ -82,7 +82,7 @@ public class TradeHelper {
      * @param symbol Symbole à vérifier
      */
     public void isAssetSymbolEligible(String symbol) {
-        String sql = "SELECT COUNT(*) FROM alpaca_asset WHERE symbol = ? AND eligible = true";
+        String sql = "SELECT COUNT(*) FROM alpaca_asset WHERE symbol = ? AND eligible = true and filtre_out = false";
         Integer count = jdbcTemplate.queryForObject(sql, new Object[]{symbol}, Integer.class);
         if (count == null || count == 0) {
             throw new RuntimeException("Le symbole n'est pas valide ou inactif : " + symbol);

@@ -14,6 +14,7 @@ public class ComboResult {
     private Object entryParams;
     private String exitName;
     private Object exitParams;
-    private RiskResult result;
+    private RiskResult finalResult;
+    private RiskResult testResult;
     private ParamsOptim paramsOptim;
 }

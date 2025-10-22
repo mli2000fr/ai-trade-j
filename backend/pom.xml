@@ -16,6 +16,8 @@
     </parent>
     <properties>
         <java.version>17</java.version>
+        <!-- Version centralisée Deeplearning4j -->
+        <dl4j.version>1.0.0-M2.1</dl4j.version>
     </properties>
     <repositories>
         <repository>
@@ -27,6 +29,16 @@
             <snapshots>
                 <enabled>true</enabled>
             </snapshots>
+        </repository>
+        <repository>
+            <id>sonatype</id>
+            <name>Sonatype OSSRH</name>
+            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+        </repository>
+        <repository>
+            <id>deeplearning4j</id>
+            <name>Deeplearning4j Repository</name>
+            <url>https://repo.deeplearning4j.org/</url>
         </repository>
     </repositories>
     <dependencies>
@@ -61,28 +73,22 @@
             <artifactId>Java-WebSocket</artifactId>
             <version>1.5.4</version>
         </dependency>
-        <!-- Deeplearning4j dependencies -->
+        <!-- DL4J core + ND4J CUDA backend (deeplearning4j-cuda-* introuvable sur M2.1) -->
         <dependency>
             <groupId>org.deeplearning4j</groupId>
             <artifactId>deeplearning4j-core</artifactId>
-            <version>1.0.0-M2.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.deeplearning4j</groupId>
-            <artifactId>deeplearning4j-datasets</artifactId>
-            <version>1.0.0-M2.1</version>
+            <version>${dl4j.version}</version>
         </dependency>
         <dependency>
             <groupId>org.nd4j</groupId>
-            <artifactId>nd4j-native-platform</artifactId>
-            <version>1.0.0-M2.1</version>
+            <artifactId>nd4j-cuda-11.6-platform</artifactId>
+            <version>${dl4j.version}</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
             <version>2.10.1</version>
         </dependency>
-        <!-- OpenAI Java SDK -->
         <dependency>
             <groupId>com.openai</groupId>
             <artifactId>openai-java</artifactId>
@@ -92,18 +98,25 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
-        <!-- MySQL Connector/J correct -->
         <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
-            <version>8.0.32</version>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <!-- Ajouté pour compatibilité Java 8+ -->
         <dependency>
             <groupId>org.threeten</groupId>
             <artifactId>threetenbp</artifactId>
             <version>1.5.1</version>
+        </dependency>
+        <dependency>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
+            <version>1.3.2</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <version>2.1.1</version>
         </dependency>
     </dependencies>
     <build>
@@ -128,15 +141,6 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                            <version>1.18.32</version>
-                        </exclude>
-                    </excludes>
-                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

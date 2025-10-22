@@ -1,7 +1,7 @@
 package com.app.backend.trade.model;
 
 public class StrategyFilterConfig {
-    public double maxDrawdown = 0.5;
+    public double maxDrawdown = 0.3;
     public double minProfitFactor = 1.0;
     public double minWinRate = 0.2;
     public int minAvgTradeBars = 1;

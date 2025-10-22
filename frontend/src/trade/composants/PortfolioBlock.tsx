@@ -22,6 +22,7 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import BestPerformanceDialog from './BestPerformanceDialog';
+import Tooltip from '@mui/material/Tooltip';
 
 interface PortfolioBlockProps {
   portfolio: any;
@@ -33,9 +34,11 @@ interface PortfolioBlockProps {
 }
 interface SignalInfo {
     symbol: string;
-    type: string;
-    date?: string | null;
-    dateStr?: string;
+    typeSingle: string;
+    typeMix: string;
+    typeLstm?: string;
+    positionLstm: string;
+    sell?: boolean | null;
 }
 
 const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, loading, compteId, resetSellErrorKey, onRefreshPortfolio }) => {
@@ -87,7 +90,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
     if (symbolsToFetch.length === 0) return;
     symbolsToFetch.forEach((symbol: string) => {
       setIndices(prev => ({ ...prev, [symbol]: 'pending' }));
-      fetch(`/api/stra/strategies/get_indice?symbol=${encodeURIComponent(symbol)}`)
+      fetch(`/api/result/indice?symbol=${encodeURIComponent(symbol)}`)
         .then(res => res.json())
         .then((data: SignalInfo) => {
           setIndices(prev => ({ ...prev, [symbol]: data ?? '-' }));
@@ -200,9 +203,9 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
       try {
           let url;
           if (value) {
-           url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.single.symbol)}&isToday=true`;
+           url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.indiceSingle.symbol)}&isToday=true`;
          } else {
-           url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.single.symbol)}&historique=250`;
+           url = `/api/stra/getBougiesBySymbol?symbol=${encodeURIComponent(selected.indiceSingle.symbol)}&historique=250`;
          }
         // Bougies : on ajoute le paramètre today si nécessaire
         const bougiesRes = await fetch(url);
@@ -311,7 +314,7 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                   <TableHead>
                     <TableRow>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Symbole</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Indice</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Indice (S/M/L)</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Prix d'achat</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Prix actuel</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#e0e0e0' }}>Quantité</TableCell>
@@ -326,16 +329,17 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                       const isNegative = pos.unrealized_pl < 0;
                       const cellStyle = isNegative ? { color: 'error.main' } : {};
                       const indice = indices[pos.symbol] as SignalInfo | string;
-                      const isSellSignal = typeof indice === 'object' && indice !== null && indice.type === 'SELL';
+                      const signalStr = typeof indice === 'object' ? ('('+indice?.typeSingle?.charAt(0)+'/'+indice?.typeMix?.charAt(0)+'/'+indice?.typeLstm?.charAt(0)+')') : '-';
+                      const isSellSignal = typeof indice === 'object' && indice !== null && indice.sell === true;
                       const isPendingSignal = indice === 'pending';
                       const signalCellStyle = isSellSignal ? { color: 'error.main', fontWeight: 'bold' } : cellStyle;
                       let signalCellContent;
                       if (isPendingSignal) {
                         signalCellContent = <CircularProgress size={16} />;
                       } else if (isSellSignal) {
-                        signalCellContent = <Button variant="contained" color="error" size="small" onClick={() => handleSell(pos)} disabled={pos.qty <= 0}>SELL</Button>;
-                      } else if (typeof indice === 'object' && indice !== null && indice.type) {
-                        signalCellContent = indice.type + ' (' + indice.dateStr + ')';
+                        signalCellContent = <Button variant="contained" color="error" size="small" onClick={() => handleSell(pos)} disabled={pos.qty <= 0}>SELL {signalStr}</Button>;
+                      } else if (typeof indice === 'object' && indice !== null && indice.typeLstm) {
+                        signalCellContent = indice.positionLstm + ' ' + signalStr;
                       } else if (typeof indice === 'string') {
                         signalCellContent = indice;
                       } else {
@@ -352,7 +356,12 @@ const PortfolioBlock: React.FC<PortfolioBlockProps> = ({ portfolio, lastUpdate, 
                               : {}
                           }
                         >
-                          <TableCell sx={cellStyle}>{pos.symbol}</TableCell>
+                          <TableCell sx={cellStyle}>
+                          <Tooltip title={pos.name || pos.symbol} arrow placement="top" enterDelay={200} leaveDelay={100}
+                              slotProps={{ tooltip: { sx: { fontSize: '1.1rem', padding: '6px 12px' } } }}>
+                              <span>{pos.symbol}</span>
+                            </Tooltip>
+                          </TableCell>
                           <TableCell sx={signalCellStyle}>{signalCellContent}</TableCell>
                           <TableCell sx={cellStyle}>{pos.avg_entry_price !== undefined && pos.avg_entry_price !== null ? Number(pos.avg_entry_price).toFixed(2) + ' $' : '-'}</TableCell>
                           <TableCell sx={cellStyle}>{pos.current_price !== undefined && pos.current_price !== null ? Number(pos.current_price).toFixed(2) + ' $' : '-'}</TableCell>

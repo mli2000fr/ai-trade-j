@@ -1,6 +1,7 @@
 package com.app.backend.trade.controller;
 
 
+import com.app.backend.trade.model.GlobalIndice;
 import com.app.backend.trade.model.MixResultat;
 import com.app.backend.trade.model.SymbolPerso;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,9 +25,10 @@ public class GlobalStrategyController {
     public List<MixResultat> getBestScoreAction(@RequestParam(value = "limit", required = false) Integer limit,
                                                 @RequestParam(value = "type", required = false, defaultValue = "single") String type,
                                                 @RequestParam(value = "sort", required = false, defaultValue = "rendement_score") String sort,
-                                                @RequestParam(value = "filtered", required = false) Boolean filtered,
+                                                @RequestParam(value = "topProfil", required = false) Boolean topProfil,
+                                                @RequestParam(value = "topClassement", required = false) Boolean topClassement,
                                                 @RequestParam(value = "search", required = false) String search) {
-        return globalStrategyHelper.getBestScoreAction(limit, type, sort, search, filtered);
+        return globalStrategyHelper.getBestScoreAction(limit, type, sort, search, topProfil, topClassement);
     }
 
     @GetMapping("/infosSymbol")
@@ -41,11 +43,19 @@ public class GlobalStrategyController {
     }
 
 
-
-    @GetMapping("/db/ratrapage")
-    public ResponseEntity<Boolean> rattrapage() {
-        globalStrategyHelper.rattrapage();
-        return ResponseEntity.ok(true);
+    @GetMapping("/indice")
+    public ResponseEntity<GlobalIndice> getIndice(@RequestParam(value = "symbol", required = true) String symbol) {
+        return ResponseEntity.ok(globalStrategyHelper.getIndice(symbol));
     }
 
+    @GetMapping("/getSymbolBuy")
+    public ResponseEntity<String> getSymbolBuy() {
+        //http://localhost:8080/api/result/getSymbolBuy
+        return ResponseEntity.ok(globalStrategyHelper.getSymbolBuy());
+    }
+
+    @GetMapping("/symbol-buy/monitor")
+    public ResponseEntity<Integer> getSymbolBuyMonitor() {
+        return ResponseEntity.ok(globalStrategyHelper.getLastSymbolBuyCount());
+    }
 }

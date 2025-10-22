@@ -117,7 +117,7 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
                        <TableBody>
                          <TableRow>
                            <TableCell sx={{ fontWeight: 'bold' }}>Single</TableCell>
-                           <TableCell align="center" >{selected.predict?.signal} ({selected.predict?.lastClose} / {selected.predict?.predictedClose} {selected.predict?.position})</TableCell>
+                           <TableCell align="center" >{selected.predict?.signal} ({selected.predict?.lastClose} / {selected.predict?.predictedClose.toFixed(2)} / {selected.predict?.position})</TableCell>
                            <TableCell align="center" >{selected.indiceSingle?.type}</TableCell>
                            <TableCell align="center" >{selected.indiceMix?.type}</TableCell>
                          </TableRow>
@@ -138,7 +138,7 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
                 <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Résultats & Vérification</Typography>
               </AccordionSummary>
               <AccordionDetails>
-                <Table size="small" sx={{ mt: 2, backgroundColor: '#f1f8e9' }}>
+                <Table size="small" sx={{ mb: 2, backgroundColor: '#f9f9f9' }}>
                   <TableHead>
                     <TableRow>
                       <TableCell sx={{ backgroundColor: '#e0e0e0' }}></TableCell>
@@ -147,45 +147,9 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Rendement Sum</TableCell>
-                      <TableCell align="center" >{(selected.single.rendementSum * 100).toFixed(2)} %</TableCell>
-                      <TableCell align="center" >{(selected.mix.rendementSum * 100).toFixed(2)} %</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Rendement Diff</TableCell>
-                      <TableCell align="center" >{(selected.single.rendementDiff * 100).toFixed(2)} %</TableCell>
-                      <TableCell align="center" >{(selected.mix.rendementDiff * 100).toFixed(2)} %</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Rendement Score</TableCell>
-                      <TableCell align="center" >{(selected.single.rendementScore * 100).toFixed(2)}</TableCell>
-                      <TableCell align="center" >{(selected.mix.rendementScore * 100).toFixed(2)}</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-                <br/>
-                <Table size="small" sx={{ mb: 2, backgroundColor: '#f9f9f9' }}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ backgroundColor: '#e0e0e0' }}></TableCell>
-                      <TableCell colSpan={2} align="center" sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9', fontSize: '1rem' }}>Single</TableCell>
-                      <TableCell colSpan={2} align="center" sx={{ fontWeight: 'bold', backgroundColor: '#bbdefb', fontSize: '1rem' }}>Mix</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold', width: '40%' }}>Métrique</TableCell>
-                      <TableCell align="center"  sx={{ fontWeight: 'bold' }}>Résultat</TableCell>
-                      <TableCell align="center"  sx={{ fontWeight: 'bold' }}>Vérification</TableCell>
-                      <TableCell align="center"  sx={{ fontWeight: 'bold' }}>Résultat</TableCell>
-                      <TableCell align="center"  sx={{ fontWeight: 'bold' }}>Vérification</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {Array.from(new Set([...Object.keys(selected.single.result || {}), ...Object.keys(selected.single.check || {})])).map((key) => {
-                      const resultObjSingle = selected.single.result as Record<string, any>;
-                      const checkObjSingle = selected.single.check as Record<string, any>;
-                      const resultObjMix = selected.mix.result as Record<string, any>;
-                      const checkObjMix = selected.mix.check as Record<string, any>;
+                    {Array.from(new Set([...Object.keys(selected.single.finalResult || {})])).map((key) => {
+                      const resultObjSingle = selected.single.finalResult as Record<string, any>;
+                      const resultObjMix = selected.mix.finalResult as Record<string, any>;
 
                       return (
                         <TableRow key={key}>
@@ -200,15 +164,6 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
                             : resultObjSingle?.[key] ?? '-'}
                           </TableCell>
                           <TableCell align="center" >
-                            {typeof checkObjSingle?.[key] === 'number'
-                              ? (Math.abs(checkObjSingle[key]) > 1
-                                  ? checkObjSingle[key].toFixed(2)
-                                  : (checkObjSingle[key] * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
-                          : typeof checkObjSingle?.[key] === 'boolean'
-                            ? checkObjSingle[key] ? 'Oui' : 'Non'
-                            : checkObjSingle?.[key] ?? '-'}
-                          </TableCell>
-                          <TableCell align="center" >
                             {typeof resultObjMix?.[key] === 'number'
                               ? (Math.abs(resultObjMix[key]) > 1
                                   ? resultObjMix[key].toFixed(2)
@@ -217,47 +172,11 @@ const BestPerformanceDialog: React.FC<BestPerformanceDialogProps> = ({
                             ? resultObjMix[key] ? 'Oui' : 'Non'
                             : resultObjMix?.[key] ?? '-'}
                           </TableCell>
-                          <TableCell align="center" >
-                            {typeof checkObjMix?.[key] === 'number'
-                              ? (Math.abs(checkObjMix[key]) > 1
-                                  ? checkObjMix[key].toFixed(2)
-                                  : (checkObjMix[key] * 100).toFixed(2) + (key.toLowerCase().includes('pct') || key.toLowerCase().includes('rate') || key.toLowerCase().includes('drawdown') || key.toLowerCase().includes('rendement') ? ' %' : ''))
-                          : typeof checkObjMix?.[key] === 'boolean'
-                            ? checkObjMix[key] ? 'Oui' : 'Non'
-                            : checkObjMix?.[key] ?? '-'}
-                          </TableCell>
                         </TableRow>
                       );
                     })}
                   </TableBody>
                 </Table>
-              </AccordionDetails>
-            </Accordion>
-
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie d'entrée (Single)</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.single.entryName}</b></Typography>
-                {selected.single.entryParams && renderObjectTable(selected.single.entryParams)}
-              </AccordionDetails>
-            </Accordion>
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Stratégie de sortie (Single)</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Typography variant="body2" sx={{ mb: 1 }}>Nom : <b>{selected.single.exitName}</b></Typography>
-                {selected.single.exitParams && renderObjectTable(selected.single.exitParams)}
-              </AccordionDetails>
-            </Accordion>
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Paramètres d'optimisation (Single)</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                {selected.single.paramsOptim && renderObjectTable(selected.single.paramsOptim)}
               </AccordionDetails>
             </Accordion>
           </div>
