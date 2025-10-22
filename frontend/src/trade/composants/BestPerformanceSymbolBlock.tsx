@@ -159,6 +159,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   const [sort, setSort] = useState<string>('single:score_swing_trade');
   const [topProfil, setTopProfil] = useState(true);
   const [topClassement, setTopClassement] = useState(false);
+  const [filtreClassement, setFiltreClassement] = useState(false);
   const [bougies, setBougies] = useState<any[]>([]);
   const [bougiesLoading, setBougiesLoading] = useState(false);
   const [bougiesError, setBougiesError] = useState<string | null>(null);
@@ -187,6 +188,9 @@ const BestPerformanceSymbolBlock: React.FC = () => {
       if (topProfil) {
         url += `&topProfil=true`;
       }
+      if (topClassement) {
+        url += `&topClassement=true`;
+      }
     }
     fetch(url)
       .then(res => {
@@ -201,7 +205,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   useEffect(() => {
     fetchData(false, '');
     // eslint-disable-next-line
-  }, [limit, sort, topProfil]);
+  }, [limit, sort, topProfil, topClassement]);
 
   useEffect(() => {
     if (!data || data.length === 0) return;
@@ -230,7 +234,9 @@ const BestPerformanceSymbolBlock: React.FC = () => {
         });
       // Ajout fetch LSTM
       setLstmResults(prev => ({ ...prev, [symbol]: 'pending' }));
-      fetch(`/api/lstm/predict?symbol=${encodeURIComponent(symbol)}`)
+      const type = sort.split(':')[0];
+      const index = type === 'lstm' ? sort.split(':')[1] : 'rendement';
+      fetch(`/api/lstm/predict?symbol=${encodeURIComponent(symbol)}&index=${encodeURIComponent(index)}`)
         .then(res => res.json())
         .then((data: any) => {
           setLstmResults(prev => ({ ...prev, [symbol]: data ?? '-' }));
@@ -259,7 +265,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
         lstmOk = (typeof lstm === 'object' && lstm.signal && lstm.signal.startsWith('BUY')) ? true : false;
       }
       let classement = row?.single?.top || row?.mix?.top;
-      if (topClassement && classement == null) return false;
+      if (filtreClassement && classement == null) return false;
       return singleOk && mixOk && lstmOk;
     });
   };
@@ -359,7 +365,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   <MenuItem value={30}>30</MenuItem>
                   <MenuItem value={50}>50</MenuItem>
                   <MenuItem value={100}>100</MenuItem>
-                  <MenuItem value={10000}>All</MenuItem>
+                  <MenuItem value={500}>500</MenuItem>
                 </Select>
               </FormControl>
               <FormControl size="small" sx={{ minWidth: 180 }}>
@@ -372,26 +378,46 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                   onChange={e => setSort(e.target.value)}
                   disabled={searchMode}
                 >
+                  <MenuItem value="lstm:classement">Classement</MenuItem>
+                  <MenuItem value="lstm:business_score">LSTM - Score Buissine</MenuItem>
+                  <MenuItem value="lstm:rendement">LSTM - Rendement</MenuItem>
                   <MenuItem value="single:rendement">Single - Rendement</MenuItem>
                   <MenuItem value="single:score_swing_trade">Single - Score Swing Trade</MenuItem>
                   <MenuItem value="mix:rendement">Mix - Rendement</MenuItem>
                   <MenuItem value="mix:score_swing_trade">Mix - Score Swing Trade</MenuItem>
                 </Select>
               </FormControl>
-
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={topProfil}
-                    onChange={e => setTopProfil(e.target.checked)}
-                    disabled={searchMode}
-                    size="small"
-                  />
-                }
-                label="Top profil"
-                sx={{ ml: 2 }}
-              />
-              <FormControlLabel
+              {/* Cacher la case 'Top profil' si lstm:business_score ou lstm:rendement */}
+              {!(sort === 'lstm:business_score' || sort === 'lstm:rendement' || sort === 'lstm:classement') && (
+                  <>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={topProfil}
+                      onChange={e => setTopProfil(e.target.checked)}
+                      disabled={searchMode}
+                      size="small"
+                    />
+                  }
+                  label="Top profil"
+                  sx={{ ml: 2 }}
+                />
+                <FormControlLabel
+                                  control={
+                                    <Checkbox
+                                      checked={filtreClassement}
+                                      onChange={e => setFiltreClassement(e.target.checked)}
+                                      disabled={searchMode}
+                                      size="small"
+                                    />
+                                  }
+                                  label="Filtre classement"
+                                  sx={{ ml: 2 }}
+                                />
+                                </>
+              )}
+              {(sort === 'lstm:business_score' || sort === 'lstm:rendement') && (
+                  <FormControlLabel
                 control={
                   <Checkbox
                     checked={topClassement}
@@ -400,9 +426,10 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                     size="small"
                   />
                 }
-                label="Top classement"
+                label="Filtre classement"
                 sx={{ ml: 2 }}
               />
+                )}
 
               <FormControlLabel
                 control={
@@ -615,7 +642,7 @@ const BestPerformanceSymbolBlock: React.FC = () => {
                       lstmOk = (typeof lstm === 'object' && lstm.signal && lstm.signal.startsWith('BUY')) ? true : false;
                     }
                     let classement = row?.single?.top || row?.mix?.top;
-                    if (topClassement && classement == null) return false;
+                    if (filtreClassement && classement == null) return false;
                     return singleOk && mixOk && lstmOk;
                   }).map((row, i) => {
                     let bgColor = undefined;

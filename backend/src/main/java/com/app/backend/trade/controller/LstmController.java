@@ -73,9 +73,9 @@ public class LstmController {
      * - Si vous devez enrichir la réponse (ex : ajouter un horodatage), faites-le dans le service ou créez un DTO dédié.
      */
     @GetMapping("/predict")
-    public PreditLsdm predictNextClose(@RequestParam String symbol) throws Exception {
+    public PreditLsdm predictNextClose(@RequestParam String symbol, @RequestParam String index) throws Exception {
 
-        return lsdmHelper.getPredit(symbol);
+        return lsdmHelper.getPredit(symbol, index);
     }
 
     /**

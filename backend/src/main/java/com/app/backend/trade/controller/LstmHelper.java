@@ -5,6 +5,8 @@ import com.app.backend.trade.lstm.LstmConfig;
 import com.app.backend.trade.lstm.LstmTradePredictor;
 import com.app.backend.trade.lstm.LstmTuningService;
 import com.app.backend.trade.model.*;
+import com.app.backend.trade.strategy.BestInOutStrategy;
+import com.app.backend.trade.strategy.ParamsOptim;
 import com.app.backend.trade.util.TradeUtils;
 import com.google.gson.Gson;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
@@ -122,6 +124,45 @@ public class LstmHelper {
     }
 
 
+    public List<String> getBestModel(Integer limit, String sort, Boolean topClassement) {
+        String orderBy = (sort == null || sort.isBlank()) ? "business_score" : sort;
+        String orderBySup = "";
+        if(sort.equals("classement")){
+            orderBySup = " stm.top ASC ";
+            orderBy = " business_score ";
+            topClassement = true;
+        }else{
+            orderBySup = " CASE WHEN lm."+ orderBy +" IS NULL THEN 1 ELSE 0 END, lm."+ orderBy +" DESC";
+        }
+        String sql_tous_sym = "SELECT aa.symbol, stm.top" +
+                " FROM alpaca_asset aa" +
+                " LEFT JOIN trade_ai.swing_trade_metrics stm ON aa.symbol = stm.symbol";
+        String sql_sym_top_classement = "SELECT stm.symbol, stm.top" +
+                " FROM trade_ai.swing_trade_metrics stm";
+        String prefix = (topClassement != null && topClassement) ? sql_sym_top_classement : sql_tous_sym;
+        String condTousSym = (topClassement != null && topClassement) ? "" : " WHERE aa.status = 'active' AND aa.eligible = true AND aa.filtre_out = false";
+        String sql = prefix +
+                " LEFT JOIN (" +
+                " SELECT symbol, rendement, business_score" +
+                " FROM (" +
+                " SELECT symbol, rendement, business_score," +
+                " ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY "+ orderBy +" DESC) as rn" +
+                " FROM trade_ai.lstm_models" +
+                " ) t" +
+                " WHERE t.rn = 1" +
+                " ) lm ON stm.symbol = lm.symbol " +
+                condTousSym +
+                " ORDER BY" + orderBySup;
+        if (limit != null && limit > 0) {
+            sql += " LIMIT " + limit;
+        }
+        List<String> results = jdbcTemplate.query(sql, (rs, rowNum) -> {
+            return rs.getString("symbol");
+        });
+        return results;
+    }
+
+
     /**
      * Récupère une prédiction LSTM pour un symbole.
      *
@@ -142,7 +183,7 @@ public class LstmHelper {
      * @return PreditLsdm objet contenant signal + prix prédits + métadonnées
      * @throws IOException si erreur IO interne (propagée depuis prédicteur)
      */
-    public PreditLsdm getPredit(String symbol) {
+    public PreditLsdm getPredit(String symbol, String index) {
         // 1. Vérifier si une prédiction du jour existe déjà (évite recalcul)
         PreditLsdm preditLsdmDb = this.getPreditFromDB(symbol);
         if (preditLsdmDb != null) {
@@ -152,7 +193,7 @@ public class LstmHelper {
         // 3. Charger modèle + scalers + config (si échec : on continue quand même => modèle null => prédiction fallback)
         LstmTradePredictor.LoadedModel loaded = null;
         try {
-            loaded = lstmTradePredictor.loadModelAndScalersFromDb(symbol, jdbcTemplate);
+            loaded = lstmTradePredictor.loadModelAndScalersFromDb(symbol, index, jdbcTemplate);
         } catch (Exception e) {
             logger.warn("Impossible de charger le modèle/scalers depuis la base : {}", e.getMessage());
         }

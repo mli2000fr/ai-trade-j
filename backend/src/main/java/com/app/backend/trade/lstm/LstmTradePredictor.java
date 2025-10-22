@@ -2875,10 +2875,10 @@ public class LstmTradePredictor {
     /**
      * Charge modèle + scalers (JSON) + hyperparams.
      */
-    public LoadedModel loadModelAndScalersFromDb(String symbol, JdbcTemplate jdbcTemplate) throws IOException {
+    public LoadedModel loadModelAndScalersFromDb(String symbol, String index, JdbcTemplate jdbcTemplate) throws IOException {
 
         // Sélection explicite des colonnes nécessaires
-        String sql = "SELECT * FROM lstm_models WHERE symbol = ? order by sum_profit desc limit 1";
+        String sql = "SELECT * FROM lstm_models WHERE symbol = ? order by "+ index +" desc limit 1";
 
         try {
             Map<String,Object> result = jdbcTemplate.queryForMap(sql, symbol);

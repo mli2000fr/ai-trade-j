@@ -947,10 +947,14 @@ public class BestCombinationStrategyHelper {
     public List<BestCombinationResult> getBestPerfActions(Integer limit, String sort, Boolean filtered){
         String orderBy = (sort == null || sort.isBlank()) ? "rendement_score" : sort;
 
-        String sql = "SELECT s.*, a.name, stm.top FROM best_in_out_mix_strategy s " +
+        String sql = "SELECT s.*, a.name, stm.top " +
+                "FROM best_in_out_mix_strategy s " +
                 "JOIN alpaca_asset a ON s.symbol = a.symbol " +
                 "LEFT JOIN swing_trade_metrics stm ON s.symbol = stm.symbol " +
-                "WHERE s.profit_factor <> 0 AND s.max_drawdown <> 0 AND s.win_rate < 1 and a.filtre_out = false";
+                "WHERE s.profit_factor <> 0 " +
+                "AND s.max_drawdown <> 0 " +
+                "AND s.win_rate < 1 " +
+                "AND a.filtre_out = false";
         if (filtered != null && filtered) {
             sql += " AND s.fltred_out = false";
         }
