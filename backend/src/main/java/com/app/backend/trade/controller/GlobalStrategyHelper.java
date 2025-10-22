@@ -28,7 +28,7 @@ public class GlobalStrategyHelper {
     private BestCombinationStrategyHelper bestCombinationStrategyHelper;
 
     private static final String FORMAT_DATE = "dd_MM_yy";
-    private static final String NOM_SYM_BUY = "TopBuy";
+    private static final String NOM_SYM_BUY = "TopBuy_";
 
     private int lastSymbolBuyCount = 0;
 
