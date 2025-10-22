@@ -797,6 +797,9 @@ public class StrategieHelper {
         List<DailyValue> listeValus = this.getDailyValuesFromDb(symbol, NOMBRE_TOTAL_BOUGIES_FOR_SIGNAL);
         BarSeries series = TradeUtils.mapping(listeValus);
         int lastIndex = series.getEndIndex();
+        if(best.entryName == null || best.entryParams == null){
+            return SignalInfo.builder().symbol(symbol).type(SignalType.NONE).dateStr("").build();
+        }
         // Instancie les stratégies IN/OUT
         com.app.backend.trade.strategy.TradeStrategy entryStrategy = createStrategy(best.entryName, best.entryParams);
         com.app.backend.trade.strategy.TradeStrategy exitStrategy = createStrategy(best.exitName, best.exitParams);

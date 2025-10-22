@@ -540,6 +540,11 @@ public class BestCombinationStrategyHelper {
             return SignalInfo.builder().symbol(symbol).type(SignalType.NONE)
                     .dateStr(lastTradingDay.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM"))).build();
         }
+
+        if(bestCombinationResult.inStrategyNames.size() == 0 || bestCombinationResult.outStrategyNames.size() == 0){
+            return SignalInfo.builder().symbol(symbol).type(SignalType.NONE).dateStr("").build();
+        }
+
         // Recréer les stratégies d'entrée
         List<TradeStrategy> inStrategies = new ArrayList<>();
         for (String name : bestCombinationResult.inStrategyNames) {

@@ -204,8 +204,15 @@ public class LstmHelper {
         // 4. Charger les données prix (BarSeries complet)
         BarSeries series = getBarBySymbol(symbol, null);
 
+
         // 6. Exécution de la prédiction (utilise model/scalers si présents)
         PreditLsdm preditLsdm = PreditLsdm.builder().build();
+
+        if (loaded == null) {
+            preditLsdm.setSignal(SignalType.NONE);
+            return preditLsdm;
+        }
+
         if(loaded.phase == 0 ){
             preditLsdm = lstmTradePredictor.getPredit(series, config, model, scalers);
         }else{

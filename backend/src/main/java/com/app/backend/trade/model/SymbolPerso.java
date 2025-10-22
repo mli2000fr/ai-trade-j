@@ -10,5 +10,6 @@ public class SymbolPerso {
     private String symbols;
     private String name;
     private String id;
+    private String date;
 }
 

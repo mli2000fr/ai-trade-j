@@ -47,4 +47,10 @@ public class GlobalStrategyController {
     public ResponseEntity<GlobalIndice> getIndice(@RequestParam(value = "symbol", required = true) String symbol) {
         return ResponseEntity.ok(globalStrategyHelper.getIndice(symbol));
     }
+
+    @GetMapping("/getSymbolBuy")
+    public ResponseEntity<String> getSymbolBuy() {
+        //http://localhost:8080/api/result/getSymbolBuy
+        return ResponseEntity.ok(globalStrategyHelper.getSymbolBuy());
+    }
 }
