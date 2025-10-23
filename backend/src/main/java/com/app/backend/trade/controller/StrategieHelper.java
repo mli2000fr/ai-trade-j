@@ -38,6 +38,8 @@ public class StrategieHelper {
     private final StrategieBackTest strategieBackTest;
     private static final boolean INSERT_ONLY = true;
     private final SwingTradeOptimParams swingParams = new SwingTradeOptimParams();
+    private final double TOLERENCE_OVERFIT_MIN = 0.5;
+    private final double TOLERENCE_OVERFIT_MAX = 1.5;
 
 
     @Autowired
@@ -239,7 +241,21 @@ public class StrategieHelper {
      * @return liste de symboles
      */
     public List<String> getAllAssetSymbolsEligibleFromDb() {
-        String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true and filtre_out = false ORDER BY symbol ASC;";
+        //String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true and filtre_out = false ORDER BY symbol ASC;";
+        String sql = """
+                SELECT aa.symbol
+                FROM trade_ai.alpaca_asset aa
+                JOIN (
+                    SELECT symbol
+                    FROM trade_ai.daily_value
+                    GROUP BY symbol
+                    HAVING COUNT(*) > 1200
+                ) dv ON aa.symbol = dv.symbol
+                WHERE aa.status = 'active'
+                  AND aa.eligible = true
+                  AND aa.filtre_out = false
+                ORDER BY aa.symbol ASC;
+                """;
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
@@ -989,7 +1005,7 @@ public class StrategieHelper {
                     RiskResult testResult = strategieBackTest.backtestStrategy(combined, testSeries);
                     // Calcul du ratio overfit pour ce combo
                     double overfitRatioCombo = testResult.getRendement() / (trainResult.getRendement() == 0.0 ? 1.0 : trainResult.getRendement());
-                    boolean isOverfitCombo = (overfitRatioCombo < 0.7 || overfitRatioCombo > 1.3);
+                    boolean isOverfitCombo = (overfitRatioCombo < TOLERENCE_OVERFIT_MIN || overfitRatioCombo > TOLERENCE_OVERFIT_MAX);
 
                     if(!isOverfitCombo){
                         BarSeries finalSeries = series.getSubSeries(series.getBarCount() - (int)Math.round(totalBars*0.2), series.getBarCount()); // dernier 20% pour le test
