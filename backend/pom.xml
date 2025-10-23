@@ -73,17 +73,13 @@
             <artifactId>Java-WebSocket</artifactId>
             <version>1.5.4</version>
         </dependency>
-        <!-- DL4J core + ND4J CUDA backend (deeplearning4j-cuda-* introuvable sur M2.1) -->
+        <!-- DL4J core only; ND4J backend is selected via Maven profiles below -->
         <dependency>
             <groupId>org.deeplearning4j</groupId>
             <artifactId>deeplearning4j-core</artifactId>
             <version>${dl4j.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.nd4j</groupId>
-            <artifactId>nd4j-cuda-11.6-platform</artifactId>
-            <version>${dl4j.version}</version>
-        </dependency>
+        <!-- Backend (CPU/GPU) moved to Maven profiles -->
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
@@ -119,6 +115,34 @@
             <version>2.1.1</version>
         </dependency>
     </dependencies>
+
+    <!-- Maven profiles to choose ND4J backend at build time -->
+    <profiles>
+        <profile>
+            <id>cpu</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.nd4j</groupId>
+                    <artifactId>nd4j-native-platform</artifactId>
+                    <version>${dl4j.version}</version>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>gpu</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>org.nd4j</groupId>
+                    <artifactId>nd4j-cuda-11.6-platform</artifactId>
+                    <version>${dl4j.version}</version>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+
     <build>
         <resources>
             <resource>
