@@ -346,6 +346,11 @@ public class LstmHelper {
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
+    public List<String> getSymbolTopClassement() {
+        String sql = "select symbol from swing_trade_metrics ORDER BY top ASC";
+        return jdbcTemplate.queryForList(sql, String.class);
+    }
+
     // Méthode conservée (signature legacy)
     public void tuneAllSymbols() {
         tuneAllSymbols(true, 150);
@@ -369,7 +374,9 @@ public class LstmHelper {
      * @param randomGridSize nombre de configs tirées si random
      */
     public void tuneAllSymbols(boolean useRandomGrid, int randomGridSize) {
-        List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
+        //List<String> symbols = getSymbolFitredFromTabSingle("rendement");
+
+        List<String> symbols = getSymbolTopClassement();
 
         // Valeurs testées (ne pas modifier sans validation)
         int[] horizonBars = {3, 5, 10};
