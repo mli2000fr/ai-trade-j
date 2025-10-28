@@ -708,7 +708,6 @@ public class StrategieHelper {
                                 .rendement(rs.getDouble("rendement"))
                                 .tradeCount(rs.getInt("trade_count"))
                                 .winRate(rs.getDouble("win_rate"))
-                                .winRate(rs.getInt("num_flod"))
                                 .maxDrawdown(rs.getDouble("max_drawdown"))
                                 .avgPnL(rs.getDouble("avg_pnl"))
                                 .profitFactor(rs.getDouble("profit_factor"))
