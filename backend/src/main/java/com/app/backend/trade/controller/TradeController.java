@@ -77,7 +77,7 @@ public class TradeController {
     public ResponseEntity<ReponseAuto> tradeAIAuto(@RequestBody TradeAutoRequestGpt request)  {
         CompteEntity compte = compteService.getCompteCredentialsById(request.getId());
         String analyseGpt = request.getAnalyseGpt() != null ? request.getAnalyseGpt() : "";
-        ReponseAuto result = tradeHelper.tradeAIAuto(compte, request.getSymbols(), analyseGpt);
+        ReponseAuto result = tradeHelper.tradeAIAuto(compte, request.getSymbols(), analyseGpt, request.getAgent());
         return ResponseEntity.ok(result);
     }
 

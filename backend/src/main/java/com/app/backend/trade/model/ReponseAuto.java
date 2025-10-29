@@ -1,6 +1,5 @@
 package com.app.backend.trade.model;
 
-import com.app.backend.trade.controller.TradeHelper;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
@@ -13,7 +12,7 @@ import java.util.List;
 @Getter
 @ToString
 public class ReponseAuto {
-    private Long idGpt;
+    private Long id;
     private List<OrderRequest> orders;
     private String analyseGpt;
 

@@ -7,13 +7,17 @@ import CircularProgress from '@mui/material/CircularProgress';
 import TradeAIResults from './TradeAIResults';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert, { AlertColor } from '@mui/material/Alert';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import FormLabel from '@mui/material/FormLabel';
 
 interface TradeAutoBlockProps {
   autoSymbols: string;
   isExecuting: boolean;
   disabled?: boolean;
   onChange: (value: string) => void;
-  onTrade: () => void;
+  onTrade: (agent: string) => void;
   analyseGptText: string;
   onAnalyseGptChange: (text: string) => void;
   message?: string;
@@ -30,6 +34,7 @@ const TradeAutoBlock: React.FC<TradeAutoBlockProps> = ({ autoSymbols, isExecutin
   const [snackbarOpen, setSnackbarOpen] = React.useState(false);
   const [snackbarMessage, setSnackbarMessage] = React.useState('');
   const [snackbarSeverity, setSnackbarSeverity] = React.useState<AlertColor>('success');
+  const [agent, setAgent] = React.useState<'gpt' | 'deepseek'>('deepseek');
 
   const showSnackbar = (message: string, severity: AlertColor = 'success') => {
     setSnackbarMessage(message);
@@ -116,9 +121,16 @@ const TradeAutoBlock: React.FC<TradeAutoBlockProps> = ({ autoSymbols, isExecutin
           <Typography variant="caption" color="success.main">Fichier chargé</Typography>
         )}
       </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+        <FormLabel component="legend">Agent</FormLabel>
+        <RadioGroup row value={agent} onChange={e => setAgent(e.target.value as 'gpt' | 'deepseek')}>
+          <FormControlLabel value="gpt" control={<Radio />} label="GPT" />
+          <FormControlLabel value="deepseek" control={<Radio />} label="Deepseek" />
+        </RadioGroup>
+      </Box>
       <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 2 }}>
         <Button
-          onClick={onTrade}
+          onClick={() => onTrade(agent)}
           disabled={disabled || isExecuting || !autoSymbols.trim()}
           variant="contained"
           size="large"

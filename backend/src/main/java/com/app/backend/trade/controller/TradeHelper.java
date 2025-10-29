@@ -20,8 +20,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import static com.app.backend.trade.util.TradeConstant.NOMBRE_TOTAL_BOUGIES_FOR_SIGNAL;
-
 
 @Controller
 public class TradeHelper {
@@ -36,6 +34,7 @@ public class TradeHelper {
     private final StrategyService strategyService;
     private final CompteService compteService;
     private final JdbcTemplate jdbcTemplate;
+    private final DeepseekService deepseekService;
 
     @Autowired
     public TradeHelper(AlpacaService alpacaService,
@@ -45,7 +44,9 @@ public class TradeHelper {
                        EodhdService eodhdService,
                        StrategyService strategyService,
                        CompteService compteService,
+                       DeepseekService deepseekService,
                        JdbcTemplate jdbcTemplate) {
+        this.deepseekService = deepseekService;
         this.alpacaService = alpacaService;
         this.chatGptService = chatGptService;
         this.twelveDataService = twelveDataService;
@@ -103,7 +104,7 @@ public class TradeHelper {
      * @param analyseGpt Analyse IA optionnelle
      * @return ReponseAuto
      */
-    public ReponseAuto tradeAIAuto(CompteEntity compte, List<String> symbols, String analyseGpt) {
+    public ReponseAuto tradeAIAuto(CompteEntity compte, List<String> symbols, String analyseGpt, String agent) {
 
         if (symbols == null || symbols.isEmpty()) {
             throw new RuntimeException("Aucun symbole fourni pour tradeAIAuto.");
@@ -137,8 +138,14 @@ public class TradeHelper {
             sleepForRateLimit();
         }
         promptFinal.append(promptPied);
-
-        ChatGptResponse response = chatGptService.askChatGpt(String.valueOf(compte.getId()), promptFinal.toString());
+        AgentResponse response;
+        if(Agent.GPT.getName().equals(agent)){
+            response = chatGptService.askChatGpt(promptFinal.toString());
+        }else if(Agent.DEEPSEEK.getName().equals(agent)){
+            response = deepseekService.askDeepseek(promptFinal.toString());
+        }else{
+            throw new RuntimeException("Erreur lors de l'analyse : unknow agent - " + agent);
+        }
         if (response.getError() != null) {
             throw new RuntimeException("Erreur lors de l'analyse : " + response.getError());
         }
@@ -152,9 +159,12 @@ public class TradeHelper {
      * @param response Réponse IA
      * @return ReponseAuto
      */
-    private ReponseAuto processAIAuto(CompteEntity compte, ChatGptResponse response) {
+    private ReponseAuto processAIAuto(CompteEntity compte, AgentResponse response) {
         String[] parts = response.getMessage() != null ? response.getMessage().split("===") : new String[0];
         String orders = parts.length > 0 ? parts[0].trim() : "";
+        if(orders.contains("```json")){
+            orders = orders.replace("```json\n", "").replace("\n```", "");
+        }
         String analyseGpt = parts.length > 1 ? parts[1].trim() : "";
         try {
             Type listType = new TypeToken<List<OrderRequest>>() {
@@ -175,7 +185,7 @@ public class TradeHelper {
                     }
                 }
             }
-            ReponseAuto ra = ReponseAuto.builder().idGpt(response.getIdGpt()).analyseGpt(analyseGpt).orders(listOrders).build();
+            ReponseAuto ra = ReponseAuto.builder().id(response.getId()).analyseGpt(analyseGpt).orders(listOrders).build();
             return ra;
         } catch (Exception e) {
             throw new RuntimeException(response.getMessage() + "Erreur de parsing de l'ordre : " + e.getMessage());
