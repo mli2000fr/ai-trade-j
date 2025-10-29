@@ -55,7 +55,7 @@ const SymbolBuyMonitorPage: React.FC = () => {
         <Divider sx={{ mb: 2 }} />
         <Box mb={2}>
           <Typography variant="body1">
-            Nombre de symboles exécutés : <b>{executedCount}</b>
+            Nombre de symbols exécutés : <b>{executedCount}</b>
           </Typography>
         </Box>
         <Box display="flex" justifyContent="center" alignItems="center" mb={2}>
