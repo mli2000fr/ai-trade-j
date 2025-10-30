@@ -210,8 +210,8 @@ const BestPerformanceSymbolBlock: React.FC = () => {
   useEffect(() => {
     if (!data || data.length === 0) return;
     const symbolsToFetch = data
-      .map((row: MixResultat) => row.single.symbol)
-      .filter((symbol: string) => symbol && !(symbol in indices));
+      .map((row: MixResultat) => row.single.symbol);
+      //.filter((symbol: string) => symbol && !(symbol in indices));
     if (symbolsToFetch.length === 0) return;
     symbolsToFetch.forEach((symbol: string) => {
       setIndices(prev => ({ ...prev, [symbol]: 'pending' }));
