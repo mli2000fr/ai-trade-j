@@ -103,17 +103,6 @@ public class GlobalStrategyHelper {
                 .build();
     }
 
-    public List<SymbolPerso> getSymbolsPerso() {
-        String sql = "SELECT * FROM trade_ai.symbol_perso order by created_at DESC;";
-        return jdbcTemplate.query(sql, (rs, rowNum) -> SymbolPerso.builder()
-                        .symbols(rs.getString("symbols").replaceAll(" ", ""))
-                .name(rs.getString("name"))
-                .date(rs.getDate("created_at") == null ? null :
-                    rs.getDate("created_at").toLocalDate().format(java.time.format.DateTimeFormatter.ofPattern(FORMAT_DATE)))
-                .id(rs.getString("id"))
-                .build()
-        );
-    }
     public GlobalIndice getIndice(String symbol){
         SignalInfo singleS = strategieHelper.getBestInOutSignal(symbol);
         SignalInfo mixS = bestCombinationStrategyHelper.getSignal(symbol);
@@ -130,49 +119,4 @@ public class GlobalStrategyHelper {
     }
 
 
-
-    public String getSymbolBuy() {
-        java.time.LocalDateTime todayDateTime = java.time.LocalDateTime.now();
-        java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(todayDateTime.toLocalDate());
-        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern(FORMAT_DATE);
-        String lastTradingDayStr = lastTradingDay.format(formatter);
-
-        List<SymbolPerso> listSymPerso = this.getSymbolsPerso();
-        boolean isExistant = listSymPerso.stream().anyMatch(sp -> lastTradingDayStr.equals(sp.getDate())
-            && sp.getName().startsWith(NOM_SYM_BUY));
-        if(isExistant){
-            return "existant";
-        }
-
-        String sql = "select symbol from trade_ai.best_in_out_single_strategy;";
-        List<String> listeSym = jdbcTemplate.query(sql, (rs, rowNum) -> {
-            return rs.getString("symbol");
-        });
-        List<String> listeSymBut = new ArrayList<>();
-        int executedCount = 0;
-        for(String symbol : listeSym) {
-            SignalInfo single = strategieHelper.getBestInOutSignal(symbol);
-            SignalInfo mix = bestCombinationStrategyHelper.getSignal(symbol);
-            PreditLsdm predit = lstmHelper.getPredit(symbol, "rendement");
-            if(single != null && mix != null
-            && single.getType() == SignalType.BUY
-            && mix.getType() == SignalType.BUY
-                    && predit != null && predit.getSignal() == SignalType.BUY) {
-                listeSymBut.add(symbol);
-            }
-            executedCount++;
-            lastSymbolBuyCount = executedCount;
-        }
-        String symbolBuy = String.join(",", listeSymBut);
-        String insertSql = "INSERT INTO symbol_perso (name, created_at, symbols) VALUES (?, ?, ?)";
-        jdbcTemplate.update(insertSql,
-                NOM_SYM_BUY + lastTradingDayStr,
-                lastTradingDay,
-                symbolBuy);
-        return symbolBuy;
-    }
-
-    public int getLastSymbolBuyCount() {
-        return lastSymbolBuyCount;
-    }
 }

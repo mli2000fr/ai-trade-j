@@ -21,6 +21,9 @@ public class GlobalStrategyController {
     @Autowired
     private GlobalStrategyHelper globalStrategyHelper;
 
+    @Autowired
+    private CheckSymbolHelper checkSymbolHelper;
+
     @GetMapping("/global")
     public List<MixResultat> getBestScoreAction(@RequestParam(value = "limit", required = false) Integer limit,
                                                 @RequestParam(value = "type", required = false, defaultValue = "single") String type,
@@ -39,7 +42,7 @@ public class GlobalStrategyController {
 
     @GetMapping("/symbol_pero")
     public ResponseEntity<List<SymbolPerso>> getSymbolsPerso() {
-        return ResponseEntity.ok(globalStrategyHelper.getSymbolsPerso());
+        return ResponseEntity.ok(checkSymbolHelper.getSymbolsPerso());
     }
 
 
@@ -51,11 +54,11 @@ public class GlobalStrategyController {
     @GetMapping("/getSymbolBuy")
     public ResponseEntity<String> getSymbolBuy() {
         //http://localhost:8080/api/result/getSymbolBuy
-        return ResponseEntity.ok(globalStrategyHelper.getSymbolBuy());
+        return ResponseEntity.ok(checkSymbolHelper.getSymbolBuy());
     }
 
     @GetMapping("/symbol-buy/monitor")
     public ResponseEntity<Integer> getSymbolBuyMonitor() {
-        return ResponseEntity.ok(globalStrategyHelper.getLastSymbolBuyCount());
+        return ResponseEntity.ok(checkSymbolHelper.getLastSymbolBuyCount());
     }
 }

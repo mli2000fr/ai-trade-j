@@ -34,7 +34,7 @@ const TradeAutoBlock: React.FC<TradeAutoBlockProps> = ({ autoSymbols, isExecutin
   const [snackbarOpen, setSnackbarOpen] = React.useState(false);
   const [snackbarMessage, setSnackbarMessage] = React.useState('');
   const [snackbarSeverity, setSnackbarSeverity] = React.useState<AlertColor>('success');
-  const [agent, setAgent] = React.useState<'gpt' | 'deepseek'>('deepseek');
+  const [agent, setAgent] = React.useState<'gpt' | 'deepseek' | ''>('');
 
   const showSnackbar = (message: string, severity: AlertColor = 'success') => {
     setSnackbarMessage(message);
@@ -65,6 +65,14 @@ const TradeAutoBlock: React.FC<TradeAutoBlockProps> = ({ autoSymbols, isExecutin
     } finally {
       setLoadingPrompt(false);
     }
+  };
+
+  const handleExecute = () => {
+    if (!agent) {
+      showSnackbar("L'agent est obligatoire", 'error');
+      return;
+    }
+    onTrade(agent);
   };
 
   return (
@@ -130,7 +138,7 @@ const TradeAutoBlock: React.FC<TradeAutoBlockProps> = ({ autoSymbols, isExecutin
       </Box>
       <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 2 }}>
         <Button
-          onClick={() => onTrade(agent)}
+          onClick={handleExecute}
           disabled={disabled || isExecuting || !autoSymbols.trim()}
           variant="contained"
           size="large"
