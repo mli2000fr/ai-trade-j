@@ -26,6 +26,8 @@ public class TradeHelper {
     @Value("${trade.type}")
     private String tradeType;
 
+    private final static String INCONNU = "";
+
     private final AlpacaService alpacaService;
     private final ChatGptService chatGptService;
     private final TwelveDataService twelveDataService;
@@ -132,7 +134,7 @@ public class TradeHelper {
         for (String symbol : symbols) {
             symbol = symbol.trim();
             if (symbol.isEmpty()) continue;
-            InfosAction infosAction = this.getInfosAction(compte, symbol, true);
+            InfosAction infosAction = this.getInfosAction(compte, symbol, agent, true);
             Map<String, Object> variables = TradeUtils.getStringObjectMap(infosAction); // Utilitaire déplacé
             promptFinal.append(getPromptWithValues(promptSymbol, variables));
             sleepForRateLimit();
@@ -265,7 +267,7 @@ public class TradeHelper {
      * @param withPortfolio inclure le portefeuille
      * @return InfosAction
      */
-    private InfosAction getInfosAction(CompteEntity compte, String symbol, boolean withPortfolio) {
+    private InfosAction getInfosAction(CompteEntity compte, String symbol, String agent, boolean withPortfolio) {
         String portfolioJson = null;
         if (withPortfolio) {
             Portfolio portfolio = this.getPortfolio(compte);
@@ -301,6 +303,24 @@ public class TradeHelper {
             }
         } catch (Exception e) {
             TradeUtils.log("Error getNews(" + symbol + "): " + e.getMessage());
+        }
+        if(Agent.DEEPSEEK.getName().equals(agent)){
+            return new InfosAction(
+                    lastPrice,
+                    symbol,
+                    historical,
+                    INCONNU,
+                    INCONNU,
+                    INCONNU,
+                    INCONNU,
+                    INCONNU,
+                    INCONNU,
+                    INCONNU,
+                    INCONNU,
+                    INCONNU,
+                    news,
+                    portfolioJson
+            );
         }
         return new InfosAction(
                 lastPrice,
