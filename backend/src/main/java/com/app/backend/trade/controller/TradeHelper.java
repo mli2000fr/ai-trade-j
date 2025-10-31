@@ -28,6 +28,8 @@ public class TradeHelper {
 
     private final static String INCONNU = "";
 
+    private final static boolean ACTIF_SIMPLE = true;
+
     private final AlpacaService alpacaService;
     private final ChatGptService chatGptService;
     private final TwelveDataService twelveDataService;
@@ -304,7 +306,7 @@ public class TradeHelper {
         } catch (Exception e) {
             TradeUtils.log("Error getNews(" + symbol + "): " + e.getMessage());
         }
-        if(Agent.DEEPSEEK.getName().equals(agent)){
+        if(ACTIF_SIMPLE && Agent.DEEPSEEK.getName().equals(agent)){
             return new InfosAction(
                     lastPrice,
                     symbol,
