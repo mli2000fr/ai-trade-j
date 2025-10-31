@@ -202,7 +202,7 @@ public class LstmHelper {
         LstmConfig config = loaded != null ? loaded.config : null;
 
         // 4. Charger les données prix (BarSeries complet)
-        BarSeries series = getBarBySymbol(symbol, null);
+        BarSeries series = getBarBySymbol(symbol, 100);
 
 
         // 6. Exécution de la prédiction (utilise model/scalers si présents)

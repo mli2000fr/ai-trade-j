@@ -1,7 +1,7 @@
 
 Data of symbole {{symbol}}
 {{data_price}}
-- History Daily price (from api alpaca): {{data_historical_daily}}
+- History Daily price: {{data_historical_daily}}
 - EMA_20: {{data_ema20}}
 - EMA_50: {{data_ema50}}
 - SMA_200: {{data_sma200}}
