@@ -741,7 +741,10 @@ public class StrategieHelper {
         }else{
             orderBy = "s." + orderBy + " DESC";
         }
-        String sql = "SELECT s.*, a.name FROM best_in_out_single_strategy s JOIN alpaca_asset a ON s.symbol = a.symbol WHERE "+ searchSQL +" s.profit_factor <> 0 AND s.win_rate < 1 and filtre_out = false";
+        String sql = "SELECT s.*, a.name FROM best_in_out_single_strategy s JOIN alpaca_asset a ON s.symbol = a.symbol WHERE "+ searchSQL +" s.profit_factor <> 0 AND s.win_rate < 1";
+        if(search == null || search.isEmpty()){
+            sql += " AND filtre_out = false";
+        }
         if (topProfil != null && topProfil) {
             sql += " AND s.avg_pnl > 0 AND s.profit_factor > 1 AND s.win_rate > 0.5 AND s.max_drawdown < 0.2 AND s.sharpe_ratio > 1 AND s.rendement > 0.05";
         }

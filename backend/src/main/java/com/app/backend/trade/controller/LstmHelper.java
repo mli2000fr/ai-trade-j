@@ -354,6 +354,25 @@ public class LstmHelper {
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
+    public List<String> getSymbolsTechno() {
+        String sql = "SELECT name, symbols FROM trade_ai.symbol_perso order by created_at DESC;";
+        List<SymbolPerso> listePerso = jdbcTemplate.query(sql, (rs, rowNum) -> SymbolPerso.builder()
+                .symbols(rs.getString("symbols").replaceAll(" ", ""))
+                .name(rs.getString("name"))
+                .build()
+        );
+        SymbolPerso techno = listePerso.stream()
+                .filter(sp -> sp.getName().toLowerCase().contains("top_100_tech"))
+                .findFirst()
+                .orElse(null);
+        if(techno != null){
+            String[] symbolsArray = techno.getSymbols().split(",");
+            return java.util.Arrays.asList(symbolsArray);
+        }else {
+            throw new RuntimeException("Aucun symbole techno trouvé dans symbol_perso.");
+        }
+    }
+
     // Méthode conservée (signature legacy)
     public void tuneAllSymbols() {
         tuneAllSymbols(true, 150);
@@ -379,7 +398,7 @@ public class LstmHelper {
     public void tuneAllSymbols(boolean useRandomGrid, int randomGridSize) {
         //List<String> symbols = getSymbolFitredFromTabSingle("rendement");
 
-        List<String> symbols = getSymbolTopClassement();
+        List<String> symbols = getSymbolsTechno();//getSymbolTopClassement();
 
         // Valeurs testées (ne pas modifier sans validation)
         int[] horizonBars = {3, 5, 10};
