@@ -28,7 +28,9 @@ public class TradeHelper {
 
     private final static String INCONNU = "";
 
-    private final static boolean ACTIF_SIMPLE = true;
+    private final static boolean ACTIF_SIMPLE = true
+
+            ;
 
     private final AlpacaService alpacaService;
     private final ChatGptService chatGptService;
