@@ -2878,6 +2878,9 @@ public class LstmTradePredictor {
     public LoadedModel loadModelAndScalersFromDb(String symbol, String index, JdbcTemplate jdbcTemplate) throws IOException {
 
         // Sélection explicite des colonnes nécessaires
+        if("classement".equals(index)){
+            index = "business_score";
+        }
         String sql = "SELECT * FROM lstm_models WHERE symbol = ? order by "+ index +" desc limit 1";
 
         try {

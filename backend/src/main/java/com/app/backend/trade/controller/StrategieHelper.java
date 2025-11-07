@@ -38,6 +38,8 @@ public class StrategieHelper {
     private final StrategieBackTest strategieBackTest;
     private static final boolean INSERT_ONLY = true;
     private final SwingTradeOptimParams swingParams = new SwingTradeOptimParams();
+    private final double TOLERENCE_OVERFIT_MIN = 0.5;
+    private final double TOLERENCE_OVERFIT_MAX = 1.5;
 
 
     @Autowired
@@ -239,7 +241,21 @@ public class StrategieHelper {
      * @return liste de symboles
      */
     public List<String> getAllAssetSymbolsEligibleFromDb() {
-        String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true and filtre_out = false ORDER BY symbol ASC;";
+        //String sql = "SELECT symbol FROM trade_ai.alpaca_asset WHERE status = 'active' and eligible = true and filtre_out = false ORDER BY symbol ASC;";
+        String sql = """
+                SELECT aa.symbol
+                FROM trade_ai.alpaca_asset aa
+                JOIN (
+                    SELECT symbol
+                    FROM trade_ai.daily_value
+                    GROUP BY symbol
+                    HAVING COUNT(*) > 1200
+                ) dv ON aa.symbol = dv.symbol
+                WHERE aa.status = 'active'
+                  AND aa.eligible = true
+                  AND aa.filtre_out = false
+                ORDER BY aa.symbol ASC;
+                """;
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
@@ -692,7 +708,6 @@ public class StrategieHelper {
                                 .rendement(rs.getDouble("rendement"))
                                 .tradeCount(rs.getInt("trade_count"))
                                 .winRate(rs.getDouble("win_rate"))
-                                .winRate(rs.getInt("num_flod"))
                                 .maxDrawdown(rs.getDouble("max_drawdown"))
                                 .avgPnL(rs.getDouble("avg_pnl"))
                                 .profitFactor(rs.getDouble("profit_factor"))
@@ -726,7 +741,10 @@ public class StrategieHelper {
         }else{
             orderBy = "s." + orderBy + " DESC";
         }
-        String sql = "SELECT s.*, a.name FROM best_in_out_single_strategy s JOIN alpaca_asset a ON s.symbol = a.symbol WHERE "+ searchSQL +" s.profit_factor <> 0 AND s.win_rate < 1 and filtre_out = false";
+        String sql = "SELECT s.*, a.name FROM best_in_out_single_strategy s JOIN alpaca_asset a ON s.symbol = a.symbol WHERE "+ searchSQL +" s.profit_factor <> 0 AND s.win_rate < 1";
+        if(search == null || search.isEmpty()){
+            sql += " AND filtre_out = false";
+        }
         if (topProfil != null && topProfil) {
             sql += " AND s.avg_pnl > 0 AND s.profit_factor > 1 AND s.win_rate > 0.5 AND s.max_drawdown < 0.2 AND s.sharpe_ratio > 1 AND s.rendement > 0.05";
         }
@@ -989,7 +1007,7 @@ public class StrategieHelper {
                     RiskResult testResult = strategieBackTest.backtestStrategy(combined, testSeries);
                     // Calcul du ratio overfit pour ce combo
                     double overfitRatioCombo = testResult.getRendement() / (trainResult.getRendement() == 0.0 ? 1.0 : trainResult.getRendement());
-                    boolean isOverfitCombo = (overfitRatioCombo < 0.7 || overfitRatioCombo > 1.3);
+                    boolean isOverfitCombo = (overfitRatioCombo < TOLERENCE_OVERFIT_MIN || overfitRatioCombo > TOLERENCE_OVERFIT_MAX);
 
                     if(!isOverfitCombo){
                         BarSeries finalSeries = series.getSubSeries(series.getBarCount() - (int)Math.round(totalBars*0.2), series.getBarCount()); // dernier 20% pour le test

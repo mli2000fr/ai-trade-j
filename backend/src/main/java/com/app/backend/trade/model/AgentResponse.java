@@ -7,8 +7,8 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChatGptResponse {
-    private Long idGpt;
+public class AgentResponse {
+    private Long id;
     private String message;
     private String error;
 }

@@ -13,4 +13,5 @@ public class TradeAutoRequestGpt {
     private String id;
     private List<String> symbols;
     private String analyseGpt;
+    private String agent;
 }

@@ -16,5 +16,7 @@ public class TradeConstant {
     public static final int HISTORIQUE_MIN_VALUE = 31;
     public static final int RANDO_COUNT = 20000;
 
+    public static final boolean isGPU = false;
+
 }
 

@@ -2,7 +2,9 @@ package com.app.backend.trade.controller;
 
 import com.app.backend.trade.lstm.LstmTradePredictor;
 import com.app.backend.trade.lstm.LstmTuningService;
+import com.app.backend.trade.model.AgentResponse;
 import com.app.backend.trade.model.PreditLsdm;
+import com.app.backend.trade.service.DeepseekService;
 import org.nd4j.linalg.factory.Nd4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -164,5 +166,17 @@ public class LstmController {
             System.setOut(oldOut);
         }
         return baos.toString();
+    }
+
+
+
+    @Autowired
+    private DeepseekService deepseekService;
+
+    @GetMapping("/test-deepseek")
+    @ResponseBody
+    public String testDeepseek() {
+        AgentResponse res = deepseekService.askDeepseek("Bonjour, peux tu me faire un résumé en trois phrases de l'histoire de France ?");
+        return res.getMessage();
     }
 }

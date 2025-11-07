@@ -101,7 +101,7 @@ const DashboardPage: React.FC = () => {
   };
 
   // Handler trade auto
-  const handleTradeAuto = async () => {
+  const handleTradeAuto = async (agent: string) => {
     setMessageAuto('');
     setIsExecutingAuto(true);
     setAiJsonResult(null);
@@ -111,7 +111,7 @@ const DashboardPage: React.FC = () => {
       const res = await fetch('/api/trade/trade-ai-auto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols, id: selectedCompteId, analyseGpt: analyseGptText }),
+        body: JSON.stringify({ symbols, id: selectedCompteId, analyseGpt: analyseGptText, agent }),
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();

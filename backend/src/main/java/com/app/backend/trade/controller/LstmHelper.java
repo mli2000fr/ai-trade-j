@@ -185,7 +185,7 @@ public class LstmHelper {
      */
     public PreditLsdm getPredit(String symbol, String index) {
         // 1. Vérifier si une prédiction du jour existe déjà (évite recalcul)
-        PreditLsdm preditLsdmDb = this.getPreditFromDB(symbol);
+        PreditLsdm preditLsdmDb = this.getPreditFromDB(symbol, index);
         if (preditLsdmDb != null) {
             return preditLsdmDb;
         }
@@ -202,7 +202,7 @@ public class LstmHelper {
         LstmConfig config = loaded != null ? loaded.config : null;
 
         // 4. Charger les données prix (BarSeries complet)
-        BarSeries series = getBarBySymbol(symbol, null);
+        BarSeries series = getBarBySymbol(symbol, 100);
 
 
         // 6. Exécution de la prédiction (utilise model/scalers si présents)
@@ -233,7 +233,7 @@ public class LstmHelper {
         preditLsdm.setLoadedModel(loaded);
 
         // 7. Sauvegarde du signal du jour
-        saveSignalHistory(symbol, preditLsdm);
+        saveSignalHistory(symbol, index, preditLsdm);
         return preditLsdm;
     }
 
@@ -247,12 +247,13 @@ public class LstmHelper {
      * @param symbol symbole
      * @param preditLsdm objet contenant signal + prix
      */
-    public void saveSignalHistory(String symbol, PreditLsdm preditLsdm) {
+    public void saveSignalHistory(String symbol, String tri, PreditLsdm preditLsdm) {
         java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
-        String insertSql = "INSERT INTO signal_lstm (symbol, signal_lstm, price_lstm, price_clo, position_lstm, lstm_created_at, result_tuning) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        String insertSql = "INSERT INTO signal_lstm (symbol, tri, signal_lstm, price_lstm, price_clo, position_lstm, lstm_created_at, result_tuning) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         jdbcTemplate.update(insertSql,
                 symbol,
                 preditLsdm.getSignal().name(),
+                tri,
                 preditLsdm.getPredictedClose(),
                 preditLsdm.getLastClose(),
                 preditLsdm.getPosition(),
@@ -276,10 +277,13 @@ public class LstmHelper {
      * @param symbol symbole
      * @return PreditLsdm ou null si pas à jour
      */
-    public PreditLsdm getPreditFromDB(String symbol) {
-        String sql = "SELECT * FROM signal_lstm WHERE symbol = ? ORDER BY lstm_created_at DESC LIMIT 1";
+    public PreditLsdm getPreditFromDB(String symbol, String tri) {
+        String sql = "SELECT * FROM signal_lstm WHERE symbol = ? AND tri = ? ORDER BY lstm_created_at DESC LIMIT 1";
         try {
-            return jdbcTemplate.query(sql, ps -> ps.setString(1, symbol), rs -> {
+            return jdbcTemplate.query(sql, ps -> {
+                ps.setString(1, symbol);
+                ps.setString(2, tri);
+            }, rs -> {
                 if (rs.next()) {
                     String signalStr = rs.getString("signal_lstm");
                     double priceLstm = rs.getDouble("price_lstm");
@@ -288,7 +292,6 @@ public class LstmHelper {
                     java.sql.Date lastDate = rs.getDate("lstm_created_at");
                     String tuning_result =  rs.getString("result_tuning");
                     LstmTradePredictor.LoadedModel loadedModel = new Gson().fromJson(tuning_result, LstmTradePredictor.LoadedModel.class);
-
 
                     // Conversion robuste du type de signal
                     SignalType type;
@@ -346,6 +349,30 @@ public class LstmHelper {
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
+    public List<String> getSymbolTopClassement() {
+        String sql = "select symbol from swing_trade_metrics ORDER BY top ASC";
+        return jdbcTemplate.queryForList(sql, String.class);
+    }
+
+    public List<String> getSymbolsTechno() {
+        String sql = "SELECT name, symbols FROM trade_ai.symbol_perso order by created_at DESC;";
+        List<SymbolPerso> listePerso = jdbcTemplate.query(sql, (rs, rowNum) -> SymbolPerso.builder()
+                .symbols(rs.getString("symbols").replaceAll(" ", ""))
+                .name(rs.getString("name"))
+                .build()
+        );
+        SymbolPerso techno = listePerso.stream()
+                .filter(sp -> sp.getName().toLowerCase().contains("top_100_tech"))
+                .findFirst()
+                .orElse(null);
+        if(techno != null){
+            String[] symbolsArray = techno.getSymbols().split(",");
+            return java.util.Arrays.asList(symbolsArray);
+        }else {
+            throw new RuntimeException("Aucun symbole techno trouvé dans symbol_perso.");
+        }
+    }
+
     // Méthode conservée (signature legacy)
     public void tuneAllSymbols() {
         tuneAllSymbols(true, 150);
@@ -369,7 +396,9 @@ public class LstmHelper {
      * @param randomGridSize nombre de configs tirées si random
      */
     public void tuneAllSymbols(boolean useRandomGrid, int randomGridSize) {
-        List<String> symbols = getSymbolFitredFromTabSingle("score_swing_trade");
+        //List<String> symbols = getSymbolFitredFromTabSingle("rendement");
+
+        List<String> symbols = getSymbolsTechno();//getSymbolTopClassement();
 
         // Valeurs testées (ne pas modifier sans validation)
         int[] horizonBars = {3, 5, 10};
