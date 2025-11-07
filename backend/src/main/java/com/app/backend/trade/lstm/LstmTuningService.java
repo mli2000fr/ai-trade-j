@@ -1768,8 +1768,9 @@ public class LstmTuningService {
                                              String phaseTag,
                                              TuningProgress progress) {
         waitForMemory();
+
         long start = System.currentTimeMillis();
-        int numThreads = TradeConstant.isGPU ? 2 : 3; // Désormais séquentiel
+        int numThreads = TradeConstant.isGPU ? 2 : 4; // Désormais séquentiel
         if (numThreads < 1) numThreads = 1;
         if (progress != null && progress.threadsUsed == 0) progress.threadsUsed = numThreads;
         // Suppression du pool de threads
