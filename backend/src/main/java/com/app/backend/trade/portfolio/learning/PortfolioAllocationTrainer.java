@@ -3,6 +3,8 @@ package com.app.backend.trade.portfolio.learning;
 import com.app.backend.trade.model.PreditLsdm;
 import com.app.backend.trade.model.SignalType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,6 +15,7 @@ import java.util.*;
  * Trainer supervisé pour le modèle d'allocation.
  * Construit un dataset à partir de l'historique des signaux (table signal_lstm) et des prix (daily_value).
  */
+@Component
 public class PortfolioAllocationTrainer {
 
     private static final Logger logger = LoggerFactory.getLogger(PortfolioAllocationTrainer.class);
@@ -32,7 +35,6 @@ public class PortfolioAllocationTrainer {
     public PortfolioAllocationModel trainModel(List<String> symbols, String tri) {
         List<double[]> featureRows = new ArrayList<>();
         List<Double> targetRows = new ArrayList<>();
-
         for (String sym : symbols) {
             try {
                 buildSymbolDataset(sym, tri, featureRows, targetRows);
@@ -41,25 +43,20 @@ public class PortfolioAllocationTrainer {
             }
         }
         if (featureRows.isEmpty()) {
-            logger.warn("Dataset vide => retour modèle non entraîné.");
-            return new PortfolioAllocationModel(1, config); // placeholder
+            logger.warn("Dataset vide => modèle placeholder.");
+            return new PortfolioAllocationModel(1, config);
         }
         int inputSize = featureRows.get(0).length;
         PortfolioAllocationModel model = new PortfolioAllocationModel(inputSize, config);
-        // Préparation INDArray (concat)
         int n = featureRows.size();
         double[][] X = new double[n][inputSize];
         double[][] y = new double[n][1];
-        for (int i = 0; i < n; i++) {
-            X[i] = featureRows.get(i);
-            y[i][0] = targetRows.get(i);
-        }
+        for (int i = 0; i < n; i++) { X[i] = featureRows.get(i); y[i][0] = targetRows.get(i); }
+        if (config.isNormalizeFeatures()) { normalizeInPlace(X); }
         org.nd4j.linalg.api.ndarray.INDArray inX = org.nd4j.linalg.factory.Nd4j.create(X);
         org.nd4j.linalg.api.ndarray.INDArray inY = org.nd4j.linalg.factory.Nd4j.create(y);
-        for (int epoch = 0; epoch < config.getEpochs(); epoch++) {
-            model.getNetwork().fit(inX, inY);
-        }
-        logger.info("Entraînement terminé: {} lignes, inputSize={} ", n, inputSize);
+        for (int epoch = 0; epoch < config.getEpochs(); epoch++) { model.getNetwork().fit(inX, inY); }
+        logger.info("Entraînement terminé: {} lignes, inputSize={}", n, inputSize);
         return model;
     }
 
@@ -71,30 +68,32 @@ public class PortfolioAllocationTrainer {
         String sqlSignals = "SELECT lstm_created_at, signal_lstm, price_lstm, price_clo FROM signal_lstm WHERE symbol = ? AND tri = ? ORDER BY lstm_created_at ASC";
         List<Map<String, Object>> signals = jdbcTemplate.queryForList(sqlSignals, symbol, tri);
         if (signals.size() < config.getMinHistoryBars()) return;
-        // Map date -> close pour daily_value
-        String sqlPrices = "SELECT date, close FROM daily_value WHERE symbol = ? ORDER BY date ASC";
-        Map<LocalDate, Double> closeMap = new HashMap<>();
-        jdbcTemplate.query(sqlPrices, ps -> ps.setString(1, symbol), rs -> {
-            while (rs.next()) {
-                try { closeMap.put(rs.getDate("date").toLocalDate(), Double.valueOf(rs.getString("close"))); } catch (Exception ignored) {}
-            }
-        });
-        // Rolling stats pour volatilité simple (std 20 derniers rendements)
-        List<Double> prevCloses = new ArrayList<>();
+        // Préparer séquence des closes (trading bars séquentielles)
+        List<Double> closes = new ArrayList<>();
         for (Map<String, Object> row : signals) {
-            LocalDate d = ((java.sql.Date) row.get("lstm_created_at")).toLocalDate();
-            Double closeToday = closeMap.get(d);
-            if (closeToday == null) continue;
-            // Future window
-            double futureRet = computeFutureReturn(closeMap, d, config.getLookaheadBars());
-            if (Double.isNaN(futureRet)) continue;
-            // Rendement direct pour features
-            if (!prevCloses.isEmpty()) {
-                double lastClosePrev = prevCloses.get(prevCloses.size() - 1);
-            }
-            prevCloses.add(closeToday);
-            double vol20 = computeVolatility(prevCloses, 20);
-            String signalStr = (String) row.get("signal_lstm");
+            Double c = asDouble(row.get("price_clo"));
+            if (c != null && c > 0) closes.add(c); else closes.add(Double.NaN);
+        }
+        // Metrics modèle (une seule récupération)
+        String sqlMetric = "SELECT profit_factor, win_rate, max_drawdown, business_score, total_trades FROM trade_ai.lstm_models WHERE symbol = ? ORDER BY updated_date DESC LIMIT 1";
+        Map<String, Object> metric = null;
+        try { metric = jdbcTemplate.queryForMap(sqlMetric, symbol); } catch (Exception ignored) {}
+        double profitFactor = safeMetric(metric, "profit_factor");
+        double winRate = safeMetric(metric, "win_rate");
+        double maxDD = safeMetric(metric, "max_drawdown");
+        double businessScore = safeMetric(metric, "business_score");
+        double totalTrades = safeMetric(metric, "total_trades");
+
+        // Parcours séquentiel (trading days) pour label horizonBars
+        for (int i = 0; i < signals.size(); i++) {
+            int futureIndex = i + config.getLookaheadBars();
+            if (futureIndex >= signals.size()) break; // fin
+            Double startClose = closes.get(i);
+            Double endClose = closes.get(futureIndex);
+            if (startClose == null || endClose == null || startClose.isNaN() || endClose.isNaN() || startClose == 0) continue;
+            double futureRet = (endClose - startClose) / startClose;
+            Map<String,Object> row = signals.get(i);
+            String signalStr = String.valueOf(row.get("signal_lstm"));
             SignalType sig;
             try { sig = SignalType.valueOf(signalStr); } catch (Exception e) { sig = SignalType.NONE; }
             double signalBuy = sig == SignalType.BUY ? 1.0 : 0.0;
@@ -102,19 +101,66 @@ public class PortfolioAllocationTrainer {
             Double pricePred = asDouble(row.get("price_lstm"));
             Double priceClose = asDouble(row.get("price_clo"));
             double deltaPred = (pricePred != null && priceClose != null && priceClose != 0) ? (pricePred - priceClose) / priceClose : 0.0;
-            // Metrics modèle (dernière ligne)
-            String sqlMetric = "SELECT profit_factor, win_rate, max_drawdown, business_score, total_trades FROM trade_ai.lstm_models WHERE symbol = ? ORDER BY updated_date DESC LIMIT 1";
-            Map<String, Object> metric = null;
-            try { metric = jdbcTemplate.queryForMap(sqlMetric, symbol); } catch (Exception ignored) {}
-            double profitFactor = safeMetric(metric, "profit_factor");
-            double winRate = safeMetric(metric, "win_rate");
-            double maxDD = safeMetric(metric, "max_drawdown");
-            double businessScore = safeMetric(metric, "business_score");
-            double totalTrades = safeMetric(metric, "total_trades");
+            // Volatilité rolling basée sur closes jusqu'à i
+            double vol20 = computeVolatilityRolling(closes, i, 20);
             double[] features = new double[]{signalBuy, signalSell, deltaPred, vol20, profitFactor, winRate, maxDD, businessScore, totalTrades};
             featureRows.add(features);
             targetRows.add(futureRet);
         }
+    }
+
+    public double[] buildInferenceFeatures(String symbol, String tri) {
+        String sqlLast = "SELECT lstm_created_at, signal_lstm, price_lstm, price_clo FROM signal_lstm WHERE symbol = ? AND tri = ? ORDER BY lstm_created_at DESC LIMIT 25";
+        List<Map<String, Object>> recent = jdbcTemplate.queryForList(sqlLast, symbol, tri);
+        if (recent.isEmpty()) return null;
+        // Reconstituer closes (ordre DESC actuellement -> inverser pour volatilité cohérente)
+        Collections.reverse(recent);
+        List<Double> closes = new ArrayList<>();
+        for (Map<String,Object> r : recent) {
+            Double c = asDouble(r.get("price_clo"));
+            if (c != null && c > 0) closes.add(c);
+        }
+        Map<String,Object> last = recent.get(recent.size()-1);
+        String sqlMetric = "SELECT profit_factor, win_rate, max_drawdown, business_score, total_trades FROM trade_ai.lstm_models WHERE symbol = ? ORDER BY updated_date DESC LIMIT 1";
+        Map<String, Object> metric = null;
+        try { metric = jdbcTemplate.queryForMap(sqlMetric, symbol); } catch (Exception ignored) {}
+        double profitFactor = safeMetric(metric, "profit_factor");
+        double winRate = safeMetric(metric, "win_rate");
+        double maxDD = safeMetric(metric, "max_drawdown");
+        double businessScore = safeMetric(metric, "business_score");
+        double totalTrades = safeMetric(metric, "total_trades");
+        String signalStr = String.valueOf(last.get("signal_lstm"));
+        SignalType sig;
+        try { sig = SignalType.valueOf(signalStr); } catch (Exception e) { sig = SignalType.NONE; }
+        double signalBuy = sig == SignalType.BUY ? 1.0 : 0.0;
+        double signalSell = sig == SignalType.SELL ? 1.0 : 0.0;
+        Double pricePred = asDouble(last.get("price_lstm"));
+        Double priceClose = asDouble(last.get("price_clo"));
+        double deltaPred = (pricePred != null && priceClose != null && priceClose != 0) ? (pricePred - priceClose) / priceClose : 0.0;
+        double vol20 = computeVolatility(closes, Math.min(20, closes.size()));
+        double[] f = new double[]{signalBuy, signalSell, deltaPred, vol20, profitFactor, winRate, maxDD, businessScore, totalTrades};
+        if (config.isNormalizeFeatures()) { f = normalizeSingle(f); }
+        return f;
+    }
+
+    private void normalizeInPlace(double[][] X) {
+        int cols = X[0].length;
+        for (int j = 0; j < cols; j++) {
+            double sum = 0.0; for (double[] row : X) sum += row[j];
+            double mean = sum / X.length;
+            double var = 0.0; for (double[] row : X) var += (row[j]-mean)*(row[j]-mean);
+            var /= Math.max(1, X.length-1);
+            double std = var <= 0 ? 1.0 : Math.sqrt(var);
+            for (double[] row : X) row[j] = (row[j]-mean)/std;
+        }
+    }
+
+    private double[] normalizeSingle(double[] f) { return f; } // placeholder simple (dataset global déjà normalisé)
+
+    private double computeVolatilityRolling(List<Double> closes, int idx, int window) {
+        if (idx < window) return 0.0;
+        List<Double> slice = closes.subList(idx - window, idx);
+        return computeVolatility(slice, window);
     }
 
     private double computeFutureReturn(Map<LocalDate, Double> closeMap, LocalDate start, int horizon) {
@@ -154,4 +200,3 @@ public class PortfolioAllocationTrainer {
         try { return Double.parseDouble(o.toString()); } catch (Exception e) { return null; }
     }
 }
-

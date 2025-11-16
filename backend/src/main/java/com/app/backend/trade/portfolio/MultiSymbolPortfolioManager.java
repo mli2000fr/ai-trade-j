@@ -14,6 +14,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import com.app.backend.trade.portfolio.learning.PortfolioAllocationTrainer;
+import com.app.backend.trade.portfolio.learning.PortfolioAllocationModel;
+import com.app.backend.trade.portfolio.learning.PortfolioLearningConfig;
 
 /**
  * Gestion multi-symboles : collecte signaux LSTM déjà entraînés + construction allocation + exécution ordres.
@@ -43,6 +46,14 @@ public class MultiSymbolPortfolioManager {
     // Cache signaux du cycle courant
     private final Map<String, PreditLsdm> lastPredictions = new HashMap<>();
     private final Map<String, ModelMetrics> metricsCache = new HashMap<>();
+
+    // Nouveau: trainer & config du modèle d'allocation supervisé
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private PortfolioAllocationTrainer allocationTrainer;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private PortfolioLearningConfig portfolioLearningConfig;
+    private volatile PortfolioAllocationModel currentAllocationModel;
+    private volatile java.time.LocalDate lastModelTrainDate;
 
     public MultiSymbolPortfolioManager(LstmHelper lstmHelper, AlpacaService alpacaService, JdbcTemplate jdbcTemplate) {
         this.lstmHelper = lstmHelper;
@@ -341,4 +352,119 @@ public class MultiSymbolPortfolioManager {
 
     public Map<String, PreditLsdm> getLastPredictions() { return Collections.unmodifiableMap(lastPredictions); }
     public Map<String, ModelMetrics> getMetricsCache() { return Collections.unmodifiableMap(metricsCache); }
+
+    // ====== Méthodes Allocation Supervisée ======
+    public synchronized void trainAllocationModel(List<String> symbols, String tri) {
+        if (allocationTrainer == null) {
+            logger.warn("AllocationTrainer non injecté: entraînement ignoré.");
+            return;
+        }
+        currentAllocationModel = allocationTrainer.trainModel(symbols, tri);
+        lastModelTrainDate = java.time.LocalDate.now();
+    }
+
+    public Map<String, Object> runDailyCycleLearned(CompteEntity compte, List<String> universe, String tri) {
+        Map<String, Object> report = new LinkedHashMap<>();
+        if (currentAllocationModel == null) {
+            trainAllocationModel(universe, tri);
+        }
+        if (currentAllocationModel == null) {
+            report.put("warning", "model_allocation_absent_fallback_rule_based");
+            return runDailyCycle(compte, universe, tri);
+        }
+        PortfolioDto portfolio = alpacaService.getPortfolioWithPositions(compte);
+        double nav = estimateNav(portfolio);
+        Map<String, Integer> currentQtyMap = extractCurrentQuantities(portfolio);
+
+        // Collecte prédictions brutes pour contexte (pas utilisé directement dans le score ici)
+        List<String> usableSymbols = new ArrayList<>();
+        List<double[]> featureRows = new ArrayList<>();
+        for (String sym : universe) {
+            try {
+                // Assurer présence prédiction (cache DB)
+                PreditLsdm p = lstmHelper.getPreditFromDB(sym, tri);
+                if (p == null) p = lstmHelper.getPredit(sym, tri);
+                if (p == null || p.getSignal() == null) continue;
+                lastPredictions.put(sym, p);
+                double[] f = allocationTrainer != null ? allocationTrainer.buildInferenceFeatures(sym, tri) : null;
+                if (f == null) continue;
+                featureRows.add(f);
+                usableSymbols.add(sym);
+            } catch (Exception e) {
+                logger.warn("Feature inference échouée {}: {}", sym, e.getMessage());
+            }
+        }
+        report.put("symbols_featured", usableSymbols.size());
+        if (featureRows.isEmpty()) {
+            report.put("warning", "aucun_feature_disponible_fallback");
+            return runDailyCycle(compte, universe, tri);
+        }
+        // Prédiction scores
+        double[][] featArr = featureRows.toArray(new double[0][]);
+        double[] scoresRaw = currentAllocationModel.predictBatch(featArr);
+        Map<String, Double> scores = new LinkedHashMap<>();
+        double sumPos = 0.0;
+        for (int i = 0; i < usableSymbols.size(); i++) {
+            double s = Math.max(0.0, scoresRaw[i]); // long-only => clamp négatif à 0
+            if (s > 0) {
+                scores.put(usableSymbols.get(i), s);
+                sumPos += s;
+            }
+        }
+        if (sumPos == 0) {
+            report.put("info", "scores_tous_nuls_fallback_rule");
+            return runDailyCycle(compte, universe, tri);
+        }
+        // Transformation en poids (normalisation + contraintes)
+        Map<String, Double> normScores = new LinkedHashMap<>();
+        for (Map.Entry<String, Double> e : scores.entrySet()) {
+            normScores.put(e.getKey(), e.getValue() / sumPos);
+        }
+        Map<String, Double> targetWeights = new HashMap<>();
+        double gross = 0.0;
+        for (Map.Entry<String, Double> e : normScores.entrySet()) {
+            double w = Math.min(e.getValue() * maxGrossExposure, maxWeightPerSymbol);
+            targetWeights.put(e.getKey(), w);
+            gross += Math.abs(w);
+        }
+        if (gross > maxGrossExposure && gross > 0) {
+            double ratio = maxGrossExposure / gross;
+            targetWeights.replaceAll((k,v) -> v * ratio);
+        }
+        // Intégrer liquidation SELL existante si signal SELL et position > 0
+        for (String sym : usableSymbols) {
+            SignalType sig = lastPredictions.get(sym).getSignal();
+            if (sig == SignalType.SELL) {
+                int held = currentQtyMap.getOrDefault(sym, 0);
+                if (held > 0) targetWeights.put(sym, 0.0);
+            }
+        }
+        report.put("targetWeights_learned", targetWeights);
+        // Génération ordres
+        List<Map<String, Object>> ordersPlanned = planOrders(compte, portfolio, targetWeights, nav);
+        report.put("ordersPlanned", ordersPlanned);
+        List<String> executed = new ArrayList<>();
+        for (Map<String, Object> ord : ordersPlanned) {
+            if (Boolean.TRUE.equals(ord.get("skip"))) continue;
+            try {
+                Order o = alpacaService.placeOrder(
+                        compte,
+                        (String) ord.get("symbol"),
+                        (Double) ord.get("qty"),
+                        (String) ord.get("side"),
+                        null, null, null, null,
+                        true, false
+                );
+                executed.add(o.getId());
+                ord.put("status", "EXECUTED");
+            } catch (Exception ex) {
+                ord.put("status", "FAILED:" + ex.getMessage());
+                logger.warn("Ordre échoué learned {} : {}", ord, ex.getMessage());
+            }
+        }
+        report.put("executed_orders", executed);
+        report.put("nav_estimated", nav);
+        report.put("model_last_train", lastModelTrainDate != null ? lastModelTrainDate.toString() : null);
+        return report;
+    }
 }
