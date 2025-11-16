@@ -3,11 +3,8 @@ package com.app.backend.trade.portfolio.learning;
 import com.app.backend.trade.model.SignalType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.time.LocalDate;
 import java.util.*;
 
 /**
@@ -20,16 +17,17 @@ public class PortfolioAllocationTrainer {
     private static final Logger logger = LoggerFactory.getLogger(PortfolioAllocationTrainer.class);
     private final JdbcTemplate jdbcTemplate;
     private final PortfolioLearningConfig config;
+    private final PortfolioAllocationModelRepository repository;
 
-    public PortfolioAllocationTrainer(JdbcTemplate jdbcTemplate, PortfolioLearningConfig config) {
+    public PortfolioAllocationTrainer(JdbcTemplate jdbcTemplate, PortfolioLearningConfig config,
+                                      PortfolioAllocationModelRepository repository) {
         this.jdbcTemplate = jdbcTemplate;
         this.config = config;
+        this.repository = repository;
     }
 
     /**
-     * Entraîne un modèle sur un ensemble de symboles.
-     * @param symbols liste de symboles
-     * @param tri clé tri / style utilisé pour filtrer signaux
+     * Entraîne un modèle avec validation walk-forward et early stopping; sélectionne le meilleur split.
      */
     public PortfolioAllocationModel trainModel(List<String> symbols, String tri) {
         List<double[]> featureRows = new ArrayList<>();
@@ -41,28 +39,137 @@ public class PortfolioAllocationTrainer {
                 logger.warn("Dataset partiel ignoré {}: {}", sym, e.getMessage());
             }
         }
-        if (featureRows.isEmpty()) {
+        int n = featureRows.size();
+        if (n == 0) {
             logger.warn("Dataset vide => modèle placeholder.");
-            return new PortfolioAllocationModel(1, config);
+            PortfolioAllocationModel placeholder = new PortfolioAllocationModel(1, config);
+            // Sauvegarde du placeholder pour traçabilité
+            try {
+                String algoVersion = String.format("portfolio-mlp-%dx%d", config.getHidden1(), config.getHidden2());
+                String notes = "auto-save (dataset vide)";
+                repository.saveModel(tri, algoVersion, notes, placeholder);
+            } catch (Exception e) {
+                logger.warn("Échec sauvegarde modèle placeholder: {}", e.getMessage());
+            }
+            return placeholder;
         }
         int inputSize = featureRows.get(0).length;
-        PortfolioAllocationModel model = new PortfolioAllocationModel(inputSize, config);
-        int n = featureRows.size();
-        double[][] X = new double[n][inputSize];
-        double[][] y = new double[n][1];
-        for (int i = 0; i < n; i++) { X[i] = featureRows.get(i); y[i][0] = targetRows.get(i); }
-        if (config.isNormalizeFeatures()) {
-            double[][] stats = computeMeansStds(X);
-            model.setFeatureMeans(stats[0]);
-            model.setFeatureStds(stats[1]);
-            applyNormalizationInPlace(X, stats[0], stats[1]);
+
+        // Créer splits walk-forward
+        List<int[]> splits = createWalkForwardSplits(n, Math.max(1, config.getWalkForwardSplits()));
+        double bestValLoss = Double.POSITIVE_INFINITY;
+        PortfolioAllocationModel bestModel = null;
+
+        for (int s = 0; s < splits.size(); s++) {
+            int[] split = splits.get(s);
+            int trainEnd = split[0];
+            int valEnd = split[1];
+            if (trainEnd <= 1 || valEnd - trainEnd < 1) continue;
+            double[][] Xtrain = new double[trainEnd][inputSize];
+            double[][] ytrain = new double[trainEnd][1];
+            for (int i = 0; i < trainEnd; i++) { Xtrain[i] = featureRows.get(i); ytrain[i][0] = targetRows.get(i); }
+            double[][] Xval = new double[valEnd - trainEnd][inputSize];
+            double[][] yval = new double[valEnd - trainEnd][1];
+            for (int i = trainEnd; i < valEnd; i++) { Xval[i - trainEnd] = featureRows.get(i); yval[i - trainEnd][0] = targetRows.get(i); }
+
+            // Normalisation par split (stats calculées sur train uniquement)
+            double[][] stats = config.isNormalizeFeatures() ? computeMeansStds(Xtrain) : null;
+            if (stats != null) {
+                applyNormalizationInPlace(Xtrain, stats[0], stats[1]);
+                applyNormalizationInPlace(Xval, stats[0], stats[1]);
+            }
+
+            // Préparer réseau et early stopping
+            PortfolioAllocationModel model = new PortfolioAllocationModel(inputSize, config);
+            if (stats != null) { model.setFeatureMeans(stats[0]); model.setFeatureStds(stats[1]); }
+            org.nd4j.linalg.api.ndarray.INDArray inX = org.nd4j.linalg.factory.Nd4j.create(Xtrain);
+            org.nd4j.linalg.api.ndarray.INDArray inY = org.nd4j.linalg.factory.Nd4j.create(ytrain);
+            org.nd4j.linalg.api.ndarray.INDArray valX = org.nd4j.linalg.factory.Nd4j.create(Xval);
+            org.nd4j.linalg.api.ndarray.INDArray valY = org.nd4j.linalg.factory.Nd4j.create(yval);
+
+            double bestSplitVal = Double.POSITIVE_INFINITY;
+            int patienceLeft = config.getPatienceEs();
+            org.nd4j.linalg.api.ndarray.INDArray bestParams = model.getNetwork().params().dup();
+
+            for (int epoch = 0; epoch < config.getEpochs(); epoch++) {
+                model.getNetwork().fit(inX, inY);
+                double valLoss = customValLoss(model, valX, valY);
+                if (valLoss + config.getMinDeltaEs() < bestSplitVal) {
+                    bestSplitVal = valLoss;
+                    patienceLeft = config.getPatienceEs();
+                    bestParams.assign(model.getNetwork().params());
+                } else {
+                    patienceLeft--;
+                    if (patienceLeft <= 0) {
+                        break; // early stop
+                    }
+                }
+            }
+            // Restaurer meilleurs paramètres du split
+            model.getNetwork().setParams(bestParams);
+
+            // Évaluer val finale (custom loss)
+            double finalVal = customValLoss(model, valX, valY);
+            logger.info("Split {}: valLoss={} (best={})", s+1, finalVal, bestSplitVal);
+            if (finalVal < bestValLoss) {
+                bestValLoss = finalVal;
+                bestModel = model;
+            }
         }
-        org.nd4j.linalg.api.ndarray.INDArray inX = org.nd4j.linalg.factory.Nd4j.create(X);
-        org.nd4j.linalg.api.ndarray.INDArray inY = org.nd4j.linalg.factory.Nd4j.create(y);
-        for (int epoch = 0; epoch < config.getEpochs(); epoch++) { model.getNetwork().fit(inX, inY); }
-        logger.info("Entraînement terminé: {} lignes, inputSize={}", n, inputSize);
-        return model;
+
+        if (bestModel == null) {
+            // fallback: entraînement simple sur tout
+            double[][] X = new double[n][inputSize];
+            double[][] y = new double[n][1];
+            for (int i = 0; i < n; i++) { X[i] = featureRows.get(i); y[i][0] = targetRows.get(i); }
+            PortfolioAllocationModel model = new PortfolioAllocationModel(inputSize, config);
+            if (config.isNormalizeFeatures()) {
+                double[][] stats = computeMeansStds(X);
+                model.setFeatureMeans(stats[0]);
+                model.setFeatureStds(stats[1]);
+                applyNormalizationInPlace(X, stats[0], stats[1]);
+            }
+            org.nd4j.linalg.api.ndarray.INDArray inX = org.nd4j.linalg.factory.Nd4j.create(X);
+            org.nd4j.linalg.api.ndarray.INDArray inY = org.nd4j.linalg.factory.Nd4j.create(y);
+            for (int epoch = 0; epoch < config.getEpochs(); epoch++) { model.getNetwork().fit(inX, inY); }
+            bestModel = model;
+            logger.warn("Walk-forward non applicable, fallback entraînement global.");
+        }
+        logger.info("Sélection modèle avec valLoss={}.", bestValLoss);
+
+        // Sauvegarde du meilleur modèle
+        try {
+            String algoVersion = String.format("portfolio-mlp-%dx%d", config.getHidden1(), config.getHidden2());
+            String notes = "auto-save (post-train)";
+            repository.saveModel(tri, algoVersion, notes, bestModel);
+            logger.info("Modèle sauvegardé pour tri={} version={}", tri, algoVersion);
+        } catch (Exception e) {
+            logger.error("Échec sauvegarde du modèle: {}", e.getMessage());
+        }
+
+        return bestModel;
     }
+
+    private List<int[]> createWalkForwardSplits(int total, int k) {
+        List<int[]> splits = new ArrayList<>();
+        if (total < 10 || k < 1) return splits;
+        for (int i = 1; i <= k; i++) {
+            int trainEnd = (int) Math.floor((double) total * i / (k + 1));
+            int valEnd = (int) Math.floor((double) total * (i + 1) / (k + 1));
+            if (trainEnd >= 1 && valEnd > trainEnd) {
+                splits.add(new int[]{trainEnd, valEnd});
+            }
+        }
+        return splits;
+    }
+
+    private double customValLoss(PortfolioAllocationModel model,
+                                 org.nd4j.linalg.api.ndarray.INDArray X,
+                                 org.nd4j.linalg.api.ndarray.INDArray y) {
+        org.nd4j.linalg.api.ndarray.INDArray pred = model.getNetwork().output(X, false); // shape [n,1]
+        return model.computeCustomLoss(y, pred);
+    }
+
 
     /**
      * Construit les lignes features + cible pour un symbole donné.
@@ -70,17 +177,17 @@ public class PortfolioAllocationTrainer {
      */
     private void buildSymbolDataset(String symbol, String tri, List<double[]> featureRows, List<Double> targetRows) {
         String sqlSignals = "SELECT lstm_created_at, signal_lstm, price_lstm, price_clo FROM signal_lstm WHERE symbol = ? AND tri = ? ORDER BY lstm_created_at ASC";
-        List<Map<String, Object>> signals = jdbcTemplate.queryForList(sqlSignals, symbol, tri);
+        List<java.util.Map<String, Object>> signals = jdbcTemplate.queryForList(sqlSignals, symbol, tri);
         if (signals.size() < config.getMinHistoryBars()) return;
         // Préparer séquence des closes (trading bars séquentielles)
         List<Double> closes = new ArrayList<>();
-        for (Map<String, Object> row : signals) {
+        for (java.util.Map<String, Object> row : signals) {
             Double c = asDouble(row.get("price_clo"));
             if (c != null && c > 0) closes.add(c); else closes.add(Double.NaN);
         }
         // Metrics modèle (une seule récupération)
-        String sqlMetric = "SELECT profit_factor, win_rate, max_drawdown, business_score, total_trades FROM trade_ai.lstm_models WHERE symbol = ? ORDER BY updated_date DESC LIMIT 1";
-        Map<String, Object> metric = null;
+        String sqlMetric = "SELECT profit_factor, win_rate, max_drawdown, business_score, total_trades FROM trade_ai.lstm_models WHERE symbol = ? ORDER BY rendement DESC LIMIT 1";
+        java.util.Map<String, Object> metric = null;
         try { metric = jdbcTemplate.queryForMap(sqlMetric, symbol); } catch (Exception ignored) {}
         double profitFactor = safeMetric(metric, "profit_factor");
         double winRate = safeMetric(metric, "win_rate");
@@ -96,7 +203,7 @@ public class PortfolioAllocationTrainer {
             Double endClose = closes.get(futureIndex);
             if (startClose == null || endClose == null || startClose.isNaN() || endClose.isNaN() || startClose == 0) continue;
             double futureRet = (endClose - startClose) / startClose;
-            Map<String,Object> row = signals.get(i);
+            java.util.Map<String,Object> row = signals.get(i);
             String signalStr = String.valueOf(row.get("signal_lstm"));
             SignalType sig;
             try { sig = SignalType.valueOf(signalStr); } catch (Exception e) { sig = SignalType.NONE; }
@@ -115,18 +222,18 @@ public class PortfolioAllocationTrainer {
 
     public double[] buildInferenceFeatures(String symbol, String tri) {
         String sqlLast = "SELECT lstm_created_at, signal_lstm, price_lstm, price_clo FROM signal_lstm WHERE symbol = ? AND tri = ? ORDER BY lstm_created_at DESC LIMIT 25";
-        List<Map<String, Object>> recent = jdbcTemplate.queryForList(sqlLast, symbol, tri);
+        List<java.util.Map<String, Object>> recent = jdbcTemplate.queryForList(sqlLast, symbol, tri);
         if (recent.isEmpty()) return null;
         // Reconstituer closes (ordre DESC actuellement -> inverser pour volatilité cohérente)
-        Collections.reverse(recent);
+        java.util.Collections.reverse(recent);
         List<Double> closes = new ArrayList<>();
-        for (Map<String,Object> r : recent) {
+        for (java.util.Map<String,Object> r : recent) {
             Double c = asDouble(r.get("price_clo"));
             if (c != null && c > 0) closes.add(c);
         }
-        Map<String,Object> last = recent.get(recent.size()-1);
+        java.util.Map<String,Object> last = recent.get(recent.size()-1);
         String sqlMetric = "SELECT profit_factor, win_rate, max_drawdown, business_score, total_trades FROM trade_ai.lstm_models WHERE symbol = ? ORDER BY updated_date DESC LIMIT 1";
-        Map<String, Object> metric = null;
+        java.util.Map<String, Object> metric = null;
         try { metric = jdbcTemplate.queryForMap(sqlMetric, symbol); } catch (Exception ignored) {}
         double profitFactor = safeMetric(metric, "profit_factor");
         double winRate = safeMetric(metric, "win_rate");
@@ -179,10 +286,10 @@ public class PortfolioAllocationTrainer {
         return computeVolatility(slice, window);
     }
 
-    private double computeFutureReturn(Map<LocalDate, Double> closeMap, LocalDate start, int horizon) {
+    private double computeFutureReturn(java.util.Map<java.time.LocalDate, Double> closeMap, java.time.LocalDate start, int horizon) {
         Double startPrice = closeMap.get(start);
         if (startPrice == null) return Double.NaN;
-        LocalDate futureDate = start.plusDays(horizon);
+        java.time.LocalDate futureDate = start.plusDays(horizon);
         Double futurePrice = closeMap.get(futureDate);
         if (futurePrice == null) return Double.NaN;
         return (futurePrice - startPrice) / startPrice;
@@ -206,7 +313,7 @@ public class PortfolioAllocationTrainer {
         return Math.sqrt(var);
     }
 
-    private double safeMetric(Map<String, Object> metric, String key) {
+    private double safeMetric(java.util.Map<String, Object> metric, String key) {
         if (metric == null || !metric.containsKey(key) || metric.get(key) == null) return 0.0;
         try { return Double.parseDouble(metric.get(key).toString()); } catch (Exception e) { return 0.0; }
     }

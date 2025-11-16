@@ -9,13 +9,10 @@ import org.deeplearning4j.nn.conf.layers.DenseLayer;
 import org.deeplearning4j.nn.conf.layers.OutputLayer;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
-import org.deeplearning4j.util.ModelSerializer;
 import org.nd4j.linalg.activations.Activation;
 import org.nd4j.linalg.learning.config.Adam;
-import org.nd4j.linalg.lossfunctions.LossFunctions;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 
 /**
@@ -33,10 +30,15 @@ public class PortfolioAllocationModel {
     // Stats de normalisation pour inférence cohérente
     private double[] featureMeans;
     private double[] featureStds;
+    // Loss personnalisées
+    private LossPortfolioAllocation customLoss;        // utilitaire d'évaluation (labels/pred)
+    private PortfolioCustomLoss trainLoss;             // ILossFunction pour le réseau
 
     public PortfolioAllocationModel(int inputSize, PortfolioLearningConfig config) {
         this.inputSize = inputSize;
         this.config = config;
+        this.customLoss = new LossPortfolioAllocation(config.getLambdaTurnover(), config.getLambdaDrawdown());
+        this.trainLoss = new PortfolioCustomLoss(config.getLambdaTurnover(), config.getLambdaDrawdown());
         this.network = buildNetwork();
     }
 
@@ -49,11 +51,14 @@ public class PortfolioAllocationModel {
                 .list()
                 .layer(new DenseLayer.Builder().nIn(inputSize).nOut(config.getHidden1())
                         .activation(Activation.RELU)
+                        .dropOut(config.getDropout())
                         .build())
-        .layer(new DenseLayer.Builder().nIn(config.getHidden1()).nOut(config.getHidden2())
+                .layer(new DenseLayer.Builder().nIn(config.getHidden1()).nOut(config.getHidden2())
                         .activation(Activation.RELU)
+                        .dropOut(config.getDropout())
                         .build())
-                .layer(new OutputLayer.Builder(LossFunctions.LossFunction.MSE)
+                .layer(new OutputLayer.Builder()
+                        .lossFunction(trainLoss)
                         .activation(Activation.IDENTITY)
                         .nIn(config.getHidden2()).nOut(1).build())
                 .build();
@@ -61,6 +66,12 @@ public class PortfolioAllocationModel {
         net.init();
         net.setListeners(new ScoreIterationListener(50));
         return net;
+    }
+
+    // Méthode utilitaire: calcule la perte custom à partir de labels et prédictions
+    public double computeCustomLoss(org.nd4j.linalg.api.ndarray.INDArray labels,
+                                    org.nd4j.linalg.api.ndarray.INDArray predictions) {
+        return customLoss.computeScore(labels, predictions);
     }
 
     public double[] predictBatch(double[][] features) {

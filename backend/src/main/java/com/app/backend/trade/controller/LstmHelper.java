@@ -127,7 +127,7 @@ public class LstmHelper {
     public List<String> getBestModel(Integer limit, String sort, Boolean topClassement) {
         String orderBy = (sort == null || sort.isBlank()) ? "business_score" : sort;
         String orderBySup = "";
-        if(sort.equals("classement")){
+        if("classement".equals(sort)){
             orderBySup = " stm.top ASC ";
             orderBy = " business_score ";
             topClassement = true;
@@ -206,10 +206,15 @@ public class LstmHelper {
 
 
         // 6. Exécution de la prédiction (utilise model/scalers si présents)
-        PreditLsdm preditLsdm = PreditLsdm.builder().build();
+        PreditLsdm preditLsdm;
 
         if (loaded == null) {
-            preditLsdm.setSignal(SignalType.NONE);
+            preditLsdm = PreditLsdm.builder()
+                    .signal(SignalType.NONE)
+                    .lastClose(0)
+                    .predictedClose(0)
+                    .lastDate(java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM")))
+                    .build();
             return preditLsdm;
         }
 
@@ -217,14 +222,16 @@ public class LstmHelper {
             preditLsdm = lstmTradePredictor.getPredit(series, config, model, scalers);
         }else{
             TradeStylePrediction tradeStylePrediction = lstmTradePredictor.predictTradeStyle(symbol, series, config, model, scalers);
-
-            preditLsdm.setLastClose(tradeStylePrediction.lastClose);
-            preditLsdm.setPredictedClose(tradeStylePrediction.predictedClose);
-            preditLsdm.setSignal(tradeStylePrediction.action.equals("BUY") ? SignalType.BUY :
-                    tradeStylePrediction.action.equals("SELL") ? SignalType.SELL : SignalType.NONE);
-            preditLsdm.setLastDate(java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM")));
-            preditLsdm.setPosition(tradeStylePrediction.tendance);
-            preditLsdm.setExplication(tradeStylePrediction.comment);
+            SignalType sig = tradeStylePrediction.action.equals("BUY") ? SignalType.BUY :
+                    (tradeStylePrediction.action.equals("SELL") ? SignalType.SELL : SignalType.NONE);
+            preditLsdm = PreditLsdm.builder()
+                    .lastClose(tradeStylePrediction.lastClose)
+                    .predictedClose(tradeStylePrediction.predictedClose)
+                    .signal(sig)
+                    .lastDate(java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM")))
+                    .position(tradeStylePrediction.tendance)
+                    .explication(tradeStylePrediction.comment)
+                    .build();
             tradeStylePrediction.loadedModel = loaded;
         }
         loaded.model = null;
@@ -233,27 +240,158 @@ public class LstmHelper {
         preditLsdm.setLoadedModel(loaded);
 
         // 7. Sauvegarde du signal du jour
-        saveSignalHistory(symbol, index, preditLsdm);
+        this.saveSignalHistory(symbol, index, preditLsdm);
+        return preditLsdm;
+    }
+
+    // ------------------- NOUVEAU: prédiction à une date donnée -------------------
+
+    /**
+     * Variante de getPredit qui calcule/retourne le signal pour une date précise.
+     * Si un signal existe déjà en base pour cette date, il est renvoyé.
+     * Sinon, on prédit avec les données strictement antérieures à la date.
+     *
+     * Format attendu: dateStr = "dd/MM/yyyy" (ex: "01/11/2025").
+     */
+    public PreditLsdm getPredit(String symbol, String index, String dateStr) {
+        if (dateStr == null || dateStr.isBlank()) {
+            return getPredit(symbol, index);
+        }
+        java.time.LocalDate lastTradingDay;
+        try {
+            java.time.LocalDate targetDate = java.time.LocalDate.parse(dateStr, java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            lastTradingDay = TradeUtils.getLastTradingDayBefore(targetDate);
+        } catch (Exception e) {
+            logger.warn("Format de date invalide '{}', attendu dd/MM/yyyy: {}", dateStr, e.getMessage());
+            return getPredit(symbol, index);
+        }
+        return getPreditAtDate(symbol, index, lastTradingDay);
+    }
+
+    /**
+     * Implémentation principale pour la prédiction à une date donnée.
+     * Utilise uniquement les données antérieures à targetDate (date exclusive).
+     */
+    public PreditLsdm getPreditAtDate(String symbol, String index, java.time.LocalDate targetDate) {
+        // 1) Cache BD pour la date cible
+        PreditLsdm preditLsdmDb = this.getPreditFromDBAtDate(symbol, index, targetDate);
+        if (preditLsdmDb != null) {
+            return preditLsdmDb;
+        }
+
+        // 2) Chargement modèle/scalers/config
+        LstmTradePredictor.LoadedModel loaded = null;
+        try {
+            loaded = lstmTradePredictor.loadModelAndScalersFromDb(symbol, index, jdbcTemplate);
+        } catch (Exception e) {
+            logger.warn("Impossible de charger le modèle/scalers depuis la base : {}", e.getMessage());
+        }
+        if (loaded == null) {
+            PreditLsdm neutral = PreditLsdm.builder()
+                    .signal(SignalType.NONE)
+                    .lastClose(0)
+                    .predictedClose(0)
+                    .lastDate(targetDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM")))
+                    .build();
+            return neutral;
+        }
+        MultiLayerNetwork model = loaded.model;
+        LstmTradePredictor.ScalerSet scalers = loaded.scalers;
+        LstmConfig config = loaded.config;
+
+        // 3) Série des prix strictement avant la date cible (fenêtre de 100 par défaut)
+        BarSeries series = getBarBySymbolUntil(symbol, targetDate, 100);
+        if (series == null || series.getBarCount() == 0) {
+            PreditLsdm neutral = PreditLsdm.builder()
+                    .signal(SignalType.NONE)
+                    .lastClose(0)
+                    .predictedClose(0)
+                    .lastDate(targetDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM")))
+                    .build();
+            return neutral;
+        }
+
+        // 4) Prédiction
+        PreditLsdm preditLsdm;
+        if (loaded.phase == 0) {
+            preditLsdm = lstmTradePredictor.getPredit(series, config, model, scalers);
+        } else {
+            TradeStylePrediction tradeStylePrediction = lstmTradePredictor.predictTradeStyle(symbol, series, config, model, scalers);
+            SignalType sig = tradeStylePrediction.action.equals("BUY") ? SignalType.BUY :
+                    (tradeStylePrediction.action.equals("SELL") ? SignalType.SELL : SignalType.NONE);
+            preditLsdm = PreditLsdm.builder()
+                    .lastClose(tradeStylePrediction.lastClose)
+                    .predictedClose(tradeStylePrediction.predictedClose)
+                    .signal(sig)
+                    .lastDate(targetDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM")))
+                    .position(tradeStylePrediction.tendance)
+                    .explication(tradeStylePrediction.comment)
+                    .build();
+            tradeStylePrediction.loadedModel = loaded;
+        }
+        // Détacher poids/scalers lourds pour stockage léger
+        loaded.model = null;
+        loaded.scalers = null;
+        loaded.config = null;
+        preditLsdm.setLoadedModel(loaded);
+
+        // 5) Sauvegarde en BD pour la date cible
+        saveSignalHistoryAtDate(symbol, index, preditLsdm, targetDate);
         return preditLsdm;
     }
 
     /**
-     * Sauvegarde le signal quotidien en base.
-     *
-     * IMPORTANT :
-     * - Utilise la date du dernier jour de bourse (méthode utilitaire)
-     * - On insère systématiquement (pas de upsert)
-     *
-     * @param symbol symbole
-     * @param preditLsdm objet contenant signal + prix
+     * Récupère une série jusqu'à (exclu) une date donnée. Si limit > 0, renvoie les limit dernières barres.
      */
+    public BarSeries getBarBySymbolUntil(String symbol, java.time.LocalDate untilExclusive, Integer limit) {
+        String base = "SELECT date, open, high, low, close, volume, number_of_trades, volume_weighted_average_price FROM daily_value WHERE symbol = ? AND date < ? ";
+        String sql = base + "ORDER BY date ASC";
+        if (limit != null && limit > 0) {
+            sql = base + "ORDER BY date DESC LIMIT " + limit;
+        }
+        List<DailyValue> results = jdbcTemplate.query(sql, ps -> {
+            ps.setString(1, symbol);
+            ps.setDate(2, java.sql.Date.valueOf(untilExclusive));
+        }, (rs, rowNum) -> DailyValue.builder()
+                .date(rs.getDate("date").toString())
+                .open(rs.getString("open"))
+                .high(rs.getString("high"))
+                .low(rs.getString("low"))
+                .close(rs.getString("close"))
+                .volume(rs.getString("volume"))
+                .numberOfTrades(rs.getString("number_of_trades"))
+                .volumeWeightedAveragePrice(rs.getString("volume_weighted_average_price"))
+                .build());
+        if (limit != null && limit > 0) {
+            Collections.reverse(results);
+        }
+        return TradeUtils.mapping(results);
+    }
+
+    /**
+     * Sauvegarde du signal pour une date précise (utilise la même structure que saveSignalHistory).
+     */
+    public void saveSignalHistoryAtDate(String symbol, String tri, PreditLsdm preditLsdm, java.time.LocalDate date) {
+        String insertSql = "INSERT INTO signal_lstm (symbol, tri, signal_lstm, price_lstm, price_clo, position_lstm, lstm_created_at, result_tuning) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        jdbcTemplate.update(insertSql,
+                symbol,
+                tri,
+                preditLsdm.getSignal().name(),
+                preditLsdm.getPredictedClose(),
+                preditLsdm.getLastClose(),
+                preditLsdm.getPosition(),
+                java.sql.Date.valueOf(date),
+                preditLsdm.getLoadedModel() != null ? new Gson().toJson(preditLsdm.getLoadedModel()) : null);
+    }
+
+    // Sauvegarde du signal pour le dernier jour de bourse (utilisée par getPredit sans date)
     public void saveSignalHistory(String symbol, String tri, PreditLsdm preditLsdm) {
         java.time.LocalDate lastTradingDay = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
         String insertSql = "INSERT INTO signal_lstm (symbol, tri, signal_lstm, price_lstm, price_clo, position_lstm, lstm_created_at, result_tuning) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         jdbcTemplate.update(insertSql,
                 symbol,
-                preditLsdm.getSignal().name(),
                 tri,
+                preditLsdm.getSignal().name(),
                 preditLsdm.getPredictedClose(),
                 preditLsdm.getLastClose(),
                 preditLsdm.getPosition(),
@@ -262,7 +400,53 @@ public class LstmHelper {
     }
 
     /**
-     * Récupération d'une prédiction déjà existante en base.
+     * Lecture d'un signal existant pour symbol/tri à une date exacte. Retourne null si absent.
+     */
+    public PreditLsdm getPreditFromDBAtDate(String symbol, String tri, java.time.LocalDate date) {
+        String sql = "SELECT * FROM signal_lstm WHERE symbol = ? AND tri = ? AND lstm_created_at = ? ORDER BY lstm_created_at DESC LIMIT 1";
+        try {
+            return jdbcTemplate.query(sql, ps -> {
+                ps.setString(1, symbol);
+                ps.setString(2, tri);
+                ps.setDate(3, java.sql.Date.valueOf(date));
+            }, rs -> {
+                if (rs.next()) {
+                    String signalStr = rs.getString("signal_lstm");
+                    double priceLstm = rs.getDouble("price_lstm");
+                    double priceClo = rs.getDouble("price_clo");
+                    String positionLstm = rs.getString("position_lstm");
+                    java.sql.Date lastDate = rs.getDate("lstm_created_at");
+                    String tuning_result = rs.getString("result_tuning");
+                    LstmTradePredictor.LoadedModel loadedModel = new Gson().fromJson(tuning_result, LstmTradePredictor.LoadedModel.class);
+
+                    SignalType type;
+                    try {
+                        type = SignalType.valueOf(signalStr);
+                    } catch (Exception e) {
+                        logger.warn("SignalType inconnu en base: {}", signalStr);
+                        type = null;
+                    }
+
+                    String dateSavedStr = lastDate.toLocalDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"));
+                    return PreditLsdm.builder()
+                            .signal(type)
+                            .lastClose(priceClo)
+                            .lastDate(dateSavedStr)
+                            .predictedClose(priceLstm)
+                            .position(positionLstm)
+                            .loadedModel(loadedModel)
+                            .build();
+                }
+                return null;
+            });
+        } catch (Exception e) {
+            logger.warn("Erreur SQL getPreditFromDBAtDate pour {}: {}", symbol, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Récupère une prédiction déjà existante en base.
      *
      * Processus :
      * - Lit la dernière ligne (ORDER BY lstm_created_at DESC LIMIT 1)

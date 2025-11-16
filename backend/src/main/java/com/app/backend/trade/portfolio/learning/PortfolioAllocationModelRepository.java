@@ -6,8 +6,6 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
-import java.util.Map;
 
 @Repository
 public class PortfolioAllocationModelRepository {
@@ -89,4 +87,3 @@ public class PortfolioAllocationModelRepository {
         public java.time.LocalDate createdAtDate() { return java.time.Instant.ofEpochMilli(createdAtEpochMs).atZone(java.time.ZoneId.systemDefault()).toLocalDate(); }
     }
 }
-
