@@ -398,7 +398,7 @@ public class LstmHelper {
     public void tuneAllSymbols(boolean useRandomGrid, int randomGridSize) {
         //List<String> symbols = getSymbolFitredFromTabSingle("rendement");
 
-        List<String> symbols = getSymbolsTechno();//getSymbolTopClassement();
+        List<String> symbols = getSymbolTopClassement();
 
         // Valeurs testées (ne pas modifier sans validation)
         int[] horizonBars = {3, 5, 10};
