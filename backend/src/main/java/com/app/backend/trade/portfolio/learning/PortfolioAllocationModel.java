@@ -9,9 +9,14 @@ import org.deeplearning4j.nn.conf.layers.DenseLayer;
 import org.deeplearning4j.nn.conf.layers.OutputLayer;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
+import org.deeplearning4j.util.ModelSerializer;
 import org.nd4j.linalg.activations.Activation;
 import org.nd4j.linalg.learning.config.Adam;
 import org.nd4j.linalg.lossfunctions.LossFunctions;
+
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.IOException;
 
 /**
  * Modèle MLP simple pour produire un score risque-ajusté par symbole.
@@ -25,6 +30,9 @@ public class PortfolioAllocationModel {
     private MultiLayerNetwork network;
     private int inputSize;
     private PortfolioLearningConfig config;
+    // Stats de normalisation pour inférence cohérente
+    private double[] featureMeans;
+    private double[] featureStds;
 
     public PortfolioAllocationModel(int inputSize, PortfolioLearningConfig config) {
         this.inputSize = inputSize;
@@ -42,7 +50,7 @@ public class PortfolioAllocationModel {
                 .layer(new DenseLayer.Builder().nIn(inputSize).nOut(config.getHidden1())
                         .activation(Activation.RELU)
                         .build())
-                .layer(new DenseLayer.Builder().nIn(config.getHidden1()).nOut(config.getHidden2())
+        .layer(new DenseLayer.Builder().nIn(config.getHidden1()).nOut(config.getHidden2())
                         .activation(Activation.RELU)
                         .build())
                 .layer(new OutputLayer.Builder(LossFunctions.LossFunction.MSE)
@@ -58,11 +66,30 @@ public class PortfolioAllocationModel {
     public double[] predictBatch(double[][] features) {
         double[] scores = new double[features.length];
         for (int i = 0; i < features.length; i++) {
-            org.nd4j.linalg.api.ndarray.INDArray in = org.nd4j.linalg.factory.Nd4j.create(features[i]);
+            double[] f = features[i];
+            if (featureMeans != null && featureStds != null && featureMeans.length == f.length && featureStds.length == f.length) {
+                f = f.clone();
+                for (int j = 0; j < f.length; j++) {
+                    double std = featureStds[j] == 0 ? 1.0 : featureStds[j];
+                    f[j] = (f[j] - featureMeans[j]) / std;
+                }
+            }
+            org.nd4j.linalg.api.ndarray.INDArray in = org.nd4j.linalg.factory.Nd4j.create(f);
             double v = network.output(in, false).getDouble(0);
             scores[i] = v;
         }
         return scores;
     }
-}
 
+    public static PortfolioAllocationModel loadFromBytes(byte[] bytes, PortfolioLearningConfig config, int inputSize, double[] means, double[] stds) throws IOException {
+        if (bytes == null || bytes.length == 0) throw new IOException("Bytes modèle vides");
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(bytes)) {
+            org.deeplearning4j.nn.multilayer.MultiLayerNetwork net = org.deeplearning4j.util.ModelSerializer.restoreMultiLayerNetwork(bais);
+            PortfolioAllocationModel m = new PortfolioAllocationModel(inputSize, config);
+            m.setNetwork(net);
+            m.setFeatureMeans(means);
+            m.setFeatureStds(stds);
+            return m;
+        }
+    }
+}

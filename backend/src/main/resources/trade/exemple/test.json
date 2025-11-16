@@ -1,6 +1,19 @@
-1: 100 phase 1 et top 5
-2: 200 phase 1 et top 0, pas de phase 2
-3: 200 phase 1 et top 5 score et rendement, pas de phase 2
+Prochaines améliorations possibles:
+Sauvegarde/chargement du modèle (serialization réseau) pour éviter ré-entraînement quotidien.
+Split train/validation + early stopping (actuellement MSE brute).
+Pénalité turnover et drawdown dans la loss (personnaliser OutputLayer + custom loss).
+Gestion jours fériés: dataset déjà basé sur séquence de signaux (donc trading days implicit).
+Filtre qualité avant entraînement (exclure profit_factor<1).
+Ajout softmax calibré: weight_i = (score_i^2)/Σ(score_j^2) pour accentuer conviction.
 
 
-cas, cas_description
+Souhaites-tu la persistance du modèle ou l’ajout d’une validation walk-forward ensuite ?
+
+
+---------------------
+
+Prochaines améliorations recommandées
+Early stopping + split validation walk-forward.
+Loss personnalisée avec pénalités turnover/drawdown (au lieu de MSE).
+Persistance en base (BLOB) avec versioning (table portfolio_models).
+Calendrier boursier complet (jours fériés multi‑marchés) si besoin d’une granularité différente.

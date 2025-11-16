@@ -1,6 +1,5 @@
 package com.app.backend.trade.portfolio.learning;
 
-import com.app.backend.trade.model.PreditLsdm;
 import com.app.backend.trade.model.SignalType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -52,7 +51,12 @@ public class PortfolioAllocationTrainer {
         double[][] X = new double[n][inputSize];
         double[][] y = new double[n][1];
         for (int i = 0; i < n; i++) { X[i] = featureRows.get(i); y[i][0] = targetRows.get(i); }
-        if (config.isNormalizeFeatures()) { normalizeInPlace(X); }
+        if (config.isNormalizeFeatures()) {
+            double[][] stats = computeMeansStds(X);
+            model.setFeatureMeans(stats[0]);
+            model.setFeatureStds(stats[1]);
+            applyNormalizationInPlace(X, stats[0], stats[1]);
+        }
         org.nd4j.linalg.api.ndarray.INDArray inX = org.nd4j.linalg.factory.Nd4j.create(X);
         org.nd4j.linalg.api.ndarray.INDArray inY = org.nd4j.linalg.factory.Nd4j.create(y);
         for (int epoch = 0; epoch < config.getEpochs(); epoch++) { model.getNetwork().fit(inX, inY); }
@@ -139,23 +143,35 @@ public class PortfolioAllocationTrainer {
         double deltaPred = (pricePred != null && priceClose != null && priceClose != 0) ? (pricePred - priceClose) / priceClose : 0.0;
         double vol20 = computeVolatility(closes, Math.min(20, closes.size()));
         double[] f = new double[]{signalBuy, signalSell, deltaPred, vol20, profitFactor, winRate, maxDD, businessScore, totalTrades};
-        if (config.isNormalizeFeatures()) { f = normalizeSingle(f); }
         return f;
     }
 
-    private void normalizeInPlace(double[][] X) {
-        int cols = X[0].length;
+    private double[][] computeMeansStds(double[][] X) {
+        int rows = X.length, cols = X[0].length;
+        double[] means = new double[cols];
+        double[] stds = new double[cols];
         for (int j = 0; j < cols; j++) {
-            double sum = 0.0; for (double[] row : X) sum += row[j];
-            double mean = sum / X.length;
-            double var = 0.0; for (double[] row : X) var += (row[j]-mean)*(row[j]-mean);
-            var /= Math.max(1, X.length-1);
-            double std = var <= 0 ? 1.0 : Math.sqrt(var);
-            for (double[] row : X) row[j] = (row[j]-mean)/std;
+            double sum = 0; for (int i = 0; i < rows; i++) sum += X[i][j];
+            double mean = sum / rows; means[j] = mean;
+            double var = 0; for (int i = 0; i < rows; i++) { double d = X[i][j]-mean; var += d*d; }
+            var /= Math.max(1, rows-1);
+            stds[j] = var <= 0 ? 1.0 : Math.sqrt(var);
+        }
+        return new double[][]{means, stds};
+    }
+
+    private void applyNormalizationInPlace(double[][] X, double[] means, double[] stds) {
+        for (int i = 0; i < X.length; i++) {
+            for (int j = 0; j < X[i].length; j++) {
+                double std = stds[j] == 0 ? 1.0 : stds[j];
+                X[i][j] = (X[i][j] - means[j]) / std;
+            }
         }
     }
 
-    private double[] normalizeSingle(double[] f) { return f; } // placeholder simple (dataset global déjà normalisé)
+    private void normalizeInPlace(double[][] X) { /* deprecated, remplacée par computeMeansStds+applyNormalizationInPlace */ }
+
+    private double[] normalizeSingle(double[] f) { return f; } // non utilisé désormais
 
     private double computeVolatilityRolling(List<Double> closes, int idx, int window) {
         if (idx < window) return 0.0;

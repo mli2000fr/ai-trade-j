@@ -14,17 +14,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
-import com.app.backend.trade.portfolio.learning.PortfolioAllocationTrainer;
-import com.app.backend.trade.portfolio.learning.PortfolioAllocationModel;
-import com.app.backend.trade.portfolio.learning.PortfolioLearningConfig;
 
 /**
  * Gestion multi-symboles : collecte signaux LSTM déjà entraînés + construction allocation + exécution ordres.
- * Hypothèses :
- * - Pas de ré-entraînement ici (réutilisation des modèles existants via LstmHelper.getPreditFromDB / getPredit)
- * - Universe filtré obtenu ailleurs (ex: getBestModel / getSymbolFitredFromTabSingle)
- * - On ne prend que les signaux du dernier jour de bourse
- * Objectif : Maximiser score pondéré tout en maîtrisant risque simple (expositions + métriques modèle).
  */
 @Service
 public class MultiSymbolPortfolioManager {
@@ -47,23 +39,13 @@ public class MultiSymbolPortfolioManager {
     private final Map<String, PreditLsdm> lastPredictions = new HashMap<>();
     private final Map<String, ModelMetrics> metricsCache = new HashMap<>();
 
-    // Nouveau: trainer & config du modèle d'allocation supervisé
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private PortfolioAllocationTrainer allocationTrainer;
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private PortfolioLearningConfig portfolioLearningConfig;
-    private volatile PortfolioAllocationModel currentAllocationModel;
-    private volatile java.time.LocalDate lastModelTrainDate;
-
     public MultiSymbolPortfolioManager(LstmHelper lstmHelper, AlpacaService alpacaService, JdbcTemplate jdbcTemplate) {
         this.lstmHelper = lstmHelper;
         this.alpacaService = alpacaService;
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    /**
-     * DTO interne pour métriques de modèle.
-     */
+    /** DTO interne pour métriques de modèle. */
     public static class ModelMetrics {
         public Double profitFactor;
         public Double winRate;
@@ -78,10 +60,6 @@ public class MultiSymbolPortfolioManager {
 
     /**
      * Exécution complète d'un cycle quotidien : collecte signaux -> scoring -> allocation -> ordres.
-     * @param compte compte Alpaca
-     * @param universe liste de symboles candidats
-     * @param tri label / index (ex: "swing", phase, etc.) utilisé pour la récupération de prédiction
-     * @return rapport synthétique
      */
     public Map<String, Object> runDailyCycle(CompteEntity compte, List<String> universe, String tri) {
         Map<String, Object> report = new LinkedHashMap<>();
@@ -158,21 +136,18 @@ public class MultiSymbolPortfolioManager {
         return report;
     }
 
-    /**
-     * Calcul scores multi-critères.
-     * Formule simple : directionFactor * businessScore * profitFactor * winRate * (1 - maxDrawdown) * stabilité.
-     */
+    /** Calcul scores multi-critères. */
     private Map<String, Double> computeScores(List<PreditLsdm> preds) {
         Map<String, Double> scores = new HashMap<>();
         for (PreditLsdm p : preds) {
-            String sym = extractSymbol(p); // symbol non stocké dans PreditLsdm directement? (hypothèse: loadedModel contient symbol)
+            String sym = extractSymbol(p);
             if (sym == null) continue;
             ModelMetrics m = metricsCache.get(sym);
             if (m == null) continue;
             if (!riskFilter(m)) continue;
             double directionFactor = p.getSignal() == SignalType.BUY ? 1.0 : p.getSignal() == SignalType.SELL ? (allowShort ? -1.0 : 0.0) : 0.0;
             if (directionFactor == 0.0) continue;
-            double stability = m.totalTrades != null && m.totalTrades > 50 ? 1.0 : 0.7; // pénalité faible historique
+            double stability = m.totalTrades != null && m.totalTrades > 50 ? 1.0 : 0.7;
             double score = directionFactor * safe(m.businessScore) * safe(m.profitFactor) * safe(m.winRate) * (1 - safe(m.maxDrawdown)) * stability;
             if (score >= minScoreThreshold) {
                 scores.put(sym, score);
@@ -190,9 +165,7 @@ public class MultiSymbolPortfolioManager {
 
     private double safe(Double v) {return v == null ? 0.0 : v;}
 
-    /**
-     * Construction des poids cibles (normalisation + contraintes).
-     */
+    /** Construction des poids cibles (normalisation + contraintes). */
     private Map<String, Double> buildTargetWeights(Map<String, Double> scores) {
         if (scores.isEmpty()) return Collections.emptyMap();
         double sum = scores.values().stream().mapToDouble(Double::doubleValue).sum();
@@ -212,10 +185,7 @@ public class MultiSymbolPortfolioManager {
         return capped;
     }
 
-    /**
-     * Planification des ordres à partir des poids cibles.
-     * Note: poids cible 0 avec position existante -> vente totale (long-only, pas de short).
-     */
+    /** Planification des ordres à partir des poids cibles. */
     private List<Map<String, Object>> planOrders(CompteEntity compte, PortfolioDto portfolio, Map<String, Double> targetWeights, double nav) {
         List<Map<String, Object>> orders = new ArrayList<>();
         Map<String, Integer> currentQty = extractCurrentQuantities(portfolio);
@@ -237,7 +207,7 @@ public class MultiSymbolPortfolioManager {
             double targetValue = targetW * nav;
             int targetQty = (int) Math.floor(targetValue / lastPrice);
             int delta = targetQty - current;
-            if (delta == 0) continue; // rien à faire
+            if (delta == 0) continue;
             String side;
             if (delta > 0) {
                 side = "buy";
@@ -282,9 +252,7 @@ public class MultiSymbolPortfolioManager {
         return map;
     }
 
-    /**
-     * Estimation NAV = cash + somme market_value positions.
-     */
+    /** Estimation NAV = cash + somme market_value positions. */
     private double estimateNav(PortfolioDto dto) {
         double cash = 0.0;
         if (dto.getAccount() != null && dto.getAccount().get("cash") != null) {
@@ -302,9 +270,7 @@ public class MultiSymbolPortfolioManager {
         return cash + mv;
     }
 
-    /**
-     * Récupération métriques modèle (dernière ligne lstm_models) pour un symbole.
-     */
+    /** Récupération métriques modèle (dernière ligne lstm_models) pour un symbole. */
     private ModelMetrics fetchMetrics(String symbol) {
         try {
             String sql = "SELECT profit_factor, win_rate, max_drawdown, business_score, rendement, sum_profit, total_trades, mse, rmse FROM trade_ai.lstm_models WHERE symbol = ? ORDER BY updated_date DESC LIMIT 1";
@@ -330,20 +296,15 @@ public class MultiSymbolPortfolioManager {
         }
     }
 
-    /**
-     * Extraction du symbole depuis PreditLsdm. Sans accès direct au champ symbol du config,
-     * on tente plusieurs sources : loadedModel.config.indexTop (index) ignoré ici.
-     * Fallback : on stocke le symbole au moment de la collecte dans une clé interne (adaptation simple).
-     */
+    /** Extraction du symbole depuis PreditLsdm via cache interne. */
     private String extractSymbol(PreditLsdm p) {
-        // Le modèle chargé ne contient pas explicite symbol => on ajoute un tag via position dans lastPredictions
         for (Map.Entry<String,PreditLsdm> ent : lastPredictions.entrySet()) {
             if (ent.getValue() == p) return ent.getKey();
         }
         return null;
     }
 
-    // Méthodes de configuration externes (setters)
+    // Setters de configuration
     public void setMaxWeightPerSymbol(double v) { this.maxWeightPerSymbol = v; }
     public void setMaxGrossExposure(double v) { this.maxGrossExposure = v; }
     public void setMinScoreThreshold(double v) { this.minScoreThreshold = v; }
@@ -352,119 +313,4 @@ public class MultiSymbolPortfolioManager {
 
     public Map<String, PreditLsdm> getLastPredictions() { return Collections.unmodifiableMap(lastPredictions); }
     public Map<String, ModelMetrics> getMetricsCache() { return Collections.unmodifiableMap(metricsCache); }
-
-    // ====== Méthodes Allocation Supervisée ======
-    public synchronized void trainAllocationModel(List<String> symbols, String tri) {
-        if (allocationTrainer == null) {
-            logger.warn("AllocationTrainer non injecté: entraînement ignoré.");
-            return;
-        }
-        currentAllocationModel = allocationTrainer.trainModel(symbols, tri);
-        lastModelTrainDate = java.time.LocalDate.now();
-    }
-
-    public Map<String, Object> runDailyCycleLearned(CompteEntity compte, List<String> universe, String tri) {
-        Map<String, Object> report = new LinkedHashMap<>();
-        if (currentAllocationModel == null) {
-            trainAllocationModel(universe, tri);
-        }
-        if (currentAllocationModel == null) {
-            report.put("warning", "model_allocation_absent_fallback_rule_based");
-            return runDailyCycle(compte, universe, tri);
-        }
-        PortfolioDto portfolio = alpacaService.getPortfolioWithPositions(compte);
-        double nav = estimateNav(portfolio);
-        Map<String, Integer> currentQtyMap = extractCurrentQuantities(portfolio);
-
-        // Collecte prédictions brutes pour contexte (pas utilisé directement dans le score ici)
-        List<String> usableSymbols = new ArrayList<>();
-        List<double[]> featureRows = new ArrayList<>();
-        for (String sym : universe) {
-            try {
-                // Assurer présence prédiction (cache DB)
-                PreditLsdm p = lstmHelper.getPreditFromDB(sym, tri);
-                if (p == null) p = lstmHelper.getPredit(sym, tri);
-                if (p == null || p.getSignal() == null) continue;
-                lastPredictions.put(sym, p);
-                double[] f = allocationTrainer != null ? allocationTrainer.buildInferenceFeatures(sym, tri) : null;
-                if (f == null) continue;
-                featureRows.add(f);
-                usableSymbols.add(sym);
-            } catch (Exception e) {
-                logger.warn("Feature inference échouée {}: {}", sym, e.getMessage());
-            }
-        }
-        report.put("symbols_featured", usableSymbols.size());
-        if (featureRows.isEmpty()) {
-            report.put("warning", "aucun_feature_disponible_fallback");
-            return runDailyCycle(compte, universe, tri);
-        }
-        // Prédiction scores
-        double[][] featArr = featureRows.toArray(new double[0][]);
-        double[] scoresRaw = currentAllocationModel.predictBatch(featArr);
-        Map<String, Double> scores = new LinkedHashMap<>();
-        double sumPos = 0.0;
-        for (int i = 0; i < usableSymbols.size(); i++) {
-            double s = Math.max(0.0, scoresRaw[i]); // long-only => clamp négatif à 0
-            if (s > 0) {
-                scores.put(usableSymbols.get(i), s);
-                sumPos += s;
-            }
-        }
-        if (sumPos == 0) {
-            report.put("info", "scores_tous_nuls_fallback_rule");
-            return runDailyCycle(compte, universe, tri);
-        }
-        // Transformation en poids (normalisation + contraintes)
-        Map<String, Double> normScores = new LinkedHashMap<>();
-        for (Map.Entry<String, Double> e : scores.entrySet()) {
-            normScores.put(e.getKey(), e.getValue() / sumPos);
-        }
-        Map<String, Double> targetWeights = new HashMap<>();
-        double gross = 0.0;
-        for (Map.Entry<String, Double> e : normScores.entrySet()) {
-            double w = Math.min(e.getValue() * maxGrossExposure, maxWeightPerSymbol);
-            targetWeights.put(e.getKey(), w);
-            gross += Math.abs(w);
-        }
-        if (gross > maxGrossExposure && gross > 0) {
-            double ratio = maxGrossExposure / gross;
-            targetWeights.replaceAll((k,v) -> v * ratio);
-        }
-        // Intégrer liquidation SELL existante si signal SELL et position > 0
-        for (String sym : usableSymbols) {
-            SignalType sig = lastPredictions.get(sym).getSignal();
-            if (sig == SignalType.SELL) {
-                int held = currentQtyMap.getOrDefault(sym, 0);
-                if (held > 0) targetWeights.put(sym, 0.0);
-            }
-        }
-        report.put("targetWeights_learned", targetWeights);
-        // Génération ordres
-        List<Map<String, Object>> ordersPlanned = planOrders(compte, portfolio, targetWeights, nav);
-        report.put("ordersPlanned", ordersPlanned);
-        List<String> executed = new ArrayList<>();
-        for (Map<String, Object> ord : ordersPlanned) {
-            if (Boolean.TRUE.equals(ord.get("skip"))) continue;
-            try {
-                Order o = alpacaService.placeOrder(
-                        compte,
-                        (String) ord.get("symbol"),
-                        (Double) ord.get("qty"),
-                        (String) ord.get("side"),
-                        null, null, null, null,
-                        true, false
-                );
-                executed.add(o.getId());
-                ord.put("status", "EXECUTED");
-            } catch (Exception ex) {
-                ord.put("status", "FAILED:" + ex.getMessage());
-                logger.warn("Ordre échoué learned {} : {}", ord, ex.getMessage());
-            }
-        }
-        report.put("executed_orders", executed);
-        report.put("nav_estimated", nav);
-        report.put("model_last_train", lastModelTrainDate != null ? lastModelTrainDate.toString() : null);
-        return report;
-    }
 }
