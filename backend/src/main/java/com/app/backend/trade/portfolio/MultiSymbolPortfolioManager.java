@@ -13,6 +13,9 @@ import com.app.backend.trade.portfolio.learning.PortfolioAllocationTrainer;
 import com.app.backend.trade.portfolio.learning.PortfolioLearningConfig;
 import com.app.backend.trade.portfolio.direct.PortfolioDirectAllocatorService;
 import com.app.backend.trade.portfolio.advanced.PortfolioMultiHeadAllocatorService;
+import com.app.backend.trade.portfolio.rl.PortfolioRlAllocatorService;
+import com.app.backend.trade.portfolio.advanced.PortfolioMultiHeadTrainer;
+import com.app.backend.trade.portfolio.rl.PortfolioRlTrainer;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
@@ -52,6 +55,10 @@ public class MultiSymbolPortfolioManager {
     // Service optionnel d'allocation directe (poids multi-symboles)
     private PortfolioDirectAllocatorService directAllocatorService; // setter injection facultative
     private PortfolioMultiHeadAllocatorService multiHeadAllocatorService; // nouveau service avancé
+    private PortfolioRlAllocatorService rlAllocatorService; // couche RL
+    // Trainers optionnels
+    private PortfolioMultiHeadTrainer multiHeadTrainer; // injection pour entraînement
+    private PortfolioRlTrainer rlTrainer; // injection pour entraînement
 
     public MultiSymbolPortfolioManager(LstmHelper lstmHelper,
                                        AlpacaService alpacaService,
@@ -113,8 +120,84 @@ public class MultiSymbolPortfolioManager {
         Map<String, Double> targetWeights;
         boolean usedDirectAllocator = false;
         boolean usedMultiHeadAllocator = false;
+        boolean usedRlAllocator = false;
         try {
-            if (multiHeadAllocatorService != null) {
+            if (rlAllocatorService != null) {
+                targetWeights = rlAllocatorService.inferWeights(lastPredictions, nav, maxGrossExposure, maxWeightPerSymbol, allowShort, tri);
+                if (!targetWeights.isEmpty()) {
+                    usedRlAllocator = true; scores = new HashMap<>();
+                } else {
+                    // fallback multi-head puis direct puis scoring
+                    if (multiHeadAllocatorService != null) {
+                        targetWeights = multiHeadAllocatorService.inferWeights(lastPredictions, nav, maxGrossExposure, maxWeightPerSymbol, allowShort, tri);
+                        if (!targetWeights.isEmpty()) { usedMultiHeadAllocator = true; scores = new HashMap<>(); }
+                        else if (directAllocatorService != null) { targetWeights = directAllocatorService.predictTargetWeights(lastPredictions, metricsCache, nav, maxGrossExposure, maxWeightPerSymbol, allowShort); usedDirectAllocator = true; scores = new HashMap<>(); }
+                        else { // scoring classique
+                            LoadedAllocationModel loaded = allocationRepo.loadLatestModel(tri, allocationConfig);
+                            if (loaded != null && loaded.model != null) {
+                                // Préparation batch features
+                                List<String> syms = new ArrayList<>();
+                                List<double[]> featsList = new ArrayList<>();
+                                for (String sym : lastPredictions.keySet()) {
+                                    double[] f = allocationTrainer.buildInferenceFeatures(sym, tri);
+                                    if (f != null && f.length == loaded.model.getInputSize()) {
+                                        syms.add(sym);
+                                        featsList.add(f);
+                                    }
+                                }
+                                if (!featsList.isEmpty()) {
+                                    double[][] feats = featsList.toArray(new double[0][]);
+                                    double[] sc = loaded.model.predictBatch(feats);
+                                    Map<String, Double> m = new HashMap<>();
+                                    for (int i = 0; i < syms.size(); i++) {
+                                        m.put(syms.get(i), sc[i]);
+                                    }
+                                    scores = m;
+                                } else {
+                                    scores = computeScores(preds);
+                                }
+                                report.put("allocation_model_version", loaded.algoVersion);
+                            } else {
+                                scores = computeScores(preds);
+                                report.put("allocation_model_version", "none");
+                            }
+                            targetWeights = buildTargetWeights(scores);
+                        }
+                    } else if (directAllocatorService != null) {
+                        targetWeights = directAllocatorService.predictTargetWeights(lastPredictions, metricsCache, nav, maxGrossExposure, maxWeightPerSymbol, allowShort); usedDirectAllocator = true; scores = new HashMap<>();
+                    } else {
+                        LoadedAllocationModel loaded = allocationRepo.loadLatestModel(tri, allocationConfig);
+                        if (loaded != null && loaded.model != null) {
+                            // Préparation batch features
+                            List<String> syms = new ArrayList<>();
+                            List<double[]> featsList = new ArrayList<>();
+                            for (String sym : lastPredictions.keySet()) {
+                                double[] f = allocationTrainer.buildInferenceFeatures(sym, tri);
+                                if (f != null && f.length == loaded.model.getInputSize()) {
+                                    syms.add(sym);
+                                    featsList.add(f);
+                                }
+                            }
+                            if (!featsList.isEmpty()) {
+                                double[][] feats = featsList.toArray(new double[0][]);
+                                double[] sc = loaded.model.predictBatch(feats);
+                                Map<String, Double> m = new HashMap<>();
+                                for (int i = 0; i < syms.size(); i++) {
+                                    m.put(syms.get(i), sc[i]);
+                                }
+                                scores = m;
+                            } else {
+                                scores = computeScores(preds);
+                            }
+                            report.put("allocation_model_version", loaded.algoVersion);
+                        } else {
+                            scores = computeScores(preds);
+                            report.put("allocation_model_version", "none");
+                        }
+                        targetWeights = buildTargetWeights(scores);
+                    }
+                }
+            } else if (multiHeadAllocatorService != null) {
                 targetWeights = multiHeadAllocatorService.inferWeights(lastPredictions, nav, maxGrossExposure, maxWeightPerSymbol, allowShort, tri);
                 if (!targetWeights.isEmpty()) {
                     usedMultiHeadAllocator = true;
@@ -194,8 +277,18 @@ public class MultiSymbolPortfolioManager {
                 targetWeights = buildTargetWeights(scores);
             }
         } catch (Exception e) {
-            logger.warn("Erreur allocation (multi-head/direct/scoring): {}", e.getMessage());
-            if (directAllocatorService != null) {
+            logger.warn("Erreur allocation (RL/multi-head/direct/scoring): {}", e.getMessage());
+            if (rlAllocatorService != null) {
+                // tentative fallback direct ou scoring pour robustesse
+                if (directAllocatorService != null) {
+                    targetWeights = directAllocatorService.predictTargetWeights(lastPredictions, metricsCache, nav, maxGrossExposure, maxWeightPerSymbol, allowShort);
+                    usedDirectAllocator = true;
+                    scores = new HashMap<>();
+                } else {
+                    scores = computeScores(preds);
+                    targetWeights = buildTargetWeights(scores);
+                }
+            } else if (directAllocatorService != null) {
                 targetWeights = directAllocatorService.predictTargetWeights(lastPredictions, metricsCache, nav, maxGrossExposure, maxWeightPerSymbol, allowShort);
                 usedDirectAllocator = true;
                 scores = new HashMap<>();
@@ -204,6 +297,7 @@ public class MultiSymbolPortfolioManager {
                 targetWeights = buildTargetWeights(scores);
             }
         }
+        report.put("used_rl_allocator", usedRlAllocator);
         report.put("used_direct_allocator", usedDirectAllocator);
         report.put("used_multihead_allocator", usedMultiHeadAllocator);
         report.put("scores", scores);
@@ -260,7 +354,7 @@ public class MultiSymbolPortfolioManager {
             String sym = extractSymbol(p);
             if (sym == null) continue;
             ModelMetrics m = metricsCache.get(sym);
-            if (m == null) continue; // correction parenthèses
+            if( m == null) continue; // correction parenthèses
             if (!riskFilter(m)) continue;
             double directionFactor = p.getSignal() == SignalType.BUY ? 1.0 : p.getSignal() == SignalType.SELL ? (allowShort ? -1.0 : 0.0) : 0.0;
             if (directionFactor == 0.0) continue;
@@ -433,7 +527,38 @@ public class MultiSymbolPortfolioManager {
     public void setDirectAllocatorService(PortfolioDirectAllocatorService svc) { this.directAllocatorService = svc; }
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     public void setMultiHeadAllocatorService(PortfolioMultiHeadAllocatorService svc) { this.multiHeadAllocatorService = svc; }
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setRlAllocatorService(PortfolioRlAllocatorService svc) { this.rlAllocatorService = svc; }
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setMultiHeadTrainer(PortfolioMultiHeadTrainer t) { this.multiHeadTrainer = t; }
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setRlTrainer(PortfolioRlTrainer t) { this.rlTrainer = t; }
 
     public Map<String, PreditLsdm> getLastPredictions() { return Collections.unmodifiableMap(lastPredictions); }
     public Map<String, ModelMetrics> getMetricsCache() { return Collections.unmodifiableMap(metricsCache); }
+
+    /**
+     * Lance l'entraînement des modèles avancés (RL puis multi-head puis allocation supervisée déjà existante).
+     * @param tri clé de timeframe (ex: "daily")
+     * @param universe liste de symboles (si vide => aucun entraînement)
+     * @return rapport synthétique
+     */
+    public Map<String,Object> trainModels(String tri, List<String> universe) {
+        Map<String,Object> report = new LinkedHashMap<>();
+        if (universe == null || universe.isEmpty()) { report.put("status", "universe_vide"); return report; }
+        // RL
+        if (rlTrainer != null) {
+            try { var rlModel = rlTrainer.train(universe, tri); report.put("rl_model_input_size", rlModel.getInputSize()); report.put("rl_trained", true); } catch (Exception e) { report.put("rl_error", e.getMessage()); }
+        } else { report.put("rl_trained", false); }
+        // Multi-head
+        if (multiHeadTrainer != null) {
+            try { var mhModel = multiHeadTrainer.train(universe, tri); report.put("multihead_input_size", mhModel.getInputSize()); report.put("multihead_trained", true); } catch (Exception e) { report.put("multihead_error", e.getMessage()); }
+        } else { report.put("multihead_trained", false); }
+        // Allocation MLP existante (réutilise allocationTrainer déjà injecté)
+        if (allocationTrainer != null) {
+            try { var allocModel = allocationTrainer.trainModel(universe, tri); report.put("allocation_input_size", allocModel.getInputSize()); report.put("allocation_trained", true); } catch (Exception e) { report.put("allocation_error", e.getMessage()); }
+        } else { report.put("allocation_trained", false); }
+        report.put("symbols_count", universe.size());
+        return report;
+    }
 }
