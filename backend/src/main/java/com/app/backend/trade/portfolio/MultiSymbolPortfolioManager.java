@@ -11,6 +11,8 @@ import com.app.backend.trade.portfolio.learning.PortfolioAllocationModelReposito
 import com.app.backend.trade.portfolio.learning.PortfolioAllocationModelRepository.LoadedAllocationModel;
 import com.app.backend.trade.portfolio.learning.PortfolioAllocationTrainer;
 import com.app.backend.trade.portfolio.learning.PortfolioLearningConfig;
+import com.app.backend.trade.portfolio.direct.PortfolioDirectAllocatorService;
+import com.app.backend.trade.portfolio.advanced.PortfolioMultiHeadAllocatorService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
@@ -46,6 +48,10 @@ public class MultiSymbolPortfolioManager {
     // Cache signaux du cycle courant
     private final Map<String, PreditLsdm> lastPredictions = new HashMap<>();
     private final Map<String, ModelMetrics> metricsCache = new HashMap<>();
+
+    // Service optionnel d'allocation directe (poids multi-symboles)
+    private PortfolioDirectAllocatorService directAllocatorService; // setter injection facultative
+    private PortfolioMultiHeadAllocatorService multiHeadAllocatorService; // nouveau service avancé
 
     public MultiSymbolPortfolioManager(LstmHelper lstmHelper,
                                        AlpacaService alpacaService,
@@ -102,60 +108,119 @@ public class MultiSymbolPortfolioManager {
         }
         report.put("predictions_count", preds.size());
 
-        // 2. Scoring: essaie d'utiliser le modèle d'allocation sauvegardé, sinon heuristique
+        // 2. Scoring ou allocation directe
         Map<String, Double> scores;
+        Map<String, Double> targetWeights;
+        boolean usedDirectAllocator = false;
+        boolean usedMultiHeadAllocator = false;
         try {
-            LoadedAllocationModel loaded = allocationRepo.loadLatestModel(tri, allocationConfig);
-            if (loaded != null && loaded.model != null) {
-                // Préparation batch features
-                List<String> syms = new ArrayList<>();
-                List<double[]> featsList = new ArrayList<>();
-                for (String sym : lastPredictions.keySet()) {
-                    double[] f = allocationTrainer.buildInferenceFeatures(sym, tri);
-                    if (f != null && f.length == loaded.model.getInputSize()) {
-                        syms.add(sym);
-                        featsList.add(f);
-                    }
-                }
-                if (!featsList.isEmpty()) {
-                    double[][] feats = featsList.toArray(new double[0][]);
-                    double[] sc = loaded.model.predictBatch(feats);
-                    Map<String, Double> m = new HashMap<>();
-                    for (int i = 0; i < syms.size(); i++) {
-                        m.put(syms.get(i), sc[i]);
-                    }
-                    scores = m;
+            if (multiHeadAllocatorService != null) {
+                targetWeights = multiHeadAllocatorService.inferWeights(lastPredictions, nav, maxGrossExposure, maxWeightPerSymbol, allowShort, tri);
+                if (!targetWeights.isEmpty()) {
+                    usedMultiHeadAllocator = true;
+                    scores = new HashMap<>();
                 } else {
-                    logger.warn("Aucune feature valide pour le modèle d'allocation. Fallback heuristique.");
-                    scores = computeScores(preds);
+                    // fallback vers direct ou scoring
+                    if (directAllocatorService != null) {
+                        targetWeights = directAllocatorService.predictTargetWeights(lastPredictions, metricsCache, nav, maxGrossExposure, maxWeightPerSymbol, allowShort);
+                        usedDirectAllocator = true;
+                        scores = new HashMap<>();
+                    } else {
+                        // scoring classique
+                        LoadedAllocationModel loaded = allocationRepo.loadLatestModel(tri, allocationConfig);
+                        if (loaded != null && loaded.model != null) {
+                            // Préparation batch features
+                            List<String> syms = new ArrayList<>();
+                            List<double[]> featsList = new ArrayList<>();
+                            for (String sym : lastPredictions.keySet()) {
+                                double[] f = allocationTrainer.buildInferenceFeatures(sym, tri);
+                                if (f != null && f.length == loaded.model.getInputSize()) {
+                                    syms.add(sym);
+                                    featsList.add(f);
+                                }
+                            }
+                            if (!featsList.isEmpty()) {
+                                double[][] feats = featsList.toArray(new double[0][]);
+                                double[] sc = loaded.model.predictBatch(feats);
+                                Map<String, Double> m = new HashMap<>();
+                                for (int i = 0; i < syms.size(); i++) {
+                                    m.put(syms.get(i), sc[i]);
+                                }
+                                scores = m;
+                            } else {
+                                scores = computeScores(preds);
+                            }
+                            report.put("allocation_model_version", loaded.algoVersion);
+                        } else {
+                            scores = computeScores(preds);
+                            report.put("allocation_model_version", "none");
+                        }
+                        targetWeights = buildTargetWeights(scores);
+                    }
                 }
-                report.put("allocation_model_version", loaded.algoVersion);
+            } else if (directAllocatorService != null) {
+                targetWeights = directAllocatorService.predictTargetWeights(lastPredictions, metricsCache, nav, maxGrossExposure, maxWeightPerSymbol, allowShort);
+                usedDirectAllocator = true;
+                scores = new HashMap<>();
             } else {
-                scores = computeScores(preds);
-                report.put("allocation_model_version", "none");
+                LoadedAllocationModel loaded = allocationRepo.loadLatestModel(tri, allocationConfig);
+                if (loaded != null && loaded.model != null) {
+                    // Préparation batch features
+                    List<String> syms = new ArrayList<>();
+                    List<double[]> featsList = new ArrayList<>();
+                    for (String sym : lastPredictions.keySet()) {
+                        double[] f = allocationTrainer.buildInferenceFeatures(sym, tri);
+                        if (f != null && f.length == loaded.model.getInputSize()) {
+                            syms.add(sym);
+                            featsList.add(f);
+                        }
+                    }
+                    if (!featsList.isEmpty()) {
+                        double[][] feats = featsList.toArray(new double[0][]);
+                        double[] sc = loaded.model.predictBatch(feats);
+                        Map<String, Double> m = new HashMap<>();
+                        for (int i = 0; i < syms.size(); i++) {
+                            m.put(syms.get(i), sc[i]);
+                        }
+                        scores = m;
+                    } else {
+                        scores = computeScores(preds);
+                    }
+                    report.put("allocation_model_version", loaded.algoVersion);
+                } else {
+                    scores = computeScores(preds);
+                    report.put("allocation_model_version", "none");
+                }
+                targetWeights = buildTargetWeights(scores);
             }
         } catch (Exception e) {
-            logger.warn("Chargement/inférence modèle d'allocation échoué: {}. Fallback heuristique.", e.getMessage());
-            scores = computeScores(preds);
-            report.put("allocation_model_version", "error");
+            logger.warn("Erreur allocation (multi-head/direct/scoring): {}", e.getMessage());
+            if (directAllocatorService != null) {
+                targetWeights = directAllocatorService.predictTargetWeights(lastPredictions, metricsCache, nav, maxGrossExposure, maxWeightPerSymbol, allowShort);
+                usedDirectAllocator = true;
+                scores = new HashMap<>();
+            } else {
+                scores = computeScores(preds);
+                targetWeights = buildTargetWeights(scores);
+            }
         }
+        report.put("used_direct_allocator", usedDirectAllocator);
+        report.put("used_multihead_allocator", usedMultiHeadAllocator);
         report.put("scores", scores);
 
-        // 3. Allocation cible (long-only)
-        Map<String, Double> targetWeights = buildTargetWeights(scores);
-        // Ajout: si signal SELL et position > 0 => poids cible forcé à 0 (fermeture), pas de short
-        for (Map.Entry<String, PreditLsdm> ent : lastPredictions.entrySet()) {
-            SignalType sig = ent.getValue().getSignal();
-            if (!allowShort && sig == SignalType.SELL) {
-                int held = currentQtyMap.getOrDefault(ent.getKey(), 0);
-                if (held > 0) {
-                    targetWeights.put(ent.getKey(), 0.0); // force liquidation
+        // Ajustement SELL (si long-only) seulement si on n'a pas déjà forcé via direct allocator
+        if (!usedDirectAllocator) {
+            for (Map.Entry<String, PreditLsdm> ent : lastPredictions.entrySet()) {
+                SignalType sig = ent.getValue().getSignal();
+                if (!allowShort && sig == SignalType.SELL) {
+                    int held = currentQtyMap.getOrDefault(ent.getKey(), 0);
+                    if (held > 0) { targetWeights.put(ent.getKey(), 0.0); }
                 }
             }
         }
         report.put("targetWeights", targetWeights);
 
-        // 4. Génération ordres (delta positions)
+        // 4. Ordres
         List<Map<String, Object>> ordersPlanned = planOrders(compte, portfolio, targetWeights, nav);
         report.put("ordersPlanned", ordersPlanned);
 
@@ -195,7 +260,7 @@ public class MultiSymbolPortfolioManager {
             String sym = extractSymbol(p);
             if (sym == null) continue;
             ModelMetrics m = metricsCache.get(sym);
-            if (m == null) continue;
+            if (m == null) continue; // correction parenthèses
             if (!riskFilter(m)) continue;
             double directionFactor = p.getSignal() == SignalType.BUY ? 1.0 : p.getSignal() == SignalType.SELL ? (allowShort ? -1.0 : 0.0) : 0.0;
             if (directionFactor == 0.0) continue;
@@ -362,6 +427,12 @@ public class MultiSymbolPortfolioManager {
     public void setMinScoreThreshold(double v) { this.minScoreThreshold = v; }
     public void setMaxNewPositionsPerCycle(int v) { this.maxNewPositionsPerCycle = v; }
     public void setAllowShort(boolean allowShort) { this.allowShort = allowShort; }
+
+    // Setter optionnel (Spring pourra l'injecter si bean défini)
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setDirectAllocatorService(PortfolioDirectAllocatorService svc) { this.directAllocatorService = svc; }
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setMultiHeadAllocatorService(PortfolioMultiHeadAllocatorService svc) { this.multiHeadAllocatorService = svc; }
 
     public Map<String, PreditLsdm> getLastPredictions() { return Collections.unmodifiableMap(lastPredictions); }
     public Map<String, ModelMetrics> getMetricsCache() { return Collections.unmodifiableMap(metricsCache); }
