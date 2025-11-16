@@ -1,6 +1,8 @@
 package com.app.backend.trade.portfolio.learning;
 
 import com.app.backend.trade.model.SignalType;
+import com.app.backend.trade.controller.LstmHelper;
+import com.app.backend.trade.util.TradeUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.slf4j.Logger;
@@ -18,12 +20,16 @@ public class PortfolioAllocationTrainer {
     private final JdbcTemplate jdbcTemplate;
     private final PortfolioLearningConfig config;
     private final PortfolioAllocationModelRepository repository;
+    // Ajout: accès aux prédictions LSTM datées pour backfill
+    private final LstmHelper lstmHelper;
 
     public PortfolioAllocationTrainer(JdbcTemplate jdbcTemplate, PortfolioLearningConfig config,
-                                      PortfolioAllocationModelRepository repository) {
+                                      PortfolioAllocationModelRepository repository,
+                                      LstmHelper lstmHelper) {
         this.jdbcTemplate = jdbcTemplate;
         this.config = config;
         this.repository = repository;
+        this.lstmHelper = lstmHelper;
     }
 
     /**
@@ -178,7 +184,57 @@ public class PortfolioAllocationTrainer {
     private void buildSymbolDataset(String symbol, String tri, List<double[]> featureRows, List<Double> targetRows) {
         String sqlSignals = "SELECT lstm_created_at, signal_lstm, price_lstm, price_clo FROM signal_lstm WHERE symbol = ? AND tri = ? ORDER BY lstm_created_at ASC";
         List<java.util.Map<String, Object>> signals = jdbcTemplate.queryForList(sqlSignals, symbol, tri);
-        if (signals.size() < config.getMinHistoryBars()) return;
+
+        int minBars = config.getMinHistoryBars();
+        if (signals.size() < minBars) {
+            try {
+                // 1) Construire l'ensemble des dates trading récentes cibles
+                java.util.Set<java.time.LocalDate> existingDates = new java.util.HashSet<>();
+                for (java.util.Map<String, Object> r : signals) {
+                    Object d = r.get("lstm_created_at");
+                    if (d instanceof java.sql.Date) {
+                        existingDates.add(((java.sql.Date) d).toLocalDate());
+                    } else if (d instanceof java.util.Date) {
+                        existingDates.add(new java.sql.Date(((java.util.Date) d).getTime()).toLocalDate());
+                    }
+                }
+                java.util.List<java.time.LocalDate> candidateDays = new java.util.ArrayList<>();
+                java.time.LocalDate ref = TradeUtils.getLastTradingDayBefore(java.time.LocalDate.now());
+                // Générer au plus minBars derniers jours de bourse
+                while (candidateDays.size() < minBars) {
+                    if (candidateDays.isEmpty() || !ref.isEqual(candidateDays.get(candidateDays.size() - 1))) {
+                        candidateDays.add(ref);
+                    }
+                    // reculer d'au moins 1 jour pour éviter boucle infinie sur jours non ouvrés
+                    ref = TradeUtils.getLastTradingDayBefore(ref.minusDays(1));
+                }
+
+                // 2) Appeler getPreditAtDate pour les dates manquantes seulement
+                int toInsert = minBars - signals.size();
+                int inserted = 0;
+                for (java.time.LocalDate d : candidateDays) {
+                    if (inserted >= toInsert) break;
+                    if (existingDates.contains(d)) continue;
+                    try {
+                        lstmHelper.getPreditAtDate(symbol, tri, d);
+                        inserted++;
+                    } catch (Exception ex) {
+                        logger.warn("Backfill échoué {}@{}: {}", symbol, d, ex.getMessage());
+                    }
+                }
+
+                // 3) Relire les signaux pour poursuivre le traitement
+                signals = jdbcTemplate.queryForList(sqlSignals, symbol, tri);
+                if (signals.size() < minBars) {
+                    logger.warn("Backfill incomplet pour {} tri={} ({}/{})", symbol, tri, signals.size(), minBars);
+                }
+            } catch (Exception e) {
+                logger.warn("Backfill des signaux impossible pour {}: {}", symbol, e.getMessage());
+            }
+        }
+
+        if (signals.size() < minBars) return; // garde-fou si backfill insuffisant
+
         // Préparer séquence des closes (trading bars séquentielles)
         List<Double> closes = new ArrayList<>();
         for (java.util.Map<String, Object> row : signals) {
