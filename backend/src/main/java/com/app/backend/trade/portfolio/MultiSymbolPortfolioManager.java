@@ -7,6 +7,10 @@ import com.app.backend.trade.model.alpaca.Order;
 import com.app.backend.trade.service.AlpacaService;
 import com.app.backend.trade.model.CompteEntity;
 import com.app.backend.trade.model.PortfolioDto;
+import com.app.backend.trade.portfolio.learning.PortfolioAllocationModelRepository;
+import com.app.backend.trade.portfolio.learning.PortfolioAllocationModelRepository.LoadedAllocationModel;
+import com.app.backend.trade.portfolio.learning.PortfolioAllocationTrainer;
+import com.app.backend.trade.portfolio.learning.PortfolioLearningConfig;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
@@ -27,6 +31,10 @@ public class MultiSymbolPortfolioManager {
     private final LstmHelper lstmHelper;
     private final AlpacaService alpacaService;
     private final JdbcTemplate jdbcTemplate;
+    // Nouveau: modèle d'allocation sauvegardé + builder de features
+    private final PortfolioAllocationModelRepository allocationRepo;
+    private final PortfolioLearningConfig allocationConfig;
+    private final PortfolioAllocationTrainer allocationTrainer;
 
     // Paramètres de risque / config simples (ajustables)
     private double maxWeightPerSymbol = 0.03;          // 3% du NAV
@@ -39,10 +47,18 @@ public class MultiSymbolPortfolioManager {
     private final Map<String, PreditLsdm> lastPredictions = new HashMap<>();
     private final Map<String, ModelMetrics> metricsCache = new HashMap<>();
 
-    public MultiSymbolPortfolioManager(LstmHelper lstmHelper, AlpacaService alpacaService, JdbcTemplate jdbcTemplate) {
+    public MultiSymbolPortfolioManager(LstmHelper lstmHelper,
+                                       AlpacaService alpacaService,
+                                       JdbcTemplate jdbcTemplate,
+                                       PortfolioAllocationModelRepository allocationRepo,
+                                       PortfolioLearningConfig allocationConfig,
+                                       PortfolioAllocationTrainer allocationTrainer) {
         this.lstmHelper = lstmHelper;
         this.alpacaService = alpacaService;
         this.jdbcTemplate = jdbcTemplate;
+        this.allocationRepo = allocationRepo;
+        this.allocationConfig = allocationConfig;
+        this.allocationTrainer = allocationTrainer;
     }
 
     /** DTO interne pour métriques de modèle. */
@@ -86,9 +102,45 @@ public class MultiSymbolPortfolioManager {
         }
         report.put("predictions_count", preds.size());
 
-        // 2. Scoring
-        Map<String, Double> scores = computeScores(preds);
+        // 2. Scoring: essaie d'utiliser le modèle d'allocation sauvegardé, sinon heuristique
+        Map<String, Double> scores;
+        try {
+            LoadedAllocationModel loaded = allocationRepo.loadLatestModel(tri, allocationConfig);
+            if (loaded != null && loaded.model != null) {
+                // Préparation batch features
+                List<String> syms = new ArrayList<>();
+                List<double[]> featsList = new ArrayList<>();
+                for (String sym : lastPredictions.keySet()) {
+                    double[] f = allocationTrainer.buildInferenceFeatures(sym, tri);
+                    if (f != null && f.length == loaded.model.getInputSize()) {
+                        syms.add(sym);
+                        featsList.add(f);
+                    }
+                }
+                if (!featsList.isEmpty()) {
+                    double[][] feats = featsList.toArray(new double[0][]);
+                    double[] sc = loaded.model.predictBatch(feats);
+                    Map<String, Double> m = new HashMap<>();
+                    for (int i = 0; i < syms.size(); i++) {
+                        m.put(syms.get(i), sc[i]);
+                    }
+                    scores = m;
+                } else {
+                    logger.warn("Aucune feature valide pour le modèle d'allocation. Fallback heuristique.");
+                    scores = computeScores(preds);
+                }
+                report.put("allocation_model_version", loaded.algoVersion);
+            } else {
+                scores = computeScores(preds);
+                report.put("allocation_model_version", "none");
+            }
+        } catch (Exception e) {
+            logger.warn("Chargement/inférence modèle d'allocation échoué: {}. Fallback heuristique.", e.getMessage());
+            scores = computeScores(preds);
+            report.put("allocation_model_version", "error");
+        }
         report.put("scores", scores);
+
         // 3. Allocation cible (long-only)
         Map<String, Double> targetWeights = buildTargetWeights(scores);
         // Ajout: si signal SELL et position > 0 => poids cible forcé à 0 (fermeture), pas de short
