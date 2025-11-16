@@ -38,7 +38,7 @@ public class MultiSymbolPortfolioManager {
 
     // Paramètres de risque / config simples (ajustables)
     private double maxWeightPerSymbol = 0.03;          // 3% du NAV
-    private double maxGrossExposure = 0.60;            // 60% capital investi max
+    private double maxGrossExposure = 0.90;            // 60% capital investi max
     private double minScoreThreshold = 0.10;           // score minimal pour ouverture
     private int maxNewPositionsPerCycle = 15;          // limiter churn
     private boolean allowShort = false;                // si SELL => sortir position plutôt que short
